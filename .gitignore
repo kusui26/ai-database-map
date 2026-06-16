@@ -1,0 +1,23 @@
+# --- 指定の除外フォルダ ---
+data/
+slide/
+
+# --- macOS ---
+.DS_Store
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.venv/
+venv/
+env/
+  
+# --- 環境変数・機密情報（APIキー等） ---
+.env
+.env.*
+*.key
+  
+# --- ログ・一時ファイル ---
+*.log 
+*.tmp

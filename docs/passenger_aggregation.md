@@ -194,10 +194,10 @@ rate_covid = 分子/分母 − 1       # basket が空なら NaN
 | フラグ | 条件 | 意図 |
 |---|---|---|
 | `flag_yoy` | \|rate_yoy\| > 30% | 事業者内の報告基準変更（渋谷+36%, 小諸+119%等）を検出 |
-| `flag_covid` | 被覆 < 100% **or** いずれかの社の pre_year < 2019 | 一部社のみ / 参照年が非理想 を検出 |
+| `flag_covid` | 被覆 < 100% **or** いずれかの社の pre_year < 2019 **or** \|rate_covid\| > 100% | 一部社のみ / 参照年が非理想 / 極端値（小駅の分母ノイズ）を検出 |
 | `level_complete` | 在の社集合が全データ年で一定（bool）| False＝どこかの年で社が抜けた（凹みあり）。詳細表で要確認 |
 
-> post窓を2023/2024に絞ったため、「post非理想」条件は原理的に発生せず、`flag_covid` は上記2条件に簡素化された。
+> **`flag_covid` の極端値条件（\|rate_covid\|>100%）について**：post窓を2023/2024に絞ったため「post非理想」条件は原理的に発生しないが、検証（QA）で **小駅の分母ノイズによる極端な比率**が見つかった（85群が \|率\|>100%、全て n_op=1 の単独群・pax中央値118人/日）。例: 御厨駅（2020年頃開業の新駅で2019=104→2024=5,073=+4778%）、阿蘇白川（1→9人=+800%）。大駅(>10万人)の rate_covid は最大94%に収まるため、\|rate_covid\|>100% は正常値を誤検出せず小駅ノイズだけを拾う。`rate_yoy` の極端値フラグ（>30%）と設計思想を統一するため `flag_covid` にも追加した。
 
 ### 例（メインテーブルの実データ）
 ```
@@ -324,7 +324,7 @@ for 社 in 群:
     post_year[社] = max{ y∈POST_W | present(社,y) & pax(社,y)>0 }
 basket2 = {社 | pre_year[社] and post_year[社]}        # 両方ある社のみ（pre/post一貫）
 rate_covid = Σpax(社,post_year)/Σpax(社,pre_year) - 1  # 空なら NaN
-flag_covid = (len(basket2)/n_op < 1) or (min(pre_year[basket2]) < 2019)
+flag_covid = (len(basket2)/n_op < 1) or (min(pre_year[basket2]) < 2019) or (abs(rate_covid) > 1.0)
 ```
 
 実装は `script/create_dataset_for_AI_Database_Map.ipynb` に、既存ファイルを壊さない形で追加する。
@@ -348,6 +348,20 @@ flag_covid = (len(basket2)/n_op < 1) or (min(pre_year[basket2]) < 2019)
 | stale社（post最新が2020-22）| 83社 / 小諸型(混在)は2群のみ |
 | レベル時系列 構成一定 | 98.2%（9,109群）/ 変動164群 / 内部欠損480群 |
 | コロナ年の内部欠損 | 2021:338社, 2022:322社（計352社）|
+
+### 検証（QA）結果
+独立な再計算（別ルートのループ実装）で出力 `station_group.csv` / `station_group_operator.csv` を照合した結果:
+
+| 検証項目 | 結果 |
+|---|---|
+| レベル合算（全14年）| 不一致 **0**、NaN整合 9,273/9,273、全国合算が既知値と一致 |
+| `rate_yoy` 再計算一致 | **7,367 / 7,367**（±0.1pt）|
+| `rate_covid` 再計算一致 | **7,684 / 7,684**（±0.1pt）|
+| 構造健全性 | grp重複0 / 負のpax 0 / 経緯度は日本内 / 駅名=grp split一致 |
+| DBSCANの1km逸脱 | 群の最大内部距離 **891m**（1km超ゼロ＝連鎖問題なし）|
+| 極端値ガード追加後 | `flag_covid` True = 238群（極端値の見逃し0、大駅の誤検出なし）|
+
+→ 計算バグは検出されず。唯一の改善点だった `rate_covid` の極端値ガードは §7 で対応済み。
 
 ---
 

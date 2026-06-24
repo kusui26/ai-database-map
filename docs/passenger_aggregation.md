@@ -7,7 +7,7 @@
 **データ配置**（種別ごとにフォルダ分け）:
 - 駅別乗降客数: `data/駅別乗降客数データ/S12-25_GML.zip`
 - 行政区域(N03, 都道府県付与用): `data/行政区域データ/N03-20260101_GML.zip`
-- 生成物: `data/derived/station_group.csv` / `station_group_operator.csv`
+- 生成物（`data/derived/`）: メイン **`station_dataset.csv`**（1群1行・人口等を統合）／ 監査明細 **`station_operator_detail.csv`**（1群×1社）。**出力時に日本語列名をASCII化**: `駅名→station_name`, `都道府県→prefecture`, `運営会社→operator`（値は日本語のまま。Supabase/PostGIS・PostgREST向け）
 
 ---
 
@@ -38,7 +38,7 @@
 | 増減率 | *restrictive*（比較2年で揃う社だけの like-for-like basket）|
 | 都道府県 | 行政区域(N03)の都道府県ポリゴンを代表点に `gpd.sjoin`（EPSG:6668） |
 | 駅名表記 | `label`（表示用・運営会社ベース）と `search_label`（検索用・`label`＋都道府県の単一括弧）|
-| 出力 | **2テーブル**：メイン `station_group`（1群1行・ワイド）＋ 監査用 `station_group_operator`（1群×1社）|
+| 出力 | **2テーブル**：メイン **`station_dataset.csv`**（1群1行・ワイド）＋ 監査明細 **`station_operator_detail.csv`**（1群×1社）|
 
 **設計の背骨**：
 - **レベルは「全部足す」、比率は「揃う社だけ」** ── 目的が違うので合算ロジックを分ける。
@@ -223,11 +223,11 @@ rate_covid = 分子/分母 − 1       # basket が空なら NaN
 
 **2テーブル構成**で確定。メインは「1群1行のワイド」── 今後 人口・地価などのグループ単位特徴量を右に追記していく feature mart。
 
-### 8.1 メイン `station_group`（1群1行・これを使い続ける）
+### 8.1 メイン `station_dataset.csv`（1群1行・これを使い続ける）
 
 | 区分 | 列 | 内容 |
 |---|---|---|
-| 識別 | `grp`, `駅名`, `label`, `search_label`, `都道府県`, `lon`, `lat` | キー＋表記＋地図表示 |
+| 識別 | `grp`, `station_name`, `label`, `search_label`, `prefecture`, `lon`, `lat` | キー＋表記＋地図表示（旧列名 `駅名`/`都道府県`。出力時にASCII化）|
 | レベル時系列 | `pax_2011` … `pax_2024`（14列）| inclusive合算・補間なし・全社欠測年はNULL |
 | レベル品質 | `n_op` | 群の延べ運営会社数 |
 | レベル品質 | `level_complete`（bool）| 構成が全データ年で一定か |
@@ -263,11 +263,11 @@ rate_covid = 分子/分母 − 1       # basket が空なら NaN
 
 > 設計の要点: 尼崎型（同一県内・別事業者）は運営会社で、20群型（同一社・別地域）は都道府県で区別でき、`search_label = label + 都道府県` で両方の穴を塞ぐ。将来データで同名・同県・素ラベルが衝突する可能性に備え、生成時に `search_label` の重複チェックを入れる。
 
-### 8.2 監査用 `station_group_operator`（1群×1社・普段は使わない）
+### 8.2 監査明細 `station_operator_detail.csv`（1群×1社・普段は使わない）
 
 | 列 | 内容 |
 |---|---|
-| `grp`, `運営会社` | キー |
+| `grp`, `operator`（旧 `運営会社`）| キー |
 | `pax_2011` … `pax_2024` | 各社の年次値 |
 | `present_2011` … `present_2024` | 在/欠測（データ有無==1か）|
 | `pre_year`, `post_year` | P2で実際に使った参照年 |
@@ -392,7 +392,7 @@ assert search_label.is_unique          # 同名・同県・素ラベルの衝突
 | `search_label` 一意性 | 9,273件すべて一意（重複0）|
 
 ### 検証（QA）結果
-独立な再計算（別ルートのループ実装）で出力 `station_group.csv` / `station_group_operator.csv` を照合した結果:
+独立な再計算（別ルートのループ実装）で出力 `station_dataset.csv` / `station_operator_detail.csv` を照合した結果:
 
 | 検証項目 | 結果 |
 |---|---|

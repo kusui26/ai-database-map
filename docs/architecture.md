@@ -22,11 +22,13 @@
 | フレームワーク | **Next.js（App Router）＋ React** | Server Components でSSR取得、Route Handlers を共通APIに。UI/API/AI を1基盤へ統合 |
 | 型・検証 | **Zod** | 共通APIの入出力・GUI Chat Protocol を単一スキーマで型化（`z.infer`）|
 | 地図描画 | **MapLibre GL JS**（ベクター）| ベクター描画・サーバ側 bbox 絞り込み・大量点のクラスタリング |
-| ベースマップ | **MapTiler** | ベクタータイル配信 |
+| ベースマップ | **国土地理院 最適化ベクトルタイル** | 無料・キー不要・実質クォータなし・出典明記で商用可。日本特化の正確さ＋オープンデータの物語整合（下記注） |
 | DB | **Supabase（PostgreSQL）** | マネージド Postgres・認証・RLS・マイグレーション |
 | 空間拡張 | **PostGIS** | `ST_DWithin`/`ST_Distance`・geometry。駅の空間検索の土台 |
 | グラフ | **Chart.js** | 年次推移・散布図（過去プロジェクトから踏襲）|
-| AI / LLM | **Google Gemini 2.5 Flash** | 低レイテンシ・**function calling** で共通APIを叩く（Step2）|
+| AI / LLM | **Google Gemini（Flash 系）** | 低レイテンシ・**function calling** で共通APIを叩く（Step2）。採用モデルは P8 時点の最新安定を eval で確定（§10.2）|
+
+- **ベースマップの選定**：実装は**地理院 最適化ベクトルタイルのみ**（公式スタイルを淡色トーンに調整・attribution に出典表示）。「試験公開」（正式提供化を検討中の暫定提供）のため、①スタイルURLの env 差し替え（`NEXT_PUBLIC_MAP_STYLE_URL`）、②公式配布 PMTiles の自前コピー（Cloudflare R2 等）、③正式提供の淡色ラスタへの退避、を保険とする。**候補（記録のみ・実装しない）**：OpenFreeMap（キー不要・寄付運営）／MapTiler Flex $30/月（美観オプション。**無料枠は非商用限定**のため既定にしない）。
 
 ---
 
@@ -177,7 +179,7 @@ AI-Database-Map/
 ├── tests/                        # ドメイン純関数の単体テスト中心（境界値重視）
 ├── package.json / next.config.ts / tsconfig.json / vitest.config.ts
 ├── .env.example / .env(gitignore) / .eslintrc / .vercelignore
-└── Station_Area_Database_Map/  (参考・将来削除) ／ condminium/(探索) ／ slide/(gitignore)
+└── Station_Area_Database_Map/  (参考・現在削除済み) ／ condminium/(探索) ／ slide/(gitignore)
 ```
 
 **要点**：Step1 の勝ち筋は「派手なUI」ではなく、**意味を持つ共通API ＋ ドメイン層 ＋ メトリクス・カタログ**を作り込み、UIをその薄い consumer にすること。これが Step2 を純加算にする。
@@ -220,7 +222,7 @@ src/
 ## 8. デプロイ・環境・セキュリティ
 
 - **デプロイ**：Vercel（`src/app` を直下ビルド）。`pipeline/`・`data/` は `.vercelignore`。
-- **環境変数**：`.env`(gitignore)。パイプラインの `ESTAT_APP_ID`、アプリの `NEXT_PUBLIC_MAPTILER_KEY`・`SUPABASE_URL`・`SUPABASE_ANON_KEY`・`SUPABASE_SERVICE_ROLE_KEY`（サーバのみ）・`GEMINI_API_KEY`（Step2・サーバのみ）。**鍵・完全URLは出力/ログに出さない**。
+- **環境変数**：`.env`(gitignore)。パイプラインの `ESTAT_APP_ID`、アプリの `NEXT_PUBLIC_MAP_STYLE_URL`（既定＝地理院スタイル・キー不要）・`SUPABASE_URL`・`SUPABASE_ANON_KEY`・`SUPABASE_SERVICE_ROLE_KEY`（サーバのみ）・`GEMINI_API_KEY`（Step2・サーバのみ）。**鍵・完全URLは出力/ログに出さない**。
 - **Supabase**：**RLS 有効化**（読み取りは公開ビュー/匿名ロールに限定）、**SSL 正常化**、CORS 制限、書込は service role をサーバ側のみ。過去プロジェクトの CORS 全開放 / `rejectUnauthorized:false` を踏襲しない。
 - **DB 変更**：`supabase/migrations` の**バージョン管理**のみ（`force:true` の破壊的 DROP を使わない）。投入は**バルク＋冪等 upsert**。
 - **品質ゲート**：lint / typecheck / unit test（ドメイン純関数中心）を CI で必須化。
@@ -241,7 +243,7 @@ src/
 
 ## 10. LLM 実装方針（Step2）— プロバイダと オーケストレーション
 
-Step2（AIネイティブ化）の LLM 層をどう作るかの設計判断。**結論を先に**：AIネイティブ性は「どのLLM／どのフレームワークか」ではなく、**§3・§6 の共通API＋メトリクス・カタログ＝ツール表面**が担保する。ゆえにプロバイダもオーケストレータも**差し替え可能な実装詳細**として `src/ai`（§7.3）に隔離する。
+Step2（AIネイティブ化）の LLM 層をどう作るかの設計判断。**結論を先に**：AIネイティブ性は「どのLLM／どのフレームワークか」ではなく、**§3・§6 の共通API＋メトリクス・カタログ＝ツール表面**が担保する。ゆえにプロバイダもオーケストレータも**差し替え可能な実装詳細**として `src/ai`（§7.3）に隔離する。（版・料金は **2026-07 時点**で確認済み。各ライブラリの詳説は [`plan_fable.md`](./plan_fable.md) §10）
 
 ### 10.1 この層の要件
 - 自然言語（日本語）→ **共通APIのツール呼び出し**（function calling）→ 結果を **GUI Chat Protocol（§4）** に組み立て → 地図/グラフへ描画。
@@ -250,20 +252,20 @@ Step2（AIネイティブ化）の LLM 層をどう作るかの設計判断。**
 ### 10.2 LLM プロバイダ選定
 | プロバイダ / モデル | 無料枠 | 特徴 | 位置づけ |
 |---|---|---|---|
-| **Gemini 2.5 Flash / Flash-Lite** | **1,500 req/日・15 RPM・1M TPM**、function calling・JSON・1M文脈 | 低遅延・低コスト・日本語良好・マルチモーダル | **主（開発・本番）** |
+| **Gemini Flash 系**（2.5 Flash $0.30/$2.50・3 Flash Preview $0.50/$3.00・3.5 Flash $1.50/$9 per 1M tok）| 無料枠あり（2.5 Flash：**1,500 req/日・15 RPM・1M TPM**）、function calling・JSON・1M文脈 | 低遅延・低コスト・日本語良好・マルチモーダル。**採用モデルは P8 時点の最新安定を eval で確定** | **主（開発・本番）** |
 | Claude Haiku 4.5 | 無（従量 ~$0.8/$4 per M）| **マルチターンtool-use精度が最良**（「呼ばない」判断も強い）| 精度重視時の代替 |
 | GPT-4.1-mini / 4o-mini | 実質安価（4o-mini $0.15/$0.6 per M）| 安定・堅実な tool use | 汎用の代替 |
 | Groq（Llama3.3-70B / Qwen / gpt-oss）| 30 RPM・1,000 req/日・超高速(≈315TPS) | 無料・高速・function calling | 開発・コスト最適 |
 | OpenRouter（gpt-oss-120b/20b 等）| 20 RPM・200 req/日 | 多数モデルをルーティング | 実験・フォールバック |
 
-- **採用**：**Gemini 2.5 Flash を主**。無料枠で開発、本番は低コスト従量。**プロバイダ非依存の抽象**の背後に置き、tool-use 精度・遅延・レート制限に応じて Claude Haiku 4.5 / GPT-4.1-mini / Groq へ即差し替え可能にする。
+- **採用**：**Gemini Flash 系を主**（採用モデルは P8a/P8c の eval でコスト×tool-use 精度から確定）。無料枠で開発、本番は低コスト従量。**プロバイダ非依存の抽象**の背後に置き、tool-use 精度・遅延・レート制限に応じて Claude Haiku 4.5 / GPT-4.1-mini / Groq へ即差し替え可能にする。
 - ⚠️ **無料枠の注意**：Gemini 無料枠は**入出力がモデル改善に使われうる**。収録データは公開オープンデータで懸念は小さいが、**ユーザの発話**を扱う本番は**有料枠 or Vertex AI**（学習非利用）を選ぶ。鍵はサーバのみ（§8）。
 - 任意で **Vercel AI Gateway**（ルーティング・フォールバック・可観測性・コスト管理）を挟むと、無料枠横断のレート制限回避や障害時フォールバックが容易。
 
 ### 10.3 オーケストレーション層の選択肢
 | 方式 | 長所 | 短所 | 適合 |
 |---|---|---|---|
-| **Vercel AI SDK** | Next.js/Vercel 一体・**turnkey streaming／`useChat`**・**`generateObject`(Zod)＝GUI Chat Protocol**・provider非依存・multi-step(`stepCountIs`)・巨大コミュニティ | 込み入った多段フローは手続き的に書く | ◎ 既定（最速・最小リスク・スタック最適）|
+| **Vercel AI SDK（v6 が現行）** | Next.js/Vercel 一体・**turnkey streaming／`useChat`**・**structured outputs（Zod）＝GUI Chat Protocol**・provider非依存・**`ToolLoopAgent`（ツールループ内蔵・v6）**・巨大コミュニティ | 込み入った多段フローは手続き的に書く。**v5→v6 は破壊的変更大**＝`ai@^6` と `@ai-sdk/react@^6` をセット固定（最初から v6 で実装）| ◎ 既定（最速・最小リスク・スタック最適）|
 | **GraphAI** | **宣言的グラフ(YAML/JSON)＝エージェント論理がデータ**・並列/ネスト/リトライ内蔵・`fetchAgent`＝共通APIをノード化・**本アーキテクチャの源流と一致** | コミュニティ小(≈371★)・新パラダイム・Next.js streaming に一手間 | ○ 宣言的な多段フロー層に採用余地大（§10.4）|
 | 素の provider SDK | 依存最小 | tool ループ／stream／provider差替を自作 | △ 車輪の再発明 |
 | LangChain.js / Mastra 等 | 機能豊富 | 重い・TS慣用から外れる | △ 不要 |
@@ -280,8 +282,8 @@ GraphAI（receptron・v2系・TypeScript・v2.0.18/2026）は **非同期デー�
 
 ### 10.5 推奨アーキテクチャ（決定）
 1. **土台（最優先）**：**共通API＋メトリクス・カタログをツール表面に固める**（§3・§6）。AIネイティブ性はここが担保し、オーケストレータは差し替え可能。
-2. **プロバイダ**：**Gemini 2.5 Flash を主**、**provider非依存の抽象**の背後に。フォールバックに Claude Haiku 4.5 / GPT-4.1-mini / Groq。本番の発話は有料枠/Vertex。
-3. **既定オーケストレータ**：**Vercel AI SDK**（`streamText`+tools・`generateObject`(Zod)＝GUI Chat Protocol・`useChat`）で **Step2 MVP を最短で出荷**。
+2. **プロバイダ**：**Gemini Flash 系を主**（採用モデルは P8 の eval で確定）、**provider非依存の抽象**の背後に。フォールバックに Claude Haiku 4.5 / GPT-4.1-mini / Groq。本番の発話は有料枠/Vertex。
+3. **既定オーケストレータ**：**Vercel AI SDK v6**（`ToolLoopAgent`＋tools・structured outputs(Zod)＝GUI Chat Protocol・`useChat`）で **Step2 MVP を最短で出荷**。
 4. **GraphAI**：**宣言的な多段フローが要るクエリで PoC**（`fetchAgent`＝共通API、gemini/anthropic エージェント）。有効なら orchestration を GraphAI に寄せる／複雑フローだけ GraphAI・単純対話は AI SDK という**共存**も可。
 5. **将来（MCP）**：共通APIを **Model Context Protocol** のツールとしても公開すれば、外部AIクライアント（Claude 等）も同一表面を使え、「API こそがプロダクト」が外部へ拡張される。AI SDK・GraphAI とも MCP を消費可能。
 
@@ -289,17 +291,17 @@ GraphAI（receptron・v2系・TypeScript・v2.0.18/2026）は **非同期デー�
 
 ### 10.6 実装の骨子（`src/ai`・§7.3）
 - `tools.ts`：**共通API（`domain`）の薄いアダプタ**をツール定義に。スキーマは **`metric_catalog` から自動生成**（指標追加が UI/AI に同時反映）。
-- `assemble.ts`：ツール結果 → **GUI Chat Protocol（Zod）** に組立（AI SDK の `generateObject` / GraphAI の最終ノード、どちらでも同型を出力）。
+- `assemble.ts`：ツール結果 → **GUI Chat Protocol（Zod）** に組立（AI SDK v6 の structured outputs / GraphAI の最終ノード、どちらでも同型を出力）。
 - `client.ts`：**provider 抽象**（Gemini 主・他へ差替）。鍵はサーバのみ、`app/api/chat` から呼ぶ。
 - `system-prompt.ts`：ドメイン説明＋カタログ＋GUI Chat Protocol 指示。
 - streaming：`app/api/chat` が Web Streams/SSE でトークンと Protocol を送出、`components/chat` が**構造化UIと同じ描画パス**で地図/グラフに反映（§4）。
 
 ### 10.7 未決事項（PoC で確定）
-- Gemini 2.5 Flash の**日本語ツール選択精度**（駅名・指標の曖昧性解決）。不足なら Claude Haiku 4.5 へ。
+- 採用する Gemini Flash 系モデル（2.5 / 3 / 3.5）の**日本語ツール選択精度**（駅名・指標の曖昧性解決）。不足なら Claude Haiku 4.5 へ。
 - GraphAI を **既定にするか AI SDK 併用か**（複雑クエリ PoC の結果次第）。
 - **任意半径クエリ**（§5.2）を LLM から扱う場合の集計方式（事前計算6半径＋補間 or PostGIS 幾何）。
 
 ### 10.8 参考
 - GraphAI: [receptron/graphai](https://github.com/receptron/graphai)（[LLM agents](https://github.com/receptron/graphai/blob/main/agents/llm_agents/README.md) / [Streaming](https://github.com/receptron/graphai/blob/main/docs/guide/Streaming.md) / [@receptron/graphai_express](https://www.npmjs.com/package/@receptron/graphai_express)）・[GraphAI 解説(Zenn)](https://zenn.dev/singularity/articles/graphai-index)
-- Vercel AI SDK: [vercel/ai](https://github.com/vercel/ai)・[AI SDK 5](https://vercel.com/blog/ai-sdk-5)・[Gemini × AI SDK 例](https://ai.google.dev/gemini-api/docs/vercel-ai-sdk-example)
+- Vercel AI SDK: [vercel/ai](https://github.com/vercel/ai)・[AI SDK 6](https://vercel.com/blog/ai-sdk-6)・[v5→v6 移行ガイド](https://ai-sdk.dev/docs/migration-guides/migration-guide-6-0)・[Gemini × AI SDK 例](https://ai.google.dev/gemini-api/docs/vercel-ai-sdk-example)
 - プロバイダ: [Gemini 料金](https://ai.google.dev/gemini-api/docs/pricing) / [レート制限](https://ai.google.dev/gemini-api/docs/rate-limits)・[Groq レート制限](https://console.groq.com/docs/rate-limits)・[OpenRouter 無料モデル](https://openrouter.ai/collections/free-models)

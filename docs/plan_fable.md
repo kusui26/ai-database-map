@@ -500,8 +500,9 @@ MapResponse = { messages: {role,text}[], mapActions: MapAction[], panels: Panel[
 
 | ブロック | 状態 | 完了日 | メモ |
 |---|---|---|---|
-| **P0** | ✅ 完了 | 2026-07-06 | Next 16 / React 19 / TS 6 / Tailwind v4 / ESLint 10（境界ルール）/ Prettier / Vitest 4。`typecheck`・`lint`・`test`（12）・`build` すべて green。境界ルールは自動テストで担保。**ユーザー作業**：GitHub push＋Vercel 接続でプレビュー確認 |
-| P1〜P8c | 未着手 | — | — |
+| **P0** | ✅ 完了 | 2026-07-06 | Next 16 / React 19 / TS 6 / Tailwind v4 / ESLint 10（境界ルール）/ Prettier / Vitest 4。`typecheck`・`lint`・`test`（12）・`build` すべて green。境界ルールは自動テストで担保。Vercel 接続・プレビュー確認済み |
+| **P1** | ✅ 完了 | 2026-07-07 | CSV 499列 → `src/shared/catalog/catalog.json`（488エントリ＋駅属性11）を `pipeline/build_catalog.py` で生成。独立検証 27/27 PASS（列数・カテゴリ別件数が dataset.md §2 と一致・フラグ参照実在）。ラベル一覧 `docs/catalog_labels.md`。CI 用スモークテスト追加。**ユーザー確認**：ラベルの日本語自然さ |
+| P2a〜P8c | 未着手 | — | — |
 
 ---
 

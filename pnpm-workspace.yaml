@@ -1,0 +1,11 @@
+# pnpm 設定（単一パッケージの workspace ルート）。
+
+# 本プロジェクトは「2026-07 時点の最新安定」を意図的に採用している（package.json 参照）。
+# pnpm 11 の minimumReleaseAge（既定 ~24h）は公開直後の最新版を弾き、`--frozen-lockfile`
+# の CI を不安定にする。再現性・完全性はコミット済み pnpm-lock.yaml（各パッケージの sha512
+# integrity）で担保するため、age gate は無効化する（0 = 最小公開経過時間の制限なし）。
+minimumReleaseAge: 0
+
+# sharp（Next.js の画像最適化）のインストール時ビルドスクリプトを明示的に許可する。
+allowBuilds:
+  sharp: true

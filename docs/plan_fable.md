@@ -500,7 +500,8 @@ MapResponse = { messages: {role,text}[], mapActions: MapAction[], panels: Panel[
 
 | ブロック | 状態 | 完了日 | メモ |
 |---|---|---|---|
-| P0〜P8c | 未着手 | — | — |
+| **P0** | ✅ 完了 | 2026-07-06 | Next 16 / React 19 / TS 6 / Tailwind v4 / ESLint 10（境界ルール）/ Prettier / Vitest 4。`typecheck`・`lint`・`test`（12）・`build` すべて green。境界ルールは自動テストで担保。**ユーザー作業**：GitHub push＋Vercel 接続でプレビュー確認 |
+| P1〜P8c | 未着手 | — | — |
 
 ---
 

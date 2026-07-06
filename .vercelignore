@@ -1,0 +1,8 @@
+# Vercel のビルドに不要な資産（データ・資料・パイプライン・探索）を除外する。
+# アプリ本体は src/ ・public/ ・各種 config のみで完結する。
+data/
+slide/
+script/
+pipeline/
+condminium/
+docs/

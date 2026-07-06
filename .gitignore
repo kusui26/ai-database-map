@@ -20,5 +20,20 @@ env/
 *.key
   
 # --- ログ・一時ファイル ---
-*.log 
+*.log
 *.tmp
+
+# --- Node / Next.js（アプリ） ---
+node_modules/
+.next/
+out/
+build/
+next-env.d.ts
+*.tsbuildinfo
+.eslintcache
+
+# --- テスト・カバレッジ ---
+coverage/
+
+# --- Vercel ---
+.vercel/

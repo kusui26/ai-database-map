@@ -1,0 +1,529 @@
+# メトリクス・カタログ ラベル一覧（自動生成）
+
+`pipeline/build_catalog.py` が `station_dataset.csv`（499列）から生成。 値列 488 エントリ ＋ 駅属性 11。
+
+凡例: `key` — ラベル 〔単位・format・rankable・⚠→信頼性フラグ〕
+
+## 乗降客数（passenger）— 16件
+
+- `pax_2011` — 乗降客数（2011年） 〔人/日・int・rankable〕
+- `pax_2012` — 乗降客数（2012年） 〔人/日・int・rankable〕
+- `pax_2013` — 乗降客数（2013年） 〔人/日・int・rankable〕
+- `pax_2014` — 乗降客数（2014年） 〔人/日・int・rankable〕
+- `pax_2015` — 乗降客数（2015年） 〔人/日・int・rankable〕
+- `pax_2016` — 乗降客数（2016年） 〔人/日・int・rankable〕
+- `pax_2017` — 乗降客数（2017年） 〔人/日・int・rankable〕
+- `pax_2018` — 乗降客数（2018年） 〔人/日・int・rankable〕
+- `pax_2019` — 乗降客数（2019年） 〔人/日・int・rankable〕
+- `pax_2020` — 乗降客数（2020年） 〔人/日・int・rankable〕
+- `pax_2021` — 乗降客数（2021年） 〔人/日・int・rankable〕
+- `pax_2022` — 乗降客数（2022年） 〔人/日・int・rankable〕
+- `pax_2023` — 乗降客数（2023年） 〔人/日・int・rankable〕
+- `pax_2024` — 乗降客数（2024年） 〔人/日・int・rankable〕
+- `rate_yoy` — 乗降客数 前年増減率（2023→2024年） 〔%・percent1・rankable・⚠→flag_yoy〕
+- `rate_covid` — 乗降客数 コロナ前後増減率 〔%・percent1・rankable・⚠→flag_covid〕
+
+## 人口（population）— 132件
+
+- `pop_2020_500m` — 人口（2020年・500m圏） 〔人・int・rankable〕
+- `pop_2020_1km` — 人口（2020年・1km圏） 〔人・int・rankable〕
+- `pop_2020_2km` — 人口（2020年・2km圏） 〔人・int・rankable〕
+- `pop_2020_5km` — 人口（2020年・5km圏） 〔人・int・rankable〕
+- `pop_2020_10km` — 人口（2020年・10km圏） 〔人・int・rankable〕
+- `pop_2020_20km` — 人口（2020年・20km圏） 〔人・int・rankable〕
+- `pop_2020_500m_hidden_ratio` — 人口 秘匿・合算メッシュ割合（2020年・500m圏） 〔%・ratio1・not-rankable〕
+- `pop_2015_500m` — 人口（2015年・500m圏） 〔人・int・rankable〕
+- `pop_2015_1km` — 人口（2015年・1km圏） 〔人・int・rankable〕
+- `pop_2015_2km` — 人口（2015年・2km圏） 〔人・int・rankable〕
+- `pop_2015_5km` — 人口（2015年・5km圏） 〔人・int・rankable〕
+- `pop_2015_10km` — 人口（2015年・10km圏） 〔人・int・rankable〕
+- `pop_2015_20km` — 人口（2015年・20km圏） 〔人・int・rankable〕
+- `pop_2015_500m_hidden_ratio` — 人口 秘匿・合算メッシュ割合（2015年・500m圏） 〔%・ratio1・not-rankable〕
+- `pop_2010_500m` — 人口（2010年・500m圏） 〔人・int・rankable〕
+- `pop_2010_1km` — 人口（2010年・1km圏） 〔人・int・rankable〕
+- `pop_2010_2km` — 人口（2010年・2km圏） 〔人・int・rankable〕
+- `pop_2010_5km` — 人口（2010年・5km圏） 〔人・int・rankable〕
+- `pop_2010_10km` — 人口（2010年・10km圏） 〔人・int・rankable〕
+- `pop_2010_20km` — 人口（2010年・20km圏） 〔人・int・rankable〕
+- `pop_2010_500m_hidden_ratio` — 人口 秘匿・合算メッシュ割合（2010年・500m圏） 〔%・ratio1・not-rankable〕
+- `pop_2005_500m` — 人口（2005年・500m圏） 〔人・int・rankable〕
+- `pop_2005_1km` — 人口（2005年・1km圏） 〔人・int・rankable〕
+- `pop_2005_2km` — 人口（2005年・2km圏） 〔人・int・rankable〕
+- `pop_2005_5km` — 人口（2005年・5km圏） 〔人・int・rankable〕
+- `pop_2005_10km` — 人口（2005年・10km圏） 〔人・int・rankable〕
+- `pop_2005_20km` — 人口（2005年・20km圏） 〔人・int・rankable〕
+- `pop_2005_500m_hidden_ratio` — 人口 秘匿・合算メッシュ割合（2005年・500m圏） 〔%・ratio1・not-rankable〕
+- `pop_2000_500m` — 人口（2000年・500m圏） 〔人・int・rankable〕
+- `pop_2000_1km` — 人口（2000年・1km圏） 〔人・int・rankable〕
+- `pop_2000_2km` — 人口（2000年・2km圏） 〔人・int・rankable〕
+- `pop_2000_5km` — 人口（2000年・5km圏） 〔人・int・rankable〕
+- `pop_2000_10km` — 人口（2000年・10km圏） 〔人・int・rankable〕
+- `pop_2000_20km` — 人口（2000年・20km圏） 〔人・int・rankable〕
+- `pop_2000_500m_hidden_ratio` — 人口 秘匿・合算メッシュ割合（2000年・500m圏） 〔%・ratio1・not-rankable〕
+- `pop_1995_500m` — 人口（1995年・500m圏） 〔人・int・rankable〕
+- `pop_1995_1km` — 人口（1995年・1km圏） 〔人・int・rankable〕
+- `pop_1995_2km` — 人口（1995年・2km圏） 〔人・int・rankable〕
+- `pop_1995_5km` — 人口（1995年・5km圏） 〔人・int・rankable〕
+- `pop_1995_10km` — 人口（1995年・10km圏） 〔人・int・rankable〕
+- `pop_1995_20km` — 人口（1995年・20km圏） 〔人・int・rankable〕
+- `pop_1995_500m_hidden_ratio` — 人口 秘匿・合算メッシュ割合（1995年・500m圏） 〔%・ratio1・not-rankable〕
+- `pop_gr_2020_2015_500m` — 人口増減率（2015→2020年・500m圏） 〔%・percent1・rankable・⚠→pop_lowbase_2015_500m〕
+- `pop_gr_2020_2015_1km` — 人口増減率（2015→2020年・1km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2015_1km〕
+- `pop_gr_2020_2015_2km` — 人口増減率（2015→2020年・2km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2015_2km〕
+- `pop_gr_2020_2015_5km` — 人口増減率（2015→2020年・5km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2015_5km〕
+- `pop_gr_2020_2015_10km` — 人口増減率（2015→2020年・10km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2015_10km〕
+- `pop_gr_2020_2015_20km` — 人口増減率（2015→2020年・20km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2015_20km〕
+- `pop_gr_2020_2010_500m` — 人口増減率（2010→2020年・500m圏） 〔%・percent1・rankable・⚠→pop_lowbase_2010_500m〕
+- `pop_gr_2020_2010_1km` — 人口増減率（2010→2020年・1km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2010_1km〕
+- `pop_gr_2020_2010_2km` — 人口増減率（2010→2020年・2km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2010_2km〕
+- `pop_gr_2020_2010_5km` — 人口増減率（2010→2020年・5km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2010_5km〕
+- `pop_gr_2020_2010_10km` — 人口増減率（2010→2020年・10km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2010_10km〕
+- `pop_gr_2020_2010_20km` — 人口増減率（2010→2020年・20km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2010_20km〕
+- `pop_gr_2020_2005_500m` — 人口増減率（2005→2020年・500m圏） 〔%・percent1・rankable・⚠→pop_lowbase_2005_500m〕
+- `pop_gr_2020_2005_1km` — 人口増減率（2005→2020年・1km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2005_1km〕
+- `pop_gr_2020_2005_2km` — 人口増減率（2005→2020年・2km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2005_2km〕
+- `pop_gr_2020_2005_5km` — 人口増減率（2005→2020年・5km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2005_5km〕
+- `pop_gr_2020_2005_10km` — 人口増減率（2005→2020年・10km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2005_10km〕
+- `pop_gr_2020_2005_20km` — 人口増減率（2005→2020年・20km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2005_20km〕
+- `pop_gr_2020_2000_500m` — 人口増減率（2000→2020年・500m圏） 〔%・percent1・rankable・⚠→pop_lowbase_2000_500m〕
+- `pop_gr_2020_2000_1km` — 人口増減率（2000→2020年・1km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2000_1km〕
+- `pop_gr_2020_2000_2km` — 人口増減率（2000→2020年・2km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2000_2km〕
+- `pop_gr_2020_2000_5km` — 人口増減率（2000→2020年・5km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2000_5km〕
+- `pop_gr_2020_2000_10km` — 人口増減率（2000→2020年・10km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2000_10km〕
+- `pop_gr_2020_2000_20km` — 人口増減率（2000→2020年・20km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2000_20km〕
+- `pop_gr_2020_1995_500m` — 人口増減率（1995→2020年・500m圏） 〔%・percent1・rankable・⚠→pop_lowbase_1995_500m〕
+- `pop_gr_2020_1995_1km` — 人口増減率（1995→2020年・1km圏） 〔%・percent1・rankable・⚠→pop_lowbase_1995_1km〕
+- `pop_gr_2020_1995_2km` — 人口増減率（1995→2020年・2km圏） 〔%・percent1・rankable・⚠→pop_lowbase_1995_2km〕
+- `pop_gr_2020_1995_5km` — 人口増減率（1995→2020年・5km圏） 〔%・percent1・rankable・⚠→pop_lowbase_1995_5km〕
+- `pop_gr_2020_1995_10km` — 人口増減率（1995→2020年・10km圏） 〔%・percent1・rankable・⚠→pop_lowbase_1995_10km〕
+- `pop_gr_2020_1995_20km` — 人口増減率（1995→2020年・20km圏） 〔%・percent1・rankable・⚠→pop_lowbase_1995_20km〕
+- `pop_gr_2015_2010_500m` — 人口増減率（2010→2015年・500m圏） 〔%・percent1・rankable・⚠→pop_lowbase_2010_500m〕
+- `pop_gr_2015_2010_1km` — 人口増減率（2010→2015年・1km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2010_1km〕
+- `pop_gr_2015_2010_2km` — 人口増減率（2010→2015年・2km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2010_2km〕
+- `pop_gr_2015_2010_5km` — 人口増減率（2010→2015年・5km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2010_5km〕
+- `pop_gr_2015_2010_10km` — 人口増減率（2010→2015年・10km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2010_10km〕
+- `pop_gr_2015_2010_20km` — 人口増減率（2010→2015年・20km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2010_20km〕
+- `pop_gr_2010_2005_500m` — 人口増減率（2005→2010年・500m圏） 〔%・percent1・rankable・⚠→pop_lowbase_2005_500m〕
+- `pop_gr_2010_2005_1km` — 人口増減率（2005→2010年・1km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2005_1km〕
+- `pop_gr_2010_2005_2km` — 人口増減率（2005→2010年・2km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2005_2km〕
+- `pop_gr_2010_2005_5km` — 人口増減率（2005→2010年・5km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2005_5km〕
+- `pop_gr_2010_2005_10km` — 人口増減率（2005→2010年・10km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2005_10km〕
+- `pop_gr_2010_2005_20km` — 人口増減率（2005→2010年・20km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2005_20km〕
+- `pop_gr_2005_2000_500m` — 人口増減率（2000→2005年・500m圏） 〔%・percent1・rankable・⚠→pop_lowbase_2000_500m〕
+- `pop_gr_2005_2000_1km` — 人口増減率（2000→2005年・1km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2000_1km〕
+- `pop_gr_2005_2000_2km` — 人口増減率（2000→2005年・2km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2000_2km〕
+- `pop_gr_2005_2000_5km` — 人口増減率（2000→2005年・5km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2000_5km〕
+- `pop_gr_2005_2000_10km` — 人口増減率（2000→2005年・10km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2000_10km〕
+- `pop_gr_2005_2000_20km` — 人口増減率（2000→2005年・20km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2000_20km〕
+- `pop_gr_2000_1995_500m` — 人口増減率（1995→2000年・500m圏） 〔%・percent1・rankable・⚠→pop_lowbase_1995_500m〕
+- `pop_gr_2000_1995_1km` — 人口増減率（1995→2000年・1km圏） 〔%・percent1・rankable・⚠→pop_lowbase_1995_1km〕
+- `pop_gr_2000_1995_2km` — 人口増減率（1995→2000年・2km圏） 〔%・percent1・rankable・⚠→pop_lowbase_1995_2km〕
+- `pop_gr_2000_1995_5km` — 人口増減率（1995→2000年・5km圏） 〔%・percent1・rankable・⚠→pop_lowbase_1995_5km〕
+- `pop_gr_2000_1995_10km` — 人口増減率（1995→2000年・10km圏） 〔%・percent1・rankable・⚠→pop_lowbase_1995_10km〕
+- `pop_gr_2000_1995_20km` — 人口増減率（1995→2000年・20km圏） 〔%・percent1・rankable・⚠→pop_lowbase_1995_20km〕
+- `pop_lowbase_1995_500m` — 人口 低基準フラグ（1995年・500m圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_1995_1km` — 人口 低基準フラグ（1995年・1km圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_1995_2km` — 人口 低基準フラグ（1995年・2km圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_1995_5km` — 人口 低基準フラグ（1995年・5km圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_1995_10km` — 人口 低基準フラグ（1995年・10km圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_1995_20km` — 人口 低基準フラグ（1995年・20km圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_2000_500m` — 人口 低基準フラグ（2000年・500m圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_2000_1km` — 人口 低基準フラグ（2000年・1km圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_2000_2km` — 人口 低基準フラグ（2000年・2km圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_2000_5km` — 人口 低基準フラグ（2000年・5km圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_2000_10km` — 人口 低基準フラグ（2000年・10km圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_2000_20km` — 人口 低基準フラグ（2000年・20km圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_2005_500m` — 人口 低基準フラグ（2005年・500m圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_2005_1km` — 人口 低基準フラグ（2005年・1km圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_2005_2km` — 人口 低基準フラグ（2005年・2km圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_2005_5km` — 人口 低基準フラグ（2005年・5km圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_2005_10km` — 人口 低基準フラグ（2005年・10km圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_2005_20km` — 人口 低基準フラグ（2005年・20km圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_2010_500m` — 人口 低基準フラグ（2010年・500m圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_2010_1km` — 人口 低基準フラグ（2010年・1km圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_2010_2km` — 人口 低基準フラグ（2010年・2km圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_2010_5km` — 人口 低基準フラグ（2010年・5km圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_2010_10km` — 人口 低基準フラグ（2010年・10km圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_2010_20km` — 人口 低基準フラグ（2010年・20km圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_2015_500m` — 人口 低基準フラグ（2015年・500m圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_2015_1km` — 人口 低基準フラグ（2015年・1km圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_2015_2km` — 人口 低基準フラグ（2015年・2km圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_2015_5km` — 人口 低基準フラグ（2015年・5km圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_2015_10km` — 人口 低基準フラグ（2015年・10km圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_2015_20km` — 人口 低基準フラグ（2015年・20km圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_2020_500m` — 人口 低基準フラグ（2020年・500m圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_2020_1km` — 人口 低基準フラグ（2020年・1km圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_2020_2km` — 人口 低基準フラグ（2020年・2km圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_2020_5km` — 人口 低基準フラグ（2020年・5km圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_2020_10km` — 人口 低基準フラグ（2020年・10km圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop_lowbase_2020_20km` — 人口 低基準フラグ（2020年・20km圏／基準人口<50人） 〔—・—・not-rankable〕
+
+## 将来推計人口（population_forecast）— 180件
+
+- `pop_pred_2024_2020_500m` — 将来推計人口（2020年・R6推計・500m圏） 〔人・int・rankable〕
+- `pop_pred_2024_2020_1km` — 将来推計人口（2020年・R6推計・1km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2020_2km` — 将来推計人口（2020年・R6推計・2km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2020_5km` — 将来推計人口（2020年・R6推計・5km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2020_10km` — 将来推計人口（2020年・R6推計・10km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2020_20km` — 将来推計人口（2020年・R6推計・20km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2025_500m` — 将来推計人口（2025年・R6推計・500m圏） 〔人・int・rankable〕
+- `pop_pred_2024_2025_1km` — 将来推計人口（2025年・R6推計・1km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2025_2km` — 将来推計人口（2025年・R6推計・2km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2025_5km` — 将来推計人口（2025年・R6推計・5km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2025_10km` — 将来推計人口（2025年・R6推計・10km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2025_20km` — 将来推計人口（2025年・R6推計・20km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2030_500m` — 将来推計人口（2030年・R6推計・500m圏） 〔人・int・rankable〕
+- `pop_pred_2024_2030_1km` — 将来推計人口（2030年・R6推計・1km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2030_2km` — 将来推計人口（2030年・R6推計・2km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2030_5km` — 将来推計人口（2030年・R6推計・5km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2030_10km` — 将来推計人口（2030年・R6推計・10km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2030_20km` — 将来推計人口（2030年・R6推計・20km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2035_500m` — 将来推計人口（2035年・R6推計・500m圏） 〔人・int・rankable〕
+- `pop_pred_2024_2035_1km` — 将来推計人口（2035年・R6推計・1km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2035_2km` — 将来推計人口（2035年・R6推計・2km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2035_5km` — 将来推計人口（2035年・R6推計・5km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2035_10km` — 将来推計人口（2035年・R6推計・10km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2035_20km` — 将来推計人口（2035年・R6推計・20km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2040_500m` — 将来推計人口（2040年・R6推計・500m圏） 〔人・int・rankable〕
+- `pop_pred_2024_2040_1km` — 将来推計人口（2040年・R6推計・1km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2040_2km` — 将来推計人口（2040年・R6推計・2km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2040_5km` — 将来推計人口（2040年・R6推計・5km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2040_10km` — 将来推計人口（2040年・R6推計・10km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2040_20km` — 将来推計人口（2040年・R6推計・20km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2045_500m` — 将来推計人口（2045年・R6推計・500m圏） 〔人・int・rankable〕
+- `pop_pred_2024_2045_1km` — 将来推計人口（2045年・R6推計・1km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2045_2km` — 将来推計人口（2045年・R6推計・2km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2045_5km` — 将来推計人口（2045年・R6推計・5km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2045_10km` — 将来推計人口（2045年・R6推計・10km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2045_20km` — 将来推計人口（2045年・R6推計・20km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2050_500m` — 将来推計人口（2050年・R6推計・500m圏） 〔人・int・rankable〕
+- `pop_pred_2024_2050_1km` — 将来推計人口（2050年・R6推計・1km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2050_2km` — 将来推計人口（2050年・R6推計・2km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2050_5km` — 将来推計人口（2050年・R6推計・5km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2050_10km` — 将来推計人口（2050年・R6推計・10km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2050_20km` — 将来推計人口（2050年・R6推計・20km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2055_500m` — 将来推計人口（2055年・R6推計・500m圏） 〔人・int・rankable〕
+- `pop_pred_2024_2055_1km` — 将来推計人口（2055年・R6推計・1km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2055_2km` — 将来推計人口（2055年・R6推計・2km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2055_5km` — 将来推計人口（2055年・R6推計・5km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2055_10km` — 将来推計人口（2055年・R6推計・10km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2055_20km` — 将来推計人口（2055年・R6推計・20km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2060_500m` — 将来推計人口（2060年・R6推計・500m圏） 〔人・int・rankable〕
+- `pop_pred_2024_2060_1km` — 将来推計人口（2060年・R6推計・1km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2060_2km` — 将来推計人口（2060年・R6推計・2km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2060_5km` — 将来推計人口（2060年・R6推計・5km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2060_10km` — 将来推計人口（2060年・R6推計・10km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2060_20km` — 将来推計人口（2060年・R6推計・20km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2065_500m` — 将来推計人口（2065年・R6推計・500m圏） 〔人・int・rankable〕
+- `pop_pred_2024_2065_1km` — 将来推計人口（2065年・R6推計・1km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2065_2km` — 将来推計人口（2065年・R6推計・2km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2065_5km` — 将来推計人口（2065年・R6推計・5km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2065_10km` — 将来推計人口（2065年・R6推計・10km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2065_20km` — 将来推計人口（2065年・R6推計・20km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2070_500m` — 将来推計人口（2070年・R6推計・500m圏） 〔人・int・rankable〕
+- `pop_pred_2024_2070_1km` — 将来推計人口（2070年・R6推計・1km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2070_2km` — 将来推計人口（2070年・R6推計・2km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2070_5km` — 将来推計人口（2070年・R6推計・5km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2070_10km` — 将来推計人口（2070年・R6推計・10km圏） 〔人・int・rankable〕
+- `pop_pred_2024_2070_20km` — 将来推計人口（2070年・R6推計・20km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2015_500m` — 将来推計人口（2015年・H30推計・500m圏） 〔人・int・rankable〕
+- `pop_pred_2018_2015_1km` — 将来推計人口（2015年・H30推計・1km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2015_2km` — 将来推計人口（2015年・H30推計・2km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2015_5km` — 将来推計人口（2015年・H30推計・5km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2015_10km` — 将来推計人口（2015年・H30推計・10km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2015_20km` — 将来推計人口（2015年・H30推計・20km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2020_500m` — 将来推計人口（2020年・H30推計・500m圏） 〔人・int・rankable〕
+- `pop_pred_2018_2020_1km` — 将来推計人口（2020年・H30推計・1km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2020_2km` — 将来推計人口（2020年・H30推計・2km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2020_5km` — 将来推計人口（2020年・H30推計・5km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2020_10km` — 将来推計人口（2020年・H30推計・10km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2020_20km` — 将来推計人口（2020年・H30推計・20km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2025_500m` — 将来推計人口（2025年・H30推計・500m圏） 〔人・int・rankable〕
+- `pop_pred_2018_2025_1km` — 将来推計人口（2025年・H30推計・1km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2025_2km` — 将来推計人口（2025年・H30推計・2km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2025_5km` — 将来推計人口（2025年・H30推計・5km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2025_10km` — 将来推計人口（2025年・H30推計・10km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2025_20km` — 将来推計人口（2025年・H30推計・20km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2030_500m` — 将来推計人口（2030年・H30推計・500m圏） 〔人・int・rankable〕
+- `pop_pred_2018_2030_1km` — 将来推計人口（2030年・H30推計・1km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2030_2km` — 将来推計人口（2030年・H30推計・2km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2030_5km` — 将来推計人口（2030年・H30推計・5km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2030_10km` — 将来推計人口（2030年・H30推計・10km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2030_20km` — 将来推計人口（2030年・H30推計・20km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2035_500m` — 将来推計人口（2035年・H30推計・500m圏） 〔人・int・rankable〕
+- `pop_pred_2018_2035_1km` — 将来推計人口（2035年・H30推計・1km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2035_2km` — 将来推計人口（2035年・H30推計・2km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2035_5km` — 将来推計人口（2035年・H30推計・5km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2035_10km` — 将来推計人口（2035年・H30推計・10km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2035_20km` — 将来推計人口（2035年・H30推計・20km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2040_500m` — 将来推計人口（2040年・H30推計・500m圏） 〔人・int・rankable〕
+- `pop_pred_2018_2040_1km` — 将来推計人口（2040年・H30推計・1km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2040_2km` — 将来推計人口（2040年・H30推計・2km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2040_5km` — 将来推計人口（2040年・H30推計・5km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2040_10km` — 将来推計人口（2040年・H30推計・10km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2040_20km` — 将来推計人口（2040年・H30推計・20km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2045_500m` — 将来推計人口（2045年・H30推計・500m圏） 〔人・int・rankable〕
+- `pop_pred_2018_2045_1km` — 将来推計人口（2045年・H30推計・1km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2045_2km` — 将来推計人口（2045年・H30推計・2km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2045_5km` — 将来推計人口（2045年・H30推計・5km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2045_10km` — 将来推計人口（2045年・H30推計・10km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2045_20km` — 将来推計人口（2045年・H30推計・20km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2050_500m` — 将来推計人口（2050年・H30推計・500m圏） 〔人・int・rankable〕
+- `pop_pred_2018_2050_1km` — 将来推計人口（2050年・H30推計・1km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2050_2km` — 将来推計人口（2050年・H30推計・2km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2050_5km` — 将来推計人口（2050年・H30推計・5km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2050_10km` — 将来推計人口（2050年・H30推計・10km圏） 〔人・int・rankable〕
+- `pop_pred_2018_2050_20km` — 将来推計人口（2050年・H30推計・20km圏） 〔人・int・rankable〕
+- `pop_gr_pred_2024_2025_500m` — 将来人口増減率（2020→2025年・R6推計・500m圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_500m〕
+- `pop_gr_pred_2024_2025_1km` — 将来人口増減率（2020→2025年・R6推計・1km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_1km〕
+- `pop_gr_pred_2024_2025_2km` — 将来人口増減率（2020→2025年・R6推計・2km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_2km〕
+- `pop_gr_pred_2024_2025_5km` — 将来人口増減率（2020→2025年・R6推計・5km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_5km〕
+- `pop_gr_pred_2024_2025_10km` — 将来人口増減率（2020→2025年・R6推計・10km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_10km〕
+- `pop_gr_pred_2024_2025_20km` — 将来人口増減率（2020→2025年・R6推計・20km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_20km〕
+- `pop_gr_pred_2024_2030_500m` — 将来人口増減率（2020→2030年・R6推計・500m圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_500m〕
+- `pop_gr_pred_2024_2030_1km` — 将来人口増減率（2020→2030年・R6推計・1km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_1km〕
+- `pop_gr_pred_2024_2030_2km` — 将来人口増減率（2020→2030年・R6推計・2km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_2km〕
+- `pop_gr_pred_2024_2030_5km` — 将来人口増減率（2020→2030年・R6推計・5km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_5km〕
+- `pop_gr_pred_2024_2030_10km` — 将来人口増減率（2020→2030年・R6推計・10km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_10km〕
+- `pop_gr_pred_2024_2030_20km` — 将来人口増減率（2020→2030年・R6推計・20km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_20km〕
+- `pop_gr_pred_2024_2035_500m` — 将来人口増減率（2020→2035年・R6推計・500m圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_500m〕
+- `pop_gr_pred_2024_2035_1km` — 将来人口増減率（2020→2035年・R6推計・1km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_1km〕
+- `pop_gr_pred_2024_2035_2km` — 将来人口増減率（2020→2035年・R6推計・2km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_2km〕
+- `pop_gr_pred_2024_2035_5km` — 将来人口増減率（2020→2035年・R6推計・5km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_5km〕
+- `pop_gr_pred_2024_2035_10km` — 将来人口増減率（2020→2035年・R6推計・10km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_10km〕
+- `pop_gr_pred_2024_2035_20km` — 将来人口増減率（2020→2035年・R6推計・20km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_20km〕
+- `pop_gr_pred_2024_2040_500m` — 将来人口増減率（2020→2040年・R6推計・500m圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_500m〕
+- `pop_gr_pred_2024_2040_1km` — 将来人口増減率（2020→2040年・R6推計・1km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_1km〕
+- `pop_gr_pred_2024_2040_2km` — 将来人口増減率（2020→2040年・R6推計・2km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_2km〕
+- `pop_gr_pred_2024_2040_5km` — 将来人口増減率（2020→2040年・R6推計・5km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_5km〕
+- `pop_gr_pred_2024_2040_10km` — 将来人口増減率（2020→2040年・R6推計・10km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_10km〕
+- `pop_gr_pred_2024_2040_20km` — 将来人口増減率（2020→2040年・R6推計・20km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_20km〕
+- `pop_gr_pred_2024_2045_500m` — 将来人口増減率（2020→2045年・R6推計・500m圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_500m〕
+- `pop_gr_pred_2024_2045_1km` — 将来人口増減率（2020→2045年・R6推計・1km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_1km〕
+- `pop_gr_pred_2024_2045_2km` — 将来人口増減率（2020→2045年・R6推計・2km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_2km〕
+- `pop_gr_pred_2024_2045_5km` — 将来人口増減率（2020→2045年・R6推計・5km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_5km〕
+- `pop_gr_pred_2024_2045_10km` — 将来人口増減率（2020→2045年・R6推計・10km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_10km〕
+- `pop_gr_pred_2024_2045_20km` — 将来人口増減率（2020→2045年・R6推計・20km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_20km〕
+- `pop_gr_pred_2024_2050_500m` — 将来人口増減率（2020→2050年・R6推計・500m圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_500m〕
+- `pop_gr_pred_2024_2050_1km` — 将来人口増減率（2020→2050年・R6推計・1km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_1km〕
+- `pop_gr_pred_2024_2050_2km` — 将来人口増減率（2020→2050年・R6推計・2km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_2km〕
+- `pop_gr_pred_2024_2050_5km` — 将来人口増減率（2020→2050年・R6推計・5km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_5km〕
+- `pop_gr_pred_2024_2050_10km` — 将来人口増減率（2020→2050年・R6推計・10km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_10km〕
+- `pop_gr_pred_2024_2050_20km` — 将来人口増減率（2020→2050年・R6推計・20km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_20km〕
+- `pop_gr_pred_2024_2055_500m` — 将来人口増減率（2020→2055年・R6推計・500m圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_500m〕
+- `pop_gr_pred_2024_2055_1km` — 将来人口増減率（2020→2055年・R6推計・1km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_1km〕
+- `pop_gr_pred_2024_2055_2km` — 将来人口増減率（2020→2055年・R6推計・2km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_2km〕
+- `pop_gr_pred_2024_2055_5km` — 将来人口増減率（2020→2055年・R6推計・5km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_5km〕
+- `pop_gr_pred_2024_2055_10km` — 将来人口増減率（2020→2055年・R6推計・10km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_10km〕
+- `pop_gr_pred_2024_2055_20km` — 将来人口増減率（2020→2055年・R6推計・20km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_20km〕
+- `pop_gr_pred_2024_2060_500m` — 将来人口増減率（2020→2060年・R6推計・500m圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_500m〕
+- `pop_gr_pred_2024_2060_1km` — 将来人口増減率（2020→2060年・R6推計・1km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_1km〕
+- `pop_gr_pred_2024_2060_2km` — 将来人口増減率（2020→2060年・R6推計・2km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_2km〕
+- `pop_gr_pred_2024_2060_5km` — 将来人口増減率（2020→2060年・R6推計・5km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_5km〕
+- `pop_gr_pred_2024_2060_10km` — 将来人口増減率（2020→2060年・R6推計・10km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_10km〕
+- `pop_gr_pred_2024_2060_20km` — 将来人口増減率（2020→2060年・R6推計・20km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_20km〕
+- `pop_gr_pred_2024_2065_500m` — 将来人口増減率（2020→2065年・R6推計・500m圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_500m〕
+- `pop_gr_pred_2024_2065_1km` — 将来人口増減率（2020→2065年・R6推計・1km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_1km〕
+- `pop_gr_pred_2024_2065_2km` — 将来人口増減率（2020→2065年・R6推計・2km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_2km〕
+- `pop_gr_pred_2024_2065_5km` — 将来人口増減率（2020→2065年・R6推計・5km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_5km〕
+- `pop_gr_pred_2024_2065_10km` — 将来人口増減率（2020→2065年・R6推計・10km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_10km〕
+- `pop_gr_pred_2024_2065_20km` — 将来人口増減率（2020→2065年・R6推計・20km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_20km〕
+- `pop_gr_pred_2024_2070_500m` — 将来人口増減率（2020→2070年・R6推計・500m圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_500m〕
+- `pop_gr_pred_2024_2070_1km` — 将来人口増減率（2020→2070年・R6推計・1km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_1km〕
+- `pop_gr_pred_2024_2070_2km` — 将来人口増減率（2020→2070年・R6推計・2km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_2km〕
+- `pop_gr_pred_2024_2070_5km` — 将来人口増減率（2020→2070年・R6推計・5km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_5km〕
+- `pop_gr_pred_2024_2070_10km` — 将来人口増減率（2020→2070年・R6推計・10km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_10km〕
+- `pop_gr_pred_2024_2070_20km` — 将来人口増減率（2020→2070年・R6推計・20km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_20km〕
+- `pop_err_2020_pred_2018_500m` — 人口予測誤差率（H30推計2020 vs 実績2020・500m圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_500m〕
+- `pop_err_2020_pred_2018_1km` — 人口予測誤差率（H30推計2020 vs 実績2020・1km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_1km〕
+- `pop_err_2020_pred_2018_2km` — 人口予測誤差率（H30推計2020 vs 実績2020・2km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_2km〕
+- `pop_err_2020_pred_2018_5km` — 人口予測誤差率（H30推計2020 vs 実績2020・5km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_5km〕
+- `pop_err_2020_pred_2018_10km` — 人口予測誤差率（H30推計2020 vs 実績2020・10km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_10km〕
+- `pop_err_2020_pred_2018_20km` — 人口予測誤差率（H30推計2020 vs 実績2020・20km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_20km〕
+
+## 地価（land_price）— 58件
+
+- `lp_near_price` — 最寄地価公示価格（2026年） 〔円/㎡・yen・rankable〕
+- `lp_near_dist_m` — 最寄地価公示地点までの距離 〔m・int・not-rankable〕
+- `lp_near_use` — 最寄地価公示地点の用途区分 〔—・—・not-rankable〕
+- `lp_med_500m` — 地価中央値（2026年・500m圏） 〔円/㎡・yen・rankable・⚠→lp_lown_500m〕
+- `lp_n_500m` — 地価公示地点数（500m圏） 〔箇所・int・not-rankable〕
+- `lp_lown_500m` — 地価 低分母フラグ（500m圏／地点数が少なく中央値が不安定） 〔—・—・not-rankable〕
+- `lp_med_1km` — 地価中央値（2026年・1km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_1km〕
+- `lp_n_1km` — 地価公示地点数（1km圏） 〔箇所・int・not-rankable〕
+- `lp_lown_1km` — 地価 低分母フラグ（1km圏／地点数が少なく中央値が不安定） 〔—・—・not-rankable〕
+- `lp_med_2km` — 地価中央値（2026年・2km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_2km〕
+- `lp_n_2km` — 地価公示地点数（2km圏） 〔箇所・int・not-rankable〕
+- `lp_lown_2km` — 地価 低分母フラグ（2km圏／地点数が少なく中央値が不安定） 〔—・—・not-rankable〕
+- `lp_med_5km` — 地価中央値（2026年・5km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_5km〕
+- `lp_n_5km` — 地価公示地点数（5km圏） 〔箇所・int・not-rankable〕
+- `lp_lown_5km` — 地価 低分母フラグ（5km圏／地点数が少なく中央値が不安定） 〔—・—・not-rankable〕
+- `lp_med_10km` — 地価中央値（2026年・10km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_10km〕
+- `lp_n_10km` — 地価公示地点数（10km圏） 〔箇所・int・not-rankable〕
+- `lp_lown_10km` — 地価 低分母フラグ（10km圏／地点数が少なく中央値が不安定） 〔—・—・not-rankable〕
+- `lp_gr_2026_2025_1km` — 地価増減率（2025→2026年・1km圏） 〔%・percent1・rankable・⚠→lp_gr_lown_2026_2025_1km〕
+- `lp_gr_lown_2026_2025_1km` — 地価増減率 低分母フラグ（2025→2026年・1km圏） 〔—・—・not-rankable〕
+- `lp_gr_2026_2025_2km` — 地価増減率（2025→2026年・2km圏） 〔%・percent1・rankable・⚠→lp_gr_lown_2026_2025_2km〕
+- `lp_gr_lown_2026_2025_2km` — 地価増減率 低分母フラグ（2025→2026年・2km圏） 〔—・—・not-rankable〕
+- `lp_gr_2026_2025_5km` — 地価増減率（2025→2026年・5km圏） 〔%・percent1・rankable・⚠→lp_gr_lown_2026_2025_5km〕
+- `lp_gr_lown_2026_2025_5km` — 地価増減率 低分母フラグ（2025→2026年・5km圏） 〔—・—・not-rankable〕
+- `lp_gr_2026_2025_10km` — 地価増減率（2025→2026年・10km圏） 〔%・percent1・rankable・⚠→lp_gr_lown_2026_2025_10km〕
+- `lp_gr_lown_2026_2025_10km` — 地価増減率 低分母フラグ（2025→2026年・10km圏） 〔—・—・not-rankable〕
+- `lp_gr_2026_2023_1km` — 地価増減率（2023→2026年・1km圏） 〔%・percent1・rankable・⚠→lp_gr_lown_2026_2023_1km〕
+- `lp_gr_lown_2026_2023_1km` — 地価増減率 低分母フラグ（2023→2026年・1km圏） 〔—・—・not-rankable〕
+- `lp_gr_2026_2023_2km` — 地価増減率（2023→2026年・2km圏） 〔%・percent1・rankable・⚠→lp_gr_lown_2026_2023_2km〕
+- `lp_gr_lown_2026_2023_2km` — 地価増減率 低分母フラグ（2023→2026年・2km圏） 〔—・—・not-rankable〕
+- `lp_gr_2026_2023_5km` — 地価増減率（2023→2026年・5km圏） 〔%・percent1・rankable・⚠→lp_gr_lown_2026_2023_5km〕
+- `lp_gr_lown_2026_2023_5km` — 地価増減率 低分母フラグ（2023→2026年・5km圏） 〔—・—・not-rankable〕
+- `lp_gr_2026_2023_10km` — 地価増減率（2023→2026年・10km圏） 〔%・percent1・rankable・⚠→lp_gr_lown_2026_2023_10km〕
+- `lp_gr_lown_2026_2023_10km` — 地価増減率 低分母フラグ（2023→2026年・10km圏） 〔—・—・not-rankable〕
+- `lp_gr_2026_2021_1km` — 地価増減率（2021→2026年・1km圏） 〔%・percent1・rankable・⚠→lp_gr_lown_2026_2021_1km〕
+- `lp_gr_lown_2026_2021_1km` — 地価増減率 低分母フラグ（2021→2026年・1km圏） 〔—・—・not-rankable〕
+- `lp_gr_2026_2021_2km` — 地価増減率（2021→2026年・2km圏） 〔%・percent1・rankable・⚠→lp_gr_lown_2026_2021_2km〕
+- `lp_gr_lown_2026_2021_2km` — 地価増減率 低分母フラグ（2021→2026年・2km圏） 〔—・—・not-rankable〕
+- `lp_gr_2026_2021_5km` — 地価増減率（2021→2026年・5km圏） 〔%・percent1・rankable・⚠→lp_gr_lown_2026_2021_5km〕
+- `lp_gr_lown_2026_2021_5km` — 地価増減率 低分母フラグ（2021→2026年・5km圏） 〔—・—・not-rankable〕
+- `lp_gr_2026_2021_10km` — 地価増減率（2021→2026年・10km圏） 〔%・percent1・rankable・⚠→lp_gr_lown_2026_2021_10km〕
+- `lp_gr_lown_2026_2021_10km` — 地価増減率 低分母フラグ（2021→2026年・10km圏） 〔—・—・not-rankable〕
+- `lp_gr_2026_2016_1km` — 地価増減率（2016→2026年・1km圏） 〔%・percent1・rankable・⚠→lp_gr_lown_2026_2016_1km〕
+- `lp_gr_lown_2026_2016_1km` — 地価増減率 低分母フラグ（2016→2026年・1km圏） 〔—・—・not-rankable〕
+- `lp_gr_2026_2016_2km` — 地価増減率（2016→2026年・2km圏） 〔%・percent1・rankable・⚠→lp_gr_lown_2026_2016_2km〕
+- `lp_gr_lown_2026_2016_2km` — 地価増減率 低分母フラグ（2016→2026年・2km圏） 〔—・—・not-rankable〕
+- `lp_gr_2026_2016_5km` — 地価増減率（2016→2026年・5km圏） 〔%・percent1・rankable・⚠→lp_gr_lown_2026_2016_5km〕
+- `lp_gr_lown_2026_2016_5km` — 地価増減率 低分母フラグ（2016→2026年・5km圏） 〔—・—・not-rankable〕
+- `lp_gr_2026_2016_10km` — 地価増減率（2016→2026年・10km圏） 〔%・percent1・rankable・⚠→lp_gr_lown_2026_2016_10km〕
+- `lp_gr_lown_2026_2016_10km` — 地価増減率 低分母フラグ（2016→2026年・10km圏） 〔—・—・not-rankable〕
+- `lp_gr_2026_2011_1km` — 地価増減率（2011→2026年・1km圏） 〔%・percent1・rankable・⚠→lp_gr_lown_2026_2011_1km〕
+- `lp_gr_lown_2026_2011_1km` — 地価増減率 低分母フラグ（2011→2026年・1km圏） 〔—・—・not-rankable〕
+- `lp_gr_2026_2011_2km` — 地価増減率（2011→2026年・2km圏） 〔%・percent1・rankable・⚠→lp_gr_lown_2026_2011_2km〕
+- `lp_gr_lown_2026_2011_2km` — 地価増減率 低分母フラグ（2011→2026年・2km圏） 〔—・—・not-rankable〕
+- `lp_gr_2026_2011_5km` — 地価増減率（2011→2026年・5km圏） 〔%・percent1・rankable・⚠→lp_gr_lown_2026_2011_5km〕
+- `lp_gr_lown_2026_2011_5km` — 地価増減率 低分母フラグ（2011→2026年・5km圏） 〔—・—・not-rankable〕
+- `lp_gr_2026_2011_10km` — 地価増減率（2011→2026年・10km圏） 〔%・percent1・rankable・⚠→lp_gr_lown_2026_2011_10km〕
+- `lp_gr_lown_2026_2011_10km` — 地価増減率 低分母フラグ（2011→2026年・10km圏） 〔—・—・not-rankable〕
+
+## バス（bus）— 36件
+
+- `bus_n_500m` — バス停留所数（現行・500m圏） 〔箇所・int・rankable〕
+- `bus_n_1km` — バス停留所数（現行・1km圏） 〔箇所・int・rankable〕
+- `bus_n_2km` — バス停留所数（現行・2km圏） 〔箇所・int・rankable〕
+- `bus_n_5km` — バス停留所数（現行・5km圏） 〔箇所・int・rankable〕
+- `bus_n_10km` — バス停留所数（現行・10km圏） 〔箇所・int・rankable〕
+- `bus_n_20km` — バス停留所数（現行・20km圏） 〔箇所・int・rankable〕
+- `bus_n_local_500m` — 一般バス停留所数（現行・500m圏） 〔箇所・int・rankable〕
+- `bus_n_local_1km` — 一般バス停留所数（現行・1km圏） 〔箇所・int・rankable〕
+- `bus_n_local_2km` — 一般バス停留所数（現行・2km圏） 〔箇所・int・rankable〕
+- `bus_n_local_5km` — 一般バス停留所数（現行・5km圏） 〔箇所・int・rankable〕
+- `bus_n_local_10km` — 一般バス停留所数（現行・10km圏） 〔箇所・int・rankable〕
+- `bus_n_local_20km` — 一般バス停留所数（現行・20km圏） 〔箇所・int・rankable〕
+- `bus_n_hw_500m` — 高速バス停留所数（現行・500m圏） 〔箇所・int・rankable〕
+- `bus_n_hw_1km` — 高速バス停留所数（現行・1km圏） 〔箇所・int・rankable〕
+- `bus_n_hw_2km` — 高速バス停留所数（現行・2km圏） 〔箇所・int・rankable〕
+- `bus_n_hw_5km` — 高速バス停留所数（現行・5km圏） 〔箇所・int・rankable〕
+- `bus_n_hw_10km` — 高速バス停留所数（現行・10km圏） 〔箇所・int・rankable〕
+- `bus_n_hw_20km` — 高速バス停留所数（現行・20km圏） 〔箇所・int・rankable〕
+- `bus_n2010_500m` — バス停留所数（2010年度・500m圏） 〔箇所・int・not-rankable〕
+- `bus_n2010_1km` — バス停留所数（2010年度・1km圏） 〔箇所・int・not-rankable〕
+- `bus_n2010_2km` — バス停留所数（2010年度・2km圏） 〔箇所・int・not-rankable〕
+- `bus_n2010_5km` — バス停留所数（2010年度・5km圏） 〔箇所・int・not-rankable〕
+- `bus_n2010_10km` — バス停留所数（2010年度・10km圏） 〔箇所・int・not-rankable〕
+- `bus_n2010_20km` — バス停留所数（2010年度・20km圏） 〔箇所・int・not-rankable〕
+- `bus_gr_500m` — バス停留所数増減率（2010→現行・500m圏） 〔%・percent1・rankable・⚠→bus_gr_lown_500m〕
+- `bus_gr_1km` — バス停留所数増減率（2010→現行・1km圏） 〔%・percent1・rankable・⚠→bus_gr_lown_1km〕
+- `bus_gr_2km` — バス停留所数増減率（2010→現行・2km圏） 〔%・percent1・rankable・⚠→bus_gr_lown_2km〕
+- `bus_gr_5km` — バス停留所数増減率（2010→現行・5km圏） 〔%・percent1・rankable・⚠→bus_gr_lown_5km〕
+- `bus_gr_10km` — バス停留所数増減率（2010→現行・10km圏） 〔%・percent1・rankable・⚠→bus_gr_lown_10km〕
+- `bus_gr_20km` — バス停留所数増減率（2010→現行・20km圏） 〔%・percent1・rankable・⚠→bus_gr_lown_20km〕
+- `bus_gr_lown_500m` — バス増減率 低分母フラグ（500m圏／2010年停留所数<5） 〔—・—・not-rankable〕
+- `bus_gr_lown_1km` — バス増減率 低分母フラグ（1km圏／2010年停留所数<5） 〔—・—・not-rankable〕
+- `bus_gr_lown_2km` — バス増減率 低分母フラグ（2km圏／2010年停留所数<5） 〔—・—・not-rankable〕
+- `bus_gr_lown_5km` — バス増減率 低分母フラグ（5km圏／2010年停留所数<5） 〔—・—・not-rankable〕
+- `bus_gr_lown_10km` — バス増減率 低分母フラグ（10km圏／2010年停留所数<5） 〔—・—・not-rankable〕
+- `bus_gr_lown_20km` — バス増減率 低分母フラグ（20km圏／2010年停留所数<5） 〔—・—・not-rankable〕
+
+## 事業所（establishment）— 36件
+
+- `estab_n_2021_500m` — 事業所数（2021年・500m圏） 〔事業所・int・rankable〕
+- `estab_n_2021_1km` — 事業所数（2021年・1km圏） 〔事業所・int・rankable〕
+- `estab_n_2021_2km` — 事業所数（2021年・2km圏） 〔事業所・int・rankable〕
+- `estab_n_2021_5km` — 事業所数（2021年・5km圏） 〔事業所・int・rankable〕
+- `estab_n_2021_10km` — 事業所数（2021年・10km圏） 〔事業所・int・rankable〕
+- `estab_n_2021_20km` — 事業所数（2021年・20km圏） 〔事業所・int・rankable〕
+- `estab_n_2016_500m` — 事業所数（2016年・500m圏） 〔事業所・int・rankable〕
+- `estab_n_2016_1km` — 事業所数（2016年・1km圏） 〔事業所・int・rankable〕
+- `estab_n_2016_2km` — 事業所数（2016年・2km圏） 〔事業所・int・rankable〕
+- `estab_n_2016_5km` — 事業所数（2016年・5km圏） 〔事業所・int・rankable〕
+- `estab_n_2016_10km` — 事業所数（2016年・10km圏） 〔事業所・int・rankable〕
+- `estab_n_2016_20km` — 事業所数（2016年・20km圏） 〔事業所・int・rankable〕
+- `estab_n_2012_500m` — 事業所数（2012年・500m圏） 〔事業所・int・rankable〕
+- `estab_n_2012_1km` — 事業所数（2012年・1km圏） 〔事業所・int・rankable〕
+- `estab_n_2012_2km` — 事業所数（2012年・2km圏） 〔事業所・int・rankable〕
+- `estab_n_2012_5km` — 事業所数（2012年・5km圏） 〔事業所・int・rankable〕
+- `estab_n_2012_10km` — 事業所数（2012年・10km圏） 〔事業所・int・rankable〕
+- `estab_n_2012_20km` — 事業所数（2012年・20km圏） 〔事業所・int・rankable〕
+- `estab_gr_2021_2012_500m` — 事業所数増減率（2012→2021年・500m圏） 〔%・percent1・rankable・⚠→estab_gr_lown_500m〕
+- `estab_gr_2021_2012_1km` — 事業所数増減率（2012→2021年・1km圏） 〔%・percent1・rankable・⚠→estab_gr_lown_1km〕
+- `estab_gr_2021_2012_2km` — 事業所数増減率（2012→2021年・2km圏） 〔%・percent1・rankable・⚠→estab_gr_lown_2km〕
+- `estab_gr_2021_2012_5km` — 事業所数増減率（2012→2021年・5km圏） 〔%・percent1・rankable・⚠→estab_gr_lown_5km〕
+- `estab_gr_2021_2012_10km` — 事業所数増減率（2012→2021年・10km圏） 〔%・percent1・rankable・⚠→estab_gr_lown_10km〕
+- `estab_gr_2021_2012_20km` — 事業所数増減率（2012→2021年・20km圏） 〔%・percent1・rankable・⚠→estab_gr_lown_20km〕
+- `estab_gr_2021_2016_500m` — 事業所数増減率（2016→2021年・500m圏） 〔%・percent1・rankable・⚠→estab_gr_lown_500m〕
+- `estab_gr_2021_2016_1km` — 事業所数増減率（2016→2021年・1km圏） 〔%・percent1・rankable・⚠→estab_gr_lown_1km〕
+- `estab_gr_2021_2016_2km` — 事業所数増減率（2016→2021年・2km圏） 〔%・percent1・rankable・⚠→estab_gr_lown_2km〕
+- `estab_gr_2021_2016_5km` — 事業所数増減率（2016→2021年・5km圏） 〔%・percent1・rankable・⚠→estab_gr_lown_5km〕
+- `estab_gr_2021_2016_10km` — 事業所数増減率（2016→2021年・10km圏） 〔%・percent1・rankable・⚠→estab_gr_lown_10km〕
+- `estab_gr_2021_2016_20km` — 事業所数増減率（2016→2021年・20km圏） 〔%・percent1・rankable・⚠→estab_gr_lown_20km〕
+- `estab_gr_lown_500m` — 事業所・従業者 増減率 低分母フラグ（500m圏／2012年事業所数<5） 〔—・—・not-rankable〕
+- `estab_gr_lown_1km` — 事業所・従業者 増減率 低分母フラグ（1km圏／2012年事業所数<5） 〔—・—・not-rankable〕
+- `estab_gr_lown_2km` — 事業所・従業者 増減率 低分母フラグ（2km圏／2012年事業所数<5） 〔—・—・not-rankable〕
+- `estab_gr_lown_5km` — 事業所・従業者 増減率 低分母フラグ（5km圏／2012年事業所数<5） 〔—・—・not-rankable〕
+- `estab_gr_lown_10km` — 事業所・従業者 増減率 低分母フラグ（10km圏／2012年事業所数<5） 〔—・—・not-rankable〕
+- `estab_gr_lown_20km` — 事業所・従業者 増減率 低分母フラグ（20km圏／2012年事業所数<5） 〔—・—・not-rankable〕
+
+## 従業者（employee）— 30件
+
+- `emp_n_2021_500m` — 従業者数（2021年・500m圏） 〔人・int・rankable〕
+- `emp_n_2021_1km` — 従業者数（2021年・1km圏） 〔人・int・rankable〕
+- `emp_n_2021_2km` — 従業者数（2021年・2km圏） 〔人・int・rankable〕
+- `emp_n_2021_5km` — 従業者数（2021年・5km圏） 〔人・int・rankable〕
+- `emp_n_2021_10km` — 従業者数（2021年・10km圏） 〔人・int・rankable〕
+- `emp_n_2021_20km` — 従業者数（2021年・20km圏） 〔人・int・rankable〕
+- `emp_n_2016_500m` — 従業者数（2016年・500m圏） 〔人・int・rankable〕
+- `emp_n_2016_1km` — 従業者数（2016年・1km圏） 〔人・int・rankable〕
+- `emp_n_2016_2km` — 従業者数（2016年・2km圏） 〔人・int・rankable〕
+- `emp_n_2016_5km` — 従業者数（2016年・5km圏） 〔人・int・rankable〕
+- `emp_n_2016_10km` — 従業者数（2016年・10km圏） 〔人・int・rankable〕
+- `emp_n_2016_20km` — 従業者数（2016年・20km圏） 〔人・int・rankable〕
+- `emp_n_2012_500m` — 従業者数（2012年・500m圏） 〔人・int・rankable〕
+- `emp_n_2012_1km` — 従業者数（2012年・1km圏） 〔人・int・rankable〕
+- `emp_n_2012_2km` — 従業者数（2012年・2km圏） 〔人・int・rankable〕
+- `emp_n_2012_5km` — 従業者数（2012年・5km圏） 〔人・int・rankable〕
+- `emp_n_2012_10km` — 従業者数（2012年・10km圏） 〔人・int・rankable〕
+- `emp_n_2012_20km` — 従業者数（2012年・20km圏） 〔人・int・rankable〕
+- `emp_gr_2021_2012_500m` — 従業者数増減率（2012→2021年・500m圏） 〔%・percent1・rankable・⚠→estab_gr_lown_500m〕
+- `emp_gr_2021_2012_1km` — 従業者数増減率（2012→2021年・1km圏） 〔%・percent1・rankable・⚠→estab_gr_lown_1km〕
+- `emp_gr_2021_2012_2km` — 従業者数増減率（2012→2021年・2km圏） 〔%・percent1・rankable・⚠→estab_gr_lown_2km〕
+- `emp_gr_2021_2012_5km` — 従業者数増減率（2012→2021年・5km圏） 〔%・percent1・rankable・⚠→estab_gr_lown_5km〕
+- `emp_gr_2021_2012_10km` — 従業者数増減率（2012→2021年・10km圏） 〔%・percent1・rankable・⚠→estab_gr_lown_10km〕
+- `emp_gr_2021_2012_20km` — 従業者数増減率（2012→2021年・20km圏） 〔%・percent1・rankable・⚠→estab_gr_lown_20km〕
+- `emp_gr_2021_2016_500m` — 従業者数増減率（2016→2021年・500m圏） 〔%・percent1・rankable・⚠→estab_gr_lown_500m〕
+- `emp_gr_2021_2016_1km` — 従業者数増減率（2016→2021年・1km圏） 〔%・percent1・rankable・⚠→estab_gr_lown_1km〕
+- `emp_gr_2021_2016_2km` — 従業者数増減率（2016→2021年・2km圏） 〔%・percent1・rankable・⚠→estab_gr_lown_2km〕
+- `emp_gr_2021_2016_5km` — 従業者数増減率（2016→2021年・5km圏） 〔%・percent1・rankable・⚠→estab_gr_lown_5km〕
+- `emp_gr_2021_2016_10km` — 従業者数増減率（2016→2021年・10km圏） 〔%・percent1・rankable・⚠→estab_gr_lown_10km〕
+- `emp_gr_2021_2016_20km` — 従業者数増減率（2016→2021年・20km圏） 〔%・percent1・rankable・⚠→estab_gr_lown_20km〕
+
+## 駅属性（識別・非指標）
+
+- `grp` — 駅グループID（string）
+- `station_name` — 駅名（string）
+- `label` — 表示ラベル（string）
+- `search_label` — 検索用ラベル（string）
+- `prefecture` — 都道府県（string）
+- `lon` — 経度（EPSG:6668）（number）
+- `lat` — 緯度（EPSG:6668）（number）
+- `n_op` — 延べ事業者数（number）
+- `level_complete` — 乗降客時系列の完全性（boolean）
+- `flag_yoy` — 前年比（rate_yoy）異常値フラグ（boolean）
+- `flag_covid` — コロナ前後比（rate_covid）信頼性フラグ（boolean）
+

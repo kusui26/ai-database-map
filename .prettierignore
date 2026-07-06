@@ -4,10 +4,11 @@ node_modules
 coverage
 *.tsbuildinfo
 
-# 生成物・ロックファイル（tsconfig.json は next build が再構成/整形するため除外）
+# 生成物・ロックファイル（next build / pipeline が生成・整形するため除外）
 pnpm-lock.yaml
 next-env.d.ts
 tsconfig.json
+src/shared/catalog/catalog.json
 
 # アプリ外のディレクトリ（データ・資料・パイプライン・設定文書は原文を保持）
 data

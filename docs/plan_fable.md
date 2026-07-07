@@ -505,7 +505,8 @@ MapResponse = { messages: {role,text}[], mapActions: MapAction[], panels: Panel[
 | **P2a** | ✅ 完了 | 2026-07-07 | Supabase（東京・クラウド経路）に migrations 3本適用：postgis/pg_trgm・`stations`(geom generated)/`metric_columns`/`station_values`・GiST/trgm index・RLS＋anon SELECT のみ。`metric_columns`=488（=catalog）。anon は SELECT 可・INSERT/DELETE 不可を REST で検証。Data API 設定は auto-expose OFF＋auto-RLS ON。CLI は brew 不可のためバイナリ導入 |
 | **P2b** | ✅ 完了 | 2026-07-07 | `pipeline/load_to_supabase.py` で投入（冪等・COPY・FK一時解除で高速化）：stations 9,273行（pax_latest算出・lp_near_use は stations に）＋ station_values **4,390,790行**。`pipeline/validate_load.py` の全数検証 **9/9 PASS**（件数=CSV非NaN・列別件数・無作為300値・全国計sum・pax_latest）。**DBサイズ 348MB < 400MB**。レポート `docs/p2b_load_report.md` |
 | **P2c** | ✅ 完了 | 2026-07-07 | RPC 6本を migration で実装（`search_stations`/`stations_in_bbox`/`nearest_stations`/`rank_by_column`/`values_for_columns`/`station_bundle`）。security invoker・`search_path=''`・完全 schema 修飾・**動的 SQL なし**（key は metric_columns で照合＝ホワイトリスト）。anon EXECUTE 付与＋REST で実行確認。ゴールデン **12/12 PASS**（検索#1・最寄・bbox・ランキング±・全国 argmax・千葉県増減率・駅詳細=CSV値・注入不能）。検索は駅名一致を優先。かな検索は読み仮名列（将来）待ち |
-| P3a〜P8c | 未着手 | — | — |
+| **P3a** | ✅ 完了 | 2026-07-07 | shared 契約＋domain 層（framework 非依存・DB 不要）。`src/shared`：catalog（Zod ロード検証）・protocol（GUI Chat Protocol v1）・api（入出力 Zod）・format・geo。`src/domain`：metrics・stations/presenter（値束→StationDetail：カテゴリ×半径×vintage 系列組立・フラグ解決）・ranking/presenter・**決定的 k-means**（z-score＋seeded k-means++）・growth/presenter。zod 4 追加。`typecheck`/`lint`/**test 61**/`format` すべて green。domain→UI/DB import ゼロ（ESLint 境界ルール確認） |
+| P3b〜P8c | 未着手 | — | — |
 
 ---
 

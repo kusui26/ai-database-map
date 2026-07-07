@@ -1,0 +1,4 @@
+# AI Database Map — pipeline（Python）の依存
+# インストール: python3 -m pip install -r pipeline/requirements.txt
+pandas>=2.3
+psycopg[binary]>=3.3

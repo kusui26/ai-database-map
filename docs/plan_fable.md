@@ -503,7 +503,8 @@ MapResponse = { messages: {role,text}[], mapActions: MapAction[], panels: Panel[
 | **P0** | ✅ 完了 | 2026-07-06 | Next 16 / React 19 / TS 6 / Tailwind v4 / ESLint 10（境界ルール）/ Prettier / Vitest 4。`typecheck`・`lint`・`test`（12）・`build` すべて green。境界ルールは自動テストで担保。Vercel 接続・プレビュー確認済み |
 | **P1** | ✅ 完了 | 2026-07-07 | CSV 499列 → `src/shared/catalog/catalog.json`（488エントリ＋駅属性11）を `pipeline/build_catalog.py` で生成。独立検証 27/27 PASS（列数・カテゴリ別件数が dataset.md §2 と一致・フラグ参照実在）。ラベル一覧 `docs/catalog_labels.md`。CI 用スモークテスト追加。ラベル自然さユーザー確認済み |
 | **P2a** | ✅ 完了 | 2026-07-07 | Supabase（東京・クラウド経路）に migrations 3本適用：postgis/pg_trgm・`stations`(geom generated)/`metric_columns`/`station_values`・GiST/trgm index・RLS＋anon SELECT のみ。`metric_columns`=488（=catalog）。anon は SELECT 可・INSERT/DELETE 不可を REST で検証。Data API 設定は auto-expose OFF＋auto-RLS ON。CLI は brew 不可のためバイナリ導入 |
-| P2b〜P8c | 未着手 | — | — |
+| **P2b** | ✅ 完了 | 2026-07-07 | `pipeline/load_to_supabase.py` で投入（冪等・COPY・FK一時解除で高速化）：stations 9,273行（pax_latest算出・lp_near_use は stations に）＋ station_values **4,390,790行**。`pipeline/validate_load.py` の全数検証 **9/9 PASS**（件数=CSV非NaN・列別件数・無作為300値・全国計sum・pax_latest）。**DBサイズ 348MB < 400MB**。レポート `docs/p2b_load_report.md` |
+| P2c〜P8c | 未着手 | — | — |
 
 ---
 

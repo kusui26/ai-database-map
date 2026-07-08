@@ -509,7 +509,8 @@ MapResponse = { messages: {role,text}[], mapActions: MapAction[], panels: Panel[
 | **P3b** | ✅ 完了 | 2026-07-08 | 共通API 7ルート（Route Handlers）稼働。`src/db`：supabase-js（anon・RLS・timeout fetch）＋RPC 型付きラッパ（Zod 検証）。`src/app/api`：metrics/stations(q/bbox/near)/geojson/stations/[grp]/ranking/growth/health。Zod 検証→domain→整形済み応答・エラー封筒・Cache-Control・runtime=nodejs。統合スモーク **13/13 PASS**（不正 metric→400・rankable外→400・未存在→404）。geojson は max-rows 回避のため単一 jsonb を返す RPC（**9,273 features**）。@supabase/supabase-js 追加 |
 | **P4a** | ✅ 完了 | 2026-07-08 | 地図基盤（MapLibre）。地理院 最適化ベクトルタイル（淡色 style JSON・出典表示）＋全駅 GeoJSON 1回配信（クラスタ z<10→circle 平方根スケール→ラベル z≥12）。クリック選択＝flyTo＋アクセント色ハイライト＋半径サークル（shared/geo）。Zustand（hover）＋nuqs（?grp&r 双方向同期）。ヘッドレスブラウザで検証（z9クラスタ・z12個別＋選択＋2km円・URL復元・地理院出典・**console error 0**）。engines を 22.x にピン留め（Vercel 警告解消）。maplibre-gl/zustand/nuqs/@types/geojson 追加 |
 | **P4b** | ✅ 完了 | 2026-07-08 | 検索＋アプリシェル。shadcn 基盤（cn util・Command=cmdk）導入。ヘッダ（ロゴ・**cmdk 駅名検索** debounce250ms→`/api/stations?q=`→選択で ?grp→flyTo・半径セグメント）。左下 FAB（ランキング/散布のプレースホルダ）。**モバイル対応**（375px 縦積み・overflow 0）。ヘッドレス検証：「東京」→#1東京→選択・「二月田」ヒット・375px 崩れなし・**console error 0**。かな検索（しんじゅく）は読み仮名列（将来）待ち。cmdk/clsx/tailwind-merge 追加 |
-| P5a〜P8c | 未着手 | — | — |
+| **P5a** | ✅ 完了 | 2026-07-08 | 駅詳細パネル（骨格＋乗降タブ）。デスクトップ＝右ドロワー／モバイル＝vaul ボトムシート（`useIsDesktop`）。SWR で `/api/stations/[grp]` を grp キーのみ取得（**半径切替は再フェッチ不要**＝全半径同梱を client 絞り）。**Protocol 準拠パネル**：`stationCardPanel`/`paxTrendPanel`（domain・純関数）→ 汎用 `PanelRenderer`/`PanelStack`（type 分岐＝Step2 のチャット描画をそのまま再利用）。駅カード（延べ事業者数・最新乗降客・時系列欠損バッジ）＋乗降推移チャート（Chart.js 折れ線・`formatCompact` 万軸・前年比/コロナ比 KPI チップ・フラグ⚠）。タブ5枚の器（乗降のみ実装・他は P5b/P5c プレースホルダ）。Protocol 拡張：detailPoint に `key`（addressable）・trendChart に `stats`/`format`・`PanelOf<T>` 派生型。ヘッドレス検証：東京/二月田で表示・タブ切替・KPI（+7.3%/-5.7%）・閉じるで ?grp クリア・375px sheet overflow 0・**console error 0**。build green。swr/chart.js/react-chartjs-2/vaul 追加 |
+| P5b〜P8c | 未着手 | — | — |
 
 ---
 

@@ -57,6 +57,15 @@ export function formatNumber(
   }
 }
 
+/** チャート軸向けの簡約表記（万・億で桁を抑える）。ラベル幅を詰めてプロット領域を広く保つ。 */
+export function formatCompact(value: number | null | undefined): string {
+  if (isMissing(value)) return MISSING
+  const abs = Math.abs(value)
+  if (abs >= 1e8) return `${fixedGrouped(value / 1e8, 1)}億`
+  if (abs >= 1e4) return `${fixedGrouped(value / 1e4, 1)}万`
+  return fixedGrouped(value, 0)
+}
+
 /** 数値＋単位で文字列化する（欠損は単位を付けず「—」）。円/㎡ などはカタログ単位を後置。 */
 export function formatWithUnit(
   value: number | null | undefined,

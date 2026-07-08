@@ -74,6 +74,7 @@ export type StationSummary = z.infer<typeof stationSummarySchema>
 
 // --- 駅詳細（presenter が組み立てる：カテゴリ×半径の系列） --------------
 export const detailPointSchema = z.object({
+  key: z.string(), // カタログ列 key（点を一意に addressable に：AI が特定点を参照可能）
   year: z.number().nullable(),
   yearBase: z.number().nullable(),
   value: z.number().nullable(),

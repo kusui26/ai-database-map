@@ -23,6 +23,7 @@ const station: StationRow = {
   lon: 139.767,
   lat: 35.681,
   nOp: 3,
+  operators: '東日本旅客鉄道・東京地下鉄・東海旅客鉄道',
   paxLatest: 1262604,
   lpNearUse: '商業地',
   levelComplete: false,
@@ -185,12 +186,14 @@ describe('populationPanels', () => {
 })
 
 const p5cValues = new Map<string, number>([
-  // 地価
+  // 地価（lp_med は年次系列＝P5d。現在値バーは最新年 2026 を使う）
   ['lp_near_price', 37600000],
   ['lp_near_dist_m', 252],
-  ['lp_med_500m', 24400000],
-  ['lp_med_1km', 19050000],
-  ['lp_med_2km', 5540000],
+  ['lp_med_2026_500m', 24400000],
+  ['lp_med_2011_1km', 14750000],
+  ['lp_med_2021_1km', 16700000],
+  ['lp_med_2026_1km', 19050000],
+  ['lp_med_2026_2km', 5540000],
   ['lp_gr_2026_2025_1km', 7.6],
   ['lp_gr_2026_2023_1km', 15.1],
   // バス
@@ -231,6 +234,12 @@ describe('landPricePanels', () => {
     expect(bars.map((b) => b.label)).toEqual(['500m', '1km', '2km'])
     expect(bars.find((b) => b.label === '1km')?.emphasis).toBe(true)
     expect(bars.find((b) => b.label === '500m')?.emphasis).toBe(false)
+  })
+
+  it('lp_med は年次系列：現在値バーは最新年（2026）を使う', () => {
+    const bar = landPricePanels(p5cDetail, 1000).find((p) => p.type === 'barChart')
+    const oneKm = bar?.type === 'barChart' ? bar.bars.find((b) => b.label === '1km') : undefined
+    expect(oneKm?.value).toBe(19050000) // 2026（2011=14,750,000 ではない）
   })
 
   it('500m 圏は増減率が非対応 → 空＋注記（カタログ駆動フォールド）', () => {

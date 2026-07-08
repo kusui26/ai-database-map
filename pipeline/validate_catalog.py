@@ -23,16 +23,16 @@ EXPECTED_CATEGORY_COUNTS = {
     "passenger": 16,  # pax 14 + rate 2
     "population": 132,  # 実績42 + 増減率54 + lowbase36
     "population_forecast": 180,  # 推計114 + 推計増減率60 + 誤差6
-    "land_price": 58,
+    "land_price": 153,  # lp_med(年次20×5=100) + lp_n5 + lp_lown5 + lp_gr20 + lp_gr_lown20 + lp_near3
     "bus": 36,
     "establishment": 36,  # estab_n18 + estab_gr12 + estab_gr_lown6
     "employee": 30,  # emp_n18 + emp_gr12
 }
-EXPECTED_ENTRY_TOTAL = 488
-EXPECTED_COLUMN_TOTAL = 499
+EXPECTED_ENTRY_TOTAL = 583
+EXPECTED_COLUMN_TOTAL = 595
 IDENTITY = {
     "grp", "station_name", "label", "search_label", "prefecture",
-    "lon", "lat", "n_op", "level_complete", "flag_yoy", "flag_covid",
+    "lon", "lat", "n_op", "operators", "level_complete", "flag_yoy", "flag_covid",
 }
 ALLOWED_UNITS = {"人", "人/日", "円/㎡", "%", "箇所", "事業所", "m", None}
 ALLOWED_FORMATS = {"int", "decimal1", "percent1", "ratio1", "yen", None}
@@ -62,10 +62,10 @@ def main() -> int:
         results.append((ok, name, detail))
 
     # 1. 総数
-    check(len(header) == EXPECTED_COLUMN_TOTAL, "CSV 列数 = 499", f"actual {len(header)}")
+    check(len(header) == EXPECTED_COLUMN_TOTAL, f"CSV 列数 = {EXPECTED_COLUMN_TOTAL}", f"actual {len(header)}")
     check(len(header) == len(header_set), "CSV 列名に重複なし")
-    check(len(entries) == EXPECTED_ENTRY_TOTAL, "エントリ数 = 488", f"actual {len(entries)}")
-    check(len(attrs) == 11, "駅属性 = 11", f"actual {len(attrs)}")
+    check(len(entries) == EXPECTED_ENTRY_TOTAL, f"エントリ数 = {EXPECTED_ENTRY_TOTAL}", f"actual {len(entries)}")
+    check(len(attrs) == len(IDENTITY), f"駅属性 = {len(IDENTITY)}", f"actual {len(attrs)}")
     check(len(entries) + len(attrs) == len(header), "エントリ + 属性 = 列数")
 
     # 2. key の網羅・一意・分離
@@ -74,7 +74,7 @@ def main() -> int:
     check(set(entry_keys) | attr_keys == header_set, "エントリ ∪ 属性 = CSV 列集合",
           f"欠落{sorted(header_set - set(entry_keys) - attr_keys)[:3]} 余分{sorted((set(entry_keys) | attr_keys) - header_set)[:3]}")
     check(not (set(entry_keys) & IDENTITY), "識別列がエントリに混入していない")
-    check(attr_keys == IDENTITY, "駅属性 = 識別11列", f"diff {sorted(attr_keys ^ IDENTITY)}")
+    check(attr_keys == IDENTITY, f"駅属性 = 識別{len(IDENTITY)}列", f"diff {sorted(attr_keys ^ IDENTITY)}")
 
     # 3. カテゴリ別件数が dataset.md §2 と一致
     per_cat: dict[str, int] = {}

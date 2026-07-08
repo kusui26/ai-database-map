@@ -11,6 +11,7 @@ const station: StationRow = {
   lon: 139.767,
   lat: 35.681,
   nOp: 5,
+  operators: '東日本旅客鉄道・東京地下鉄',
   paxLatest: 1262604,
   lpNearUse: '商業地',
   levelComplete: true,
@@ -31,7 +32,7 @@ const values = new Map<string, number>([
   ['pop_pred_2018_2030_1km', 5900],
   ['pax_2020', 1000],
   ['pax_2024', 1200],
-  ['lp_med_1km', 94600],
+  ['lp_med_2026_1km', 94600],
   ['lp_lown_1km', 0],
 ])
 

@@ -24,6 +24,8 @@ Step1（アプリ公開）→ Step2（AIネイティブ化）を **Claude Code �
 | **P5a** | 駅詳細パネル（骨格＋乗降客） | ドロワー/ボトムシート・駅カード・pax チャート・フラグ | P4b | 1回 |
 | **P5b** | 駅詳細（人口・将来推計） | 実績＋2推計の重ねチャート・増減率・lowbase 表示 | P5a | 1回 |
 | **P5c** | 駅詳細（地価・バス・事業所） | 3カテゴリのタブ完成 | P5a | 1回 |
+| **P5d** | 追加データ投入（地価年次・事業者名） | 年次地価パネル＋事業者名を DB 投入（catalog/loader/schema/API 拡張・再ロード） | P5c | 1回 |
+| **P5e** | 駅詳細UI改善 | 地価/バス 時系列化・従業者タブ独立・事業者名表示・地図ズーム移動 | P5d | 1回 |
 | **P6a** | ランキング | 都道府県×指標（カタログ駆動）→ 上位/下位20 → flyTo | P3b, P4b | 1回 |
 | **P6b** | 散布図＋クラスタ | k-means(決定的)・散布チャート・lown 除外トグル | P3b, P4b | 1回 |
 | **P7a** | 品質・仕上げ | 出典/About・OGP・エラー/ロード・a11y・Lighthouse | P5, P6 | 1回 |
@@ -32,7 +34,7 @@ Step1（アプリ公開）→ Step2（AIネイティブ化）を **Claude Code �
 | **P8b** | チャット UI | **左併設チャット＋インラインカード**・Protocol レンダラ（P5/P6 部品を再利用） | P8a | 1回 |
 | **P8c** | 評価・強化 | ゴールデン20問 eval・プロンプト調整・(任意)GraphAI PoC | P8b | 1回 |
 
-**合計目安**：Step1 = 16ブロック、Step2 = 3ブロック。
+**合計目安**：Step1 = 18ブロック（P5d/P5e はユーザー UI 改善要望で 2026-07-08 追加）、Step2 = 3ブロック。
 
 ### 0.2 依存関係（クリティカルパス）
 
@@ -46,6 +48,7 @@ Step1公開 ─ P8a ─ P8b ─ P8c ═ Step2
 
 - **最短公開ルート**（機能を絞る場合）：P0→P1→P2→P3→P4→P5a→P7a→P7b（地図＋検索＋駅詳細のみで先に公開し、P5b/c・P6 を追撃）も可。既定は全ブロック順走。
 - P3a は P2 と**並行可能**（DB がなくても純関数は書ける）。
+- **P5d/P5e（UI改善・2026-07-08 追加）**：`P5c ─ P5d ─ P5e`。P5d は追加データ投入（DB 再ロード）、P5e はその UI 化。クリティカルパス外で P6/P7 と並行可（公開を急ぐなら後回しでも可）。
 
 ### 0.3 各ブロック共通の進め方（毎回この型）
 
@@ -171,7 +174,7 @@ architecture.md を土台に、実装量・運用コスト・UX の観点で**�
 │                                        ┌─────────────────────┐ │
 │  [🏆 ランキング] [📈 散布図]  ← 左下FAB   │ ◉ 東京（JR東日本ほか）    │ │
 │                                        │ 千代田区 / 乗降 XXX万/日 │ │
-│                                        │ [乗降|人口|地価|バス|事業]│ │
+│                                    │ [乗降|人口|地価|バス|事業所|従業者]│ │
 │                                        │  📊 チャート             │ │
 │                                        │  ⚠ 低分母注意 (該当時)   │ │
 │                                        └─────────────────────┘ │
@@ -213,14 +216,15 @@ architecture.md を土台に、実装量・運用コスト・UX の観点で**�
 | **④ 地図即時操作** | `mapActions` は**返答ストリーミング中に即時実行**（flyTo→ハイライト→半径円）。本文中の**駅名はクリック可能チップ**（タップで flyTo）。パネル開時は **flyTo に padding** を渡し可視領域の中心へ |
 | **⑤ 共存と復帰** | 左チャット＋右ドロワー同時表示可（1440px で地図 ~640px）。両方開閉可・「地図をリセット」チップ＝ `clearOverlays` |
 
-**チャート仕様（駅詳細タブ）**
+**チャート仕様（駅詳細タブ）** ※ P5c は棒中心で実装。P5d/P5e で地価・バスを時系列化し従業者を独立タブに（下表は P5e 後の最終形）。
 | タブ | 内容 |
 |---|---|
 | 乗降客 | pax_2011–2024 折れ線＋ rate_yoy/rate_covid バッジ（flag_* で注意表示） |
 | 人口 | 実績 1995–2020 実線 ＋ R6 推計 2025–2070 破線 ＋ H30 推計 併記（凡例トグル）。pop_err を注記 |
-| 地価 | lp_med_{r} 年系列（パネル用 `station_landprice_yearly` は将来拡張とし、Step1 は lp_med 現在値＋増減率5期間の棒）＋ lp_near（最寄地点） |
-| バス | bus_n 現在 vs 2010 の棒＋内訳（local/hw）＋増減率 |
-| 事業所 | estab/emp の 3時点（2012/16/21）折れ線＋9年/5年増減率 |
+| 地価 | lp_med の**年次折れ線**（`station_landprice_yearly` を P5d で投入）＋最寄公示カード＋増減率表。半径別バーは補助として残置可 |
+| バス | bus_n2010→bus_n の**2点折れ線**（2010→現在）＋内訳（local/hw）・対2010年増減率 |
+| 事業所 | estab_n の 3時点（2012/16/21）折れ線＋9年/5年増減率 |
+| 従業者 | emp_n の 3時点折れ線＋9年/5年増減率（`employee` カテゴリ・**独立タブ**） |
 
 ---
 
@@ -396,6 +400,30 @@ MapResponse = { messages: {role,text}[], mapActions: MapAction[], panels: Panel[
 - **受け入れ基準**：地価は 20km 非対応・増減率 500m 非対応が UI 上正しく畳まれる（カタログ駆動で自動）／三厩（バス全廃）・竜田（事業所急増）が正しく表示され ⚠/注記の文言が妥当。
 - **依頼例**：「P5c 残り3タブを実装」
 
+### P5d — 追加データ投入（地価年次パネル・事業者名）
+> **由来**：2026-07-08 ユーザー UI 改善要望（①地価・バスを時系列化 ②従業者を独立タブ ③事業者名を表示 ④ズーム移動）のうち、**データ追加を要する②③のデータ層**。データは notebook が生成済（`station_landprice_yearly.csv`・`station_operator_detail.csv`）だが DB 未投入のため取り込む。
+- **前提**：P5c。
+- **方針（2026-07-09 決定）**：`station_dataset.csv` を「すべてを含む単一ベース」に統一（別CSVの特殊ロードは列レジストリ設計に反するため不採用）。誤差ゼロ・将来汎用性のため **notebook を修正して再実行**（データは同一実行で既に計算済＝Geo 再計算不要の畳み込み）。
+- **作業（実施済）**：
+  - **notebook**：cell 45 で地価中央値を `lp_med_{年}_{R}`（2007–2026・単年を置換）に年次系列化、cell 18 で運営会社を pax 規模降順 `・` 連結して `operators` 列に畳み込み → **再実行**（全 494 共有列が backup と bit 一致＝決定的・ドリフト 0 を実測）。
+  - **catalog**：`catalog_rules.py` の lp_med を年付きに・`operators` を駅属性に追加 → `build_catalog`（**583 エントリ / 595 列 / 属性 12**）。`validate_catalog`（27 チェック）緑。
+  - **DB**：`add_operators` migration（stations.operators text）＋ loader を拡張（**metric_columns を catalog.json に同期＝id 再採番／operators ロード**）し単一トランザクションで再ロード（**station_values 5,030,433 行**）。RPC は key 解決のため id 再採番は安全。
+  - **API**：`stationRowSchema` に `operators` 追加・`queries` の SELECT に追加。`landPricePanels` は lp_med 最新年を現在値に（非破壊の最小修正・折れ線化は P5e）。
+- **受け入れ基準（達成）**：東京 API に `operators`＝「東日本旅客鉄道・東京地下鉄・東海旅客鉄道」／`lp_med` 1km が 20 点（2007–2026）／golden RPC・catalog 検証・frontend test(86) 緑／DB 389MB（<400MB ゲート内・要監視）。
+- **依頼例**：「P5d 地価年次と事業者名を投入」
+
+### P5e — 駅詳細UI改善（時系列化・従業者タブ・事業者名・ズーム）
+> **由来**：同 UI 改善要望の UI 層。P5d のデータが API に載った前提で描画を更新。
+- **前提**：P5d。
+- **作業**：
+  - **地図ズーム移動**：MapLibre `NavigationControl` を `top-left`（ロゴと重複）→ **`bottom-left`（FAB の上に縦並び）** へ。`MapView` の `addControl` 位置＋余白で重なり解消（ユーザー選択：左下）。
+  - **地価タブ＝時系列**：`lp_med` の年次系列で**中央値の推移（折れ線・選択半径）**を主表示に（乗降/人口と同形式の `trendChart`）。最寄公示カード・増減率表は維持。半径別バーは空間比較の補助として残置可。20km/500m の非対応は従来どおり自動フォールド。
+  - **バスタブ＝時系列**：`bus_n2010`→`bus_n` の **2点折れ線**（2010→現在）に統一。一般/高速の内訳・対2010年増減率は `statTable` で併記（データは2時点のみ＝ユーザー了承済）。
+  - **従業者タブ独立**：タブを `[乗降|人口|地価|バス|事業所|従業者]` の **6枚**に。`establishmentPanels` を分割し **事業所タブ**＝`estab_n` 折れ線＋事業所増減率、**従業者タブ**（`employee` カテゴリ）＝`emp_n` 折れ線＋従業者増減率。`DETAIL_TABS` に `employee` を追加（6タブはモバイルで横スクロール）。
+  - **事業者名カード**：駅カードの「延べ N社」を **具体的社名（`・` 連結、例「JR東日本・東京地下鉄・都営地下鉄」）** に。多数事業者は折返し。`operators` 欠損時は従来の「延べ N社」にフォールバック。
+- **受け入れ基準**：東京で地価・バスが折れ線表示／従業者が独立タブ／カードに社名が出る／ズームがロゴと重ならず FAB の上／375px で 6タブが崩れず横スクロール・overflow 0／console error 0・build 緑。ヘッドレスで実測。
+- **依頼例**：「P5e 駅詳細のUI改善を実装」
+
 ### P6a — ランキング
 - **前提**：P3b・P4b。
 - **作業**：FAB→ Dialog。都道府県（47＋全国）× 指標ピッカ（**catalog の rankable をカテゴリ→指標→半径/年の3段で選択**・既定=人口増減率 2015→2020・1km）→ `/api/ranking` → 上位/下位20テーブル（値は format 済・⚠ 列付き）→ 行クリックで flyTo＋選択。`rankingTable` Panel 型で描画。
@@ -461,7 +489,7 @@ MapResponse = { messages: {role,text}[], mapActions: MapAction[], panels: Panel[
 |---|---|---|
 | **データ拡張** | dataset.md §4 の候補（昼間人口 2000–2020 → 災害リスク → 生活利便施設…）を **dataset.md §3 の定石**で追加。カタログ再生成 → P2b 再投入 → **UI/API/AI は自動追従**（カタログ駆動の効果検証にもなる） | Step1 公開後推奨 |
 | **`script/` → `pipeline/` 整理** | notebook 移設・純関数抽出（P1/P2b で `pipeline/` を新設するため、残りは任意） | 任意 |
-| **地価パネル（年次系列）** | `station_landprice_yearly.csv`（674k行）を別テーブル投入し、地価タブを年次チャート化 | P5c 後 |
+| ~~地価パネル（年次系列）~~ | → **P5d に昇格**（`station_landprice_yearly.csv` を `lp_med_{year}_{R}` として投入・地価タブを年次折れ線化）。事業者名投入も同 P5d | **P5d で実施** |
 | **MCP 公開** | 共通APIを MCP ツール化（architecture.md §10.5-5） | Step2 後 |
 
 ---
@@ -491,6 +519,7 @@ MapResponse = { messages: {role,text}[], mapActions: MapAction[], panels: Panel[
 | ランキング/散布の既定指標 | P6a/b | 提案ベースで確認 |
 | カスタムドメイン | P7b | 任意 |
 | 本番 LLM（無料枠可否・Vertex） | P8c | eval 結果とコストで判断 |
+| 駅詳細UI改善（地価/バス時系列・従業者タブ・事業者名・ズーム） | P5d/P5e | **決定済（2026-07-08）**：地価=年次パネル投入／バス=2点折れ線＋内訳／事業者名=全社名 `・` 連結（DB追加）／ズーム=左下（FABの上） |
 
 ---
 
@@ -512,7 +541,8 @@ MapResponse = { messages: {role,text}[], mapActions: MapAction[], panels: Panel[
 | **P5a** | ✅ 完了 | 2026-07-08 | 駅詳細パネル（骨格＋乗降タブ）。デスクトップ＝右ドロワー／モバイル＝vaul ボトムシート（`useIsDesktop`）。SWR で `/api/stations/[grp]` を grp キーのみ取得（**半径切替は再フェッチ不要**＝全半径同梱を client 絞り）。**Protocol 準拠パネル**：`stationCardPanel`/`paxTrendPanel`（domain・純関数）→ 汎用 `PanelRenderer`/`PanelStack`（type 分岐＝Step2 のチャット描画をそのまま再利用）。駅カード（延べ事業者数・最新乗降客・時系列欠損バッジ）＋乗降推移チャート（Chart.js 折れ線・`formatCompact` 万軸・前年比/コロナ比 KPI チップ・フラグ⚠）。タブ5枚の器（乗降のみ実装・他は P5b/P5c プレースホルダ）。Protocol 拡張：detailPoint に `key`（addressable）・trendChart に `stats`/`format`・`PanelOf<T>` 派生型。ヘッドレス検証：東京/二月田で表示・タブ切替・KPI（+7.3%/-5.7%）・閉じるで ?grp クリア・375px sheet overflow 0・**console error 0**。build green。swr/chart.js/react-chartjs-2/vaul 追加 |
 | **P5b** | ✅ 完了 | 2026-07-08 | 駅詳細・人口タブ（**半径依存の初タブ**）。`populationPanels(detail, radiusM)`（domain・純関数）→ 重ねチャート（実績実線＋R6/H30 推計破線・Chart.js 凡例トグル）＋人口増減率ミニ表（`statTable` Panel 新設・9ペア×選択半径・2列）。信頼性：`pop_lowbase`⚠・`pop_err`（H30推計の2020乖離 例:東京+47.1%/二月田-21.9%）注記・500m 秘匿メッシュ割合注記・NaN 期間は「—」。**ドロワー内 集計半径セレクタ**（?r 同期・デスクトップ/モバイル両対応）。**半径切替はチャート再計算のみ＝再フェッチ 0**（grp キー取得＋全半径同梱を client 絞り・ヘッドレスで detailReqs=1 を実測）。Protocol 拡張：`statTable`/`StatTablePanel`・`radiusLabel`・`isRadiusDependentCategory`（カタログ駆動）。ヘッドレス検証：東京（増）・二月田（減・500m 秘匿注記）・半径トグル無再取得・375px overflow 0・**console error 0**。build green |
 | **P5c** | ✅ 完了 | 2026-07-08 | 駅詳細・残り3タブ（地価・バス・事業所）＝**5タブ全実装**。`barChart` Panel 新設（横棒・CSS 描画・emphasis で選択半径を強調）。地価：最寄公示カード（価格 円/㎡・用途・距離）＋半径別中央値バー（500m〜10km・選択半径強調）＋増減率5期間表。バス：2010→現在の対比バー＋一般/高速内訳・対2010年増減率（lown ⚠）。事業所：事業所数（violet）・従業者数（pink）の推移2枚＋9年/5年増減率（estab_gr_lown ⚠）。**カタログ駆動の自動フォールド**：地価 20km 非対応（バーに20km出ず）・増減率 500m 非対応（注記表示）をヘッドレスで実測。`landPricePanels`/`busPanels`/`establishmentPanels`（domain・純関数）→ 汎用 PanelRenderer。ヘッドレス検証：東京で3タブ・20km/500m フォールド注記・375px overflow 0・**console error 0**。build green |
-| P6a〜P8c | 未着手 | — | — |
+| **P5d** | ✅ 完了 | 2026-07-09 | 追加データ投入（地価年次・事業者名）。**notebook 再実行**で `station_dataset.csv` を単一ベースに統一（cell45 地価を `lp_med_{年}_{R}` 年次化・cell18 運営会社を `・`連結 `operators` に畳込み）。**全 494 共有列が backup と bit 一致＝決定的・ドリフト 0** を実測。catalog：lp_med 年付き・operators 駅属性（**583 エントリ/595 列/属性12**・validate 27 緑）。DB：`add_operators` migration＋loader 拡張（**metric_columns を catalog.json に同期＝id 再採番**・operators ロード）で単一トランザクション再ロード（**station_values 503万行**）。API：`stationRow.operators`＋queries SELECT。`landPricePanels` は lp_med 最新年を現在値に（非破壊）。検証：東京 API に operators＝「東日本旅客鉄道・東京地下鉄・東海旅客鉄道」・lp_med 1km 20点(2007–2026)・**golden RPC/ catalog/ test(86) 緑**・DB 389MB。docs（dataset/land_price/passenger_aggregation）反映 |
+| P5e〜P8c | 未着手 | — | — |
 
 ---
 

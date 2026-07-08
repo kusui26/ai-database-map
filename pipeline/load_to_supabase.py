@@ -1,10 +1,13 @@
-"""P2b — CSV → Supabase 投入（冪等・COPY）。
+"""P2b/P5d — CSV → Supabase 投入（冪等・COPY・カタログ同期）。
 
-- stations 9,273行（station_id=1..N・pax_latest 算出込み・lp_near_use を文字列属性として保持）
-- 487 の数値メトリクス列を melt（NaN スキップ）して station_values（≈420万行）へ COPY
-- 唯一のカテゴリ文字列 lp_near_use は float8 の station_values に入らないため stations に置く
+- metric_columns を catalog.json に同期（列順で id 採番・DB はミラー）。RPC は key で id を
+  解決するため、列順が変わっても再採番は安全。
+- stations 9,273行（station_id=1..N・pax_latest 算出込み・lp_near_use / operators を文字列属性として保持）
+- 数値メトリクス列を melt（NaN スキップ）して station_values（≈490万行）へ COPY
+- 文字列メトリクス lp_near_use は float8 の station_values に入らないため stations に置く
 
-冪等性: TRUNCATE → 再投入を単一トランザクションで実行（失敗時はロールバック）。
+冪等性: metric_columns 再シード → stations/station_values 再投入を単一トランザクションで実行
+（失敗時はロールバック＝旧データ保持）。live app は commit まで旧データを読む（無停止）。
 接続: .env の SUPABASE_DB_URL を分解し kwargs で psycopg に渡す（パスワードは生値・URL encode 不要）。
 
     python3 pipeline/load_to_supabase.py
@@ -13,6 +16,7 @@
 from __future__ import annotations
 
 import io
+import json
 import re
 import time
 from pathlib import Path
@@ -22,12 +26,13 @@ import psycopg
 
 ROOT = Path(__file__).resolve().parents[1]
 CSV_PATH = ROOT / "data" / "derived" / "station_dataset.csv"
+CATALOG_PATH = ROOT / "src" / "shared" / "catalog" / "catalog.json"
 PAX_DESC = [f"pax_{y}" for y in range(2024, 2010, -1)]  # 2024..2011（新しい順）
 COPY_CHUNK = 500_000
 
 STATION_COLUMNS = [
     "id", "grp", "station_name", "label", "search_label", "prefecture",
-    "lon", "lat", "n_op", "pax_latest", "lp_near_use",
+    "lon", "lat", "n_op", "operators", "pax_latest", "lp_near_use",
     "level_complete", "flag_yoy", "flag_covid",
 ]
 
@@ -73,20 +78,23 @@ def main() -> int:
     df["__sid"] = station_id
     df["pax_latest"] = df[PAX_DESC].bfill(axis=1).iloc[:, 0]
 
+    # metric_columns は catalog.json のミラー。列順で id を 1..N 採番し、DB を同期する
+    # （列順が変わっても RPC は key で id を解決するため id 再採番は安全）。
+    entries = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))["entries"]
+    colid: dict[str, int] = {e["key"]: i for i, e in enumerate(entries, start=1)}
+
+    value_keys = [k for k in df.columns if k in colid]
+    text_value = [k for k in value_keys if not pd.api.types.is_numeric_dtype(df[k])]
+    if text_value != ["lp_near_use"]:
+        raise SystemExit(f"想定外の非数値メトリクス列: {text_value}（stations 側の対応が必要）")
+    numeric_keys = [k for k in value_keys if k != "lp_near_use"]
+    print(f"stations={n} / metric_columns={len(entries)} / value cols={len(value_keys)}"
+          f"（numeric {len(numeric_keys)} + text {text_value}）")
+
     with psycopg.connect(**db_params()) as conn:
         with conn.cursor() as cur:
-            cur.execute("select key, id from public.metric_columns")
-            colid: dict[str, int] = dict(cur.fetchall())
-
-            value_keys = [k for k in df.columns if k in colid]
-            text_value = [k for k in value_keys if not pd.api.types.is_numeric_dtype(df[k])]
-            if text_value != ["lp_near_use"]:
-                raise SystemExit(f"想定外の非数値メトリクス列: {text_value}（stations 側の対応が必要）")
-            numeric_keys = [k for k in value_keys if k != "lp_near_use"]
-            print(f"stations={n} / value cols={len(value_keys)}（numeric {len(numeric_keys)} + text {text_value}）")
-
             # --- セッション設定＋FK 一時解除 ---
-            # 4.2M 行の per-row FK チェック（FOR KEY SHARE）は statement timeout に達するため、
+            # 数百万行の per-row FK チェック（FOR KEY SHARE）は statement timeout に達するため、
             # timeout を無効化し、FK を外して高速 COPY → 後で一括検証つきで再付与する。
             cur.execute("set statement_timeout = 0")
             cur.execute(
@@ -96,11 +104,19 @@ def main() -> int:
             for (fk_name,) in cur.fetchall():
                 cur.execute(f'alter table public.station_values drop constraint "{fk_name}"')
 
-            # --- 冪等リセット ---
+            # --- 冪等リセット（値・駅・カタログミラーを truncate） ---
             cur.execute("truncate public.station_values")
             cur.execute("truncate public.stations cascade")
+            cur.execute("truncate public.metric_columns")
 
-            # --- stations を COPY ---
+            # --- metric_columns を catalog.json に同期（列順＝id・単一トランザクション内） ---
+            t0 = time.time()
+            with cur.copy("copy public.metric_columns (id, key, meta) from stdin") as cp:
+                for i, e in enumerate(entries, start=1):
+                    cp.write_row([i, e["key"], json.dumps(e, ensure_ascii=False)])
+            print(f"  metric_columns {len(entries)} 行 synced in {time.time() - t0:.1f}s")
+
+            # --- stations を COPY（operators 追加） ---
             t0 = time.time()
             stations = pd.DataFrame(
                 {
@@ -108,6 +124,7 @@ def main() -> int:
                     "grp": df["grp"], "station_name": df["station_name"], "label": df["label"],
                     "search_label": df["search_label"], "prefecture": df["prefecture"],
                     "lon": df["lon"], "lat": df["lat"], "n_op": df["n_op"],
+                    "operators": df["operators"],
                     "pax_latest": df["pax_latest"], "lp_near_use": df["lp_near_use"],
                     "level_complete": df["level_complete"], "flag_yoy": df["flag_yoy"],
                     "flag_covid": df["flag_covid"],
@@ -119,8 +136,8 @@ def main() -> int:
                         int(row.id), str(row.grp), str(row.station_name), str(row.label),
                         str(row.search_label), str(row.prefecture),
                         float(row.lon), float(row.lat),
-                        _int_or_none(row.n_op), _int_or_none(row.pax_latest),
-                        _text_or_none(row.lp_near_use),
+                        _int_or_none(row.n_op), _text_or_none(row.operators),
+                        _int_or_none(row.pax_latest), _text_or_none(row.lp_near_use),
                         _bool_or_none(row.level_complete), _bool_or_none(row.flag_yoy),
                         _bool_or_none(row.flag_covid),
                     ])

@@ -223,7 +223,8 @@ export function MapView() {
       maxZoom: 18,
     })
     mapRef.current = map
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-left')
+    // 拡大縮小は左下（ロゴと重ならない・デスクトップは FAB の上／CSS で余白）
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-left')
 
     map.on('load', () => {
       void (async () => {

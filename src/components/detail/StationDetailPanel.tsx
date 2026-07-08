@@ -13,6 +13,7 @@ import { type StationDetail } from '@/shared/api'
 import { type Category, CATEGORY_LABELS_JA, RADII_M, RADIUS_LABELS } from '@/shared/constants'
 import {
   busPanels,
+  employeePanels,
   establishmentPanels,
   landPricePanels,
   paxTrendPanel,
@@ -26,13 +27,14 @@ import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { PanelRenderer, PanelStack } from '@/components/panels/PanelRenderer'
 import { cn } from '@/lib/utils'
 
-/** 詳細タブ（表示順）。全 5 カテゴリを実装。 */
+/** 詳細タブ（表示順）。全 6 カテゴリを実装（従業者は事業所から独立・P5e）。 */
 const DETAIL_TABS: readonly Category[] = [
   'passenger',
   'population',
   'land_price',
   'bus',
   'establishment',
+  'employee',
 ]
 
 /** タブごとの本文パネル（選択半径で再計算）。全 5 カテゴリを実装。 */
@@ -48,6 +50,8 @@ function tabPanels(detail: StationDetail, tab: Category, radiusM: number): Panel
       return busPanels(detail, radiusM)
     case 'establishment':
       return establishmentPanels(detail, radiusM)
+    case 'employee':
+      return employeePanels(detail, radiusM)
     default:
       return []
   }

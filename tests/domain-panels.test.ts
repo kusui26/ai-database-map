@@ -3,6 +3,7 @@ import { type StationRow } from '@/shared/api'
 import { buildStationDetail } from '@/domain/stations/presenter'
 import {
   busPanels,
+  employeePanels,
   establishmentPanels,
   formatPaxLatest,
   landPricePanels,
@@ -51,21 +52,23 @@ describe('passengerPanels', () => {
     ])
   })
 
-  it('駅カード：延べ事業者数・最新乗降客・時系列欠損バッジ', () => {
+  it('駅カード：具体的な社名・最新乗降客・時系列欠損バッジ', () => {
     const card = stationCardPanel(detail)
     expect(card.stationName).toBe('東京')
     expect(card.prefecture).toBe('東京都')
-    expect(card.operators).toBe('延べ3社')
+    expect(card.operators).toBe('東日本旅客鉄道・東京地下鉄・東海旅客鉄道') // P5d の社名
     expect(card.paxLatest).toBe(1262604)
     expect(card.badges).toEqual([{ label: '乗降 時系列に欠損あり', level: 'warn' }])
   })
 
-  it('事業者数が null ならバッジ・operators も欠損に', () => {
-    const card = stationCardPanel(
-      buildStationDetail({ ...station, nOp: null, levelComplete: true }, values),
+  it('社名欠損時は延べ社数にフォールバック、n_op も null なら null', () => {
+    const withCount = stationCardPanel(buildStationDetail({ ...station, operators: null }, values))
+    expect(withCount.operators).toBe('延べ3社')
+    const noneCard = stationCardPanel(
+      buildStationDetail({ ...station, nOp: null, operators: null, levelComplete: true }, values),
     )
-    expect(card.operators).toBeNull()
-    expect(card.badges).toEqual([])
+    expect(noneCard.operators).toBeNull()
+    expect(noneCard.badges).toEqual([])
   })
 
   it('推移チャート：年昇順の点・カテゴリ色・前年比/コロナ比 KPI（フラグ解決）', () => {
@@ -215,7 +218,15 @@ const p5cDetail = buildStationDetail(station, p5cValues)
 describe('landPricePanels', () => {
   it('最寄カード（価格・用途・距離）＋半径別バー＋増減率表', () => {
     const panels = landPricePanels(p5cDetail, 1000)
-    expect(panels.map((p) => p.type)).toEqual(['statTable', 'barChart', 'statTable'])
+    expect(panels.map((p) => p.type)).toEqual(['statTable', 'trendChart', 'barChart', 'statTable'])
+  })
+
+  it('中央値の推移：選択半径の年次折れ線（P5e）', () => {
+    const line = landPricePanels(p5cDetail, 1000).find((p) => p.type === 'trendChart')
+    const trend = line?.type === 'trendChart' ? line : undefined
+    expect(trend?.unit).toBe('円/㎡')
+    expect(trend?.series[0]?.points.map((pt) => pt.x)).toEqual([2011, 2021, 2026])
+    expect(trend?.series[0]?.points.at(-1)?.y).toBe(19050000)
   })
 
   it('最寄の地価公示：円/㎡・用途・m', () => {
@@ -253,13 +264,15 @@ describe('landPricePanels', () => {
 })
 
 describe('busPanels', () => {
-  it('2010→現在の対比バー（現在を emphasis）＋内訳・増減表', () => {
+  it('2010→現在の2点折れ線（P5e）＋内訳・増減表', () => {
     const panels = busPanels(p5cDetail, 1000)
-    expect(panels.map((p) => p.type)).toEqual(['barChart', 'statTable'])
-    const bar = panels[0]
-    if (bar?.type === 'barChart') {
-      expect(bar.bars.map((b) => b.label)).toEqual(['2010年度', '現在'])
-      expect(bar.bars.find((b) => b.label === '現在')?.emphasis).toBe(true)
+    expect(panels.map((p) => p.type)).toEqual(['trendChart', 'statTable'])
+    const line = panels[0]
+    if (line?.type === 'trendChart') {
+      expect(line.series[0]?.points).toEqual([
+        { x: 2010, y: 41 },
+        { x: 2023, y: 44 },
+      ])
     }
     const table = panels[1]
     if (table?.type === 'statTable') {
@@ -272,35 +285,42 @@ describe('busPanels', () => {
   })
 })
 
-describe('establishmentPanels', () => {
-  it('事業所数・従業者数の折れ線 2 枚＋増減率表', () => {
+describe('establishmentPanels / employeePanels（P5e で分離）', () => {
+  it('事業所タブ：事業所数の折れ線＋事業所増減率（従業者は含まない）', () => {
     const panels = establishmentPanels(p5cDetail, 1000)
-    expect(panels.map((p) => p.type)).toEqual(['trendChart', 'trendChart', 'statTable'])
+    expect(panels.map((p) => p.type)).toEqual(['trendChart', 'statTable'])
+    const chart = panels[0]
+    if (chart?.type === 'trendChart') expect(chart.unit).toBe('事業所')
+    const table = panels[1]
+    if (table?.type === 'statTable') {
+      expect(table.title).toBe('事業所数 増減率')
+      expect(table.rows).toEqual([{ label: '2012→2021', value: '+10.5%', flagged: false }])
+    }
   })
 
-  it('従業者チャートは人単位、増減率は事業所/従業者ラベル', () => {
-    const panels = establishmentPanels(p5cDetail, 1000)
-    const emp = panels[1]
-    if (emp?.type === 'trendChart') {
-      expect(emp.unit).toBe('人')
-      expect(emp.series[0]?.points.at(-1)?.y).toBe(565228)
+  it('従業者タブ：従業者数（人）の折れ線＋従業者増減率', () => {
+    const panels = employeePanels(p5cDetail, 1000)
+    expect(panels.map((p) => p.type)).toEqual(['trendChart', 'statTable'])
+    const chart = panels[0]
+    if (chart?.type === 'trendChart') {
+      expect(chart.unit).toBe('人')
+      expect(chart.series[0]?.points.at(-1)?.y).toBe(565228)
     }
-    const table = panels[2]
+    const table = panels[1]
     if (table?.type === 'statTable') {
-      expect(table.rows).toEqual([
-        { label: '事業所 2012→2021', value: '+10.5%', flagged: false },
-        { label: '従業者 2012→2021', value: '+25.2%', flagged: false },
-      ])
+      expect(table.title).toBe('従業者数 増減率')
+      expect(table.rows).toEqual([{ label: '2012→2021', value: '+25.2%', flagged: false }])
     }
   })
 })
 
-describe('P5c パネルは Protocol スキーマに合致', () => {
-  it('地価・バス・事業所すべて parse できる', () => {
+describe('P5c/P5e パネルは Protocol スキーマに合致', () => {
+  it('地価・バス・事業所・従業者すべて parse できる', () => {
     const all = [
       ...landPricePanels(p5cDetail, 1000),
       ...busPanels(p5cDetail, 1000),
       ...establishmentPanels(p5cDetail, 1000),
+      ...employeePanels(p5cDetail, 1000),
     ]
     for (const panel of all) expect(() => panelSchema.parse(panel)).not.toThrow()
   })

@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 import { StationCard } from './StationCard'
 import { TrendChart } from './TrendChart'
 import { StatTable } from './StatTable'
+import { BarChart } from './BarChart'
 
 export function PanelRenderer({ panel }: { panel: Panel }) {
   switch (panel.type) {
@@ -20,6 +21,8 @@ export function PanelRenderer({ panel }: { panel: Panel }) {
       return <TrendChart panel={panel} />
     case 'statTable':
       return <StatTable panel={panel} />
+    case 'barChart':
+      return <BarChart panel={panel} />
     case 'markdown':
       return <p className="text-sm whitespace-pre-wrap text-slate-700">{panel.body}</p>
     case 'rankingTable':

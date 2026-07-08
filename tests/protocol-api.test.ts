@@ -52,6 +52,23 @@ describe('GUI Chat Protocol', () => {
     if (panel.type === 'statTable') expect(panel.rows[1]?.flagged).toBe(true)
   })
 
+  it('barChart パネル（半径別・emphasis）をパース', () => {
+    const panel = panelSchema.parse({
+      type: 'barChart',
+      title: '地価中央値（半径別）',
+      unit: '円/㎡',
+      format: 'yen',
+      category: 'land_price',
+      bars: [
+        { label: '500m', value: 24400000, formatted: '24,400,000', flagged: false },
+        { label: '1km', value: 19050000, formatted: '19,050,000', flagged: false, emphasis: true },
+      ],
+      flags: [],
+    })
+    expect(panel.type).toBe('barChart')
+    if (panel.type === 'barChart') expect(panel.bars[1]?.emphasis).toBe(true)
+  })
+
   it('未知の panel type を拒否', () => {
     expect(() => panelSchema.parse({ type: 'unknown' })).toThrow()
   })

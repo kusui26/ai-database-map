@@ -63,6 +63,16 @@ export const panelStatSchema = z.object({
 })
 export type PanelStat = z.infer<typeof panelStatSchema>
 
+/** 棒グラフの 1 本（値＋整形済み文字列・emphasis で強調＝選択半径など）。 */
+export const barSchema = z.object({
+  label: z.string(),
+  value: z.number().nullable(),
+  formatted: z.string(),
+  flagged: z.boolean(),
+  emphasis: z.boolean().optional(),
+})
+export type Bar = z.infer<typeof barSchema>
+
 export const rankingRowSchema = z.object({
   rank: z.number(),
   grp: z.string(),
@@ -117,6 +127,18 @@ export const panelSchema = z.discriminatedUnion('type', [
     size: sizeSchema,
   }),
   z.object({
+    type: z.literal('barChart'),
+    title: z.string(),
+    unit: z.string().nullable(),
+    format: formatSchema,
+    category: categorySchema.optional(),
+    bars: z.array(barSchema), // 半径別・年次対比・内訳などの棒（横棒で描画）
+    flags: z.array(reliabilityFlagSchema),
+    note: z.string().nullable().optional(),
+    placement: placementSchema,
+    size: sizeSchema,
+  }),
+  z.object({
     type: z.literal('rankingTable'),
     title: z.string(),
     metricKey: z.string(),
@@ -154,6 +176,7 @@ export type PanelOf<T extends Panel['type']> = Extract<Panel, { type: T }>
 export type StationCardPanel = PanelOf<'stationCard'>
 export type TrendChartPanel = PanelOf<'trendChart'>
 export type StatTablePanel = PanelOf<'statTable'>
+export type BarChartPanel = PanelOf<'barChart'>
 export type RankingTablePanel = PanelOf<'rankingTable'>
 export type ScatterPanel = PanelOf<'scatter'>
 export type MarkdownPanel = PanelOf<'markdown'>

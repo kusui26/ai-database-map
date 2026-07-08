@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { type StationRow } from '@/shared/api'
 import { buildStationDetail } from '@/domain/stations/presenter'
 import {
+  busPanels,
+  establishmentPanels,
   formatPaxLatest,
+  landPricePanels,
   passengerPanels,
   paxTrendPanel,
   populationPanels,
@@ -178,5 +181,118 @@ describe('populationPanels', () => {
     for (const panel of populationPanels(popDetail, 500)) {
       expect(() => panelSchema.parse(panel)).not.toThrow()
     }
+  })
+})
+
+const p5cValues = new Map<string, number>([
+  // 地価
+  ['lp_near_price', 37600000],
+  ['lp_near_dist_m', 252],
+  ['lp_med_500m', 24400000],
+  ['lp_med_1km', 19050000],
+  ['lp_med_2km', 5540000],
+  ['lp_gr_2026_2025_1km', 7.6],
+  ['lp_gr_2026_2023_1km', 15.1],
+  // バス
+  ['bus_n_1km', 44],
+  ['bus_n2010_1km', 41],
+  ['bus_n_local_1km', 33],
+  ['bus_n_hw_1km', 17],
+  ['bus_gr_1km', 7.3],
+  // 事業所・従業者
+  ['estab_n_2012_1km', 13909],
+  ['estab_n_2021_1km', 15375],
+  ['emp_n_2012_1km', 451361],
+  ['emp_n_2021_1km', 565228],
+  ['estab_gr_2021_2012_1km', 10.5],
+  ['emp_gr_2021_2012_1km', 25.2],
+])
+const p5cDetail = buildStationDetail(station, p5cValues)
+
+describe('landPricePanels', () => {
+  it('最寄カード（価格・用途・距離）＋半径別バー＋増減率表', () => {
+    const panels = landPricePanels(p5cDetail, 1000)
+    expect(panels.map((p) => p.type)).toEqual(['statTable', 'barChart', 'statTable'])
+  })
+
+  it('最寄の地価公示：円/㎡・用途・m', () => {
+    const [near] = landPricePanels(p5cDetail, 1000)
+    const rows = near?.type === 'statTable' ? near.rows : []
+    expect(rows).toEqual([
+      { label: '公示価格', value: '37,600,000 円/㎡', flagged: false },
+      { label: '用途', value: '商業地', flagged: false },
+      { label: '最寄地点まで', value: '252 m', flagged: false },
+    ])
+  })
+
+  it('中央値バー：選択半径を emphasis', () => {
+    const bar = landPricePanels(p5cDetail, 1000).find((p) => p.type === 'barChart')
+    const bars = bar?.type === 'barChart' ? bar.bars : []
+    expect(bars.map((b) => b.label)).toEqual(['500m', '1km', '2km'])
+    expect(bars.find((b) => b.label === '1km')?.emphasis).toBe(true)
+    expect(bars.find((b) => b.label === '500m')?.emphasis).toBe(false)
+  })
+
+  it('500m 圏は増減率が非対応 → 空＋注記（カタログ駆動フォールド）', () => {
+    const table = landPricePanels(p5cDetail, 500).at(-1)
+    expect(table?.type).toBe('statTable')
+    if (table?.type === 'statTable') {
+      expect(table.rows).toEqual([])
+      expect(table.note).toContain('500m')
+    }
+  })
+})
+
+describe('busPanels', () => {
+  it('2010→現在の対比バー（現在を emphasis）＋内訳・増減表', () => {
+    const panels = busPanels(p5cDetail, 1000)
+    expect(panels.map((p) => p.type)).toEqual(['barChart', 'statTable'])
+    const bar = panels[0]
+    if (bar?.type === 'barChart') {
+      expect(bar.bars.map((b) => b.label)).toEqual(['2010年度', '現在'])
+      expect(bar.bars.find((b) => b.label === '現在')?.emphasis).toBe(true)
+    }
+    const table = panels[1]
+    if (table?.type === 'statTable') {
+      expect(table.rows).toEqual([
+        { label: '一般バス停', value: '33 箇所', flagged: false },
+        { label: '高速バス停', value: '17 箇所', flagged: false },
+        { label: '対2010年 増減率', value: '+7.3%', flagged: false },
+      ])
+    }
+  })
+})
+
+describe('establishmentPanels', () => {
+  it('事業所数・従業者数の折れ線 2 枚＋増減率表', () => {
+    const panels = establishmentPanels(p5cDetail, 1000)
+    expect(panels.map((p) => p.type)).toEqual(['trendChart', 'trendChart', 'statTable'])
+  })
+
+  it('従業者チャートは人単位、増減率は事業所/従業者ラベル', () => {
+    const panels = establishmentPanels(p5cDetail, 1000)
+    const emp = panels[1]
+    if (emp?.type === 'trendChart') {
+      expect(emp.unit).toBe('人')
+      expect(emp.series[0]?.points.at(-1)?.y).toBe(565228)
+    }
+    const table = panels[2]
+    if (table?.type === 'statTable') {
+      expect(table.rows).toEqual([
+        { label: '事業所 2012→2021', value: '+10.5%', flagged: false },
+        { label: '従業者 2012→2021', value: '+25.2%', flagged: false },
+      ])
+    }
+  })
+})
+
+describe('P5c パネルは Protocol スキーマに合致', () => {
+  it('地価・バス・事業所すべて parse できる', () => {
+    const all = [
+      ...landPricePanels(p5cDetail, 1000),
+      ...busPanels(p5cDetail, 1000),
+      ...establishmentPanels(p5cDetail, 1000),
+    ]
+    for (const panel of all) expect(() => panelSchema.parse(panel)).not.toThrow()
   })
 })

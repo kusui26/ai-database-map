@@ -96,6 +96,7 @@ IDENTITY_COLUMNS: list[dict[str, str]] = [
     {"key": "lon", "type": "number", "labelJa": "経度（EPSG:6668）", "role": "geo"},
     {"key": "lat", "type": "number", "labelJa": "緯度（EPSG:6668）", "role": "geo"},
     {"key": "n_op", "type": "number", "labelJa": "延べ事業者数", "role": "attribute"},
+    {"key": "operators", "type": "string", "labelJa": "運営会社名（pax規模降順・「・」連結）", "role": "attribute"},
     {"key": "level_complete", "type": "boolean", "labelJa": "乗降客時系列の完全性", "role": "flag"},
     {"key": "flag_yoy", "type": "boolean", "labelJa": "前年比（rate_yoy）異常値フラグ", "role": "flag"},
     {"key": "flag_covid", "type": "boolean", "labelJa": "コロナ前後比（rate_covid）信頼性フラグ", "role": "flag"},
@@ -241,11 +242,11 @@ def build_entry(col: str) -> CatalogEntry:
     if col == "lp_near_use":
         return _make(col, "lp_near", "level", "land_price", "最寄地価公示地点の用途区分",
                      None, None, rankable=False)
-    m = re.fullmatch(rf"lp_med_({RT})", col)
+    m = re.fullmatch(rf"lp_med_(\d{{4}})_({RT})", col)
     if m:
-        r = m[1]
-        return _make(col, "lp_med", "level", "land_price", f"地価中央値（2026年・{r}圏）",
-                     "円/㎡", "yen", radiusM=RADIUS_M[r], year=2026, flag=f"lp_lown_{r}")
+        y, r = int(m[1]), m[2]
+        return _make(col, "lp_med", "level", "land_price", f"地価中央値（{y}年・{r}圏）",
+                     "円/㎡", "yen", radiusM=RADIUS_M[r], year=y, flag=f"lp_lown_{r}")
     m = re.fullmatch(rf"lp_n_({RT})", col)
     if m:
         r = m[1]

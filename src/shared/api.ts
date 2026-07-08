@@ -52,6 +52,7 @@ export const stationRowSchema = z.object({
   lon: z.number(),
   lat: z.number(),
   nOp: z.number().nullable(),
+  operators: z.string().nullable(), // 運営会社名（pax規模降順・「・」連結・P5d で追加）
   paxLatest: z.number().nullable(),
   lpNearUse: z.string().nullable(),
   levelComplete: z.boolean().nullable(),

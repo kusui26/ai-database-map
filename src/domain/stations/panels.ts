@@ -225,9 +225,10 @@ export function landPricePanels(
     panels.push({ type: 'statTable', title: '最寄の地価公示', rows: nearRows, note: null, size })
   }
 
-  // 中央値（半径別）：500m〜10km の横棒（20km はデータなし＝自動で畳まれる）
+  // 中央値（半径別）：500m〜10km の横棒（20km はデータなし＝自動で畳まれる）。
+  // lp_med は年次系列（P5d）なので最新年（末尾）を現在値として使う。
   const medBars: Bar[] = RADII_M.flatMap((radius) => {
-    const point = seriesAt(detail, 'lp_med', radius)?.points[0]
+    const point = seriesAt(detail, 'lp_med', radius)?.points.at(-1)
     if (point === undefined || point.value === null) return []
     return [
       {

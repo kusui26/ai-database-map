@@ -12,10 +12,10 @@ import {
 import { CATEGORIES, RADII_M } from '@/shared/constants'
 
 describe('catalog（Zod ロード）', () => {
-  it('488 エントリ・11 属性・カウント整合', () => {
-    expect(catalog.entryCount).toBe(488)
-    expect(entries.length).toBe(488)
-    expect(catalog.stationAttributes.length).toBe(11)
+  it('583 エントリ・12 属性・カウント整合', () => {
+    expect(catalog.entryCount).toBe(583)
+    expect(entries.length).toBe(583)
+    expect(catalog.stationAttributes.length).toBe(12)
     expect(catalog.entryCount + catalog.stationAttributeCount).toBe(catalog.columnCount)
   })
 
@@ -34,9 +34,9 @@ describe('catalog（Zod ロード）', () => {
     expect(() => requireEntry('___missing___')).toThrow()
   })
 
-  it('カテゴリ別エントリ数の合計が 488', () => {
+  it('カテゴリ別エントリ数の合計が 583', () => {
     const total = CATEGORIES.reduce((sum, cat) => sum + entriesForCategory(cat).length, 0)
-    expect(total).toBe(488)
+    expect(total).toBe(583)
   })
 
   it('rankable は flag / hidden_ratio を含まない', () => {

@@ -230,6 +230,7 @@ rate_covid = 分子/分母 − 1       # basket が空なら NaN
 | 識別 | `grp`, `station_name`, `label`, `search_label`, `prefecture`, `lon`, `lat` | キー＋表記＋地図表示（旧列名 `駅名`/`都道府県`。出力時にASCII化）|
 | レベル時系列 | `pax_2011` … `pax_2024`（14列）| inclusive合算・補間なし・全社欠測年はNULL |
 | レベル品質 | `n_op` | 群の延べ運営会社数 |
+| 事業者名 | `operators` | 運営会社名を pax 規模の降順で `・` 連結した単一文字列（例「東日本旅客鉄道・東京地下鉄・東海旅客鉄道」）。監査 `station_operator_detail.csv` を grp 集約し station_dataset へ畳み込み（P5d・カード表示用）|
 | レベル品質 | `level_complete`（bool）| 構成が全データ年で一定か |
 | 比率P1 | `rate_yoy`, `flag_yoy` | 2024/2023 と異常値フラグ |
 | 比率P2 | `rate_covid`, `flag_covid` | コロナ前後 と信頼性フラグ |

@@ -1,6 +1,6 @@
 # メトリクス・カタログ ラベル一覧（自動生成）
 
-`pipeline/build_catalog.py` が `station_dataset.csv`（499列）から生成。 値列 488 エントリ ＋ 駅属性 11。
+`pipeline/build_catalog.py` が `station_dataset.csv`（595列）から生成。 値列 583 エントリ ＋ 駅属性 12。
 
 凡例: `key` — ラベル 〔単位・format・rankable・⚠→信頼性フラグ〕
 
@@ -341,24 +341,119 @@
 - `pop_err_2020_pred_2018_10km` — 人口予測誤差率（H30推計2020 vs 実績2020・10km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_10km〕
 - `pop_err_2020_pred_2018_20km` — 人口予測誤差率（H30推計2020 vs 実績2020・20km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_20km〕
 
-## 地価（land_price）— 58件
+## 地価（land_price）— 153件
 
 - `lp_near_price` — 最寄地価公示価格（2026年） 〔円/㎡・yen・rankable〕
 - `lp_near_dist_m` — 最寄地価公示地点までの距離 〔m・int・not-rankable〕
 - `lp_near_use` — 最寄地価公示地点の用途区分 〔—・—・not-rankable〕
-- `lp_med_500m` — 地価中央値（2026年・500m圏） 〔円/㎡・yen・rankable・⚠→lp_lown_500m〕
+- `lp_med_2007_500m` — 地価中央値（2007年・500m圏） 〔円/㎡・yen・rankable・⚠→lp_lown_500m〕
+- `lp_med_2008_500m` — 地価中央値（2008年・500m圏） 〔円/㎡・yen・rankable・⚠→lp_lown_500m〕
+- `lp_med_2009_500m` — 地価中央値（2009年・500m圏） 〔円/㎡・yen・rankable・⚠→lp_lown_500m〕
+- `lp_med_2010_500m` — 地価中央値（2010年・500m圏） 〔円/㎡・yen・rankable・⚠→lp_lown_500m〕
+- `lp_med_2011_500m` — 地価中央値（2011年・500m圏） 〔円/㎡・yen・rankable・⚠→lp_lown_500m〕
+- `lp_med_2012_500m` — 地価中央値（2012年・500m圏） 〔円/㎡・yen・rankable・⚠→lp_lown_500m〕
+- `lp_med_2013_500m` — 地価中央値（2013年・500m圏） 〔円/㎡・yen・rankable・⚠→lp_lown_500m〕
+- `lp_med_2014_500m` — 地価中央値（2014年・500m圏） 〔円/㎡・yen・rankable・⚠→lp_lown_500m〕
+- `lp_med_2015_500m` — 地価中央値（2015年・500m圏） 〔円/㎡・yen・rankable・⚠→lp_lown_500m〕
+- `lp_med_2016_500m` — 地価中央値（2016年・500m圏） 〔円/㎡・yen・rankable・⚠→lp_lown_500m〕
+- `lp_med_2017_500m` — 地価中央値（2017年・500m圏） 〔円/㎡・yen・rankable・⚠→lp_lown_500m〕
+- `lp_med_2018_500m` — 地価中央値（2018年・500m圏） 〔円/㎡・yen・rankable・⚠→lp_lown_500m〕
+- `lp_med_2019_500m` — 地価中央値（2019年・500m圏） 〔円/㎡・yen・rankable・⚠→lp_lown_500m〕
+- `lp_med_2020_500m` — 地価中央値（2020年・500m圏） 〔円/㎡・yen・rankable・⚠→lp_lown_500m〕
+- `lp_med_2021_500m` — 地価中央値（2021年・500m圏） 〔円/㎡・yen・rankable・⚠→lp_lown_500m〕
+- `lp_med_2022_500m` — 地価中央値（2022年・500m圏） 〔円/㎡・yen・rankable・⚠→lp_lown_500m〕
+- `lp_med_2023_500m` — 地価中央値（2023年・500m圏） 〔円/㎡・yen・rankable・⚠→lp_lown_500m〕
+- `lp_med_2024_500m` — 地価中央値（2024年・500m圏） 〔円/㎡・yen・rankable・⚠→lp_lown_500m〕
+- `lp_med_2025_500m` — 地価中央値（2025年・500m圏） 〔円/㎡・yen・rankable・⚠→lp_lown_500m〕
+- `lp_med_2026_500m` — 地価中央値（2026年・500m圏） 〔円/㎡・yen・rankable・⚠→lp_lown_500m〕
 - `lp_n_500m` — 地価公示地点数（500m圏） 〔箇所・int・not-rankable〕
 - `lp_lown_500m` — 地価 低分母フラグ（500m圏／地点数が少なく中央値が不安定） 〔—・—・not-rankable〕
-- `lp_med_1km` — 地価中央値（2026年・1km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_1km〕
+- `lp_med_2007_1km` — 地価中央値（2007年・1km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_1km〕
+- `lp_med_2008_1km` — 地価中央値（2008年・1km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_1km〕
+- `lp_med_2009_1km` — 地価中央値（2009年・1km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_1km〕
+- `lp_med_2010_1km` — 地価中央値（2010年・1km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_1km〕
+- `lp_med_2011_1km` — 地価中央値（2011年・1km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_1km〕
+- `lp_med_2012_1km` — 地価中央値（2012年・1km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_1km〕
+- `lp_med_2013_1km` — 地価中央値（2013年・1km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_1km〕
+- `lp_med_2014_1km` — 地価中央値（2014年・1km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_1km〕
+- `lp_med_2015_1km` — 地価中央値（2015年・1km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_1km〕
+- `lp_med_2016_1km` — 地価中央値（2016年・1km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_1km〕
+- `lp_med_2017_1km` — 地価中央値（2017年・1km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_1km〕
+- `lp_med_2018_1km` — 地価中央値（2018年・1km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_1km〕
+- `lp_med_2019_1km` — 地価中央値（2019年・1km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_1km〕
+- `lp_med_2020_1km` — 地価中央値（2020年・1km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_1km〕
+- `lp_med_2021_1km` — 地価中央値（2021年・1km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_1km〕
+- `lp_med_2022_1km` — 地価中央値（2022年・1km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_1km〕
+- `lp_med_2023_1km` — 地価中央値（2023年・1km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_1km〕
+- `lp_med_2024_1km` — 地価中央値（2024年・1km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_1km〕
+- `lp_med_2025_1km` — 地価中央値（2025年・1km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_1km〕
+- `lp_med_2026_1km` — 地価中央値（2026年・1km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_1km〕
 - `lp_n_1km` — 地価公示地点数（1km圏） 〔箇所・int・not-rankable〕
 - `lp_lown_1km` — 地価 低分母フラグ（1km圏／地点数が少なく中央値が不安定） 〔—・—・not-rankable〕
-- `lp_med_2km` — 地価中央値（2026年・2km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_2km〕
+- `lp_med_2007_2km` — 地価中央値（2007年・2km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_2km〕
+- `lp_med_2008_2km` — 地価中央値（2008年・2km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_2km〕
+- `lp_med_2009_2km` — 地価中央値（2009年・2km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_2km〕
+- `lp_med_2010_2km` — 地価中央値（2010年・2km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_2km〕
+- `lp_med_2011_2km` — 地価中央値（2011年・2km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_2km〕
+- `lp_med_2012_2km` — 地価中央値（2012年・2km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_2km〕
+- `lp_med_2013_2km` — 地価中央値（2013年・2km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_2km〕
+- `lp_med_2014_2km` — 地価中央値（2014年・2km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_2km〕
+- `lp_med_2015_2km` — 地価中央値（2015年・2km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_2km〕
+- `lp_med_2016_2km` — 地価中央値（2016年・2km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_2km〕
+- `lp_med_2017_2km` — 地価中央値（2017年・2km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_2km〕
+- `lp_med_2018_2km` — 地価中央値（2018年・2km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_2km〕
+- `lp_med_2019_2km` — 地価中央値（2019年・2km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_2km〕
+- `lp_med_2020_2km` — 地価中央値（2020年・2km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_2km〕
+- `lp_med_2021_2km` — 地価中央値（2021年・2km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_2km〕
+- `lp_med_2022_2km` — 地価中央値（2022年・2km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_2km〕
+- `lp_med_2023_2km` — 地価中央値（2023年・2km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_2km〕
+- `lp_med_2024_2km` — 地価中央値（2024年・2km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_2km〕
+- `lp_med_2025_2km` — 地価中央値（2025年・2km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_2km〕
+- `lp_med_2026_2km` — 地価中央値（2026年・2km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_2km〕
 - `lp_n_2km` — 地価公示地点数（2km圏） 〔箇所・int・not-rankable〕
 - `lp_lown_2km` — 地価 低分母フラグ（2km圏／地点数が少なく中央値が不安定） 〔—・—・not-rankable〕
-- `lp_med_5km` — 地価中央値（2026年・5km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_5km〕
+- `lp_med_2007_5km` — 地価中央値（2007年・5km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_5km〕
+- `lp_med_2008_5km` — 地価中央値（2008年・5km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_5km〕
+- `lp_med_2009_5km` — 地価中央値（2009年・5km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_5km〕
+- `lp_med_2010_5km` — 地価中央値（2010年・5km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_5km〕
+- `lp_med_2011_5km` — 地価中央値（2011年・5km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_5km〕
+- `lp_med_2012_5km` — 地価中央値（2012年・5km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_5km〕
+- `lp_med_2013_5km` — 地価中央値（2013年・5km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_5km〕
+- `lp_med_2014_5km` — 地価中央値（2014年・5km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_5km〕
+- `lp_med_2015_5km` — 地価中央値（2015年・5km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_5km〕
+- `lp_med_2016_5km` — 地価中央値（2016年・5km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_5km〕
+- `lp_med_2017_5km` — 地価中央値（2017年・5km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_5km〕
+- `lp_med_2018_5km` — 地価中央値（2018年・5km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_5km〕
+- `lp_med_2019_5km` — 地価中央値（2019年・5km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_5km〕
+- `lp_med_2020_5km` — 地価中央値（2020年・5km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_5km〕
+- `lp_med_2021_5km` — 地価中央値（2021年・5km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_5km〕
+- `lp_med_2022_5km` — 地価中央値（2022年・5km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_5km〕
+- `lp_med_2023_5km` — 地価中央値（2023年・5km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_5km〕
+- `lp_med_2024_5km` — 地価中央値（2024年・5km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_5km〕
+- `lp_med_2025_5km` — 地価中央値（2025年・5km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_5km〕
+- `lp_med_2026_5km` — 地価中央値（2026年・5km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_5km〕
 - `lp_n_5km` — 地価公示地点数（5km圏） 〔箇所・int・not-rankable〕
 - `lp_lown_5km` — 地価 低分母フラグ（5km圏／地点数が少なく中央値が不安定） 〔—・—・not-rankable〕
-- `lp_med_10km` — 地価中央値（2026年・10km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_10km〕
+- `lp_med_2007_10km` — 地価中央値（2007年・10km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_10km〕
+- `lp_med_2008_10km` — 地価中央値（2008年・10km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_10km〕
+- `lp_med_2009_10km` — 地価中央値（2009年・10km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_10km〕
+- `lp_med_2010_10km` — 地価中央値（2010年・10km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_10km〕
+- `lp_med_2011_10km` — 地価中央値（2011年・10km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_10km〕
+- `lp_med_2012_10km` — 地価中央値（2012年・10km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_10km〕
+- `lp_med_2013_10km` — 地価中央値（2013年・10km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_10km〕
+- `lp_med_2014_10km` — 地価中央値（2014年・10km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_10km〕
+- `lp_med_2015_10km` — 地価中央値（2015年・10km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_10km〕
+- `lp_med_2016_10km` — 地価中央値（2016年・10km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_10km〕
+- `lp_med_2017_10km` — 地価中央値（2017年・10km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_10km〕
+- `lp_med_2018_10km` — 地価中央値（2018年・10km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_10km〕
+- `lp_med_2019_10km` — 地価中央値（2019年・10km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_10km〕
+- `lp_med_2020_10km` — 地価中央値（2020年・10km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_10km〕
+- `lp_med_2021_10km` — 地価中央値（2021年・10km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_10km〕
+- `lp_med_2022_10km` — 地価中央値（2022年・10km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_10km〕
+- `lp_med_2023_10km` — 地価中央値（2023年・10km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_10km〕
+- `lp_med_2024_10km` — 地価中央値（2024年・10km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_10km〕
+- `lp_med_2025_10km` — 地価中央値（2025年・10km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_10km〕
+- `lp_med_2026_10km` — 地価中央値（2026年・10km圏） 〔円/㎡・yen・rankable・⚠→lp_lown_10km〕
 - `lp_n_10km` — 地価公示地点数（10km圏） 〔箇所・int・not-rankable〕
 - `lp_lown_10km` — 地価 低分母フラグ（10km圏／地点数が少なく中央値が不安定） 〔—・—・not-rankable〕
 - `lp_gr_2026_2025_1km` — 地価増減率（2025→2026年・1km圏） 〔%・percent1・rankable・⚠→lp_gr_lown_2026_2025_1km〕
@@ -523,6 +618,7 @@
 - `lon` — 経度（EPSG:6668）（number）
 - `lat` — 緯度（EPSG:6668）（number）
 - `n_op` — 延べ事業者数（number）
+- `operators` — 運営会社名（pax規模降順・「・」連結）（string）
 - `level_complete` — 乗降客時系列の完全性（boolean）
 - `flag_yoy` — 前年比（rate_yoy）異常値フラグ（boolean）
 - `flag_covid` — コロナ前後比（rate_covid）信頼性フラグ（boolean）

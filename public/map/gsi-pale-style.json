@@ -1,0 +1,68 @@
+{
+  "version": 8,
+  "name": "GSI Optimal BV Map — pale",
+  "glyphs": "https://gsi-cyberjapan.github.io/optimal_bvmap/glyphs/{fontstack}/{range}.pbf",
+  "sources": {
+    "v": {
+      "type": "vector",
+      "tiles": ["https://cyberjapandata.gsi.go.jp/xyz/optimal_bvmap-v1/{z}/{x}/{y}.pbf"],
+      "minzoom": 4,
+      "maxzoom": 16,
+      "attribution": "<a href=\"https://www.gsi.go.jp/\" target=\"_blank\" rel=\"noopener\">国土地理院最適化ベクトルタイル</a>"
+    }
+  },
+  "layers": [
+    {
+      "id": "background",
+      "type": "background",
+      "paint": { "background-color": "#f4f6f9" }
+    },
+    {
+      "id": "water",
+      "type": "fill",
+      "source": "v",
+      "source-layer": "WA",
+      "paint": { "fill-color": "#dde5ee" }
+    },
+    {
+      "id": "coastline",
+      "type": "line",
+      "source": "v",
+      "source-layer": "Cstline",
+      "paint": { "line-color": "#b9c5d2", "line-width": 0.6 }
+    },
+    {
+      "id": "admin-boundary",
+      "type": "line",
+      "source": "v",
+      "source-layer": "AdmBdry",
+      "paint": {
+        "line-color": "#d0d8e0",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 6, 0.5, 12, 1.2],
+        "line-dasharray": [3, 2]
+      }
+    },
+    {
+      "id": "road",
+      "type": "line",
+      "source": "v",
+      "source-layer": "RdCL",
+      "minzoom": 8,
+      "paint": {
+        "line-color": "#e7ebf0",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 8, 0.4, 14, 2.2]
+      }
+    },
+    {
+      "id": "railway",
+      "type": "line",
+      "source": "v",
+      "source-layer": "RailCL",
+      "minzoom": 9,
+      "paint": {
+        "line-color": "#ccd4dc",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 9, 0.5, 14, 1.6]
+      }
+    }
+  ]
+}

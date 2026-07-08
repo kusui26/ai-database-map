@@ -6,10 +6,10 @@
 /** メートル/度（緯度方向）。WGS84 の平均的近似。 */
 const METERS_PER_DEG_LAT = 111_320
 
-/** GeoJSON Polygon（MapLibre のソースにそのまま渡せる最小形）。 */
+/** GeoJSON Polygon（MapLibre / GeoJSON の Geometry にそのまま渡せる形）。 */
 export type CirclePolygon = {
-  readonly type: 'Polygon'
-  readonly coordinates: readonly (readonly (readonly [number, number])[])[]
+  type: 'Polygon'
+  coordinates: [number, number][][]
 }
 
 /**

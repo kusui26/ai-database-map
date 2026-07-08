@@ -3,11 +3,12 @@
  *
  * クリック（P5 の詳細パネル）と会話（Step2 のチャット）は、この同一の Panel[] を消費する
  * （.claude/CLAUDE.md §2「API こそがプロダクト」）。UI にメトリクスの意味づけを埋めない。
- * 乗降（passenger）・人口（population）タブを実装する（地価・バス・事業所は P5c）。
+ * 全 5 タブ（乗降・人口・地価・バス・事業所）の Panel を選択半径で組み立てる。
  */
 
 import { type MetricSeries, type StationDetail, type StationRow } from '@/shared/api'
 import {
+  type Bar,
   type Panel,
   type PanelSize,
   type PanelStat,
@@ -15,7 +16,7 @@ import {
   type StationCardPanel,
   type TrendChartPanel,
 } from '@/shared/protocol'
-import { CATEGORY_COLORS, radiusLabel } from '@/shared/constants'
+import { CATEGORY_COLORS, RADII_M, radiusLabel } from '@/shared/constants'
 import { formatWithUnit } from '@/shared/format'
 import { baseMetricLabel } from '@/domain/metrics'
 
@@ -163,15 +164,10 @@ function populationTrendPanel(
 
 /** 人口増減率のミニ表 Panel（選択半径の 9 ペア・lowbase は各行 ⚠）。 */
 function populationGrowthTable(detail: StationDetail, radiusM: number, size: PanelSize): Panel {
-  const growth = seriesAt(detail, 'pop_gr', radiusM)
   return {
     type: 'statTable',
     title: '人口増減率',
-    rows: (growth?.points ?? []).map((point) => ({
-      label: `${point.yearBase ?? '?'}→${point.year ?? '?'}`,
-      value: point.formatted,
-      flagged: point.flagged,
-    })),
+    rows: growthRows(seriesAt(detail, 'pop_gr', radiusM)),
     note: null,
     size,
   }
@@ -184,6 +180,206 @@ export function populationPanels(
   size: PanelSize = 'full',
 ): Panel[] {
   return [populationTrendPanel(detail, radiusM, size), populationGrowthTable(detail, radiusM, size)]
+}
+
+/** 増減率系列 → ミニ表の行（yearBase→year ラベル・整形済み値・lown フラグ）。接頭辞付与可。 */
+function growthRows(series: MetricSeries | undefined, prefix = ''): PanelStat[] {
+  return (series?.points ?? []).map((point) => ({
+    label: `${prefix}${point.yearBase ?? '?'}→${point.year ?? '?'}`,
+    value: point.formatted,
+    flagged: point.flagged,
+  }))
+}
+
+/** 地価タブ：最寄公示カード＋半径別中央値バー＋増減率表（500m/20km はカタログで自動フォールド）。 */
+export function landPricePanels(
+  detail: StationDetail,
+  radiusM: number,
+  size: PanelSize = 'full',
+): Panel[] {
+  const panels: Panel[] = []
+
+  // 最寄の地価公示（半径非依存）：価格・用途・距離
+  const near = detail.series.find((series) => series.baseMetric === 'lp_near')
+  const price = near?.points.find((point) => point.key === 'lp_near_price')
+  const dist = near?.points.find((point) => point.key === 'lp_near_dist_m')
+  const nearRows: PanelStat[] = []
+  if (price !== undefined) {
+    nearRows.push({
+      label: '公示価格',
+      value: formatWithUnit(price.value, 'yen', '円/㎡'),
+      flagged: false,
+    })
+  }
+  if (detail.station.lpNearUse !== null) {
+    nearRows.push({ label: '用途', value: detail.station.lpNearUse, flagged: false })
+  }
+  if (dist !== undefined) {
+    nearRows.push({
+      label: '最寄地点まで',
+      value: formatWithUnit(dist.value, 'int', 'm'),
+      flagged: false,
+    })
+  }
+  if (nearRows.length > 0) {
+    panels.push({ type: 'statTable', title: '最寄の地価公示', rows: nearRows, note: null, size })
+  }
+
+  // 中央値（半径別）：500m〜10km の横棒（20km はデータなし＝自動で畳まれる）
+  const medBars: Bar[] = RADII_M.flatMap((radius) => {
+    const point = seriesAt(detail, 'lp_med', radius)?.points[0]
+    if (point === undefined || point.value === null) return []
+    return [
+      {
+        label: radiusLabel(radius),
+        value: point.value,
+        formatted: point.formatted,
+        flagged: point.flagged,
+        emphasis: radius === radiusM,
+      },
+    ]
+  })
+  if (medBars.length > 0) {
+    panels.push({
+      type: 'barChart',
+      title: '地価中央値（半径別）',
+      unit: '円/㎡',
+      format: 'yen',
+      category: 'land_price',
+      bars: medBars,
+      flags: [],
+      note: '半径が大きいほど郊外を含み、中央値は下がる傾向。',
+      size,
+    })
+  }
+
+  // 増減率（選択半径・5 期間）：500m/20km は非対応 → 注記
+  const growth = seriesAt(detail, 'lp_gr', radiusM)
+  const grRows = growthRows(growth)
+  panels.push({
+    type: 'statTable',
+    title: `地価増減率（${radiusLabel(radiusM)}圏）`,
+    rows: grRows,
+    note:
+      grRows.length === 0
+        ? `${radiusLabel(radiusM)}圏は公示地価の増減率が非対応です（500m・20km は算出対象外）。`
+        : null,
+    size,
+  })
+
+  return panels
+}
+
+/** バスタブ：2010→現在の対比バー＋一般/高速内訳・対2010年増減率（lown ⚠）。 */
+export function busPanels(
+  detail: StationDetail,
+  radiusM: number,
+  size: PanelSize = 'full',
+): Panel[] {
+  const panels: Panel[] = []
+
+  const now = seriesAt(detail, 'bus_n', radiusM)?.points[0]
+  const y2010 = seriesAt(detail, 'bus_n2010', radiusM)?.points[0]
+  const bars: Bar[] = []
+  if (y2010 !== undefined && y2010.value !== null) {
+    bars.push({ label: '2010年度', value: y2010.value, formatted: y2010.formatted, flagged: false })
+  }
+  if (now !== undefined && now.value !== null) {
+    bars.push({
+      label: '現在',
+      value: now.value,
+      formatted: now.formatted,
+      flagged: false,
+      emphasis: true,
+    })
+  }
+  if (bars.length > 0) {
+    panels.push({
+      type: 'barChart',
+      title: `バス停留所数（${radiusLabel(radiusM)}圏）`,
+      unit: '箇所',
+      format: 'int',
+      category: 'bus',
+      bars,
+      flags: [],
+      note: null,
+      size,
+    })
+  }
+
+  const local = seriesAt(detail, 'bus_n_local', radiusM)?.points[0]
+  const highway = seriesAt(detail, 'bus_n_hw', radiusM)?.points[0]
+  const growth = seriesAt(detail, 'bus_gr', radiusM)?.points[0]
+  const rows: PanelStat[] = []
+  if (local !== undefined) {
+    rows.push({
+      label: '一般バス停',
+      value: formatWithUnit(local.value, 'int', '箇所'),
+      flagged: false,
+    })
+  }
+  if (highway !== undefined) {
+    rows.push({
+      label: '高速バス停',
+      value: formatWithUnit(highway.value, 'int', '箇所'),
+      flagged: false,
+    })
+  }
+  if (growth !== undefined) {
+    rows.push({ label: '対2010年 増減率', value: growth.formatted, flagged: growth.flagged })
+  }
+  if (rows.length > 0) {
+    panels.push({ type: 'statTable', title: '内訳・増減', rows, note: null, size })
+  }
+
+  return panels
+}
+
+/** 事業所タブ：事業所数・従業者数の推移（3 時点）＋増減率（9年/5年・lown ⚠）。 */
+export function establishmentPanels(
+  detail: StationDetail,
+  radiusM: number,
+  size: PanelSize = 'full',
+): Panel[] {
+  const panels: Panel[] = []
+
+  const estab = seriesAt(detail, 'estab_n', radiusM)
+  if (estab !== undefined && estab.points.length > 0) {
+    panels.push({
+      type: 'trendChart',
+      title: '事業所数の推移',
+      unit: estab.unit,
+      format: estab.format,
+      category: 'establishment',
+      flags: [],
+      series: [{ label: '事業所数', points: toXY(estab), color: CATEGORY_COLORS.establishment }],
+      size,
+    })
+  }
+
+  const emp = seriesAt(detail, 'emp_n', radiusM)
+  if (emp !== undefined && emp.points.length > 0) {
+    panels.push({
+      type: 'trendChart',
+      title: '従業者数の推移',
+      unit: emp.unit,
+      format: emp.format,
+      category: 'employee',
+      flags: [],
+      series: [{ label: '従業者数', points: toXY(emp), color: CATEGORY_COLORS.employee }],
+      size,
+    })
+  }
+
+  const rows: PanelStat[] = [
+    ...growthRows(seriesAt(detail, 'estab_gr', radiusM), '事業所 '),
+    ...growthRows(seriesAt(detail, 'emp_gr', radiusM), '従業者 '),
+  ]
+  if (rows.length > 0) {
+    panels.push({ type: 'statTable', title: '増減率', rows, note: null, size })
+  }
+
+  return panels
 }
 
 /** 乗降タブ 1 枚分の Panel[]（駅カード → 推移チャート）。UI/AI が同一配列を描画する。 */

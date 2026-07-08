@@ -3,7 +3,7 @@
 /**
  * 駅詳細パネル（骨格＋乗降タブ）。デスクトップ＝右ドロワー／モバイル＝vaul ボトムシート。
  * ?grp 選択で開き、閉じると ?grp をクリア。カード＋タブは Protocol の Panel を PanelStack で描画する。
- * タブは 5 カテゴリの器。乗降（P5a）・人口（P5b）を実装、地価/バス/事業所は P5c。半径依存タブは集計半径セレクタを表示。
+ * タブは 5 カテゴリ（乗降・人口・地価・バス・事業所）を実装。半径依存タブは集計半径セレクタを表示。
  */
 
 import { useCallback, useEffect, useState } from 'react'
@@ -11,7 +11,14 @@ import { Drawer } from 'vaul'
 import { type Panel } from '@/shared/protocol'
 import { type StationDetail } from '@/shared/api'
 import { type Category, CATEGORY_LABELS_JA, RADII_M, RADIUS_LABELS } from '@/shared/constants'
-import { paxTrendPanel, populationPanels, stationCardPanel } from '@/domain/stations/panels'
+import {
+  busPanels,
+  establishmentPanels,
+  landPricePanels,
+  paxTrendPanel,
+  populationPanels,
+  stationCardPanel,
+} from '@/domain/stations/panels'
 import { isRadiusDependentCategory } from '@/domain/metrics'
 import { useMapUrlState } from '@/components/map/useMapUrlState'
 import { useStationDetail } from '@/components/detail/useStationDetail'
@@ -19,7 +26,7 @@ import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { PanelRenderer, PanelStack } from '@/components/panels/PanelRenderer'
 import { cn } from '@/lib/utils'
 
-/** 詳細タブの器（表示順）。乗降・人口を実装、地価/バス/事業所は P5c。 */
+/** 詳細タブ（表示順）。全 5 カテゴリを実装。 */
 const DETAIL_TABS: readonly Category[] = [
   'passenger',
   'population',
@@ -28,11 +35,22 @@ const DETAIL_TABS: readonly Category[] = [
   'establishment',
 ]
 
-/** タブごとの本文パネル（選択半径で再計算・未実装カテゴリは空＝プレースホルダ）。 */
+/** タブごとの本文パネル（選択半径で再計算）。全 5 カテゴリを実装。 */
 function tabPanels(detail: StationDetail, tab: Category, radiusM: number): Panel[] {
-  if (tab === 'passenger') return [paxTrendPanel(detail)]
-  if (tab === 'population') return populationPanels(detail, radiusM)
-  return []
+  switch (tab) {
+    case 'passenger':
+      return [paxTrendPanel(detail)]
+    case 'population':
+      return populationPanels(detail, radiusM)
+    case 'land_price':
+      return landPricePanels(detail, radiusM)
+    case 'bus':
+      return busPanels(detail, radiusM)
+    case 'establishment':
+      return establishmentPanels(detail, radiusM)
+    default:
+      return []
+  }
 }
 
 /** 詳細内の集計半径セレクタ（?r 同期）。半径依存タブでのみ表示。 */
@@ -116,19 +134,18 @@ function TabContent({
   onRadius: (radiusM: number) => void
 }) {
   const panels = tabPanels(detail, tab, radiusM)
-  if (panels.length === 0) {
-    return (
-      <div className="rounded-xl bg-slate-50 p-8 text-center text-sm text-slate-400">
-        「{CATEGORY_LABELS_JA[tab]}」タブは P5c で実装します。
-      </div>
-    )
-  }
   return (
     <div>
       {isRadiusDependentCategory(tab) && (
         <DrawerRadiusControl radiusM={radiusM} onChange={onRadius} />
       )}
-      <PanelStack panels={panels} />
+      {panels.length === 0 ? (
+        <div className="rounded-xl bg-slate-50 p-8 text-center text-sm text-slate-400">
+          この駅は「{CATEGORY_LABELS_JA[tab]}」のデータがありません。
+        </div>
+      ) : (
+        <PanelStack panels={panels} />
+      )}
     </div>
   )
 }

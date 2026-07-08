@@ -507,7 +507,8 @@ MapResponse = { messages: {role,text}[], mapActions: MapAction[], panels: Panel[
 | **P2c** | ✅ 完了 | 2026-07-07 | RPC 6本を migration で実装（`search_stations`/`stations_in_bbox`/`nearest_stations`/`rank_by_column`/`values_for_columns`/`station_bundle`）。security invoker・`search_path=''`・完全 schema 修飾・**動的 SQL なし**（key は metric_columns で照合＝ホワイトリスト）。anon EXECUTE 付与＋REST で実行確認。ゴールデン **12/12 PASS**（検索#1・最寄・bbox・ランキング±・全国 argmax・千葉県増減率・駅詳細=CSV値・注入不能）。検索は駅名一致を優先。かな検索は読み仮名列（将来）待ち |
 | **P3a** | ✅ 完了 | 2026-07-07 | shared 契約＋domain 層（framework 非依存・DB 不要）。`src/shared`：catalog（Zod ロード検証）・protocol（GUI Chat Protocol v1）・api（入出力 Zod）・format・geo。`src/domain`：metrics・stations/presenter（値束→StationDetail：カテゴリ×半径×vintage 系列組立・フラグ解決）・ranking/presenter・**決定的 k-means**（z-score＋seeded k-means++）・growth/presenter。zod 4 追加。`typecheck`/`lint`/**test 61**/`format` すべて green。domain→UI/DB import ゼロ（ESLint 境界ルール確認） |
 | **P3b** | ✅ 完了 | 2026-07-08 | 共通API 7ルート（Route Handlers）稼働。`src/db`：supabase-js（anon・RLS・timeout fetch）＋RPC 型付きラッパ（Zod 検証）。`src/app/api`：metrics/stations(q/bbox/near)/geojson/stations/[grp]/ranking/growth/health。Zod 検証→domain→整形済み応答・エラー封筒・Cache-Control・runtime=nodejs。統合スモーク **13/13 PASS**（不正 metric→400・rankable外→400・未存在→404）。geojson は max-rows 回避のため単一 jsonb を返す RPC（**9,273 features**）。@supabase/supabase-js 追加 |
-| P4a〜P8c | 未着手 | — | — |
+| **P4a** | ✅ 完了 | 2026-07-08 | 地図基盤（MapLibre）。地理院 最適化ベクトルタイル（淡色 style JSON・出典表示）＋全駅 GeoJSON 1回配信（クラスタ z<10→circle 平方根スケール→ラベル z≥12）。クリック選択＝flyTo＋アクセント色ハイライト＋半径サークル（shared/geo）。Zustand（hover）＋nuqs（?grp&r 双方向同期）。ヘッドレスブラウザで検証（z9クラスタ・z12個別＋選択＋2km円・URL復元・地理院出典・**console error 0**）。engines を 22.x にピン留め（Vercel 警告解消）。maplibre-gl/zustand/nuqs/@types/geojson 追加 |
+| P4b〜P8c | 未着手 | — | — |
 
 ---
 

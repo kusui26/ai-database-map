@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
+import { NuqsAdapter } from 'nuqs/adapters/next/app'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -11,7 +12,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <html lang="ja">
-      <body className="min-h-full bg-slate-50 text-slate-900 antialiased">{children}</body>
+      <body className="min-h-full bg-slate-50 text-slate-900 antialiased">
+        <NuqsAdapter>{children}</NuqsAdapter>
+      </body>
     </html>
   )
 }

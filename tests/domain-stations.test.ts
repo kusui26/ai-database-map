@@ -73,6 +73,11 @@ describe('buildStationDetail', () => {
     expect(pax?.points.map((p) => p.value)).toEqual([1000, 1200])
   })
 
+  it('各点はカタログ key を持つ（addressable）', () => {
+    const pax = find('pax', null)
+    expect(pax?.points.map((p) => p.key)).toEqual(['pax_2020', 'pax_2024'])
+  })
+
   it('フラグ列（kind=flag）は系列に含めない', () => {
     expect(detail.series.every((s) => s.kind !== 'flag')).toBe(true)
     expect(find('pop_lowbase', 1000)).toBeUndefined()

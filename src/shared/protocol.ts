@@ -7,7 +7,7 @@
  */
 
 import { z } from 'zod'
-import { categorySchema } from './catalog'
+import { categorySchema, formatSchema } from './catalog'
 
 // --- メッセージ ---------------------------------------------------------
 export const messageSchema = z.object({
@@ -55,6 +55,14 @@ export const trendSeriesSchema = z.object({
 })
 export type TrendSeries = z.infer<typeof trendSeriesSchema>
 
+/** パネル内の要約スタッツ（前年比・コロナ前後比など・整形済み文字列＋フラグ）。 */
+export const panelStatSchema = z.object({
+  label: z.string(),
+  value: z.string(),
+  flagged: z.boolean(),
+})
+export type PanelStat = z.infer<typeof panelStatSchema>
+
 export const rankingRowSchema = z.object({
   rank: z.number(),
   grp: z.string(),
@@ -92,9 +100,11 @@ export const panelSchema = z.discriminatedUnion('type', [
     type: z.literal('trendChart'),
     title: z.string(),
     unit: z.string().nullable(),
+    format: formatSchema, // 値の整形指定（tooltip / 軸ラベル：カタログ駆動）
     category: categorySchema.optional(),
     flags: z.array(reliabilityFlagSchema),
     series: z.array(trendSeriesSchema),
+    stats: z.array(panelStatSchema).optional(), // 折れ線に添える要約 KPI（前年比・コロナ比等）
     placement: placementSchema,
     size: sizeSchema,
   }),
@@ -127,6 +137,20 @@ export const panelSchema = z.discriminatedUnion('type', [
   }),
 ])
 export type Panel = z.infer<typeof panelSchema>
+
+/**
+ * パネル部品ごとの型（判別で抽出）。UI コンポーネントはこの型を props に取り、
+ * Step2 でチャット応答の同じパネルをそのままレンダリングする（.claude/CLAUDE.md §2）。
+ */
+export type PanelOf<T extends Panel['type']> = Extract<Panel, { type: T }>
+export type StationCardPanel = PanelOf<'stationCard'>
+export type TrendChartPanel = PanelOf<'trendChart'>
+export type RankingTablePanel = PanelOf<'rankingTable'>
+export type ScatterPanel = PanelOf<'scatter'>
+export type MarkdownPanel = PanelOf<'markdown'>
+
+/** パネル表示バリアント（チャット内=compact／ドロワー・モーダル=full）。 */
+export type PanelSize = NonNullable<z.infer<typeof sizeSchema>>
 
 // --- 応答本体 -----------------------------------------------------------
 export const mapResponseSchema = z.object({

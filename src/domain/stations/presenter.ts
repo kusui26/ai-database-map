@@ -46,6 +46,7 @@ export function buildStationDetail(
       const flagged = flagKey !== null && values.get(flagKey) === 1
       const signed = entry.kind === 'growth' || entry.kind === 'error'
       return {
+        key: entry.key,
         year: entry.year,
         yearBase: entry.yearBase,
         value,

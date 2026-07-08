@@ -3,6 +3,7 @@
 import dynamic from 'next/dynamic'
 import { AppHeader } from './AppHeader'
 import { Fab } from './Fab'
+import { StationDetailPanel } from './detail/StationDetailPanel'
 
 // MapLibre は window 依存のため SSR 無効で client 限定ロード
 const MapView = dynamic(() => import('./map/MapView').then((mod) => mod.MapView), {
@@ -19,6 +20,7 @@ export function MapShell() {
       <MapView />
       <AppHeader />
       <Fab />
+      <StationDetailPanel />
     </main>
   )
 }

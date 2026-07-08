@@ -16,11 +16,12 @@ describe('GUI Chat Protocol', () => {
     expect(parsed.panels[0]?.type).toBe('markdown')
   })
 
-  it('trendChart パネル（系列・フラグ）をパース', () => {
+  it('trendChart パネル（系列・フラグ・KPI スタッツ）をパース', () => {
     const panel = panelSchema.parse({
       type: 'trendChart',
       title: '人口',
       unit: '人',
+      format: 'int',
       flags: [{ label: '低基準', level: 'warn' }],
       series: [
         {
@@ -31,8 +32,10 @@ describe('GUI Chat Protocol', () => {
           ],
         },
       ],
+      stats: [{ label: '前年比', value: '+7.3%', flagged: false }],
     })
     expect(panel.type).toBe('trendChart')
+    if (panel.type === 'trendChart') expect(panel.stats?.[0]?.value).toBe('+7.3%')
   })
 
   it('未知の panel type を拒否', () => {

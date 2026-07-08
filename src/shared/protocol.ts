@@ -109,6 +109,14 @@ export const panelSchema = z.discriminatedUnion('type', [
     size: sizeSchema,
   }),
   z.object({
+    type: z.literal('statTable'),
+    title: z.string(),
+    rows: z.array(panelStatSchema), // ラベル付き値の一覧（増減率 9 ペア等）
+    note: z.string().nullable().optional(),
+    placement: placementSchema,
+    size: sizeSchema,
+  }),
+  z.object({
     type: z.literal('rankingTable'),
     title: z.string(),
     metricKey: z.string(),
@@ -145,6 +153,7 @@ export type Panel = z.infer<typeof panelSchema>
 export type PanelOf<T extends Panel['type']> = Extract<Panel, { type: T }>
 export type StationCardPanel = PanelOf<'stationCard'>
 export type TrendChartPanel = PanelOf<'trendChart'>
+export type StatTablePanel = PanelOf<'statTable'>
 export type RankingTablePanel = PanelOf<'rankingTable'>
 export type ScatterPanel = PanelOf<'scatter'>
 export type MarkdownPanel = PanelOf<'markdown'>

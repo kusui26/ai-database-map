@@ -8,3 +8,11 @@ html,
 body {
   height: 100%;
 }
+
+/* 拡大縮小コントロール（MapLibre・左下）：デスクトップは左下の FAB と重ならないよう上げる。
+   モバイルは FAB が下部中央のため既定位置（左下）のままでよい。 */
+@media (min-width: 640px) {
+  .maplibregl-ctrl-bottom-left {
+    margin-bottom: 3rem;
+  }
+}

@@ -20,6 +20,9 @@ import { CATEGORY_COLORS, RADII_M, radiusLabel } from '@/shared/constants'
 import { formatWithUnit } from '@/shared/format'
 import { baseMetricLabel } from '@/domain/metrics'
 
+/** バス「現行」の代表年（P11 2022年度＋P36 2023年度 → 2023）。2点折れ線の現在側の x。 */
+const BUS_CURRENT_YEAR = 2023
+
 /** 系列点 → チャート座標（年欠損はスキップ・値欠損は null＝ギャップ）。 */
 function toXY(series: MetricSeries | undefined): { x: number; y: number | null }[] {
   return (series?.points ?? []).flatMap((point) =>
@@ -52,7 +55,8 @@ export function stationCardPanel(
     stationName: s.stationName,
     label: s.label,
     prefecture: s.prefecture,
-    operators: s.nOp === null ? null : `延べ${s.nOp}社`,
+    // 具体的な社名（P5d の operators）。欠損時は延べ社数にフォールバック。
+    operators: s.operators ?? (s.nOp === null ? null : `延べ${s.nOp}社`),
     paxLatest: s.paxLatest,
     badges: stationBadges(s),
     size,
@@ -225,8 +229,24 @@ export function landPricePanels(
     panels.push({ type: 'statTable', title: '最寄の地価公示', rows: nearRows, note: null, size })
   }
 
-  // 中央値（半径別）：500m〜10km の横棒（20km はデータなし＝自動で畳まれる）。
-  // lp_med は年次系列（P5d）なので最新年（末尾）を現在値として使う。
+  // 中央値の推移（選択半径の折れ線＝乗降/人口と同形式・P5e）。20km は lp_med なし＝自動フォールド。
+  const lpMed = seriesAt(detail, 'lp_med', radiusM)
+  if (lpMed !== undefined && lpMed.points.some((point) => point.value !== null)) {
+    panels.push({
+      type: 'trendChart',
+      title: `地価中央値の推移（${radiusLabel(radiusM)}圏）`,
+      unit: '円/㎡',
+      format: 'yen',
+      category: 'land_price',
+      flags: lpMed.points.some((point) => point.flagged)
+        ? [{ label: '公示地点が少なく中央値は参考値', level: 'warn' }]
+        : [],
+      series: [{ label: '地価中央値', points: toXY(lpMed), color: CATEGORY_COLORS.land_price }],
+      size,
+    })
+  }
+
+  // 中央値（半径別・最新年）：500m〜10km の横棒＝空間比較の補助（20km はデータなし＝自動フォールド）。
   const medBars: Bar[] = RADII_M.flatMap((radius) => {
     const point = seriesAt(detail, 'lp_med', radius)?.points.at(-1)
     if (point === undefined || point.value === null) return []
@@ -243,13 +263,13 @@ export function landPricePanels(
   if (medBars.length > 0) {
     panels.push({
       type: 'barChart',
-      title: '地価中央値（半径別）',
+      title: '地価中央値（半径別・最新年）',
       unit: '円/㎡',
       format: 'yen',
       category: 'land_price',
       bars: medBars,
       flags: [],
-      note: '半径が大きいほど郊外を含み、中央値は下がる傾向。',
+      note: '半径が大きいほど郊外を含み、中央値は下がる傾向（空間比較の補助）。',
       size,
     })
   }
@@ -279,31 +299,21 @@ export function busPanels(
 ): Panel[] {
   const panels: Panel[] = []
 
+  // 停留所数の推移：2010年度 → 現在の 2 点折れ線（データは2時点のみ・P5e）
   const now = seriesAt(detail, 'bus_n', radiusM)?.points[0]
   const y2010 = seriesAt(detail, 'bus_n2010', radiusM)?.points[0]
-  const bars: Bar[] = []
-  if (y2010 !== undefined && y2010.value !== null) {
-    bars.push({ label: '2010年度', value: y2010.value, formatted: y2010.formatted, flagged: false })
-  }
-  if (now !== undefined && now.value !== null) {
-    bars.push({
-      label: '現在',
-      value: now.value,
-      formatted: now.formatted,
-      flagged: false,
-      emphasis: true,
-    })
-  }
-  if (bars.length > 0) {
+  const busPoints: { x: number; y: number | null }[] = []
+  if (y2010 !== undefined && y2010.value !== null) busPoints.push({ x: 2010, y: y2010.value })
+  if (now !== undefined && now.value !== null) busPoints.push({ x: BUS_CURRENT_YEAR, y: now.value })
+  if (busPoints.length > 0) {
     panels.push({
-      type: 'barChart',
-      title: `バス停留所数（${radiusLabel(radiusM)}圏）`,
+      type: 'trendChart',
+      title: `バス停留所数の推移（${radiusLabel(radiusM)}圏）`,
       unit: '箇所',
       format: 'int',
       category: 'bus',
-      bars,
       flags: [],
-      note: null,
+      series: [{ label: 'バス停留所数', points: busPoints, color: CATEGORY_COLORS.bus }],
       size,
     })
   }
@@ -336,7 +346,7 @@ export function busPanels(
   return panels
 }
 
-/** 事業所タブ：事業所数・従業者数の推移（3 時点）＋増減率（9年/5年・lown ⚠）。 */
+/** 事業所タブ：事業所数の推移（3 時点）＋増減率（9年/5年・estab_gr_lown ⚠）。従業者は独立タブ。 */
 export function establishmentPanels(
   detail: StationDetail,
   radiusM: number,
@@ -358,6 +368,22 @@ export function establishmentPanels(
     })
   }
 
+  const rows = growthRows(seriesAt(detail, 'estab_gr', radiusM))
+  if (rows.length > 0) {
+    panels.push({ type: 'statTable', title: '事業所数 増減率', rows, note: null, size })
+  }
+
+  return panels
+}
+
+/** 従業者タブ：従業者数の推移（3 時点）＋増減率（9年/5年・estab_gr_lown ⚠）。 */
+export function employeePanels(
+  detail: StationDetail,
+  radiusM: number,
+  size: PanelSize = 'full',
+): Panel[] {
+  const panels: Panel[] = []
+
   const emp = seriesAt(detail, 'emp_n', radiusM)
   if (emp !== undefined && emp.points.length > 0) {
     panels.push({
@@ -372,12 +398,9 @@ export function establishmentPanels(
     })
   }
 
-  const rows: PanelStat[] = [
-    ...growthRows(seriesAt(detail, 'estab_gr', radiusM), '事業所 '),
-    ...growthRows(seriesAt(detail, 'emp_gr', radiusM), '従業者 '),
-  ]
+  const rows = growthRows(seriesAt(detail, 'emp_gr', radiusM))
   if (rows.length > 0) {
-    panels.push({ type: 'statTable', title: '増減率', rows, note: null, size })
+    panels.push({ type: 'statTable', title: '従業者数 増減率', rows, note: null, size })
   }
 
   return panels

@@ -38,6 +38,20 @@ describe('GUI Chat Protocol', () => {
     if (panel.type === 'trendChart') expect(panel.stats?.[0]?.value).toBe('+7.3%')
   })
 
+  it('statTable パネル（増減率ミニ表）をパース', () => {
+    const panel = panelSchema.parse({
+      type: 'statTable',
+      title: '人口増減率',
+      rows: [
+        { label: '2015→2020', value: '+20.0%', flagged: false },
+        { label: '2010→2020', value: '-5.0%', flagged: true },
+      ],
+      note: null,
+    })
+    expect(panel.type).toBe('statTable')
+    if (panel.type === 'statTable') expect(panel.rows[1]?.flagged).toBe(true)
+  })
+
   it('未知の panel type を拒否', () => {
     expect(() => panelSchema.parse({ type: 'unknown' })).toThrow()
   })

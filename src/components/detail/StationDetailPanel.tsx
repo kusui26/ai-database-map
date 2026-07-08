@@ -3,22 +3,23 @@
 /**
  * 駅詳細パネル（骨格＋乗降タブ）。デスクトップ＝右ドロワー／モバイル＝vaul ボトムシート。
  * ?grp 選択で開き、閉じると ?grp をクリア。カード＋タブは Protocol の Panel を PanelStack で描画する。
- * タブは 5 カテゴリの器を用意し、P5a では乗降のみ実装（人口・地価… は P5b/P5c）。
+ * タブは 5 カテゴリの器。乗降（P5a）・人口（P5b）を実装、地価/バス/事業所は P5c。半径依存タブは集計半径セレクタを表示。
  */
 
 import { useCallback, useEffect, useState } from 'react'
 import { Drawer } from 'vaul'
 import { type Panel } from '@/shared/protocol'
 import { type StationDetail } from '@/shared/api'
-import { type Category, CATEGORY_LABELS_JA } from '@/shared/constants'
-import { paxTrendPanel, stationCardPanel } from '@/domain/stations/panels'
+import { type Category, CATEGORY_LABELS_JA, RADII_M, RADIUS_LABELS } from '@/shared/constants'
+import { paxTrendPanel, populationPanels, stationCardPanel } from '@/domain/stations/panels'
+import { isRadiusDependentCategory } from '@/domain/metrics'
 import { useMapUrlState } from '@/components/map/useMapUrlState'
 import { useStationDetail } from '@/components/detail/useStationDetail'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { PanelRenderer, PanelStack } from '@/components/panels/PanelRenderer'
 import { cn } from '@/lib/utils'
 
-/** 詳細タブの器（表示順）。乗降のみ P5a で実装。 */
+/** 詳細タブの器（表示順）。乗降・人口を実装、地価/バス/事業所は P5c。 */
 const DETAIL_TABS: readonly Category[] = [
   'passenger',
   'population',
@@ -27,10 +28,43 @@ const DETAIL_TABS: readonly Category[] = [
   'establishment',
 ]
 
-/** タブごとの本文パネル（未実装カテゴリは空＝プレースホルダ表示）。 */
-function tabPanels(detail: StationDetail, tab: Category): Panel[] {
+/** タブごとの本文パネル（選択半径で再計算・未実装カテゴリは空＝プレースホルダ）。 */
+function tabPanels(detail: StationDetail, tab: Category, radiusM: number): Panel[] {
   if (tab === 'passenger') return [paxTrendPanel(detail)]
+  if (tab === 'population') return populationPanels(detail, radiusM)
   return []
+}
+
+/** 詳細内の集計半径セレクタ（?r 同期）。半径依存タブでのみ表示。 */
+function DrawerRadiusControl({
+  radiusM,
+  onChange,
+}: {
+  radiusM: number
+  onChange: (radiusM: number) => void
+}) {
+  return (
+    <div className="mb-3 flex items-center gap-2">
+      <span className="shrink-0 text-xs font-medium text-slate-400">集計半径</span>
+      <div className="flex gap-0.5 overflow-x-auto rounded-lg bg-slate-100 p-0.5">
+        {RADII_M.map((radius) => (
+          <button
+            key={radius}
+            type="button"
+            onClick={() => onChange(radius)}
+            className={cn(
+              'shrink-0 rounded-md px-2 py-1 text-xs font-medium tabular-nums transition-colors',
+              radius === radiusM
+                ? 'bg-white text-indigo-700 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700',
+            )}
+          >
+            {RADIUS_LABELS[radius]}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 function CloseButton({ onClick }: { onClick: () => void }) {
@@ -70,16 +104,33 @@ function DetailTabs({ value, onChange }: { value: Category; onChange: (tab: Cate
   )
 }
 
-function TabContent({ detail, tab }: { detail: StationDetail; tab: Category }) {
-  const panels = tabPanels(detail, tab)
+function TabContent({
+  detail,
+  tab,
+  radiusM,
+  onRadius,
+}: {
+  detail: StationDetail
+  tab: Category
+  radiusM: number
+  onRadius: (radiusM: number) => void
+}) {
+  const panels = tabPanels(detail, tab, radiusM)
   if (panels.length === 0) {
     return (
       <div className="rounded-xl bg-slate-50 p-8 text-center text-sm text-slate-400">
-        「{CATEGORY_LABELS_JA[tab]}」タブは P5b / P5c で実装します。
+        「{CATEGORY_LABELS_JA[tab]}」タブは P5c で実装します。
       </div>
     )
   }
-  return <PanelStack panels={panels} />
+  return (
+    <div>
+      {isRadiusDependentCategory(tab) && (
+        <DrawerRadiusControl radiusM={radiusM} onChange={onRadius} />
+      )}
+      <PanelStack panels={panels} />
+    </div>
+  )
 }
 
 type BodyProps = {
@@ -88,11 +139,22 @@ type BodyProps = {
   error: Error | undefined
   tab: Category
   onTab: (tab: Category) => void
+  radiusM: number
+  onRadius: (radiusM: number) => void
   onClose: () => void
 }
 
 /** 詳細パネルの中身（ドロワー／シート共通）。ヘッダ＝駅カード、以下にタブと本文。 */
-function DetailBody({ detail, isLoading, error, tab, onTab, onClose }: BodyProps) {
+function DetailBody({
+  detail,
+  isLoading,
+  error,
+  tab,
+  onTab,
+  radiusM,
+  onRadius,
+  onClose,
+}: BodyProps) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="flex items-start justify-between gap-2 border-b border-slate-100 px-4 pt-4 pb-3">
@@ -116,7 +178,7 @@ function DetailBody({ detail, isLoading, error, tab, onTab, onClose }: BodyProps
         ) : detail === undefined ? (
           <div className="grid h-40 place-items-center text-sm text-slate-400">読み込み中…</div>
         ) : (
-          <TabContent detail={detail} tab={tab} />
+          <TabContent detail={detail} tab={tab} radiusM={radiusM} onRadius={onRadius} />
         )}
       </div>
     </div>
@@ -124,7 +186,7 @@ function DetailBody({ detail, isLoading, error, tab, onTab, onClose }: BodyProps
 }
 
 export function StationDetailPanel() {
-  const { grp, setGrp } = useMapUrlState()
+  const { grp, setGrp, radiusM, setRadiusM } = useMapUrlState()
   const isDesktop = useIsDesktop()
   const { detail, isLoading, error } = useStationDetail(grp)
   const [tab, setTab] = useState<Category>('passenger')
@@ -146,6 +208,8 @@ export function StationDetailPanel() {
       error={error}
       tab={tab}
       onTab={setTab}
+      radiusM={radiusM}
+      onRadius={(radius) => void setRadiusM(radius)}
       onClose={close}
     />
   )

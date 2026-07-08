@@ -3,8 +3,18 @@
  * カタログ（shared）を参照し、UI/AI が使う「指標の選び方」を組み立てる（純関数）。
  */
 
-import { type CatalogEntry, rankableForCategory } from '@/shared/catalog'
+import { type CatalogEntry, entries, rankableForCategory } from '@/shared/catalog'
 import { type Category } from '@/shared/constants'
+
+/** 半径依存カテゴリ（radiusM を持つ指標がある＝集計半径で値が変わる）。カタログから導出。 */
+const RADIUS_DEPENDENT_CATEGORIES: ReadonlySet<Category> = new Set(
+  entries.filter((entry) => entry.radiusM !== null).map((entry) => entry.category),
+)
+
+/** カテゴリが集計半径に依存するか（UI の半径セレクタ表示・チャート再計算の判断）。 */
+export function isRadiusDependentCategory(category: Category): boolean {
+  return RADIUS_DEPENDENT_CATEGORIES.has(category)
+}
 
 /** baseMetric → 系列の基底ラベル（年・半径を除いた指標名）。 */
 const BASE_LABELS: Readonly<Record<string, string>> = {

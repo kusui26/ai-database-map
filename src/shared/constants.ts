@@ -24,6 +24,12 @@ export const RADIUS_LABELS: Readonly<Record<RadiusM, string>> = {
   20000: '20km',
 }
 
+/** number → 半径ラベル（6 段以外は m 表記にフォールバック・as を使わない安全参照）。 */
+export function radiusLabel(radiusM: number): string {
+  const known = RADII_M.find((radius) => radius === radiusM)
+  return known === undefined ? `${radiusM}m` : RADIUS_LABELS[known]
+}
+
 // --- カテゴリ（指標の大分類） --------------------------------------------
 
 /** 指標カテゴリ。catalog.json / GUI Chat Protocol と一致（plan_fable §3.1）。 */

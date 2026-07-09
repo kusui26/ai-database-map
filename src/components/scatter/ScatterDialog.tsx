@@ -7,13 +7,14 @@
 
 import { useCallback, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
-import { type Category, PREFECTURES } from '@/shared/constants'
+import { type Category } from '@/shared/constants'
 import { getEntry } from '@/shared/catalog'
 import { DEFAULT_SCATTER_X, DEFAULT_SCATTER_Y, rankableGroups } from '@/domain/metrics'
 import { scatterPanel } from '@/domain/growth/panel'
 import { useMapUrlState } from '@/components/map/useMapUrlState'
 import { ScatterChart } from '@/components/panels/ScatterChart'
-import { METRIC_SELECT_CLASS, MetricSelect } from '@/components/metrics/MetricSelect'
+import { MetricSelect } from '@/components/metrics/MetricSelect'
+import { PrefectureMultiSelect } from '@/components/metrics/PrefectureMultiSelect'
 import { useGrowth } from './useGrowth'
 
 const X_CATEGORY: Category = getEntry(DEFAULT_SCATTER_X)?.category ?? 'population'
@@ -35,10 +36,10 @@ export function ScatterDialog({
   const [xKey, setXKey] = useState<string>(DEFAULT_SCATTER_X)
   const [yCategory, setYCategory] = useState<Category>(Y_CATEGORY)
   const [yKey, setYKey] = useState<string>(DEFAULT_SCATTER_Y)
-  const [prefecture, setPrefecture] = useState<string | null>(null)
+  const [prefectures, setPrefectures] = useState<string[]>([])
   const [excludeLowN, setExcludeLowN] = useState<boolean>(false)
 
-  const { growth, isLoading, error } = useGrowth(xKey, yKey, prefecture, excludeLowN, open)
+  const { growth, isLoading, error } = useGrowth(xKey, yKey, prefectures, excludeLowN, open)
 
   const onXCategory = useCallback((next: Category) => {
     setXCategory(next)
@@ -63,7 +64,7 @@ export function ScatterDialog({
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm" />
         <Dialog.Content
-          className="fixed top-1/2 left-1/2 z-50 flex max-h-[88vh] w-[calc(100vw-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl bg-white shadow-2xl focus:outline-none"
+          className="fixed top-1/2 left-1/2 z-50 flex max-h-[88vh] w-[calc(100vw-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl bg-white shadow-2xl focus:outline-none"
           aria-describedby={undefined}
         >
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
@@ -86,19 +87,7 @@ export function ScatterDialog({
 
           <div className="space-y-2 border-b border-slate-100 px-4 py-3">
             <div className="flex flex-wrap items-center gap-3">
-              <select
-                aria-label="都道府県"
-                className={METRIC_SELECT_CLASS}
-                value={prefecture ?? ''}
-                onChange={(e) => setPrefecture(e.target.value === '' ? null : e.target.value)}
-              >
-                <option value="">全国</option>
-                {PREFECTURES.map((p) => (
-                  <option key={p.code} value={p.name}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+              <PrefectureMultiSelect selected={prefectures} onChange={setPrefectures} />
               <label className="flex cursor-pointer items-center gap-1.5 text-sm text-slate-600">
                 <input
                   type="checkbox"

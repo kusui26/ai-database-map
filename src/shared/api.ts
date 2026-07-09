@@ -25,21 +25,25 @@ export const stationsQuerySchema = z.object({
   near: z.string().optional(), // "lon,lat"
 })
 
+const boolFlag = z
+  .string()
+  .optional()
+  .transform((value) => value === 'true' || value === '1')
+
 export const rankingQuerySchema = z.object({
   metric: z.string(),
-  prefecture: z.string().optional(),
+  prefectures: z.array(z.string()).default([]), // 空＝全国（P6c）
   order: orderSchema.default('desc'),
-  limit: z.coerce.number().int().min(1).max(50).default(20),
+  limit: z.coerce.number().int().min(1).max(100).default(50), // P6c: ページサイズ
+  offset: z.coerce.number().int().min(0).default(0), // P6c: ページング
+  excludeLowN: boolFlag, // P6c: ⚠ 除外
 })
 
 export const growthQuerySchema = z.object({
   x: z.string(),
   y: z.string(),
-  prefecture: z.string().optional(),
-  excludeLowN: z
-    .string()
-    .optional()
-    .transform((value) => value === 'true' || value === '1'),
+  prefectures: z.array(z.string()).default([]), // 空＝全国（P6c）
+  excludeLowN: boolFlag,
 })
 
 // --- 駅（DB 行 → プレゼンタ入力・要約） ---------------------------------
@@ -114,8 +118,10 @@ export type MetricRef = z.infer<typeof metricRefSchema>
 
 export const rankingResponseSchema = z.object({
   metric: metricRefSchema,
-  prefecture: z.string().nullable(),
+  prefectures: z.array(z.string()), // 空＝全国（P6c）
   order: orderSchema,
+  offset: z.number(), // このページの先頭順位-1（P6c）
+  total: z.number(), // フィルタ後の総件数（P6c）
   rows: z.array(rankingRowSchema),
 })
 export type RankingResponse = z.infer<typeof rankingResponseSchema>
@@ -123,7 +129,7 @@ export type RankingResponse = z.infer<typeof rankingResponseSchema>
 export const growthResponseSchema = z.object({
   x: metricRefSchema,
   y: metricRefSchema,
-  prefecture: z.string().nullable(),
+  prefectures: z.array(z.string()), // 空＝全国（P6c）
   clusterCount: z.number(),
   excludedLowN: z.number(),
   points: z.array(scatterPointSchema),

@@ -18,7 +18,7 @@ export type ValueRow = {
 
 export type GrowthOptions = {
   readonly excludeLowN?: boolean
-  readonly prefecture?: string | null
+  readonly prefectures?: readonly string[]
 }
 
 export function buildGrowth(
@@ -66,7 +66,7 @@ export function buildGrowth(
   return {
     x: { key: xEntry.key, labelJa: xEntry.labelJa, unit: xEntry.unit },
     y: { key: yEntry.key, labelJa: yEntry.labelJa, unit: yEntry.unit },
-    prefecture: options.prefecture ?? null,
+    prefectures: [...(options.prefectures ?? [])],
     clusterCount: new Set(clusters).size,
     excludedLowN,
     points,

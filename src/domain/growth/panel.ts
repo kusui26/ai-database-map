@@ -4,10 +4,11 @@
  */
 
 import { type GrowthResponse } from '@/shared/api'
+import { prefectureLabel } from '@/shared/constants'
 import { type PanelSize, type ScatterPanel } from '@/shared/protocol'
 
 export function scatterPanel(response: GrowthResponse, size: PanelSize = 'full'): ScatterPanel {
-  const scope = response.prefecture ?? '全国'
+  const scope = prefectureLabel(response.prefectures)
   return {
     type: 'scatter',
     title: `${response.x.labelJa} × ${response.y.labelJa}（${scope}）`,

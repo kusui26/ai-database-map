@@ -10,10 +10,11 @@ export const runtime = 'nodejs'
 export function GET(request: Request): Promise<Response> {
   return handle(async () => {
     const params = new URL(request.url).searchParams
+    const prefParam = params.get('prefecture')
     const query = growthQuerySchema.parse({
       x: params.get('x') ?? undefined,
       y: params.get('y') ?? undefined,
-      prefecture: params.get('prefecture') ?? undefined,
+      prefectures: prefParam === null ? undefined : prefParam.split(',').filter(Boolean),
       excludeLowN: params.get('excludeLowN') ?? undefined,
     })
     for (const key of [query.x, query.y]) {
@@ -27,10 +28,12 @@ export function GET(request: Request): Promise<Response> {
       }
     }
 
-    const prefecture = query.prefecture ?? null
-    const rows = await valuesForColumns(keys, prefecture)
+    const rows = await valuesForColumns(keys, query.prefectures)
     return json(
-      buildGrowth(rows, query.x, query.y, { excludeLowN: query.excludeLowN, prefecture }),
+      buildGrowth(rows, query.x, query.y, {
+        excludeLowN: query.excludeLowN,
+        prefectures: query.prefectures,
+      }),
       CACHE.hour,
     )
   })

@@ -85,7 +85,7 @@ describe('buildGrowth', () => {
 
   it('scatterPanel：GrowthResponse → scatter Panel（title/軸/点/クラスタ）', () => {
     const panel = scatterPanel(
-      buildGrowth(rows, 'pop_gr_2020_2015_1km', 'rate_covid', { prefecture: '千葉県' }),
+      buildGrowth(rows, 'pop_gr_2020_2015_1km', 'rate_covid', { prefectures: ['千葉県'] }),
     )
     expect(panel.type).toBe('scatter')
     expect(panel.title).toContain('千葉県')

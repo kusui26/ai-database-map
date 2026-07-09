@@ -29,13 +29,14 @@ Step1（アプリ公開）→ Step2（AIネイティブ化）を **Claude Code �
 | **P5f** | 検索結果の駅名表記 | `search_label`（label＋都道府県・一意）で同名駅を区別 | P4b | 1回 |
 | **P6a** | ランキング | 都道府県×指標（カタログ駆動）→ 上位/下位20 → flyTo | P3b, P4b | 1回 |
 | **P6b** | 散布図＋クラスタ | k-means(決定的)・散布チャート・lown 除外トグル | P3b, P4b | 1回 |
+| **P6c** | ランキング/散布の改善 | 半径分離・複数県・全件ページング・⚠除外・モーダル拡大 | P6a, P6b | 1回 |
 | **P7a** | 品質・仕上げ | 出典/About・OGP・エラー/ロード・a11y・Lighthouse | P5, P6 | 1回 |
 | **P7b** | 公開 | 本番 env・cron keep-alive・README・docs 反映 | P7a | 1回 |
 | **P8a** | AI ツール表面 | catalog→tool 自動生成・AI SDK+Gemini・`/api/chat` | Step1 | 1回 |
 | **P8b** | チャット UI | **左併設チャット＋インラインカード**・Protocol レンダラ（P5/P6 部品を再利用） | P8a | 1回 |
 | **P8c** | 評価・強化 | ゴールデン20問 eval・プロンプト調整・(任意)GraphAI PoC | P8b | 1回 |
 
-**合計目安**：Step1 = 19ブロック（P5d/P5e は 2026-07-08・P5f は 2026-07-09 のユーザー要望で追加）、Step2 = 3ブロック。
+**合計目安**：Step1 = 20ブロック（P5d/P5e は 2026-07-08・P5f/P6c は 2026-07-09 のユーザー要望で追加）、Step2 = 3ブロック。
 
 ### 0.2 依存関係（クリティカルパス）
 
@@ -448,6 +449,24 @@ MapResponse = { messages: {role,text}[], mapActions: MapAction[], panels: Panel[
 - **受け入れ基準**：9k 点（全国）でも操作可能／同一入力で毎回同じクラスタ（決定性）／lown 除外トグルで件数が変わり注記表示。
 - **依頼例**：「P6b 散布図を実装」
 
+### P6c — ランキング/散布の改善（半径分離・複数県・全件・⚠除外・モーダル拡大）
+> **由来**：2026-07-09 ユーザー要望。P6a/P6b のダイアログを使いやすくする。共有 `MetricSelect` の半径分離は**両ダイアログに影響**するため、ランキングと散布を **1 ブロックで同時**に改善（中途半端な壊れを避ける）。
+- **前提**：P6a・P6b。
+- **共通インフラ（MetricSelect・都道府県・RPC/API）**：
+  - **半径を指標から分離**：`variantLabel` から半径を除く（年/期間/ビンテージのみ・例「2015→2020・1km」→「2015→2020」）。`MetricSelect` を「カテゴリ→指標（optgroup=baseMetric・option=変種〔半径なし〕）」＋「**半径セグメント**（500m/1km/2km/5km/10km/20km）」に。**外部 IF（`category`/`metricKey`）は不変**——MetricSelect 内部で metricKey を (baseMetric, 変種, 半径) に分解表示し、変種/半径の変更で metricKey を再解決する（親の状態は据え置き＝churn 最小）。半径非依存の指標（pax・rate_yoy・rate_covid・lp_near）は半径セグメント非表示。**利用可能な半径のみ**表示（lp_gr は 500m/20km なし・lp_med は 20km なし 等）。選択中の半径が新変種で無ければ先頭の利用可能半径へフォールバック。domain に `metricVariants(category)`／`radiiFor(baseMetric, 変種)`／`resolveMetricKey(baseMetric, 変種, radiusM)`（純関数・単体テスト）を追加。→ **指標ドロップダウンが大幅に短くすっきり**。
+  - **複数都道府県**：都道府県を複数選択可に（コンパクトなチェックボックス群 or ポップオーバー式マルチセレクト。全解除＝全国）。RPC `rank_by_column`／`values_for_columns` の `pref text` → `prefs text[]`（`array_length(prefs,1) is null or s.prefecture = any(prefs)`。返り値型は不変なので `create or replace`、引数型変更のため drop→create→grant の新 migration）。API クエリを配列化（`?prefecture=千葉県,埼玉県` を分割）＋ `RankingResponse`／`GrowthResponse` の prefecture 表記を複数対応（「千葉県・埼玉県」／3件以上は「千葉県 他N県」）。domain（buildRanking/buildGrowth）の prefecture を配列に。
+- **ランキング固有**：
+  - **全件表示（ページング）**：`rank_by_column` に `offset` を追加（LIMIT/OFFSET・rank は offset 連続）。UI は**ページサイズ 50 の「もっと見る」**（append・rank 連続）で全件まで辿れる。読み込み済み件数／総件数（軽量 count）を表示。**表示分のみ取得**で速度優先（全国 9k でも初期表示は速い）。上位/下位トグルは並び順として維持。※代替案＝仮想スクロール（全件取得＋DOM 仮想化）は依存追加・9k 転送のため非採用、まず load-more。
+  - **⚠ 除外チェックボックス**：散布と同じ `excludeLowN`。`rank_by_column` に除外オプション（`flag=1` 行を除外）＋ UI チェックボックス。除外で件数・総件数が変わる。
+  - **モーダル拡大**：半径セグメント＋複数県＋全件テーブルに合わせ `max-w` を拡大（例 `max-w-2xl`〜`max-w-3xl`）＋高さ最適化（テーブルは内部スクロール）。
+- **散布図固有**：
+  - **半径セレクタ・複数都道府県**：共通インフラを再利用。x/y それぞれが `MetricSelect`＝各軸に独立した半径セグメント（x=2km・y=半径なし 等）。
+  - **モーダル拡大**：散布が見やすいよう `max-w` 拡大（例 `max-w-2xl`〜`max-w-3xl`）＋チャート高さ調整。
+  - **〔実装時に判明〕全国散布の max-rows バグ**：`values_for_columns` は行数無制限のため PostgREST **max-rows=1000** に切られ、全国では先頭1000行が片指標に偏り (x,y) ペアが 0＝**散布が空**に（P6b 時からの潜在不具合。旧「461点」は切詰めの虚数）。`stations_geojson` と同じ**単一 jsonb 返却**（drop→create・返り値型変更・散布に必要な最小列 grp/station_name/key/value のみ）に改め全件返す。→ 全国 **7680 点**の真値。
+- **受け入れ基準**：指標DDが半径ぶん短い／半径は別セレクタ（非対応指標では非表示・利用可能半径のみ・不正半径はフォールバック）／複数県（例 千葉＋埼玉）でランキング/散布が絞れ表記も複数対応／ランキング「もっと見る」で全件到達・初期表示が速い／⚠除外で件数変化／モーダルが適切サイズで操作しやすい／既存の行クリック・点クリック→flyTo は不変／k-means 決定性維持／console error 0・gate 緑。
+- **依頼例**：「P6c ランキング/散布の改善を実装」
+- **設計判断（実装時に最終確認）**：全件＝load-more（ページ50）／複数県UI＝マルチセレクト（ポップオーバー）／モーダル＝max-w-2xl前後／散布は x/y 各々に半径。異論あれば実装前に調整。
+
 ### P7a — 品質・仕上げ
 - **前提**：P5・P6。
 - **作業**：About/データ出典 Dialog（**catalog の source/license から自動生成する出典表**＋各 docs への説明文）／OGP・favicon・タイトル／エラーバウンダリ・ローディングスケルトン・オフライン注意／a11y（フォーカスリング・aria・コントラスト）／Lighthouse 計測と改善（画像・フォント・コード分割）／404。
@@ -558,6 +577,7 @@ MapResponse = { messages: {role,text}[], mapActions: MapAction[], panels: Panel[
 | **P5f** | ✅ 完了 | 2026-07-09 | 検索結果の駅名表記を **`search_label`**（label＋都道府県・全群一意・`docs/passenger_aggregation.md §8.1.1`）に。同名・同一都道府県で運営会社違いの駅（**尼崎型**）が区別可能に。`search_stations` RPC の返り値に search_label 追加（新 migration・drop→create→grant／bbox・nearest は共有スキーマのため searchLabel を optional に）。`stationSummary` に searchLabel・UI は駅名太字＋淡色サフィックス（例「尼崎（阪神電気鉄道・兵庫県）」）。選択→flyTo は grp ベースで不変。ヘッドレス検証：尼崎の JR/阪神 が区別・二月田（鹿児島県）は冗長でない・選択で grp・375px overflow 0・console error 0・test(87)・build 緑。DB は RPC 差し替えのみ（再ロード不要） |
 | **P6a** | ✅ 完了 | 2026-07-09 | ランキング（駅をまたぐ横断比較の初回）。左下 FAB「ランキング」→ Radix Dialog モーダル。**指標ピッカ**：都道府県（47＋全国）×カテゴリ×指標（`optgroup`=baseMetric・option=`variantLabel` 半径/年）×上位/下位。既定=人口増減率2015→2020・1km。SWR で `/api/ranking`（P3b・既存）→ **上位/下位20**を `rankingPanel`（domain・純関数）→ `rankingTable` Panel → `RankingTable`（順位・駅名・県・format 済値・`lown`⚠）。**行クリック→`setGrp`→ 地図 flyTo＋詳細パネル**（モーダルは閉じる）。汎用 `PanelRenderer` に rankingTable 分岐（Step2 再利用）。FAB ボタンに `aria-label`（アイコンのみモバイルの a11y）。ヘッドレス検証：既定20行・⚠・**千葉県×地価増減率(2016→2026,2km)＝流山/柏 TX沿線の妥当な顔ぶれ**・下位トグル・行クリックで grp（勝浦）・375px overflow 0・console error 0・test(90)・build 緑。@radix-ui/react-dialog 追加 |
 | **P6b** | ✅ 完了 | 2026-07-09 | 散布図＋クラスタ。左下 FAB「散布図」→ Radix Dialog。**x/y 指標ピッカ**（`MetricSelect` 共通化＝ランキングと共用）×都道府県×**低分母除外**トグル。既定=人口増減率2km×乗降客コロナ前後比。SWR で `/api/growth`（**決定的 k-means 済み**・既存）→ `scatterPanel`（domain 純関数）→ `scatter` Panel → `ScatterChart`（Chart.js 散布・**クラスタ色分け**・ツールチップに駅名/値・軸ラベル）。**点クリック→最寄り点を選択**（`getElementsAtEventForMode` nearest）→ flyTo＋詳細。汎用 `PanelRenderer` に scatter 分岐（Step2 再利用）。ScatterController 登録。ヘッドレス検証：既定461点4クラスタ・低分母除外で注記・X変更で再取得・点クリックで grp（JR総持寺）・**ランキング無回帰**・375px overflow 0・console error 0・test(92)・build 緑 |
+| **P6c** | ✅ 完了 | 2026-07-09 | ランキング/散布の改善（両ダイアログを1ブロックで）。**半径を指標から分離**：`variantLabel` から半径除去→`MetricSelect` を3段（カテゴリ→指標〔`optgroup`=baseMetric・option=半径なし変種〕→**半径セグメント**〔利用可能半径のみ・`overflow-x` スクロール〕）。**外部IF（category/metricKey）不変**——内部で metricKey を (変種, 半径) に分解表示し変種/半径変更で再解決。半径非依存指標はセグメント非表示。domain に `rankableVariantGroups`/`variantTokenOf`/`radiiOf`（純関数・単体テスト）。**複数県**：`PrefectureMultiSelect`（47県チェックボックス・popover・click-outside〔型ガード〕）＋RPC `prefs text[]`（空/null=全国・`cardinality` 判定）＋`prefectureLabel`（「千葉県・埼玉県」/「〜 他N件」）。**ランキング全件**：`useSWRInfinite`（PAGE_SIZE=50・もっと見る）＋`rank_by_column` に `offset`/`total`（`count() over`）＝フッタ「N / total 件」。**⚠除外**チェックボックス（`exclude_lown`・500m 千葉+埼玉 559→554 実測）。**モーダル拡大**（`max-w-2xl`=672px）。**〔重要〕全国散布の潜在バグ修正**：`values_for_columns` が PostgREST **max-rows=1000** に切られ先頭1000行が片指標のみ→ (x,y) ペア 0 で**全国散布が空**だった既存不具合を、`stations_geojson` と同じ**単一 jsonb 返却**で修正。**全国散布が 461→7680 点の真値**に（rate_covid は実は 7684 駅・旧「461」は切詰めの虚数）。migrations 2本（`ranking_scatter_improve`〔prefs/offset/total/exclude〕・`values_for_columns_jsonb`）。ヘッドレス検証 **14/14 緑**（半径セグメント分離・指標DDに半径なし・N/total・もっと見る・複数県ラベル・⚠除外で total 変化・行クリック grp・散布 7680駅4クラスタ・両モーダル672px・375px overflow 0・**console error 0**）・test(95)・build 緑 |
 | P7a〜P8c | 未着手 | — | — |
 
 ---

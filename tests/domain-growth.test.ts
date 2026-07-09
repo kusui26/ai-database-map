@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { panelSchema } from '@/shared/protocol'
 import { kmeans, type Point2D } from '@/domain/growth/kmeans'
 import { buildGrowth, type ValueRow } from '@/domain/growth/presenter'
+import { scatterPanel } from '@/domain/growth/panel'
 
 /** 決定的なブロブ（乱数なし）。 */
 const blob = (cx: number, cy: number, n: number): Point2D[] =>
@@ -79,5 +81,23 @@ describe('buildGrowth', () => {
     expect(g.points).toHaveLength(1)
     expect(g.excludedLowN).toBe(1)
     expect(g.points[0]?.grp).toBe('b')
+  })
+
+  it('scatterPanel：GrowthResponse → scatter Panel（title/軸/点/クラスタ）', () => {
+    const panel = scatterPanel(
+      buildGrowth(rows, 'pop_gr_2020_2015_1km', 'rate_covid', { prefecture: '千葉県' }),
+    )
+    expect(panel.type).toBe('scatter')
+    expect(panel.title).toContain('千葉県')
+    expect(panel.xLabel).toContain('人口増減率')
+    expect(panel.points).toHaveLength(2)
+    expect(panel.clusterCount).toBeGreaterThanOrEqual(1)
+    expect(() => panelSchema.parse(panel)).not.toThrow()
+  })
+
+  it('scatterPanel：全国のタイトル', () => {
+    expect(scatterPanel(buildGrowth(rows, 'pop_gr_2020_2015_1km', 'rate_covid')).title).toContain(
+      '全国',
+    )
   })
 })

@@ -12,9 +12,5 @@
     "**/build": true,
     "**/coverage": true,
     "**/pnpm-lock.yaml": true
-  },
-  "files.exclude": {
-    "**/.next": true,
-    "**/next-env.d.ts": true
   }
 }

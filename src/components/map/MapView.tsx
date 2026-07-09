@@ -290,7 +290,12 @@ export function MapView() {
 
   return (
     <div className="absolute inset-0">
-      <div ref={containerRef} className="size-full" />
+      <div
+        ref={containerRef}
+        className="size-full"
+        role="application"
+        aria-label="駅データの地図（ドラッグで移動・ホイールで拡大縮小）"
+      />
       <HoverTooltip />
     </div>
   )

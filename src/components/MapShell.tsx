@@ -3,9 +3,10 @@
 import dynamic from 'next/dynamic'
 import { AppHeader } from './AppHeader'
 import { Fab } from './Fab'
-import { StationDetailPanel } from './detail/StationDetailPanel'
+import { OfflineBanner } from './OfflineBanner'
 
-// MapLibre は window 依存のため SSR 無効で client 限定ロード
+// MapLibre は window 依存＋大きいため、SSR 無効の別チャンクで client 限定ロード
+// （メインバンドルに載せるとハイドレーションを阻害し TBT/LCP が悪化する）。
 const MapView = dynamic(() => import('./map/MapView').then((mod) => mod.MapView), {
   ssr: false,
   loading: () => (
@@ -13,12 +14,19 @@ const MapView = dynamic(() => import('./map/MapView').then((mod) => mod.MapView)
   ),
 })
 
+// 駅詳細（PanelRenderer 経由で Chart.js を含む）は初期クリティカルバンドルから外す。
+const StationDetailPanel = dynamic(
+  () => import('./detail/StationDetailPanel').then((mod) => mod.StationDetailPanel),
+  { ssr: false },
+)
+
 /** アプリシェル：全面地図＋浮遊ヘッダ（ロゴ・検索・半径）＋左下 FAB。 */
 export function MapShell() {
   return (
     <main className="relative h-dvh w-screen overflow-hidden bg-slate-50">
       <MapView />
       <AppHeader />
+      <OfflineBanner />
       <Fab />
       <StationDetailPanel />
     </main>

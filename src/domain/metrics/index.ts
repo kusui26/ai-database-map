@@ -4,7 +4,17 @@
  */
 
 import { type CatalogEntry, entries, rankableForCategory } from '@/shared/catalog'
-import { type Category } from '@/shared/constants'
+import { type Category, radiusLabel } from '@/shared/constants'
+
+/** 指標の変種ラベル（半径・年・推計時点を簡潔に。指標ピッカの3段目・optgroup 内の option）。 */
+export function variantLabel(entry: CatalogEntry): string {
+  const parts: string[] = []
+  if (entry.vintage !== null) parts.push(entry.vintage === 2024 ? 'R6推計' : 'H30推計')
+  if (entry.yearBase !== null && entry.year !== null) parts.push(`${entry.yearBase}→${entry.year}`)
+  else if (entry.year !== null) parts.push(`${entry.year}年`)
+  if (entry.radiusM !== null) parts.push(radiusLabel(entry.radiusM))
+  return parts.length > 0 ? parts.join('・') : entry.labelJa
+}
 
 /** 半径依存カテゴリ（radiusM を持つ指標がある＝集計半径で値が変わる）。カタログから導出。 */
 const RADIUS_DEPENDENT_CATEGORIES: ReadonlySet<Category> = new Set(

@@ -12,6 +12,7 @@ import { StationCard } from './StationCard'
 import { TrendChart } from './TrendChart'
 import { StatTable } from './StatTable'
 import { BarChart } from './BarChart'
+import { RankingTable } from './RankingTable'
 
 export function PanelRenderer({ panel }: { panel: Panel }) {
   switch (panel.type) {
@@ -26,10 +27,11 @@ export function PanelRenderer({ panel }: { panel: Panel }) {
     case 'markdown':
       return <p className="text-sm whitespace-pre-wrap text-slate-700">{panel.body}</p>
     case 'rankingTable':
+      return <RankingTable panel={panel} />
     case 'scatter':
       return (
         <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-400">
-          「{panel.title}」は P6 で実装します。
+          「{panel.title}」は P6b で実装します。
         </div>
       )
     default: {

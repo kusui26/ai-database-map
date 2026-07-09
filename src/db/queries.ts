@@ -27,6 +27,7 @@ const summaryRowSchema = z.object({
   grp: z.string(),
   station_name: z.string(),
   label: z.string().optional(),
+  search_label: z.string().optional(), // search_stations のみ返す
   prefecture: z.string(),
   lon: z.number(),
   lat: z.number(),
@@ -43,6 +44,7 @@ function toSummary(row: z.infer<typeof summaryRowSchema>): StationSummary {
     lon: row.lon,
     lat: row.lat,
     paxLatest: row.pax_latest ?? null,
+    ...(row.search_label === undefined ? {} : { searchLabel: row.search_label }),
     ...(row.dist_m === undefined ? {} : { distM: row.dist_m }),
   }
 }

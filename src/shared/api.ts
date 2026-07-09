@@ -65,6 +65,7 @@ export const stationSummarySchema = z.object({
   grp: z.string(),
   stationName: z.string(),
   label: z.string(),
+  searchLabel: z.string().optional(), // 検索表示用（label＋都道府県・一意。search_stations のみ）
   prefecture: z.string(),
   lon: z.number(),
   lat: z.number(),

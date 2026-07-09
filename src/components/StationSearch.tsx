@@ -91,12 +91,29 @@ export function StationSearch() {
                   該当する駅がありません
                 </div>
               )}
-              {results.map((station) => (
-                <CommandItem key={station.grp} value={station.grp} onSelect={() => select(station)}>
-                  <span className="truncate font-medium">{station.stationName}</span>
-                  <span className="shrink-0 text-xs text-slate-400">{station.prefecture}</span>
-                </CommandItem>
-              ))}
+              {results.map((station) => {
+                // search_label（例「尼崎（阪神電気鉄道・兵庫県）」）で同名駅を区別。
+                // 駅名を太字、以降の括弧（事業者・都道府県）を淡色に分割表示。
+                const searchLabel =
+                  station.searchLabel ?? `${station.stationName}（${station.prefecture}）`
+                const suffix = searchLabel.startsWith(station.stationName)
+                  ? searchLabel.slice(station.stationName.length)
+                  : ''
+                return (
+                  <CommandItem
+                    key={station.grp}
+                    value={station.grp}
+                    onSelect={() => select(station)}
+                  >
+                    <span className="min-w-0 flex-1 truncate">
+                      <span className="font-medium text-slate-800">
+                        {suffix ? station.stationName : searchLabel}
+                      </span>
+                      {suffix && <span className="text-slate-400">{suffix}</span>}
+                    </span>
+                  </CommandItem>
+                )
+              })}
             </CommandList>
           </div>
         )}

@@ -26,6 +26,7 @@ Step1（アプリ公開）→ Step2（AIネイティブ化）を **Claude Code �
 | **P5c** | 駅詳細（地価・バス・事業所） | 3カテゴリのタブ完成 | P5a | 1回 |
 | **P5d** | 追加データ投入（地価年次・事業者名） | 年次地価パネル＋事業者名を DB 投入（catalog/loader/schema/API 拡張・再ロード） | P5c | 1回 |
 | **P5e** | 駅詳細UI改善 | 地価/バス 時系列化・従業者タブ独立・事業者名表示・地図ズーム移動 | P5d | 1回 |
+| **P5f** | 検索結果の駅名表記 | `search_label`（label＋都道府県・一意）で同名駅を区別 | P4b | 1回 |
 | **P6a** | ランキング | 都道府県×指標（カタログ駆動）→ 上位/下位20 → flyTo | P3b, P4b | 1回 |
 | **P6b** | 散布図＋クラスタ | k-means(決定的)・散布チャート・lown 除外トグル | P3b, P4b | 1回 |
 | **P7a** | 品質・仕上げ | 出典/About・OGP・エラー/ロード・a11y・Lighthouse | P5, P6 | 1回 |
@@ -34,7 +35,7 @@ Step1（アプリ公開）→ Step2（AIネイティブ化）を **Claude Code �
 | **P8b** | チャット UI | **左併設チャット＋インラインカード**・Protocol レンダラ（P5/P6 部品を再利用） | P8a | 1回 |
 | **P8c** | 評価・強化 | ゴールデン20問 eval・プロンプト調整・(任意)GraphAI PoC | P8b | 1回 |
 
-**合計目安**：Step1 = 18ブロック（P5d/P5e はユーザー UI 改善要望で 2026-07-08 追加）、Step2 = 3ブロック。
+**合計目安**：Step1 = 19ブロック（P5d/P5e は 2026-07-08・P5f は 2026-07-09 のユーザー要望で追加）、Step2 = 3ブロック。
 
 ### 0.2 依存関係（クリティカルパス）
 
@@ -424,6 +425,17 @@ MapResponse = { messages: {role,text}[], mapActions: MapAction[], panels: Panel[
 - **受け入れ基準**：東京で地価・バスが折れ線表示／従業者が独立タブ／カードに社名が出る／ズームがロゴと重ならず FAB の上／375px で 6タブが崩れず横スクロール・overflow 0／console error 0・build 緑。ヘッドレスで実測。
 - **依頼例**：「P5e 駅詳細のUI改善を実装」
 
+### P5f — 検索結果の駅名表記（search_label 使用）
+> **由来**：2026-07-09 ユーザー要望。検索ドロップダウンが素の駅名＋都道府県のため、同名・同一都道府県で運営会社違いの駅を区別できない。
+- **前提**：P4b（検索）。
+- **背景**：現在の `StationSearch` は `station_name`（素の駅名）＋都道府県を別枠表示。**尼崎型**（JR尼崎 と 阪神尼崎 が両方「尼崎 兵庫県」）が同一表記になる。`docs/passenger_aggregation.md §8.1.1` の **`search_label`**（`label`＋都道府県の単一括弧・全 9,273 群で**一意**を実測確認）を表示に使う。例：尼崎（阪神電気鉄道・兵庫県）／二月田（鹿児島県）／上道（鳥取県）・上道（岡山県）。
+- **作業**：
+  - **RPC**：`search_stations`（＋共有 summary スキーマの `stations_in_bbox`/`nearest_stations`）の返り値に `search_label` を追加（新 migration）。`stations` テーブルには既に `search_label` 列あり（RPC が返していないだけ）。
+  - **API 契約**：`stationSummarySchema` に `searchLabel` 追加・`queries` の `summaryRowSchema`＋`toSummary` で写す。
+  - **UI**：`StationSearch` のドロップダウンを **`search_label` 表示**に（素の駅名＋別枠都道府県を置換）。選択後の詳細取得・flyTo は `grp` ベースのまま不変。
+- **受け入れ基準**：尼崎（JR/阪神）・上道（鳥取/岡山）等の同名駅が検索結果で区別できる／単独駅は「駅名（都道府県）」で冗長でない／選択→flyTo→詳細は従来どおり／かな検索の既知制約（読み仮名列なし・P2c 記録済）は据え置き。
+- **依頼例**：「P5f 検索の駅名表記を search_label に」
+
 ### P6a — ランキング
 - **前提**：P3b・P4b。
 - **作業**：FAB→ Dialog。都道府県（47＋全国）× 指標ピッカ（**catalog の rankable をカテゴリ→指標→半径/年の3段で選択**・既定=人口増減率 2015→2020・1km）→ `/api/ranking` → 上位/下位20テーブル（値は format 済・⚠ 列付き）→ 行クリックで flyTo＋選択。`rankingTable` Panel 型で描画。
@@ -543,6 +555,7 @@ MapResponse = { messages: {role,text}[], mapActions: MapAction[], panels: Panel[
 | **P5c** | ✅ 完了 | 2026-07-08 | 駅詳細・残り3タブ（地価・バス・事業所）＝**5タブ全実装**。`barChart` Panel 新設（横棒・CSS 描画・emphasis で選択半径を強調）。地価：最寄公示カード（価格 円/㎡・用途・距離）＋半径別中央値バー（500m〜10km・選択半径強調）＋増減率5期間表。バス：2010→現在の対比バー＋一般/高速内訳・対2010年増減率（lown ⚠）。事業所：事業所数（violet）・従業者数（pink）の推移2枚＋9年/5年増減率（estab_gr_lown ⚠）。**カタログ駆動の自動フォールド**：地価 20km 非対応（バーに20km出ず）・増減率 500m 非対応（注記表示）をヘッドレスで実測。`landPricePanels`/`busPanels`/`establishmentPanels`（domain・純関数）→ 汎用 PanelRenderer。ヘッドレス検証：東京で3タブ・20km/500m フォールド注記・375px overflow 0・**console error 0**。build green |
 | **P5d** | ✅ 完了 | 2026-07-09 | 追加データ投入（地価年次・事業者名）。**notebook 再実行**で `station_dataset.csv` を単一ベースに統一（cell45 地価を `lp_med_{年}_{R}` 年次化・cell18 運営会社を `・`連結 `operators` に畳込み）。**全 494 共有列が backup と bit 一致＝決定的・ドリフト 0** を実測。catalog：lp_med 年付き・operators 駅属性（**583 エントリ/595 列/属性12**・validate 27 緑）。DB：`add_operators` migration＋loader 拡張（**metric_columns を catalog.json に同期＝id 再採番**・operators ロード）で単一トランザクション再ロード（**station_values 503万行**）。API：`stationRow.operators`＋queries SELECT。`landPricePanels` は lp_med 最新年を現在値に（非破壊）。検証：東京 API に operators＝「東日本旅客鉄道・東京地下鉄・東海旅客鉄道」・lp_med 1km 20点(2007–2026)・**golden RPC/ catalog/ test(86) 緑**・DB 389MB。docs（dataset/land_price/passenger_aggregation）反映 |
 | **P5e** | ✅ 完了 | 2026-07-09 | 駅詳細UI改善（P5d データを消費）。**地価・バスを折れ線化**（地価＝lp_med 年次系列 2007–2026 の推移＋最寄カード＋半径別バー補助＋増減率／バス＝2010→現在の2点線＋一般/高速内訳）。**従業者を独立タブに**（`employeePanels` 新設・全**6タブ**＝乗降/人口/地価/バス/事業所/従業者）。**駅カードに具体的社名**（`operators`・欠損時は延べ社数フォールバック）。**地図ズームを左下**へ（`NavigationControl` bottom-left＋CSS で FAB 上・ロゴと非重複）。ヘッドレス検証：東京で6タブ・地価/バス折れ線・従業者分離・社名表示（東日本旅客鉄道・東京地下鉄・東海旅客鉄道）・ズーム左下・375px overflow 0・**console error 0**・test(87)・build 緑 |
+| **P5f** | ✅ 完了 | 2026-07-09 | 検索結果の駅名表記を **`search_label`**（label＋都道府県・全群一意・`docs/passenger_aggregation.md §8.1.1`）に。同名・同一都道府県で運営会社違いの駅（**尼崎型**）が区別可能に。`search_stations` RPC の返り値に search_label 追加（新 migration・drop→create→grant／bbox・nearest は共有スキーマのため searchLabel を optional に）。`stationSummary` に searchLabel・UI は駅名太字＋淡色サフィックス（例「尼崎（阪神電気鉄道・兵庫県）」）。選択→flyTo は grp ベースで不変。ヘッドレス検証：尼崎の JR/阪神 が区別・二月田（鹿児島県）は冗長でない・選択で grp・375px overflow 0・console error 0・test(87)・build 緑。DB は RPC 差し替えのみ（再ロード不要） |
 | P6a〜P8c | 未着手 | — | — |
 
 ---

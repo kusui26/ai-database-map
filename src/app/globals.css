@@ -9,6 +9,19 @@ body {
   height: 100%;
 }
 
+/* キーボード操作時のみフォーカスリング（a11y）。マウスクリックでは出さない。
+   Radix 等の focus:outline-none（:focus）は特異度で勝つため二重リングにならない。 */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role='button']:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid #4f46e5;
+  outline-offset: 2px;
+}
+
 /* 拡大縮小コントロール（MapLibre・左下）：デスクトップは左下の FAB と重ならないよう上げる。
    モバイルは FAB が下部中央のため既定位置（左下）のままでよい。 */
 @media (min-width: 640px) {

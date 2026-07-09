@@ -1,8 +1,11 @@
 'use client'
 
 import { type ReactNode, useState } from 'react'
-import { RankingDialog } from './ranking/RankingDialog'
-import { ScatterDialog } from './scatter/ScatterDialog'
+import dynamic from 'next/dynamic'
+
+// 初期バンドルから外す：ダイアログ（散布は Chart.js を含む）は初回オープンまで読み込まない。
+const RankingDialog = dynamic(() => import('./ranking/RankingDialog').then((m) => m.RankingDialog))
+const ScatterDialog = dynamic(() => import('./scatter/ScatterDialog').then((m) => m.ScatterDialog))
 
 function TrophyIcon() {
   return (
@@ -62,18 +65,35 @@ function FabButton({
   )
 }
 
-/** 左下 FAB（ランキング＝P6a／散布図＝P6b）。 */
+/** 左下 FAB（ランキング＝P6a／散布図＝P6b）。ダイアログは初回オープンで初めてマウント（遅延ロード）。 */
 export function Fab() {
   const [rankingOpen, setRankingOpen] = useState(false)
   const [scatterOpen, setScatterOpen] = useState(false)
+  // 一度開いたら以後もマウントし続ける（初回のみチャンク取得・状態は保持）。
+  const [rankingSeen, setRankingSeen] = useState(false)
+  const [scatterSeen, setScatterSeen] = useState(false)
   return (
     <>
       <div className="pointer-events-auto absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 gap-2 sm:left-4 sm:translate-x-0">
-        <FabButton icon={<TrophyIcon />} label="ランキング" onClick={() => setRankingOpen(true)} />
-        <FabButton icon={<ScatterIcon />} label="散布図" onClick={() => setScatterOpen(true)} />
+        <FabButton
+          icon={<TrophyIcon />}
+          label="ランキング"
+          onClick={() => {
+            setRankingSeen(true)
+            setRankingOpen(true)
+          }}
+        />
+        <FabButton
+          icon={<ScatterIcon />}
+          label="散布図"
+          onClick={() => {
+            setScatterSeen(true)
+            setScatterOpen(true)
+          }}
+        />
       </div>
-      <RankingDialog open={rankingOpen} onOpenChange={setRankingOpen} />
-      <ScatterDialog open={scatterOpen} onOpenChange={setScatterOpen} />
+      {rankingSeen && <RankingDialog open={rankingOpen} onOpenChange={setRankingOpen} />}
+      {scatterSeen && <ScatterDialog open={scatterOpen} onOpenChange={setScatterOpen} />}
     </>
   )
 }

@@ -39,7 +39,13 @@ export function ScatterDialog({
   const [prefectures, setPrefectures] = useState<string[]>([])
   const [excludeLowN, setExcludeLowN] = useState<boolean>(false)
 
-  const { growth, isLoading, error } = useGrowth(xKey, yKey, prefectures, excludeLowN, open)
+  const { growth, isLoading, isValidating, error } = useGrowth(
+    xKey,
+    yKey,
+    prefectures,
+    excludeLowN,
+    open,
+  )
 
   const onXCategory = useCallback((next: Category) => {
     setXCategory(next)
@@ -127,19 +133,32 @@ export function ScatterDialog({
               <div className="rounded-xl bg-amber-50 p-4 text-sm text-amber-700 ring-1 ring-amber-200">
                 散布データを取得できませんでした。時間をおいて再度お試しください。
               </div>
-            ) : growth === undefined ? (
-              <div className="grid h-40 place-items-center text-sm text-slate-400">
-                {isLoading ? '集計中…' : '指標を選んでください'}
-              </div>
             ) : (
-              <>
-                <ScatterChart panel={scatterPanel(growth)} onSelect={onSelect} />
-                {growth.excludedLowN > 0 && (
-                  <p className="mt-2 text-xs text-slate-400">
-                    低分母（信頼性フラグ）の {growth.excludedLowN} 駅を除外しています。
-                  </p>
+              <div className="relative">
+                {growth === undefined ? (
+                  // 初回はチャート節（タイトル2行＋340pxチャート≒396px）と同じ高さ＝到着時にサイズ不変。
+                  <div className="grid h-[396px] place-items-center text-sm text-slate-400">
+                    {isLoading ? '集計中…' : '指標を選んでください'}
+                  </div>
+                ) : (
+                  <>
+                    <ScatterChart panel={scatterPanel(growth)} onSelect={onSelect} />
+                    {growth.excludedLowN > 0 && (
+                      <p className="mt-2 text-xs text-slate-400">
+                        低分母（信頼性フラグ）の {growth.excludedLowN} 駅を除外しています。
+                      </p>
+                    )}
+                  </>
                 )}
-              </>
+                {/* x/y・都道府県・除外の変更で再取得中は前チャートの上に重ねて表示（サイズ不変） */}
+                {isValidating && growth !== undefined && (
+                  <div className="pointer-events-none absolute inset-0 grid place-items-center rounded-xl bg-white/55">
+                    <span className="rounded-full bg-slate-900/80 px-3 py-1 text-xs font-medium text-white shadow">
+                      集計中…
+                    </span>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </Dialog.Content>

@@ -22,6 +22,7 @@ async function fetchGrowth(url: string): Promise<GrowthResponse> {
 export type GrowthState = {
   readonly growth: GrowthResponse | undefined
   readonly isLoading: boolean
+  readonly isValidating: boolean // keepPreviousData 中の再取得も true＝「集計中…」表示に使う
   readonly error: Error | undefined
 }
 
@@ -37,10 +38,15 @@ export function useGrowth(
   if (excludeLowN) params.set('excludeLowN', 'true')
   const key = enabled ? `/api/growth?${params.toString()}` : null
 
-  const { data, error, isLoading } = useSWR(key, fetchGrowth, {
+  const { data, error, isLoading, isValidating } = useSWR(key, fetchGrowth, {
     revalidateOnFocus: false,
     keepPreviousData: true,
     dedupingInterval: 60_000,
   })
-  return { growth: data, isLoading, error: error instanceof Error ? error : undefined }
+  return {
+    growth: data,
+    isLoading,
+    isValidating,
+    error: error instanceof Error ? error : undefined,
+  }
 }

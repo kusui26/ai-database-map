@@ -1,6 +1,7 @@
 'use client'
 
-import { type ReactNode } from 'react'
+import { type ReactNode, useState } from 'react'
+import { RankingDialog } from './ranking/RankingDialog'
 
 function TrophyIcon() {
   return (
@@ -35,11 +36,23 @@ function ScatterIcon() {
   )
 }
 
-function FabButton({ icon, label }: { icon: ReactNode; label: string }) {
+function FabButton({
+  icon,
+  label,
+  onClick,
+  title,
+}: {
+  icon: ReactNode
+  label: string
+  onClick?: () => void
+  title?: string
+}) {
   return (
     <button
       type="button"
-      title="準備中（P6 で実装）"
+      onClick={onClick}
+      title={title}
+      aria-label={label}
       className="inline-flex items-center gap-2 rounded-xl bg-white/90 px-3 py-2 text-sm font-medium text-slate-700 shadow-lg ring-1 ring-slate-200 backdrop-blur transition hover:bg-white"
     >
       {icon}
@@ -48,12 +61,16 @@ function FabButton({ icon, label }: { icon: ReactNode; label: string }) {
   )
 }
 
-/** 左下 FAB（ランキング・散布図）。P4b はプレースホルダ、P6 で機能実装。 */
+/** 左下 FAB（ランキング＝P6a 実装／散布図＝P6b プレースホルダ）。 */
 export function Fab() {
+  const [rankingOpen, setRankingOpen] = useState(false)
   return (
-    <div className="pointer-events-auto absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 gap-2 sm:left-4 sm:translate-x-0">
-      <FabButton icon={<TrophyIcon />} label="ランキング" />
-      <FabButton icon={<ScatterIcon />} label="散布図" />
-    </div>
+    <>
+      <div className="pointer-events-auto absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 gap-2 sm:left-4 sm:translate-x-0">
+        <FabButton icon={<TrophyIcon />} label="ランキング" onClick={() => setRankingOpen(true)} />
+        <FabButton icon={<ScatterIcon />} label="散布図" title="準備中（P6b で実装）" />
+      </div>
+      <RankingDialog open={rankingOpen} onOpenChange={setRankingOpen} />
+    </>
   )
 }

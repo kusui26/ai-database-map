@@ -1,47 +1,39 @@
 'use client'
 
-/** ランキングの指標ピッカ：都道府県 × カテゴリ→指標（MetricSelect）× 上位/下位。 */
+/** ランキングのピッカ：複数都道府県 × カテゴリ→指標（半径付き）× 上位/下位 × ⚠除外（P6c）。 */
 
 import { type Order } from '@/shared/api'
-import { type Category, PREFECTURES } from '@/shared/constants'
+import { type Category } from '@/shared/constants'
 import { cn } from '@/lib/utils'
-import { METRIC_SELECT_CLASS, MetricSelect } from '@/components/metrics/MetricSelect'
+import { MetricSelect } from '@/components/metrics/MetricSelect'
+import { PrefectureMultiSelect } from '@/components/metrics/PrefectureMultiSelect'
 
 export function MetricPicker({
   category,
   metricKey,
-  prefecture,
+  prefectures,
   order,
+  excludeLowN,
   onCategory,
   onMetric,
-  onPrefecture,
+  onPrefectures,
   onOrder,
+  onExcludeLowN,
 }: {
   category: Category
   metricKey: string
-  prefecture: string | null
+  prefectures: string[]
   order: Order
+  excludeLowN: boolean
   onCategory: (category: Category) => void
   onMetric: (key: string) => void
-  onPrefecture: (prefecture: string | null) => void
+  onPrefectures: (prefectures: string[]) => void
   onOrder: (order: Order) => void
+  onExcludeLowN: (exclude: boolean) => void
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <select
-        aria-label="都道府県"
-        className={METRIC_SELECT_CLASS}
-        value={prefecture ?? ''}
-        onChange={(e) => onPrefecture(e.target.value === '' ? null : e.target.value)}
-      >
-        <option value="">全国</option>
-        {PREFECTURES.map((p) => (
-          <option key={p.code} value={p.name}>
-            {p.name}
-          </option>
-        ))}
-      </select>
-
+      <PrefectureMultiSelect selected={prefectures} onChange={onPrefectures} />
       <MetricSelect
         category={category}
         metricKey={metricKey}
@@ -49,7 +41,6 @@ export function MetricPicker({
         onMetric={onMetric}
         className="flex-1"
       />
-
       <div className="flex shrink-0 overflow-hidden rounded-lg border border-slate-200">
         {(
           [
@@ -72,6 +63,15 @@ export function MetricPicker({
           </button>
         ))}
       </div>
+      <label className="flex cursor-pointer items-center gap-1.5 text-sm text-slate-600">
+        <input
+          type="checkbox"
+          checked={excludeLowN}
+          onChange={(e) => onExcludeLowN(e.target.checked)}
+          className="size-4 accent-indigo-600"
+        />
+        ⚠除外
+      </label>
     </div>
   )
 }

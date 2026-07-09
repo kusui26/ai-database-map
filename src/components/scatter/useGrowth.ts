@@ -28,12 +28,12 @@ export type GrowthState = {
 export function useGrowth(
   x: string,
   y: string,
-  prefecture: string | null,
+  prefectures: string[],
   excludeLowN: boolean,
   enabled: boolean,
 ): GrowthState {
   const params = new URLSearchParams({ x, y })
-  if (prefecture !== null) params.set('prefecture', prefecture)
+  if (prefectures.length > 0) params.set('prefecture', prefectures.join(','))
   if (excludeLowN) params.set('excludeLowN', 'true')
   const key = enabled ? `/api/growth?${params.toString()}` : null
 

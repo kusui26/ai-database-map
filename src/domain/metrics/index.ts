@@ -3,17 +3,27 @@
  * カタログ（shared）を参照し、UI/AI が使う「指標の選び方」を組み立てる（純関数）。
  */
 
-import { type CatalogEntry, entries, rankableForCategory } from '@/shared/catalog'
-import { type Category, radiusLabel } from '@/shared/constants'
+import { type CatalogEntry, entries, getEntry, rankableForCategory } from '@/shared/catalog'
+import { type Category } from '@/shared/constants'
 
-/** 指標の変種ラベル（半径・年・推計時点を簡潔に。指標ピッカの3段目・optgroup 内の option）。 */
+/** 指標の変種ラベル（年・期間・推計時点。**半径は含めない**＝半径は別セレクタ・P6c）。 */
 export function variantLabel(entry: CatalogEntry): string {
   const parts: string[] = []
   if (entry.vintage !== null) parts.push(entry.vintage === 2024 ? 'R6推計' : 'H30推計')
   if (entry.yearBase !== null && entry.year !== null) parts.push(`${entry.yearBase}→${entry.year}`)
   else if (entry.year !== null) parts.push(`${entry.year}年`)
-  if (entry.radiusM !== null) parts.push(radiusLabel(entry.radiusM))
   return parts.length > 0 ? parts.join('・') : entry.labelJa
+}
+
+/** 変種トークン（半径非依存の一意アイデンティティ＝同一なら半径違いのみ）。 */
+function variantToken(entry: CatalogEntry): string {
+  return `${entry.baseMetric}|${entry.year ?? ''}|${entry.yearBase ?? ''}|${entry.vintage ?? ''}`
+}
+
+/** metricKey → 変種トークン（未知は undefined）。 */
+export function variantTokenOf(key: string): string | undefined {
+  const entry = getEntry(key)
+  return entry === undefined ? undefined : variantToken(entry)
 }
 
 /** 半径依存カテゴリ（radiusM を持つ指標がある＝集計半径で値が変わる）。カタログから導出。 */
@@ -77,6 +87,55 @@ export function rankableGroups(category: Category): readonly MetricGroup[] {
     labelJa: baseMetricLabel(baseMetric),
     entries,
   }))
+}
+
+/** 指標の変種（半径非依存）。同一 (baseMetric, year, yearBase, vintage) の entries を半径で束ねる。 */
+export type MetricVariant = {
+  readonly baseMetric: string
+  readonly token: string // <option> の value
+  readonly labelJa: string // 半径を除いた変種ラベル
+  readonly byRadius: ReadonlyMap<number | null, string> // radiusM → entry key
+}
+export type VariantGroup = {
+  readonly baseMetric: string
+  readonly labelJa: string
+  readonly variants: readonly MetricVariant[]
+}
+
+/**
+ * カテゴリ内の rankable を「baseMetric → 変種（半径で束ねる）」にまとめる（指標ピッカ用・P6c）。
+ * 各変種は byRadius で半径→key を持ち、UI は半径セグメントで選ばせる。
+ */
+export function rankableVariantGroups(category: Category): readonly VariantGroup[] {
+  const byBase = new Map<string, Map<string, { label: string; byRadius: Map<number | null, string> }>>()
+  for (const entry of rankableForCategory(category)) {
+    const variants = byBase.get(entry.baseMetric) ?? new Map()
+    const token = variantToken(entry)
+    const variant = variants.get(token) ?? {
+      label: variantLabel(entry),
+      byRadius: new Map<number | null, string>(),
+    }
+    variant.byRadius.set(entry.radiusM, entry.key)
+    variants.set(token, variant)
+    byBase.set(entry.baseMetric, variants)
+  }
+  return [...byBase.entries()].map(([baseMetric, variants]) => ({
+    baseMetric,
+    labelJa: baseMetricLabel(baseMetric),
+    variants: [...variants.entries()].map(([token, v]) => ({
+      baseMetric,
+      token,
+      labelJa: v.label,
+      byRadius: v.byRadius,
+    })),
+  }))
+}
+
+/** 変種の利用可能半径（昇順・null＝半径非依存は除外）。 */
+export function radiiOf(variant: MetricVariant): readonly number[] {
+  return [...variant.byRadius.keys()]
+    .filter((r): r is number => r !== null)
+    .sort((a, b) => a - b)
 }
 
 /** 既定のランキング指標（人口増減率 2015→2020・1km圏）。plan_fable P6a。 */

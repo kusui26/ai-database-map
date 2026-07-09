@@ -19,16 +19,20 @@ export type RankRawRow = {
 
 export function buildRanking(
   metricKey: string,
-  prefecture: string | null,
+  prefectures: readonly string[],
   order: Order,
   rows: readonly RankRawRow[],
+  total: number,
+  offset: number,
 ): RankingResponse {
   const entry = requireEntry(metricKey)
   const signed = entry.kind === 'growth' || entry.kind === 'error'
   return {
     metric: { key: entry.key, labelJa: entry.labelJa, unit: entry.unit },
-    prefecture,
+    prefectures: [...prefectures],
     order,
+    offset,
+    total,
     rows: rows.map((row) => ({
       rank: row.rank,
       grp: row.grp,

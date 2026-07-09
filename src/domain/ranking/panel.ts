@@ -4,17 +4,17 @@
  */
 
 import { type RankingResponse } from '@/shared/api'
+import { prefectureLabel } from '@/shared/constants'
 import { type PanelSize, type RankingTablePanel } from '@/shared/protocol'
 
 export function rankingPanel(
   response: RankingResponse,
   size: PanelSize = 'full',
 ): RankingTablePanel {
-  const scope = response.prefecture ?? '全国'
   const direction = response.order === 'desc' ? '上位' : '下位'
   return {
     type: 'rankingTable',
-    title: `${response.metric.labelJa}（${scope}・${direction}${response.rows.length}）`,
+    title: `${response.metric.labelJa}（${prefectureLabel(response.prefectures)}・${direction}）`,
     metricKey: response.metric.key,
     unit: response.metric.unit,
     rows: response.rows,

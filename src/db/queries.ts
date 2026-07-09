@@ -81,6 +81,7 @@ const rankRowSchema = z.object({
   value: z.number(),
   flag_value: z.number().nullable(),
   rank: z.number(),
+  total: z.number(),
 })
 
 /** buildRanking の入力（RankRawRow）と構造一致。 */
@@ -93,22 +94,35 @@ export type RankRow = {
   rank: number
 }
 
+/** rank_by_column の1ページ（rows＋フィルタ後の総件数）。 */
 export async function rankByColumn(
   columnKey: string,
-  prefecture: string | null,
+  prefectures: string[],
   order: 'asc' | 'desc',
   limit: number,
-): Promise<RankRow[]> {
-  const args = { column_key: columnKey, pref: prefecture, dir: order, lim: limit }
-  const rows = await rpcRows('rank_by_column', args, rankRowSchema)
-  return rows.map((r) => ({
-    grp: r.grp,
-    stationName: r.station_name,
-    prefecture: r.prefecture,
-    value: r.value,
-    flagValue: r.flag_value,
-    rank: r.rank,
-  }))
+  offset: number,
+  excludeLowN: boolean,
+): Promise<{ rows: RankRow[]; total: number }> {
+  const args = {
+    column_key: columnKey,
+    prefs: prefectures.length > 0 ? prefectures : null, // 空は null＝全国（PostgREST の空配列回避）
+    dir: order,
+    lim: limit,
+    off: offset,
+    exclude_lown: excludeLowN,
+  }
+  const raw = await rpcRows('rank_by_column', args, rankRowSchema)
+  return {
+    total: raw[0]?.total ?? 0,
+    rows: raw.map((r) => ({
+      grp: r.grp,
+      stationName: r.station_name,
+      prefecture: r.prefecture,
+      value: r.value,
+      flagValue: r.flag_value,
+      rank: r.rank,
+    })),
+  }
 }
 
 // --- 散布（複数指標の縦持ち） -------------------------------------------
@@ -124,13 +138,14 @@ export type ValueRow = { grp: string; stationName: string; key: string; value: n
 
 export async function valuesForColumns(
   keys: string[],
-  prefecture: string | null,
+  prefectures: string[],
 ): Promise<ValueRow[]> {
-  const rows = await rpcRows(
-    'values_for_columns',
-    { column_keys: keys, pref: prefecture },
-    valueRowSchema,
-  )
+  // 全国は行数が max-rows(=1000) を超えるため、RPC は単一 jsonb で返す（配列を検証）。
+  const raw = await rpc('values_for_columns', {
+    column_keys: keys,
+    prefs: prefectures.length > 0 ? prefectures : null, // 空は null＝全国
+  })
+  const rows = z.array(valueRowSchema).parse(raw)
   return rows.map((r) => ({ grp: r.grp, stationName: r.station_name, key: r.key, value: r.value }))
 }
 

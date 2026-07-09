@@ -10,17 +10,29 @@ export const runtime = 'nodejs'
 export function GET(request: Request): Promise<Response> {
   return handle(async () => {
     const params = new URL(request.url).searchParams
+    const prefParam = params.get('prefecture')
     const query = rankingQuerySchema.parse({
       metric: params.get('metric') ?? undefined,
-      prefecture: params.get('prefecture') ?? undefined,
+      prefectures: prefParam === null ? undefined : prefParam.split(',').filter(Boolean),
       order: params.get('order') ?? undefined,
       limit: params.get('limit') ?? undefined,
+      offset: params.get('offset') ?? undefined,
+      excludeLowN: params.get('excludeLowN') ?? undefined,
     })
     if (!isRankableKey(query.metric)) {
       throw new BadRequestError(`ランキング不可の metric です: ${query.metric}`)
     }
-    const prefecture = query.prefecture ?? null
-    const rows = await rankByColumn(query.metric, prefecture, query.order, query.limit)
-    return json(buildRanking(query.metric, prefecture, query.order, rows), CACHE.hour)
+    const { rows, total } = await rankByColumn(
+      query.metric,
+      query.prefectures,
+      query.order,
+      query.limit,
+      query.offset,
+      query.excludeLowN,
+    )
+    return json(
+      buildRanking(query.metric, query.prefectures, query.order, rows, total, query.offset),
+      CACHE.hour,
+    )
   })
 }

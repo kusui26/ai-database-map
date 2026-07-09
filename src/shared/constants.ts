@@ -147,3 +147,10 @@ export const PREFECTURES: readonly Prefecture[] = [
   { code: '46', name: '鹿児島県' },
   { code: '47', name: '沖縄県' },
 ]
+
+/** 選択都道府県の表示ラベル（空＝全国／1–2件＝連結／3件以上＝先頭＋他N件）。 */
+export function prefectureLabel(prefectures: readonly string[]): string {
+  if (prefectures.length === 0) return '全国'
+  if (prefectures.length <= 2) return prefectures.join('・')
+  return `${prefectures[0]} 他${prefectures.length - 1}件`
+}

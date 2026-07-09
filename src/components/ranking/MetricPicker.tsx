@@ -1,14 +1,11 @@
 'use client'
 
-/** ランキングの指標ピッカ：都道府県 × カテゴリ → 指標（optgroup=baseMetric・option=変種）× 上位/下位。 */
+/** ランキングの指標ピッカ：都道府県 × カテゴリ→指標（MetricSelect）× 上位/下位。 */
 
 import { type Order } from '@/shared/api'
-import { CATEGORIES, CATEGORY_LABELS_JA, type Category, PREFECTURES } from '@/shared/constants'
-import { rankableGroups, variantLabel } from '@/domain/metrics'
+import { type Category, PREFECTURES } from '@/shared/constants'
 import { cn } from '@/lib/utils'
-
-const SELECT_CLASS =
-  'rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 outline-none focus:border-indigo-400'
+import { METRIC_SELECT_CLASS, MetricSelect } from '@/components/metrics/MetricSelect'
 
 export function MetricPicker({
   category,
@@ -29,16 +26,11 @@ export function MetricPicker({
   onPrefecture: (prefecture: string | null) => void
   onOrder: (order: Order) => void
 }) {
-  const selectCategory = (value: string) => {
-    const found = CATEGORIES.find((c) => c === value)
-    if (found !== undefined) onCategory(found)
-  }
-
   return (
     <div className="flex flex-wrap items-center gap-2">
       <select
         aria-label="都道府県"
-        className={SELECT_CLASS}
+        className={METRIC_SELECT_CLASS}
         value={prefecture ?? ''}
         onChange={(e) => onPrefecture(e.target.value === '' ? null : e.target.value)}
       >
@@ -50,35 +42,13 @@ export function MetricPicker({
         ))}
       </select>
 
-      <select
-        aria-label="カテゴリ"
-        className={SELECT_CLASS}
-        value={category}
-        onChange={(e) => selectCategory(e.target.value)}
-      >
-        {CATEGORIES.map((c) => (
-          <option key={c} value={c}>
-            {CATEGORY_LABELS_JA[c]}
-          </option>
-        ))}
-      </select>
-
-      <select
-        aria-label="指標"
-        className={cn(SELECT_CLASS, 'min-w-0 flex-1')}
-        value={metricKey}
-        onChange={(e) => onMetric(e.target.value)}
-      >
-        {rankableGroups(category).map((group) => (
-          <optgroup key={group.baseMetric} label={group.labelJa}>
-            {group.entries.map((entry) => (
-              <option key={entry.key} value={entry.key}>
-                {variantLabel(entry)}
-              </option>
-            ))}
-          </optgroup>
-        ))}
-      </select>
+      <MetricSelect
+        category={category}
+        metricKey={metricKey}
+        onCategory={onCategory}
+        onMetric={onMetric}
+        className="flex-1"
+      />
 
       <div className="flex shrink-0 overflow-hidden rounded-lg border border-slate-200">
         {(

@@ -1,6 +1,6 @@
 /**
  * Chart.js の必要コンポーネントだけを一度登録する（tree-shaking 構成）。
- * 折れ線＋塗り＋ツールチップのみ。チャート系コンポーネントの import 時に呼ぶ。
+ * 折れ線＋塗り＋散布＋ツールチップ。チャート系コンポーネントの import 時に呼ぶ。
  */
 
 import {
@@ -11,6 +11,7 @@ import {
   LineController,
   LineElement,
   PointElement,
+  ScatterController,
   Tooltip,
 } from 'chart.js'
 
@@ -23,6 +24,7 @@ export function ensureChartRegistered(): void {
     LineController,
     LineElement,
     PointElement,
+    ScatterController,
     LinearScale,
     CategoryScale,
     Filler,

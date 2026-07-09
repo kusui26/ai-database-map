@@ -2,6 +2,7 @@
 
 import { type ReactNode, useState } from 'react'
 import { RankingDialog } from './ranking/RankingDialog'
+import { ScatterDialog } from './scatter/ScatterDialog'
 
 function TrophyIcon() {
   return (
@@ -61,16 +62,18 @@ function FabButton({
   )
 }
 
-/** 左下 FAB（ランキング＝P6a 実装／散布図＝P6b プレースホルダ）。 */
+/** 左下 FAB（ランキング＝P6a／散布図＝P6b）。 */
 export function Fab() {
   const [rankingOpen, setRankingOpen] = useState(false)
+  const [scatterOpen, setScatterOpen] = useState(false)
   return (
     <>
       <div className="pointer-events-auto absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 gap-2 sm:left-4 sm:translate-x-0">
         <FabButton icon={<TrophyIcon />} label="ランキング" onClick={() => setRankingOpen(true)} />
-        <FabButton icon={<ScatterIcon />} label="散布図" title="準備中（P6b で実装）" />
+        <FabButton icon={<ScatterIcon />} label="散布図" onClick={() => setScatterOpen(true)} />
       </div>
       <RankingDialog open={rankingOpen} onOpenChange={setRankingOpen} />
+      <ScatterDialog open={scatterOpen} onOpenChange={setScatterOpen} />
     </>
   )
 }

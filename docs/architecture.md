@@ -209,20 +209,27 @@ src/
                                               └─→ Gemini(ai/tools) ─→ GUI Chat Protocol ─→ UI
 ```
 
-### 7.5 現状との対応
-| 目標 | 現状 |
+### 7.5 現状との対応（Step1 = P0–P7b 完了）
+Step1 の全ブロックが完了し、下記が実体として存在する。ブロック単位の詳細は [`plan_fable.md`](./plan_fable.md) §9 進捗表を正とする。
+
+| 領域 | 現状 |
 |---|---|
-| `pipeline/` | **`script/`**（notebook 2本）として存在。発展的にリネーム/整理 |
-| `data/`, `docs/`, `.claude/` | 既存 |
-| `src/`, `supabase/`, `public/`, `tests/` | **未作成**（Step1 で新設）|
-| `Station_Area_Database_Map/`, `condminium/`, `slide/` | 既存（参考・探索・資料）|
+| `src/app` | ルート（page/layout）＋**共通API 7ルート**（metrics／stations〔q・bbox・near〕／stations/geojson／stations/[grp]／ranking／growth／health）＋ error/global-error/not-found/loading/icon/opengraph-image |
+| `src/domain` | 純関数のドメイン層（metrics・stations/presenter・ranking・growth〔決定的 k-means〕・sources）。**UI/DB への import ゼロ**（ESLint 境界ルールで担保） |
+| `src/db` / `src/shared` | supabase-js（anon・RLS）＋ RPC 型付きラッパ（Zod 検証）／ catalog（**583 エントリ・単一の真実**）・protocol（GUI Chat Protocol）・api・format・constants |
+| `src/components` | 地図（MapLibre）・検索（cmdk）・FAB・駅詳細（6タブ）・ランキング/散布ダイアログ・About。ダイアログ/詳細/About は遅延ロード（Chart.js を初期バンドルから除外） |
+| `supabase/migrations` | RPC・スキーマ・RLS をバージョン管理。空間 RPC（bbox/nearest/geojson）／ランキング・散布 RPC（`prefs text[]`・**単一 jsonb で max-rows 回避**） |
+| データ | `stations` **9,273 行**・`station_values` **約 503 万行**。CSV との全数照合レポートあり |
+| `pipeline/` | データ生成・投入（Python）。`data/`・`slide/` は gitignore |
+| 品質 | typecheck / lint / test / build 緑。Lighthouse **mobile Perf 78・A11y 98**／**desktop Perf 98**（mobile Perf は地図キャンバス LCP が律速） |
+| デプロイ | Vercel（`main` マージで本番）＋ **Cron `0 3 * * *` → /api/health**（Supabase pause 対策） |
 
 ---
 
 ## 8. デプロイ・環境・セキュリティ
 
-- **デプロイ**：Vercel（`src/app` を直下ビルド）。`pipeline/`・`data/` は `.vercelignore`。
-- **環境変数**：`.env`(gitignore)。パイプラインの `ESTAT_APP_ID`、アプリの `NEXT_PUBLIC_MAP_STYLE_URL`（既定＝地理院スタイル・キー不要）・`SUPABASE_URL`・`SUPABASE_ANON_KEY`・`SUPABASE_SERVICE_ROLE_KEY`（サーバのみ）・`GEMINI_API_KEY`（Step2・サーバのみ）。**鍵・完全URLは出力/ログに出さない**。
+- **デプロイ**：Vercel（`main` へのマージで本番デプロイ）。`pipeline/`・`data/` は `.vercelignore`。**Vercel Cron `0 3 * * *` → `/api/health`**（`vercel.json`）が DB に 1 クエリ投げ、Supabase 無料枠の自動停止を防ぐ。
+- **環境変数**：`.env`(gitignore)。パイプラインの `ESTAT_APP_ID`、アプリの `NEXT_PUBLIC_MAP_STYLE_URL`（既定＝地理院スタイル・キー不要）・`NEXT_PUBLIC_SITE_URL`（OG/canonical の基点）・`SUPABASE_URL`・`SUPABASE_ANON_KEY`・`SUPABASE_SERVICE_ROLE_KEY`（サーバのみ）・`GEMINI_API_KEY`（Step2・サーバのみ）。本番は **Vercel ダッシュボード**で設定。**鍵・完全URLは出力/ログに出さない**。
 - **Supabase**：**RLS 有効化**（読み取りは公開ビュー/匿名ロールに限定）、**SSL 正常化**、CORS 制限、書込は service role をサーバ側のみ。過去プロジェクトの CORS 全開放 / `rejectUnauthorized:false` を踏襲しない。
 - **DB 変更**：`supabase/migrations` の**バージョン管理**のみ（`force:true` の破壊的 DROP を使わない）。投入は**バルク＋冪等 upsert**。
 - **品質ゲート**：lint / typecheck / unit test（ドメイン純関数中心）を CI で必須化。

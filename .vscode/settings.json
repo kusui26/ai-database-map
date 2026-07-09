@@ -1,0 +1,20 @@
+{
+  "files.watcherExclude": {
+    "**/.next/**": true,
+    "**/out/**": true,
+    "**/build/**": true,
+    "**/coverage/**": true,
+    "**/data/**": true
+  },
+  "search.exclude": {
+    "**/.next": true,
+    "**/out": true,
+    "**/build": true,
+    "**/coverage": true,
+    "**/pnpm-lock.yaml": true
+  },
+  "files.exclude": {
+    "**/.next": true,
+    "**/next-env.d.ts": true
+  }
+}

@@ -30,13 +30,14 @@ Step1（アプリ公開）→ Step2（AIネイティブ化）を **Claude Code �
 | **P6a** | ランキング | 都道府県×指標（カタログ駆動）→ 上位/下位20 → flyTo | P3b, P4b | 1回 |
 | **P6b** | 散布図＋クラスタ | k-means(決定的)・散布チャート・lown 除外トグル | P3b, P4b | 1回 |
 | **P6c** | ランキング/散布の改善 | 半径分離・複数県・全件ページング・⚠除外・モーダル拡大 | P6a, P6b | 1回 |
+| **P6d** | ランキング/散布のUX仕上げ | ピッカ整列（半径のみ2段目）・モーダル固定高さ・もっと見る中央・散布に集計中表示 | P6c | 1回 |
 | **P7a** | 品質・仕上げ | 出典/About・OGP・エラー/ロード・a11y・Lighthouse | P5, P6 | 1回 |
 | **P7b** | 公開 | 本番 env・cron keep-alive・README・docs 反映 | P7a | 1回 |
 | **P8a** | AI ツール表面 | catalog→tool 自動生成・AI SDK+Gemini・`/api/chat` | Step1 | 1回 |
 | **P8b** | チャット UI | **左併設チャット＋インラインカード**・Protocol レンダラ（P5/P6 部品を再利用） | P8a | 1回 |
 | **P8c** | 評価・強化 | ゴールデン20問 eval・プロンプト調整・(任意)GraphAI PoC | P8b | 1回 |
 
-**合計目安**：Step1 = 20ブロック（P5d/P5e は 2026-07-08・P5f/P6c は 2026-07-09 のユーザー要望で追加）、Step2 = 3ブロック。
+**合計目安**：Step1 = 21ブロック（P5d/P5e は 2026-07-08・P5f/P6c/P6d は 2026-07-09 のユーザー要望で追加）、Step2 = 3ブロック。
 
 ### 0.2 依存関係（クリティカルパス）
 
@@ -467,6 +468,20 @@ MapResponse = { messages: {role,text}[], mapActions: MapAction[], panels: Panel[
 - **依頼例**：「P6c ランキング/散布の改善を実装」
 - **設計判断（実装時に最終確認）**：全件＝load-more（ページ50）／複数県UI＝マルチセレクト（ポップオーバー）／モーダル＝max-w-2xl前後／散布は x/y 各々に半径。異論あれば実装前に調整。
 
+### P6d — ランキング/散布のUX仕上げ（ピッカ整列・固定高さ・もっと見る中央・散布の集計中表示）
+> **由来**：2026-07-09 ユーザー要望。P6c で機能は揃ったので操作感の粗を取る。①半径あり/なしでピッカの位置が揺れる、②ローディングでモーダルが伸縮する、③もっと見るが右端、④散布は更新中か分からない——を解消。**機能追加はなく既存 UI の磨き込み**（新 API・新 migration なし）。
+
+- **前提**：P6c。
+- **① ランキングのピッカを整列（半径だけ2段目・半径なしは1段のまま）**：現状は1行 `flex-wrap` で、半径セグメント（最大6ボタン）が入ると 都道府県/データ/年/上位下位/⚠除外 の位置が崩れる（半径なしの乗降客数等は良好）。**ユーザー確定（2026-07-09・プレビュー選択）＝半径ありのときだけ半径を2段目に落とす**：
+  - **段A（常に同一・位置固定）**：都道府県 → カテゴリ → 変種（年） → 上位/下位 → **⚠除外**。半径の有無に依らず同じ並び・同じ位置。**半径なし指標（pax・rate_yoy・rate_covid・lp_near）は現状どおり1段のまま**＝乗降客数等の「良い感じ」を保持。
+  - **段B（半径あり指標のときだけ）**：半径セグメントを単独で段Aの直下・左寄せに配置。
+  - **実装方針**：`MetricSelect` から**半径セグメントを分離**して段Bに単独配置できるようにする（段A＝カテゴリ＋変種＝インラインのまま）。metricKey ↔ (変種, 半径) の分解・再解決は**単一箇所に集約**（重複を作らない・純関数 `radiiOf`/`variantTokenOf` を流用）。**散布図は現状どおり各軸インライン**（半径は各 `MetricSelect` 内）を維持——分離は「半径を外だしできる」オプション化に留め、外部 IF（`category`/`metricKey`）は不変。
+- **② モーダルを固定高さに（集計前/中/後でサイズ不変）**：ランキング・散布とも `Dialog.Content` を**固定高さ**（例 ランキング `h-[86vh]`／散布 `h-[80vh]`・小画面は `max-h` 上限で吸収）にし、内容量・ローディング状態に依らずサイズ一定に。コンテンツ領域は `flex-1 overflow-y-auto` で内部スクロール。**集計中プレースホルダは `h-40` をやめ固定領域いっぱいに中央表示**（＝空/集計中/表示済で高さが変わらない）。散布チャートは固定 `HEIGHT_PX`（340px）維持。
+- **③ 「もっと見る」を中央に**：ランキングのフッタを「件数（左）＋ もっと見る（**水平中央**）」に。3分割グリッド or 件数を絶対配置してボタンを中央寄せ。**フッタの縦位置（最下部）は不変**。
+- **④ 散布図に集計中ステータス表示**：x/y 変更時に取得中が分かるよう `useGrowth` の **`isValidating`**（`keepPreviousData` 中も true）を露出し、チャート領域に**「集計中…」**（ランキングと同じ体裁の小ラベル/スピナー）。前チャートは残したまま**オーバーレイ表示**（②の固定高さでサイズ不変・チラつきなし）→ 取得完了で新チャートへ差し替え。初回（データ無し）は従来どおり中央「集計中…」。※体裁統一のため「集計中…」を小コンポーネント化し両ダイアログで共用してもよい。
+- **受け入れ基準**：ランキングで半径あり指標（人口/バス）↔ 半径なし指標（乗降客数）を切替えても 都道府県/データ/年/上位下位/⚠除外 の位置が動かない（半径あり指標では半径だけが2段目・半径なしは1段のまま）／集計前・中・後でランキング/散布のモーダルサイズ不変／もっと見るが水平中央（最下部位置は不変）／散布で x/y を変えると「集計中…」が出て完了で消える／既存の行・点クリック→flyTo・k-means 決定性・複数県・⚠除外・ページングは不変／console error 0・gate 緑・**ヘッドレスで実測**（サイズ不変はローディング中/後の実寸比較）。
+- **依頼例**：「P6d を実装」
+
 ### P7a — 品質・仕上げ
 - **前提**：P5・P6。
 - **作業**：About/データ出典 Dialog（**catalog の source/license から自動生成する出典表**＋各 docs への説明文）／OGP・favicon・タイトル／エラーバウンダリ・ローディングスケルトン・オフライン注意／a11y（フォーカスリング・aria・コントラスト）／Lighthouse 計測と改善（画像・フォント・コード分割）／404。
@@ -578,6 +593,7 @@ MapResponse = { messages: {role,text}[], mapActions: MapAction[], panels: Panel[
 | **P6a** | ✅ 完了 | 2026-07-09 | ランキング（駅をまたぐ横断比較の初回）。左下 FAB「ランキング」→ Radix Dialog モーダル。**指標ピッカ**：都道府県（47＋全国）×カテゴリ×指標（`optgroup`=baseMetric・option=`variantLabel` 半径/年）×上位/下位。既定=人口増減率2015→2020・1km。SWR で `/api/ranking`（P3b・既存）→ **上位/下位20**を `rankingPanel`（domain・純関数）→ `rankingTable` Panel → `RankingTable`（順位・駅名・県・format 済値・`lown`⚠）。**行クリック→`setGrp`→ 地図 flyTo＋詳細パネル**（モーダルは閉じる）。汎用 `PanelRenderer` に rankingTable 分岐（Step2 再利用）。FAB ボタンに `aria-label`（アイコンのみモバイルの a11y）。ヘッドレス検証：既定20行・⚠・**千葉県×地価増減率(2016→2026,2km)＝流山/柏 TX沿線の妥当な顔ぶれ**・下位トグル・行クリックで grp（勝浦）・375px overflow 0・console error 0・test(90)・build 緑。@radix-ui/react-dialog 追加 |
 | **P6b** | ✅ 完了 | 2026-07-09 | 散布図＋クラスタ。左下 FAB「散布図」→ Radix Dialog。**x/y 指標ピッカ**（`MetricSelect` 共通化＝ランキングと共用）×都道府県×**低分母除外**トグル。既定=人口増減率2km×乗降客コロナ前後比。SWR で `/api/growth`（**決定的 k-means 済み**・既存）→ `scatterPanel`（domain 純関数）→ `scatter` Panel → `ScatterChart`（Chart.js 散布・**クラスタ色分け**・ツールチップに駅名/値・軸ラベル）。**点クリック→最寄り点を選択**（`getElementsAtEventForMode` nearest）→ flyTo＋詳細。汎用 `PanelRenderer` に scatter 分岐（Step2 再利用）。ScatterController 登録。ヘッドレス検証：既定461点4クラスタ・低分母除外で注記・X変更で再取得・点クリックで grp（JR総持寺）・**ランキング無回帰**・375px overflow 0・console error 0・test(92)・build 緑 |
 | **P6c** | ✅ 完了 | 2026-07-09 | ランキング/散布の改善（両ダイアログを1ブロックで）。**半径を指標から分離**：`variantLabel` から半径除去→`MetricSelect` を3段（カテゴリ→指標〔`optgroup`=baseMetric・option=半径なし変種〕→**半径セグメント**〔利用可能半径のみ・`overflow-x` スクロール〕）。**外部IF（category/metricKey）不変**——内部で metricKey を (変種, 半径) に分解表示し変種/半径変更で再解決。半径非依存指標はセグメント非表示。domain に `rankableVariantGroups`/`variantTokenOf`/`radiiOf`（純関数・単体テスト）。**複数県**：`PrefectureMultiSelect`（47県チェックボックス・popover・click-outside〔型ガード〕）＋RPC `prefs text[]`（空/null=全国・`cardinality` 判定）＋`prefectureLabel`（「千葉県・埼玉県」/「〜 他N件」）。**ランキング全件**：`useSWRInfinite`（PAGE_SIZE=50・もっと見る）＋`rank_by_column` に `offset`/`total`（`count() over`）＝フッタ「N / total 件」。**⚠除外**チェックボックス（`exclude_lown`・500m 千葉+埼玉 559→554 実測）。**モーダル拡大**（`max-w-2xl`=672px）。**〔重要〕全国散布の潜在バグ修正**：`values_for_columns` が PostgREST **max-rows=1000** に切られ先頭1000行が片指標のみ→ (x,y) ペア 0 で**全国散布が空**だった既存不具合を、`stations_geojson` と同じ**単一 jsonb 返却**で修正。**全国散布が 461→7680 点の真値**に（rate_covid は実は 7684 駅・旧「461」は切詰めの虚数）。migrations 2本（`ranking_scatter_improve`〔prefs/offset/total/exclude〕・`values_for_columns_jsonb`）。ヘッドレス検証 **14/14 緑**（半径セグメント分離・指標DDに半径なし・N/total・もっと見る・複数県ラベル・⚠除外で total 変化・行クリック grp・散布 7680駅4クラスタ・両モーダル672px・375px overflow 0・**console error 0**）・test(95)・build 緑 |
+| **P6d** | ✅ 完了 | 2026-07-09 | ランキング/散布のUX仕上げ（既存UIの磨き込み・新API/migration なし）。**①ピッカ整列**：`MetricSelect` を `useMetricParts`（metricKey↔(変種,半径) の分解・再解決を担う単一コントローラ）＋leaf（`CategorySelect`/`VariantSelect`/`RadiusSegment`）に分解。ランキングの `MetricPicker` を2段化＝**段A**（都道府県/カテゴリ/変種/上位下位/⚠除外・常に同位置）＋**段B**（半径セグメント・**半径あり指標のときだけ**）。半径なし指標（乗降客数等）は現状どおり1段（ユーザー選択・プレビュー確定）。散布図は各軸インライン維持（外部IF不変）。**②モーダル固定高さ**：`RankingDialog` を `h-[86vh]` 固定＋集計中プレースホルダ `h-full`＝集計前/中/後でサイズ不変。散布は初回プレースホルダを `h-[396px]`（チャート節と同高）に。**③もっと見る中央**：フッタ `grid-cols-3`（件数=左・ボタン=中央）。**④散布に集計中表示**：`useGrowth` に `isValidating` を露出し、x/y・県・除外の変更中は前チャート上に「集計中…」オーバーレイ（`keepPreviousData` でチャート維持＝チラつき/リサイズなし）。ヘッドレス検証 **18/18 緑**（集計中↔集計後で ranking 高さ不変=774・半径が段B（上位下位より下）・⚠除外は段A・半径なしで段B消失＋段A位置不変・もっと見る中央・散布オーバーレイ出現/消失で canvas 維持・サイズ不変・375px overflow 0・**console error 0**）・typecheck/lint/test(95)/build 緑 |
 | P7a〜P8c | 未着手 | — | — |
 
 ---

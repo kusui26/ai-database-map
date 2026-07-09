@@ -59,7 +59,7 @@ export function RankingDialog({
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm" />
         <Dialog.Content
-          className="fixed top-1/2 left-1/2 z-50 flex max-h-[86vh] w-[calc(100vw-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl bg-white shadow-2xl focus:outline-none"
+          className="fixed top-1/2 left-1/2 z-50 flex h-[86vh] w-[calc(100vw-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl bg-white shadow-2xl focus:outline-none"
           aria-describedby={undefined}
         >
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
@@ -95,7 +95,7 @@ export function RankingDialog({
                 ランキングを取得できませんでした。時間をおいて再度お試しください。
               </div>
             ) : ranking === undefined ? (
-              <div className="grid h-40 place-items-center text-sm text-slate-400">
+              <div className="grid h-full place-items-center text-sm text-slate-400">
                 {isLoading ? '集計中…' : '指標を選んでください'}
               </div>
             ) : (
@@ -104,20 +104,23 @@ export function RankingDialog({
           </div>
 
           {ranking !== undefined && (
-            <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-4 py-2.5 text-sm">
+            <div className="grid grid-cols-3 items-center gap-3 border-t border-slate-100 px-4 py-2.5 text-sm">
               <span className="text-slate-400 tabular-nums">
                 {ranking.rows.length} / {total} 件
               </span>
-              {canLoadMore && (
-                <button
-                  type="button"
-                  onClick={loadMore}
-                  disabled={isLoadingMore}
-                  className="rounded-lg bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700 transition-colors hover:bg-indigo-100 disabled:opacity-50"
-                >
-                  {isLoadingMore ? '読み込み中…' : 'もっと見る'}
-                </button>
-              )}
+              <div className="flex justify-center">
+                {canLoadMore && (
+                  <button
+                    type="button"
+                    onClick={loadMore}
+                    disabled={isLoadingMore}
+                    className="rounded-lg bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700 transition-colors hover:bg-indigo-100 disabled:opacity-50"
+                  >
+                    {isLoadingMore ? '読み込み中…' : 'もっと見る'}
+                  </button>
+                )}
+              </div>
+              <span aria-hidden />
             </div>
           )}
         </Dialog.Content>

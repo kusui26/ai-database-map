@@ -15,7 +15,14 @@ import { BarChart } from './BarChart'
 import { RankingTable } from './RankingTable'
 import { ScatterChart } from './ScatterChart'
 
-export function PanelRenderer({ panel }: { panel: Panel }) {
+export function PanelRenderer({
+  panel,
+  onSelect,
+}: {
+  panel: Panel
+  /** 駅クリックで選択（ランキング行・散布点。チャット/モーダルで使う。詳細ドロワーでは未指定）。 */
+  onSelect?: (grp: string) => void
+}) {
   switch (panel.type) {
     case 'stationCard':
       return <StationCard panel={panel} />
@@ -28,9 +35,9 @@ export function PanelRenderer({ panel }: { panel: Panel }) {
     case 'markdown':
       return <p className="text-sm whitespace-pre-wrap text-slate-700">{panel.body}</p>
     case 'rankingTable':
-      return <RankingTable panel={panel} />
+      return <RankingTable panel={panel} onSelect={onSelect} />
     case 'scatter':
-      return <ScatterChart panel={panel} />
+      return <ScatterChart panel={panel} onSelect={onSelect} />
     default: {
       const exhaustive: never = panel
       return exhaustive
@@ -42,14 +49,16 @@ export function PanelRenderer({ panel }: { panel: Panel }) {
 export function PanelStack({
   panels,
   className,
+  onSelect,
 }: {
   panels: readonly Panel[]
   className?: string
+  onSelect?: (grp: string) => void
 }) {
   return (
     <div className={cn('space-y-4', className)}>
       {panels.map((panel, index) => (
-        <PanelRenderer key={`${panel.type}-${index}`} panel={panel} />
+        <PanelRenderer key={`${panel.type}-${index}`} panel={panel} onSelect={onSelect} />
       ))}
     </div>
   )

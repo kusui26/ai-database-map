@@ -24,20 +24,32 @@ function firstKeyOf(category: Category): string | undefined {
   return rankableGroups(category)[0]?.entries[0]?.key
 }
 
+/** チャットからの昇格で初期 x/y・条件を preset する（未指定は既定）。 */
+export type ScatterInitial = {
+  readonly xKey: string
+  readonly yKey: string
+  readonly prefectures: readonly string[]
+  readonly excludeLowN: boolean
+}
+
 export function ScatterDialog({
   open,
   onOpenChange,
+  initial,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
+  initial?: ScatterInitial
 }) {
   const { setGrp } = useMapUrlState()
-  const [xCategory, setXCategory] = useState<Category>(X_CATEGORY)
-  const [xKey, setXKey] = useState<string>(DEFAULT_SCATTER_X)
-  const [yCategory, setYCategory] = useState<Category>(Y_CATEGORY)
-  const [yKey, setYKey] = useState<string>(DEFAULT_SCATTER_Y)
-  const [prefectures, setPrefectures] = useState<string[]>([])
-  const [excludeLowN, setExcludeLowN] = useState<boolean>(false)
+  const initialX = initial?.xKey ?? DEFAULT_SCATTER_X
+  const initialY = initial?.yKey ?? DEFAULT_SCATTER_Y
+  const [xCategory, setXCategory] = useState<Category>(getEntry(initialX)?.category ?? X_CATEGORY)
+  const [xKey, setXKey] = useState<string>(initialX)
+  const [yCategory, setYCategory] = useState<Category>(getEntry(initialY)?.category ?? Y_CATEGORY)
+  const [yKey, setYKey] = useState<string>(initialY)
+  const [prefectures, setPrefectures] = useState<string[]>(initial ? [...initial.prefectures] : [])
+  const [excludeLowN, setExcludeLowN] = useState<boolean>(initial?.excludeLowN ?? false)
 
   const { growth, isLoading, isValidating, error } = useGrowth(
     xKey,

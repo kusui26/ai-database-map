@@ -224,7 +224,10 @@ Step1 の全ブロックが完了し、下記が実体として存在する。�
 | 品質 | typecheck / lint / test / build 緑。Lighthouse **mobile Perf 78・A11y 98**／**desktop Perf 98**（mobile Perf は地図キャンバス LCP が律速） |
 | デプロイ | Vercel（`main` マージで本番）＋ **Cron `0 3 * * *` → /api/health**（Supabase pause 対策） |
 
-**Step2（P8a 完了・2026-07-11・純加算）**：`src/ai`（§7.3）＝`tools`（catalog 駆動の 5 ツール・domain 直呼び）／`client`（`@ai-sdk/google` provider 抽象）／`system-prompt`／`assemble`（ツール結果→**既存 Panel ビルダで MapResponse を決定的に組立**＝§4 の同一描画パス・LLM は幻覚しない）／`catalog-digest`／`rate-limit`。`POST /api/chat`（**AI SDK v6 `ToolLoopAgent`**・`stepCountIs(6)`・SSE ストリーミング＋`data-map` パート・IP レート制限／入力 500 字／45s abort）。`src/domain`・`src/shared/protocol`・既存 API・`src/db` は**無改変**。主 LLM は **Gemini Flash 系**（§10.2）だが `gemini-2.5-flash` は 2026-07 に新規非対応のため既定は `gemini-flash-latest`（env 切替可・固定版は P8c eval）。P8b（チャット UI）・P8c（eval）は未着手。
+**Step2（P8a・P8b 完了・純加算）**：
+- **P8a（2026-07-11）**：`src/ai`（§7.3）＝`tools`（catalog 駆動の 5 ツール・domain 直呼び）／`client`（`@ai-sdk/google` provider 抽象）／`system-prompt`／`assemble`（ツール結果→**既存 Panel ビルダで MapResponse を決定的に組立**＝§4 の同一描画パス・LLM は幻覚しない）／`catalog-digest`／`rate-limit`。`POST /api/chat`（**AI SDK v6 `ToolLoopAgent`**・`stepCountIs(6)`・SSE ストリーミング＋`data-map` パート・IP レート制限／入力 500 字／45s abort）。主 LLM は **Gemini Flash 系**（§10.2）だが `gemini-2.5-flash` は 2026-07 に新規非対応のため既定は `gemini-flash-latest`（env 切替可・固定版は P8c eval）。
+- **P8b（2026-07-12）**：`src/components/chat`＝`ChatPanel`（`@ai-sdk/react` の `useChat`・デスクトップ左併設／モバイル vaul 2スナップ）／`ChatMessage`＋`InlineCard`（**既存 PanelStack で compact インライン描画**）／`panelGroups`（⤢昇格パラメータをツール入力から復元）／`useApplyMapActions`（`onData` で mapActions を即時：selectStation→?grp・highlight・flyTo・clear）／`usePromote`＋`PromotionHost`（駅詳細→右ドロワー・ランキング/散布→既存モーダルを preset で）／`linkifyStations`／`SuggestionChips`。既存 UI は無改変拡張（`MapView` ハイライト層/flyTo/padding・ダイアログ preset・ヘッダ✦AI/⌘K）。→ **「クリックでも会話でも同じ場所に同じ部品」**（§4）をヘッドレスで実証（console error 0）。
+- **不変条件**：`src/domain`・`src/shared/protocol`・既存 API・`src/db` は P8a/P8b とも**無改変**。P8c（eval）は未着手。
 
 ---
 

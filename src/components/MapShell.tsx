@@ -1,6 +1,8 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import dynamic from 'next/dynamic'
+import { useChatStore } from '@/stores/chatStore'
 import { AppHeader } from './AppHeader'
 import { Fab } from './Fab'
 import { OfflineBanner } from './OfflineBanner'
@@ -20,8 +22,23 @@ const StationDetailPanel = dynamic(
   { ssr: false },
 )
 
-/** アプリシェル：全面地図＋浮遊ヘッダ（ロゴ・検索・半径）＋左下 FAB。 */
+// チャット（Step2・@ai-sdk/react を含む）は初回オープンまで読み込まない。
+const ChatPanel = dynamic(() => import('./chat/ChatPanel').then((mod) => mod.ChatPanel), {
+  ssr: false,
+})
+const PromotionHost = dynamic(
+  () => import('./chat/PromotionHost').then((mod) => mod.PromotionHost),
+  { ssr: false },
+)
+
+/** アプリシェル：全面地図＋浮遊ヘッダ（ロゴ・検索・半径・✦AI）＋左下 FAB＋左チャット。 */
 export function MapShell() {
+  const chatOpen = useChatStore((state) => state.open)
+  const [chatSeen, setChatSeen] = useState(false)
+  useEffect(() => {
+    if (chatOpen) setChatSeen(true)
+  }, [chatOpen])
+
   return (
     <main className="relative h-dvh w-screen overflow-hidden bg-slate-50">
       <MapView />
@@ -29,6 +46,8 @@ export function MapShell() {
       <OfflineBanner />
       <Fab />
       <StationDetailPanel />
+      {chatSeen && <ChatPanel />}
+      {chatSeen && <PromotionHost />}
     </main>
   )
 }

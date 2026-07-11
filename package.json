@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.91",
+    "@ai-sdk/react": "^3.0.226",
     "@radix-ui/react-dialog": "^1.1.19",
     "@supabase/supabase-js": "^2.110.1",
     "ai": "^6.0.223",

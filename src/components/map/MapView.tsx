@@ -14,14 +14,32 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import { ACCENT_COLOR } from '@/shared/constants'
 import { circlePolygon } from '@/shared/geo'
 import { type HoverInfo, useMapStore } from '@/stores/mapStore'
+import { useChatStore } from '@/stores/chatStore'
+import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { HoverTooltip } from './HoverTooltip'
 import { useMapUrlState } from './useMapUrlState'
 
 const STYLE_URL = process.env.NEXT_PUBLIC_MAP_STYLE_URL ?? '/map/gsi-pale-style.json'
 const TOKYO_STATION: [number, number] = [139.767, 35.681]
-const FLY_PADDING = { top: 64, bottom: 64, left: 64, right: 64 }
+const BASE_PAD = 64
+const CHAT_PANEL_PX = 400 // 左チャットパネル幅（開時に flyTo を可視領域中心へ寄せる）
+const DRAWER_PANEL_PX = 380 // 右ドロワー幅（駅詳細オープン時）
 const EMPTY_FC: FeatureCollection = { type: 'FeatureCollection', features: [] }
 const NONE = '__none__'
+
+/** 開いているパネル幅を避けて可視領域の中心へ寄せる flyTo padding（plan_fable §2.4 ルール④）。 */
+function flyPadding(
+  isDesktop: boolean,
+  chatOpen: boolean,
+  drawerOpen: boolean,
+): maplibregl.PaddingOptions {
+  return {
+    top: BASE_PAD,
+    bottom: BASE_PAD,
+    left: isDesktop && chatOpen ? CHAT_PANEL_PX + BASE_PAD : BASE_PAD,
+    right: isDesktop && drawerOpen ? DRAWER_PANEL_PX + BASE_PAD : BASE_PAD,
+  }
+}
 
 type Coord = { readonly lon: number; readonly lat: number; readonly name: string }
 type SetGrp = (grp: string | null) => void
@@ -105,6 +123,30 @@ function addLayers(map: maplibregl.Map): void {
     },
   })
 
+  // ハイライト（チャットのランキング上位など・複数駅を枠で示す・フィルタで切替）
+  map.addLayer({
+    id: 'stations-highlight',
+    type: 'circle',
+    source: 'stations',
+    filter: ['in', ['get', 'grp'], ['literal', []]],
+    paint: {
+      'circle-color': ACCENT_COLOR,
+      'circle-opacity': 0.12,
+      'circle-radius': [
+        'interpolate',
+        ['linear'],
+        ['sqrt', ['coalesce', ['get', 'pax'], 1]],
+        0,
+        6,
+        1700,
+        20,
+      ],
+      'circle-stroke-color': ACCENT_COLOR,
+      'circle-stroke-width': 2,
+      'circle-stroke-opacity': 0.9,
+    },
+  })
+
   // 選択駅（アクセント色・フィルタで切替）
   map.addLayer({
     id: 'stations-selected',
@@ -151,7 +193,7 @@ function addHandlers(
   setGrpRef: { current: SetGrp },
   setHoveredRef: { current: (info: HoverInfo | null) => void },
 ): void {
-  const pointerLayers = ['stations-circle', 'stations-selected']
+  const pointerLayers = ['stations-circle', 'stations-highlight', 'stations-selected']
 
   for (const layer of pointerLayers) {
     map.on('click', layer, (e) => {
@@ -203,12 +245,23 @@ export function MapView() {
 
   const { grp, setGrp, radiusM } = useMapUrlState()
   const setHovered = useMapStore((state) => state.setHovered)
+  const highlightedGrps = useMapStore((state) => state.highlightedGrps)
+  const flyToReq = useMapStore((state) => state.flyTo)
+  const chatOpen = useChatStore((state) => state.open)
+  const isDesktop = useIsDesktop()
 
   // ハンドラから常に最新のセッターを参照するための ref
   const setGrpRef = useRef(setGrp)
   setGrpRef.current = setGrp
   const setHoveredRef = useRef(setHovered)
   setHoveredRef.current = setHovered
+
+  // flyTo padding は開いているパネル（チャット/ドロワー）に依存するが、
+  // その変化だけで再 flyTo はしたくないので ref 経由で参照する。
+  const paddingRef = useRef<maplibregl.PaddingOptions>(
+    flyPadding(isDesktop, chatOpen, grp !== null),
+  )
+  paddingRef.current = flyPadding(isDesktop, chatOpen, grp !== null)
 
   useEffect(() => {
     const container = containerRef.current
@@ -263,11 +316,29 @@ export function MapView() {
         map.flyTo({
           center: [coord.lon, coord.lat],
           zoom: Math.max(map.getZoom(), 12),
-          padding: FLY_PADDING,
+          padding: paddingRef.current,
         })
       }
     }
   }, [ready, grp])
+
+  // ハイライト：チャットの highlightStations（複数駅を枠で示す）
+  useEffect(() => {
+    const map = mapRef.current
+    if (!ready || map === null) return
+    map.setFilter('stations-highlight', ['in', ['get', 'grp'], ['literal', [...highlightedGrps]]])
+  }, [ready, highlightedGrps])
+
+  // 任意 flyTo：チャットの flyTo（駅選択を伴わない移動・seq で再実行）
+  useEffect(() => {
+    const map = mapRef.current
+    if (!ready || map === null || flyToReq === null) return
+    map.flyTo({
+      center: [flyToReq.lon, flyToReq.lat],
+      zoom: flyToReq.zoom ?? Math.max(map.getZoom(), 12),
+      padding: paddingRef.current,
+    })
+  }, [ready, flyToReq])
 
   // 半径サークル：選択駅＋半径で再描画
   useEffect(() => {

@@ -6,7 +6,7 @@
  * タブは 5 カテゴリ（乗降・人口・地価・バス・事業所）を実装。半径依存タブは集計半径セレクタを表示。
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Drawer } from 'vaul'
 import { type Panel } from '@/shared/protocol'
 import { type StationDetail } from '@/shared/api'
@@ -22,6 +22,7 @@ import {
 } from '@/domain/stations/panels'
 import { isRadiusDependentCategory } from '@/domain/metrics'
 import { useMapUrlState } from '@/components/map/useMapUrlState'
+import { useChatStore } from '@/stores/chatStore'
 import { useStationDetail } from '@/components/detail/useStationDetail'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { PanelRenderer, PanelStack } from '@/components/panels/PanelRenderer'
@@ -212,9 +213,23 @@ export function StationDetailPanel() {
   const { detail, isLoading, error } = useStationDetail(grp)
   const [tab, setTab] = useState<Category>('passenger')
 
-  // 駅が変わったら乗降タブに戻す
+  // チャットの ⤢ 昇格が焦点タブを要求していれば、その1回だけ反映（無ければ乗降）。
+  const requestedCategory = useChatStore((state) => state.requestedCategory)
+  const setRequestedCategory = useChatStore((state) => state.setRequestedCategory)
+  const requestedRef = useRef(requestedCategory)
+  requestedRef.current = requestedCategory
+
+  // ⤢ 昇格が焦点タブを要求したら、選択駅が同じ（ドロワー既開）でもそのタブへ切替え、要求は消費する
   useEffect(() => {
-    setTab('passenger')
+    if (requestedCategory !== null) {
+      setTab(requestedCategory)
+      setRequestedCategory(null)
+    }
+  }, [requestedCategory, setRequestedCategory])
+
+  // 駅が変わったら乗降タブへ戻す（ただし焦点要求が保留中なら上の効果を優先）
+  useEffect(() => {
+    if (requestedRef.current === null) setTab('passenger')
   }, [grp])
 
   const open = grp !== null

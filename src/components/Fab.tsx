@@ -2,6 +2,8 @@
 
 import { type ReactNode, useState } from 'react'
 import dynamic from 'next/dynamic'
+import { useChatStore } from '@/stores/chatStore'
+import { useIsDesktop } from '@/hooks/useIsDesktop'
 
 // 初期バンドルから外す：ダイアログ（散布は Chart.js を含む）は初回オープンまで読み込まない。
 const RankingDialog = dynamic(() => import('./ranking/RankingDialog').then((m) => m.RankingDialog))
@@ -72,9 +74,16 @@ export function Fab() {
   // 一度開いたら以後もマウントし続ける（初回のみチャンク取得・状態は保持）。
   const [rankingSeen, setRankingSeen] = useState(false)
   const [scatterSeen, setScatterSeen] = useState(false)
+  // デスクトップでチャットを開くと FAB が左パネルに隠れるため右へ寄せる。
+  const chatOpen = useChatStore((state) => state.open)
+  const isDesktop = useIsDesktop()
+  const shifted = isDesktop && chatOpen
   return (
     <>
-      <div className="pointer-events-auto absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 gap-2 sm:left-4 sm:translate-x-0">
+      <div
+        style={shifted ? { left: 420 } : undefined}
+        className="pointer-events-auto absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 gap-2 transition-[left] duration-300 sm:left-4 sm:translate-x-0"
+      >
         <FabButton
           icon={<TrophyIcon />}
           label="ランキング"

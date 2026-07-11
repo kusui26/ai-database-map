@@ -1,0 +1,252 @@
+'use client'
+
+/**
+ * 左併設チャットパネル（plan_fable §2.4「AIインタラクション UI」・ルール①〜⑤）。
+ * デスクトップ＝左サイドパネル（開閉・地図は常に可視）／モバイル＝vaul ボトムシート（半分⇔全画面）。
+ * useChat で /api/chat をストリーミング。data-map の mapActions は onData で **即時**地図へ反映。
+ * パネルは既存部品でインライン描画し、⤢ でクリックUIと同じ場所へ昇格する。
+ */
+
+import { useMemo, useState } from 'react'
+import { DefaultChatTransport } from 'ai'
+import { useChat } from '@ai-sdk/react'
+import { Drawer } from 'vaul'
+import { mapResponseSchema } from '@/shared/protocol'
+import { cn } from '@/lib/utils'
+import { useIsDesktop } from '@/hooks/useIsDesktop'
+import { useMapUrlState } from '@/components/map/useMapUrlState'
+import { useMapStore } from '@/stores/mapStore'
+import { useChatStore } from '@/stores/chatStore'
+import { type ChatUIMessage } from './types'
+import { ChatMessage } from './ChatMessage'
+import { SuggestionChips } from './SuggestionChips'
+import { useApplyMapActions } from './useApplyMapActions'
+
+/** 入力の最大文字数（サーバ /api/chat の 500 字上限に合わせる）。 */
+const MAX_INPUT_CHARS = 500
+
+function SparkleIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-4" fill="currentColor" aria-hidden>
+      <path d="M12 2l1.9 5.1L19 9l-5.1 1.9L12 16l-1.9-5.1L5 9l5.1-1.9L12 2Z" />
+      <path d="M19 14l.9 2.1L22 17l-2.1.9L19 20l-.9-2.1L16 17l2.1-.9L19 14Z" />
+    </svg>
+  )
+}
+
+function Thread({ messages, busy }: { messages: readonly ChatUIMessage[]; busy: boolean }) {
+  return (
+    <div className="flex flex-col gap-3">
+      {messages.map((message) => (
+        <ChatMessage key={message.id} message={message} />
+      ))}
+      {busy && (
+        <div className="mr-auto flex items-center gap-1.5 rounded-2xl bg-white px-3 py-2.5 ring-1 ring-slate-200">
+          <span className="size-1.5 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.2s]" />
+          <span className="size-1.5 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.1s]" />
+          <span className="size-1.5 animate-bounce rounded-full bg-slate-400" />
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** チャットの中身（デスクトップ／モバイル共通）。 */
+function ChatBody() {
+  const { setGrp } = useMapUrlState()
+  const setHighlightedGrps = useMapStore((state) => state.setHighlightedGrps)
+  const closeChat = useChatStore((state) => state.setOpen)
+  const applyMapActions = useApplyMapActions()
+
+  const transport = useMemo(() => new DefaultChatTransport<ChatUIMessage>({ api: '/api/chat' }), [])
+  const { messages, sendMessage, status, stop, error, setMessages } = useChat<ChatUIMessage>({
+    transport,
+    onData: (part) => {
+      // data-map は送信前にサーバで検証済みだが、クライアントでも parse して型を確定させる。
+      if (part.type === 'data-map') applyMapActions(mapResponseSchema.parse(part.data))
+    },
+  })
+
+  const [input, setInput] = useState('')
+  const busy = status === 'submitted' || status === 'streaming'
+
+  const send = (text: string): void => {
+    const trimmed = text.trim()
+    if (trimmed.length === 0 || trimmed.length > MAX_INPUT_CHARS || busy) return
+    void sendMessage({ text: trimmed })
+    setInput('')
+  }
+
+  const resetMap = (): void => {
+    void setGrp(null)
+    setHighlightedGrps([])
+  }
+
+  const hasMessages = messages.length > 0
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {/* ヘッダ */}
+      <header className="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
+        <div className="flex items-center gap-1.5 font-semibold text-slate-900">
+          <span className="text-indigo-600">
+            <SparkleIcon />
+          </span>
+          AI チャット
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={resetMap}
+            className="rounded-lg px-2 py-1 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+            title="地図の選択・ハイライトを消す"
+          >
+            地図をリセット
+          </button>
+          <button
+            type="button"
+            onClick={() => closeChat(false)}
+            aria-label="チャットを閉じる"
+            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              className="size-5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      {/* スレッド */}
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+        {!hasMessages ? (
+          <div className="mt-2 space-y-3 px-1">
+            <p className="text-sm leading-relaxed text-slate-500">
+              駅のデータについて日本語で質問できます。地図とグラフで答えます。
+            </p>
+          </div>
+        ) : (
+          <Thread messages={messages} busy={busy} />
+        )}
+        {error !== undefined && (
+          <div className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-700 ring-1 ring-amber-200">
+            {error.message.includes('429') || error.message.includes('多す')
+              ? 'リクエストが集中しています。少し時間をおいて再度お試しください。'
+              : '応答の取得に失敗しました。時間をおいて再度お試しください。'}
+          </div>
+        )}
+      </div>
+
+      {/* サジェスト＋入力 */}
+      <div className="space-y-2 border-t border-slate-100 px-3 py-3">
+        {(!hasMessages || !busy) && <SuggestionChips hasMessages={hasMessages} onPick={send} />}
+        {hasMessages && (
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => setMessages([])}
+              className="text-xs text-slate-400 transition-colors hover:text-slate-600"
+            >
+              会話をクリア
+            </button>
+          </div>
+        )}
+        <form
+          onSubmit={(event) => {
+            event.preventDefault()
+            send(input)
+          }}
+          className="flex items-end gap-2"
+        >
+          <textarea
+            value={input}
+            onChange={(event) => setInput(event.target.value.slice(0, MAX_INPUT_CHARS))}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault()
+                send(input)
+              }
+            }}
+            rows={1}
+            placeholder="質問を入力…（例：新宿駅の地価は？）"
+            aria-label="チャット入力"
+            className="max-h-32 min-h-[2.5rem] flex-1 resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+          />
+          {busy ? (
+            <button
+              type="button"
+              onClick={stop}
+              aria-label="生成を停止"
+              className="grid size-10 shrink-0 place-items-center rounded-xl bg-slate-200 text-slate-600 transition-colors hover:bg-slate-300"
+            >
+              <span className="size-3 rounded-sm bg-slate-600" />
+            </button>
+          ) : (
+            <button
+              type="submit"
+              disabled={input.trim().length === 0}
+              aria-label="送信"
+              className="grid size-10 shrink-0 place-items-center rounded-xl bg-indigo-600 text-white transition-colors hover:bg-indigo-700 disabled:opacity-40"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                className="size-5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="M12 19V5M5 12l7-7 7 7" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          )}
+        </form>
+      </div>
+    </div>
+  )
+}
+
+export function ChatPanel() {
+  const isDesktop = useIsDesktop()
+  const open = useChatStore((state) => state.open)
+  const setOpen = useChatStore((state) => state.setOpen)
+  const [snap, setSnap] = useState<number | string | null>(0.5)
+
+  if (isDesktop) {
+    return (
+      <aside
+        aria-hidden={!open}
+        aria-label="AI チャット"
+        className={cn(
+          'absolute top-20 bottom-3 left-3 z-30 flex w-[min(400px,calc(100%-1.5rem))] flex-col overflow-hidden rounded-2xl bg-white/95 shadow-2xl ring-1 ring-slate-200 backdrop-blur transition-[transform,opacity] duration-300 ease-out',
+          open ? 'translate-x-0 opacity-100' : 'pointer-events-none -translate-x-[120%] opacity-0',
+        )}
+      >
+        <ChatBody />
+      </aside>
+    )
+  }
+
+  return (
+    <Drawer.Root
+      open={open}
+      onOpenChange={(next) => setOpen(next)}
+      snapPoints={[0.5, 0.92]}
+      activeSnapPoint={snap}
+      setActiveSnapPoint={setSnap}
+      modal={false}
+    >
+      <Drawer.Portal>
+        <Drawer.Content className="fixed inset-x-0 bottom-0 z-30 flex h-[92vh] flex-col rounded-t-2xl bg-white outline-none">
+          <div className="mx-auto mt-3 mb-1 h-1.5 w-10 shrink-0 rounded-full bg-slate-300" />
+          <Drawer.Title className="sr-only">AI チャット</Drawer.Title>
+          <ChatBody />
+        </Drawer.Content>
+      </Drawer.Portal>
+    </Drawer.Root>
+  )
+}

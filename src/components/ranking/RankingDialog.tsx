@@ -19,19 +19,32 @@ import { useRanking } from './useRanking'
 
 const DEFAULT_CATEGORY: Category = getEntry(DEFAULT_RANKING_KEY)?.category ?? 'population'
 
+/** チャットからの昇格で初期指標・条件を preset する（未指定は既定）。 */
+export type RankingInitial = {
+  readonly metricKey: string
+  readonly prefectures: readonly string[]
+  readonly order: Order
+  readonly excludeLowN: boolean
+}
+
 export function RankingDialog({
   open,
   onOpenChange,
+  initial,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
+  initial?: RankingInitial
 }) {
   const { setGrp } = useMapUrlState()
-  const [category, setCategory] = useState<Category>(DEFAULT_CATEGORY)
-  const [metricKey, setMetricKey] = useState<string>(DEFAULT_RANKING_KEY)
-  const [prefectures, setPrefectures] = useState<string[]>([])
-  const [order, setOrder] = useState<Order>('desc')
-  const [excludeLowN, setExcludeLowN] = useState<boolean>(false)
+  const initialKey = initial?.metricKey ?? DEFAULT_RANKING_KEY
+  const [category, setCategory] = useState<Category>(
+    getEntry(initialKey)?.category ?? DEFAULT_CATEGORY,
+  )
+  const [metricKey, setMetricKey] = useState<string>(initialKey)
+  const [prefectures, setPrefectures] = useState<string[]>(initial ? [...initial.prefectures] : [])
+  const [order, setOrder] = useState<Order>(initial?.order ?? 'desc')
+  const [excludeLowN, setExcludeLowN] = useState<boolean>(initial?.excludeLowN ?? false)
 
   const { ranking, total, isLoading, isLoadingMore, canLoadMore, loadMore, error } = useRanking(
     metricKey,
@@ -68,7 +81,13 @@ export function RankingDialog({
               aria-label="閉じる"
               className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
             >
-              <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg
+                viewBox="0 0 24 24"
+                className="size-5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
                 <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
               </svg>
             </Dialog.Close>

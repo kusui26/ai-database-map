@@ -10,7 +10,7 @@ import { useMapUrlState } from '@/components/map/useMapUrlState'
 import { type ChatUIMessage } from './types'
 import { buildPanelGroups, toolCallsOf } from './panelGroups'
 import { InlineCard } from './InlineCard'
-import { linkifyStations } from './linkifyStations'
+import { RichText } from './richText'
 
 type Part = ChatUIMessage['parts'][number]
 
@@ -66,7 +66,7 @@ export function ChatMessage({ message }: { message: ChatUIMessage }) {
     <div className="mr-auto max-w-full space-y-2">
       {text.length > 0 && (
         <div className="rounded-2xl rounded-bl-sm bg-white px-3 py-2 text-sm leading-relaxed text-slate-700 ring-1 ring-slate-200">
-          {linkifyStations(text, dict, (grp) => void setGrp(grp))}
+          <RichText text={text} nameToGrp={dict} onSelect={(grp) => void setGrp(grp)} />
         </div>
       )}
       {groups.map((group, index) => (

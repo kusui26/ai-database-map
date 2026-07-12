@@ -10,21 +10,23 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { type LanguageModel } from 'ai'
 
 /**
- * 既定モデル（Gemini Flash 系・architecture.md §10.2）。env `GEMINI_MODEL` で上書き可能。
- * 2026-07 時点、plan_fable が主モデルとした `gemini-2.5-flash` は**新規 API ユーザーに提供終了**
- * （generateContent が 404）。安定運用のため、Google が現行 Flash に追随させるエイリアス
- * `gemini-flash-latest`（function calling 対応・日本語良好・実測で多段ツール利用が成功）を既定にする。
- * 採用モデル（固定バージョン）の最終確定は P8c の eval（コスト×tool-use 精度）で行う。
+ * 既定モデル（Gemini Flash 系・architecture.md §10.2/§10.7）。env `GEMINI_MODEL` で上書き可能。
+ *
+ * 2026-07 の無料枠実測（docs/p8c_eval_report.md §2）で、`gemini-2.5-flash` は新規非対応（404）、
+ * `gemini-flash-latest`（＝3.5-flash）は **20 req/日**で無料運用に耐えない、と判明。
+ * P8c の eval（ゴールデン20問）で **`gemini-flash-lite-latest` が 20/20 合格・高速（~3s）・残枠あり**
+ * だったため、**無料デプロイの既定に採用**する。品質重視/本番は有料枠 or Vertex の
+ * `gemini-flash-latest`（または `gemini-3-flash-preview`）へ `GEMINI_MODEL` で差し替える。
  */
-export const DEFAULT_CHAT_MODEL = 'gemini-flash-latest'
+export const DEFAULT_CHAT_MODEL = 'gemini-flash-lite-latest'
 
 /** ツールループの最大ステップ数（検索→詳細→…の多段呼び出し上限・plan_fable P8a）。 */
 export const MAX_TOOL_STEPS = 6
 
 /**
- * 1 リクエストの上限時間（ミリ秒・アプリ側 AbortSignal）。
- * plan_fable P8a は 30s を掲げるが、主モデル差し替え後の実測で「検索→詳細→本文」の 3 段クエリは
- * 現行 Gemini 負荷下で 30–35s を要する。graceful abort させるため 45s とし、関数上限(60s)より短くする。
+ * 1 リクエストの上限時間（ミリ秒・アプリ側 AbortSignal）。既定の flash-lite は多段でも ~3s だが、
+ * 上位モデル（`gemini-flash-latest` 等）は 3 段クエリで 30–35s を要しうる。両対応で 45s とし、
+ * graceful abort させる（Vercel 関数上限 60s より短く）。plan_fable P8a の 30s から実測で調整。
  */
 export const CHAT_TIMEOUT_MS = 45_000
 

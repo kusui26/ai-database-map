@@ -123,27 +123,19 @@ function addLayers(map: maplibregl.Map): void {
     },
   })
 
-  // ハイライト（チャットのランキング上位など・複数駅を枠で示す・フィルタで切替）
+  // ハイライト（チャットのランキング上位など・複数駅を枠で示す）。
+  // クラスタ源とは別の**非クラスタ源**から描くので、全国（低ズーム＝駅がクラスタに吸収される）でも枠が消えない。
   map.addLayer({
     id: 'stations-highlight',
     type: 'circle',
-    source: 'stations',
-    filter: ['in', ['get', 'grp'], ['literal', []]],
+    source: 'highlight',
     paint: {
       'circle-color': ACCENT_COLOR,
-      'circle-opacity': 0.12,
-      'circle-radius': [
-        'interpolate',
-        ['linear'],
-        ['sqrt', ['coalesce', ['get', 'pax'], 1]],
-        0,
-        6,
-        1700,
-        20,
-      ],
+      'circle-opacity': 0.14,
+      'circle-radius': 9,
       'circle-stroke-color': ACCENT_COLOR,
-      'circle-stroke-width': 2,
-      'circle-stroke-opacity': 0.9,
+      'circle-stroke-width': 2.5,
+      'circle-stroke-opacity': 0.95,
     },
   })
 
@@ -262,6 +254,9 @@ export function MapView() {
     flyPadding(isDesktop, chatOpen, grp !== null),
   )
   paddingRef.current = flyPadding(isDesktop, chatOpen, grp !== null)
+  // ハイライト効果内で「選択駅の有無」を参照するための ref（grp 変化で効果を再走させない）。
+  const grpRef = useRef(grp)
+  grpRef.current = grp
 
   useEffect(() => {
     const container = containerRef.current
@@ -292,6 +287,7 @@ export function MapView() {
           clusterRadius: 48,
         })
         map.addSource('radius', { type: 'geojson', data: EMPTY_FC })
+        map.addSource('highlight', { type: 'geojson', data: EMPTY_FC }) // 非クラスタ（ハイライト専用）
         addLayers(map)
         addHandlers(map, setGrpRef, setHoveredRef)
         setReady(true)
@@ -322,11 +318,29 @@ export function MapView() {
     }
   }, [ready, grp])
 
-  // ハイライト：チャットの highlightStations（複数駅を枠で示す）
+  // ハイライト：非クラスタ源に点を流し込み（全国でも枠が見える）＋その範囲へフィット
   useEffect(() => {
     const map = mapRef.current
     if (!ready || map === null) return
-    map.setFilter('stations-highlight', ['in', ['get', 'grp'], ['literal', [...highlightedGrps]]])
+    const source = map.getSource<maplibregl.GeoJSONSource>('highlight')
+    if (source === undefined) return
+    const bounds = new maplibregl.LngLatBounds()
+    const features: FeatureCollection['features'] = []
+    for (const grp of highlightedGrps) {
+      const coord = coordsRef.current.get(grp)
+      if (coord === undefined) continue
+      features.push({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [coord.lon, coord.lat] },
+        properties: { grp, name: coord.name },
+      })
+      bounds.extend([coord.lon, coord.lat])
+    }
+    source.setData({ type: 'FeatureCollection', features })
+    // 選択駅がある場合はその flyTo にカメラを任せる（二重のカメラ操作を避ける）。
+    if (features.length > 0 && grpRef.current === null) {
+      map.fitBounds(bounds, { padding: paddingRef.current, maxZoom: 12, duration: 800 })
+    }
   }, [ready, highlightedGrps])
 
   // 任意 flyTo：チャットの flyTo（駅選択を伴わない移動・seq で再実行）

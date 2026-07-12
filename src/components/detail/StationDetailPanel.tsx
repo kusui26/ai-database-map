@@ -253,6 +253,8 @@ export function StationDetailPanel() {
   if (isDesktop) {
     return (
       <aside
+        // 閉じている間はフォーカスを内部へ入れない（body は閉じアニメのため残すが tab/a11y 順から外す）。
+        inert={!open}
         aria-hidden={!open}
         className={cn(
           'pointer-events-auto absolute top-20 right-3 bottom-3 z-30 flex w-[min(380px,calc(100%-1.5rem))] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200 transition-[transform,opacity] duration-300 ease-out',

@@ -99,13 +99,33 @@ export function variantsForBaseMetric(baseMetric: string): VariantDigest[] {
   )
 }
 
+/** getMetricsCatalog の返却（判別可能な 3 形）。 */
+export type MetricsCatalogDigest =
+  | {
+      readonly baseMetric: string
+      readonly labelJa: string
+      readonly variantCount: number
+      readonly variants: VariantDigest[]
+    }
+  | CategoryDigest
+  | {
+      readonly categories: {
+        readonly category: Category
+        readonly labelJa: string
+        readonly baseMetrics: { readonly baseMetric: string; readonly labelJa: string }[]
+      }[]
+    }
+
 /**
  * getMetricsCatalog ツールの返却本体。
  * - baseMetric 指定：その変種の正確なキー一覧（ランキング/散布にそのまま渡せる）。
  * - category 指定：その配下の baseMetric 一覧（次に baseMetric で絞り込む）。
  * - 無指定：カテゴリ一覧。
  */
-export function metricsCatalogDigest(input: { category?: Category; baseMetric?: string }): unknown {
+export function metricsCatalogDigest(input: {
+  category?: Category
+  baseMetric?: string
+}): MetricsCatalogDigest {
   if (input.baseMetric !== undefined) {
     const variants = variantsForBaseMetric(input.baseMetric)
     return {

@@ -26,9 +26,19 @@ export type RateLimitResult = {
   readonly retryAfterMs: number
 }
 
+/** store がこの件数を超えたら期限切れエントリを一掃する（インメモリの無制限増加を防ぐ）。 */
+const SWEEP_THRESHOLD = 10_000
+
+function sweepExpired(now: number): void {
+  for (const [key, bucket] of store) {
+    if (now >= bucket.resetAt) store.delete(key)
+  }
+}
+
 /** 固定窓でのレート判定（純粋・`now` 注入）。窓を跨いだらリセット。 */
 export function checkRateLimit(key: string, options: RateLimitOptions): RateLimitResult {
   const { limit, windowMs, now } = options
+  if (store.size > SWEEP_THRESHOLD) sweepExpired(now) // 期限切れの掃除（メモリリーク防止）
   const bucket = store.get(key)
   if (bucket === undefined || now >= bucket.resetAt) {
     store.set(key, { count: 1, resetAt: now + windowMs })

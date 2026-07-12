@@ -9,8 +9,8 @@ import { useMapUrlState } from '@/components/map/useMapUrlState'
 
 const INITIAL: readonly string[] = [
   '東京駅の人口推移を見せて',
-  '神奈川県で乗降客の回復が大きい駅は？',
-  '尼崎駅について教えて',
+  '神奈川県の乗降客の増加が大きい駅は？',
+  '品川駅について教えて',
 ]
 
 const AFTER_STATION: readonly string[] = [

@@ -129,7 +129,7 @@ function ChatBody() {
         {!hasMessages ? (
           <div className="mt-2 space-y-3 px-1">
             <p className="text-sm leading-relaxed text-slate-500">
-              駅のデータについて日本語で質問できます。地図とグラフで答えます。
+              駅周辺のデータについて質問してください。
             </p>
           </div>
         ) : (

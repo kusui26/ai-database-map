@@ -36,8 +36,9 @@ Step1（アプリ公開）→ Step2（AIネイティブ化）を **Claude Code �
 | **P8a** | AI ツール表面 | catalog→tool 自動生成・AI SDK+Gemini・`/api/chat` | Step1 | 1回 |
 | **P8b** | チャット UI | **左併設チャット＋インラインカード**・Protocol レンダラ（P5/P6 部品を再利用） | P8a | 1回 |
 | **P8c** | 評価・強化 | ゴールデン20問 eval・プロンプト調整・(任意)GraphAI PoC | P8b | 1回 |
+| **P8d** | チャットUX改善 | 既定オープン・空状態文言・サジェスト文言（本番運用の磨き込み） | P8b | 1回 |
 
-**合計目安**：Step1 = 21ブロック（P5d/P5e は 2026-07-08・P5f/P6c/P6d は 2026-07-09 のユーザー要望で追加）、Step2 = 3ブロック。
+**合計目安**：Step1 = 21ブロック（P5d/P5e は 2026-07-08・P5f/P6c/P6d は 2026-07-09 のユーザー要望で追加）、Step2 = 4ブロック（P8d は 2026-07-13 のユーザー要望で追加）。
 
 ### 0.2 依存関係（クリティカルパス）
 
@@ -527,6 +528,23 @@ MapResponse = { messages: {role,text}[], mapActions: MapAction[], panels: Panel[
 - **受け入れ基準**：eval 合格 ≥ 16/20／拒否すべき質問（例「来年の地価を予言して」）を正しく拒否／判断結果を architecture.md §10 に追記。
 - **依頼例**：「P8c 評価を実施。eval 結果と改善案を見せて」
 
+### P8d — チャットUX改善（既定オープン・空状態文言・サジェスト文言）
+> **由来**：2026-07-13 ユーザー要望（本番デプロイ後の運用磨き込み）。機能追加はなく既存チャット UI の文言・初期状態の調整（**純加算＝UI/store のみ・domain/protocol/API/db は無改変**）。
+- **前提**：P8b（チャット UI）。
+- **作業**：
+  1. **チャットを既定でオープン（デスクトップのみ・案B 確定）**：`chatStore` の初期 `open` は `false` のまま、`MapShell` の初回マウント時に `matchMedia('(min-width:640px)')` で判定し、**デスクトップ幅なら一度だけ `setOpen(true)`**。**モバイルは既定クローズ**（✦AI・⌘K で開く）。→ モバイルは `chatSeen` の遅延ロード（`ChatPanel`＝`@ai-sdk/react` を初回タップまで非読込）を維持でき **LCP に影響なし**、デスクトップは初回に `ChatPanel` をマウント（desktop Perf 98 に余裕）。
+  2. **空状態メッセージの差し替え**：`ChatPanel`（`ChatBody` の未会話時テキスト）を「駅のデータについて日本語で質問できます。地図とグラフで答えます。」→ **「駅周辺のデータについて質問してください。」**。
+  3. **サジェスト文言の差し替え**：`src/components/chat/SuggestionChips.tsx` の初回サジェスト `INITIAL` を更新——
+     - 「神奈川県で乗降客の回復が大きい駅は？」→ **「神奈川県の乗降客の増加が大きい駅は？」**
+     - 「尼崎駅について教えて」→ **「品川駅について教えて」**
+     - （「東京駅の人口推移を見せて」は据え置き）
+- **設計判断（確定）**：
+  - **モバイルは既定クローズ（案B・ユーザー確定 2026-07-13）**：モバイルはボトムシート。既定オープンだと読み込み時に上スナップで開き**地図の初見が隠れる**ため、**デスクトップのみ既定オープン／モバイルは既定クローズ**とする。副次効果として、モバイルは `ChatPanel` の遅延ロードを維持でき **P7a の mobile LCP（現状 78・地図キャンバス LCP が律速）に影響なし**。デスクトップは初回に `ChatPanel`（`@ai-sdk/react`）を読み込むが desktop Perf 98 に余裕。dynamic import（SSR 無効の別チャンク）は維持。
+  - **既定オープンの永続化はしない**：初回ロードでデスクトップなら開くだけ（毎回開く・localStorage 永続はしない）。将来、開閉の好みを保存する拡張余地あり。
+  - **文言の意味づけ**：「回復」→「増加」でサジェストが想起させる指標が変わる（回復＝コロナ前後比 rate_covid／増加＝前年比 rate_yoy 等）が、LLM はツールで正確キーを解決するため問題なし。**eval のケース `rank-covid-kanagawa`（"回復"）は別物なので変更しない**（回帰防止）。「尼崎」→「品川」で同名駅デモは外れるが、**曖昧駅名の網羅は eval（尼崎・上道）で担保済み**。
+- **受け入れ基準**：**デスクトップはアクセス時にチャットが開いている**（左併設・地図は右に可視）／**モバイルは既定クローズ**（✦AI・⌘K で開く・地図の初見が見える）／空状態の文言が「駅周辺のデータについて質問してください。」／初回サジェストが「東京駅の人口推移を見せて」「神奈川県の乗降客の増加が大きい駅は？」「品川駅について教えて」の3つ／開閉（✦AI・⌘K）・⤢昇格・mapActions・レート制限は不変／console error 0・typecheck/lint/build 緑・モバイル LCP 非悪化をヘッドレスで確認。
+- **依頼例**：「P8d を実施」
+
 ---
 
 ## 6. 並行トラック（クリティカルパス外）
@@ -599,6 +617,7 @@ MapResponse = { messages: {role,text}[], mapActions: MapAction[], panels: Panel[
 | **P8a** | ✅ 完了 | 2026-07-11 | AI ツール表面＋チャット API（**Step2 の中核・純加算**）。`src/ai`：`tools.ts`（**catalog 駆動の 5 ツール**＝searchStations/getStationDetail/rankStations/compareGrowth/getMetricsCatalog・**既存 db クエリ＋domain プレゼンタを直呼び**＝HTTP を挟まない）／`client.ts`（`@ai-sdk/google` provider 抽象・env `GEMINI_MODEL` 切替）／`system-prompt.ts`（役割＋**カタログ駆動の要約**＋「データにない事は言わない」）／`assemble.ts`（**ツール副産物→既存 Panel ビルダで MapResponse を決定的に組立**＝LLM はパネル/数値を生成しない＝幻覚しない・Zod 100% 通過）／`catalog-digest.ts`／`rate-limit.ts`（簡易 IP・固定窓）。`POST /api/chat`：**AI SDK v6 `ToolLoopAgent`＋`stepCountIs(6)`** でストリーミング→`createUIMessageStream` で text/tool を即時送出→最終 `mapResponseSchema.parse(assemble())` を **data-map** パートで送出。ガード：IP レート制限・入力 500 字上限・**45s タイムアウト**（graceful abort・関数上限 60s）・鍵未設定は 503・エラー封筒。**ライブラリ**：`ai@6`（v6 ライン固定・v5→v6 破壊的変更回避）＋`@ai-sdk/google@3`。**モデル**：plan の `gemini-2.5-flash` は 2026-07 時点で新規 API ユーザーに提供終了（404）→ 既定を **`gemini-flash-latest`** に（env 上書き可・固定版は P8c eval）。**単体テスト**：assemble/catalog-digest/rate-limit を純関数で（**+23＝計 122 緑**・MapResponse が必ず Zod を通ることを担保）。**ライブ 5 問 SSE 疎通**（実 Gemini＋Supabase・`tests/chat-smoke.test.ts`・通常 test はスキップ）：①東京駅の人口推移＝search→detail・trendChart・実データ回答／②神奈川県で乗降回復 Top5＝**getMetricsCatalog→rankStations**・rankingTable・「ゆめが丘+229.8%…」／③尼崎の曖昧駅名＝JR/阪神を**2駅**区別表示／⑤天気（データ外）＝データパネルを出さず丁寧に拒否——**すべて data-map が Zod 100% 通過**（③④の複数駅機構は③で実証）。連投時の失敗は Gemini 無料枠 5 req/分の 429 のみ（コード非欠陥・throttle で回避）。**純加算を git で確認**：`src/domain`・`src/shared/protocol`・既存 API・`src/db` に diff 0。typecheck/lint/build 緑 |
 | **P8b** | ✅ 完了 | 2026-07-12 | チャット UI（左併設＋インラインカード＋Protocol レンダラ・§2.4 ルール①〜⑤）。**`@ai-sdk/react`（v6ライン=3.x）の `useChat`** で `/api/chat` をストリーミング。**`src/components/chat`**：`ChatPanel`（デスクトップ=左サイドパネル開閉／モバイル=vaul ボトムシート**半分⇔全画面2スナップ**〔数値 snapPoints で地図を上に可視〕・入力500字・停止・エラーUI・**会話クリア**）／`ChatMessage`（本文＋既存 `PanelStack` で **compact インライン描画**＝新規描画コードなし）／`InlineCard`（効果グループ＋⤢）／`panelGroups`（Panel[] を効果グループへ束ね、**ツール入力と内容照合**して⤢昇格の実パラメータ〔都道府県・順序・x/yキー等〕を復元・純関数）／`useApplyMapActions`（`onData` で **data-map の mapActions を即時**：selectStation→?grp／highlight／flyTo／clearOverlays）／`usePromote`（駅詳細→右ドロワー〔?grp＋焦点タブ〕・ランキング/散布→モーダル）／`PromotionHost`（ダイアログを preset で開く）／`linkifyStations`（本文の既知駅名をクリック可能チップ化）／`SuggestionChips`（初回3＋文脈追従）。**既存の無改変拡張**：`MapView`（highlightStations 層・任意 flyTo・**チャット/ドロワー幅を避ける flyTo padding**）／`RankingDialog`・`ScatterDialog`（optional `initial` で preset・後方互換）／`StationDetailPanel`（⤢の焦点タブ）／`PanelRenderer`（optional `onSelect`）／`AppHeader`（✦AI＋⌘K）／`Fab`（チャット開で右へ）。**ヘッドレス検証（Playwright・実 Gemini）**：チャット開閉/⌘K・「東京駅の人口推移」で **search→detail が同一部品でインライン描画・selectStation で ?grp＋flyTo（padding 補正）・駅名チップ・⤢で右ドロワーが人口タブに昇格（同 populationPanels の full 版）**／「神奈川県で乗降回復 Top5」で **rankingTable インライン・⤢でランキングモーダルが神奈川県 preset・324件ページング**／モバイル半分スナップで地図可視——**全 PASS・console error 0**。**純加算**：`domain`・`shared/protocol`・既存 API・`src/db`・`src/ai`(P8a) に diff 0。単体テスト +7（panelGroups＝計 129 緑）。typecheck/lint/build 緑 |
 | **P8c** | ✅ 完了 | 2026-07-12 | 評価・強化（Step2 最終）。**eval ハーネス**：`src/ai/eval/cases.ts`（ゴールデン**20問**＝駅詳細6・ランキング4・散布2・比較1・曖昧駅名2・カタログ2・データ外拒否3）＋`score.ts`（純関数採点＝期待ツール列〔入力部分一致〕/パネル型/選択/拒否/要点文字列・単体テスト）＋`tests/chat-eval.test.ts`（実 /api/chat に SSE で採点・`EVAL=1` 実行・無料枠 throttle）。**eval 20/20 合格**（閾値16・各問で正しいツール列＋MapResponse が Zod 通過＋拒否3問はデータパネル無し）。**モデル判断（確定）**：無料枠実測で `gemini-2.5-flash`=404・`gemini-flash-latest`=**20 req/日**で不足→**無料既定を `gemini-flash-lite-latest`**（20/20・高速~3s・残枠あり）に変更、本番/品質は有料枠/Vertex の flash-latest/3-flash-preview（`GEMINI_MODEL` 切替）。**GraphAI**：20問が AI SDK v6 単体で完結→不採用（並列fan-outで再評価）。レポート `docs/p8c_eval_report.md`。**P8a/P8b レビュー起点ブラッシュアップ**（2レビューエージェント＋自己レビュー）：プロンプト簡潔化・markdown抑制・都道府県厳格化・`searchStations` トークン削減・**429/エラー UX**（`toUIMessageStream` に onError／`result.text` 握り／`maxRetries:1`）・履歴文字数上限・レート制限 x-real-ip 優先＋掃除・**本文リッチテキスト描画**・**IME 変換中 Enter 誤送信防止**・閉パネル `inert`（チャット＋駅詳細）・モバイル初期スナップで入力可視・**ランキングのハイライトを非クラスタ源で全国可視化**＋選択時 fitBounds 抑制・dead code 削除。純加算（domain/protocol/既存API/db 無改変）。typecheck/lint/build 緑・単体テスト +7（計 136）・ヘッドレス（Playwright）で inert/モバイルスナップ/リッチテキスト/全国ハイライトを実測 |
+| **P8d** | ✅ 完了 | 2026-07-13 | チャットUX改善（ユーザー要望・純加算＝UI/store のみ）。①チャットを**デスクトップのみ既定オープン・モバイルは既定クローズ**（案B）：`MapShell` の初回マウントで `matchMedia('(min-width:640px)')` を判定し一度だけ `setChatOpen(true)`。モバイルは `chatSeen` 遅延ロードを維持＝**mobile LCP 影響なし**。②空状態文言を「駅周辺のデータについて質問してください。」に。③初回サジェストを差替（「神奈川県の乗降客の**増加**が大きい駅は？」「**品川**駅について教えて」・「東京駅の人口推移を見せて」は据置）。**ヘッドレス実測**：デスクトップ既定オープン・新文言・新サジェスト（増加/品川・旧なし）／モバイル既定クローズ（地図の初見）＋✦AIで開く／console error 0。typecheck/lint/build 緑。domain/protocol/API/db 無改変 |
 
 ---
 

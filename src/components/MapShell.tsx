@@ -34,7 +34,15 @@ const PromotionHost = dynamic(
 /** アプリシェル：全面地図＋浮遊ヘッダ（ロゴ・検索・半径・✦AI）＋左下 FAB＋左チャット。 */
 export function MapShell() {
   const chatOpen = useChatStore((state) => state.open)
+  const setChatOpen = useChatStore((state) => state.setOpen)
   const [chatSeen, setChatSeen] = useState(false)
+
+  // 初回ロード時、デスクトップ幅ならチャットを既定オープン（P8d 案B）。
+  // モバイルは既定クローズ＝地図の初見を優先し、ChatPanel の遅延ロードを維持（mobile LCP に影響なし）。
+  useEffect(() => {
+    if (window.matchMedia('(min-width: 640px)').matches) setChatOpen(true)
+  }, [setChatOpen])
+
   useEffect(() => {
     if (chatOpen) setChatSeen(true)
   }, [chatOpen])

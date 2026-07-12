@@ -39,18 +39,37 @@ function resolveRadius(input: number | undefined): RadiusM {
   return found ?? DEFAULT_RADIUS_M
 }
 
-/** 都道府県名を正規化（"神奈川"→"神奈川県" 等・未知はそのまま）。 */
-function normalizePrefectures(input: readonly string[]): string[] {
-  return input.map((raw) => {
+/**
+ * 都道府県名を正規化する。厳密一致か「接尾辞（都/道/府/県）抜き」の一致のみ採用し（"神奈川"→"神奈川県"）、
+ * それ以外は unknown に集める（曖昧な部分一致で誤県に寄せない＝素通しして 0 件になる混乱を防ぐ）。
+ */
+function normalizePrefectures(input: readonly string[]): { names: string[]; unknown: string[] } {
+  const names: string[] = []
+  const unknown: string[] = []
+  for (const raw of input) {
     const trimmed = raw.trim()
+    if (trimmed.length === 0) continue
     const exact = PREFECTURES.find((pref) => pref.name === trimmed)
-    if (exact !== undefined) return exact.name
-    const partial = PREFECTURES.find(
-      (pref) =>
-        pref.name.startsWith(trimmed) || trimmed.startsWith(pref.name.replace(/[都道府県]$/, '')),
-    )
-    return partial?.name ?? trimmed
-  })
+    if (exact !== undefined) {
+      names.push(exact.name)
+      continue
+    }
+    const stripped = PREFECTURES.find((pref) => pref.name.replace(/[都道府県]$/, '') === trimmed)
+    if (stripped !== undefined) {
+      names.push(stripped.name)
+      continue
+    }
+    unknown.push(trimmed)
+  }
+  return { names, unknown }
+}
+
+/** 未知の都道府県に対する構造化エラー（LLM に正式名で再指定させる）。 */
+function unknownPrefectures(unknown: readonly string[]): { error: string; hint: string } {
+  return {
+    error: `未知の都道府県: ${unknown.join('・')}`,
+    hint: '都道府県は正式名（例「神奈川県」「東京都」）で指定してください。',
+  }
 }
 
 /** 未知の指標キーに対する構造化エラー（LLM が getMetricsCatalog で再解決するための手掛かり）。 */
@@ -78,6 +97,7 @@ export function createTools(collector: EffectCollector) {
       execute: async ({ query }) => {
         try {
           const results = await searchStations(query)
+          // LLM は grp を選ぶだけ（座標・詳細は getStationDetail 側で取得）＝返却は最小限に。
           return {
             count: results.length,
             candidates: results.slice(0, 8).map((station) => ({
@@ -85,8 +105,6 @@ export function createTools(collector: EffectCollector) {
               name: station.searchLabel ?? station.label,
               prefecture: station.prefecture,
               paxLatest: station.paxLatest,
-              lon: station.lon,
-              lat: station.lat,
             })),
           }
         } catch (error) {
@@ -157,7 +175,8 @@ export function createTools(collector: EffectCollector) {
       execute: async ({ metric, prefectures, order, limit, excludeLowN }) => {
         try {
           if (!isRankableKey(metric)) return unknownMetric(metric)
-          const prefs = normalizePrefectures(prefectures ?? [])
+          const { names: prefs, unknown } = normalizePrefectures(prefectures ?? [])
+          if (unknown.length > 0) return unknownPrefectures(unknown)
           const dir = order ?? 'desc'
           const lim = Math.min(Math.max(limit ?? DEFAULT_RANK_LIMIT, 1), MAX_RANK_LIMIT)
           const exclude = excludeLowN ?? false
@@ -198,7 +217,8 @@ export function createTools(collector: EffectCollector) {
         try {
           if (!isRankableKey(x)) return unknownMetric(x)
           if (!isRankableKey(y)) return unknownMetric(y)
-          const prefs = normalizePrefectures(prefectures ?? [])
+          const { names: prefs, unknown } = normalizePrefectures(prefectures ?? [])
+          if (unknown.length > 0) return unknownPrefectures(unknown)
           const exclude = excludeLowN ?? false
           const keys = [x, y]
           if (exclude) {

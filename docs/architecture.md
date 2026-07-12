@@ -224,10 +224,11 @@ Step1 の全ブロックが完了し、下記が実体として存在する。�
 | 品質 | typecheck / lint / test / build 緑。Lighthouse **mobile Perf 78・A11y 98**／**desktop Perf 98**（mobile Perf は地図キャンバス LCP が律速） |
 | デプロイ | Vercel（`main` マージで本番）＋ **Cron `0 3 * * *` → /api/health**（Supabase pause 対策） |
 
-**Step2（P8a・P8b 完了・純加算）**：
+**Step2（P8a・P8b・P8c 完了・純加算）＝Step2 DoD 達成**：
 - **P8a（2026-07-11）**：`src/ai`（§7.3）＝`tools`（catalog 駆動の 5 ツール・domain 直呼び）／`client`（`@ai-sdk/google` provider 抽象）／`system-prompt`／`assemble`（ツール結果→**既存 Panel ビルダで MapResponse を決定的に組立**＝§4 の同一描画パス・LLM は幻覚しない）／`catalog-digest`／`rate-limit`。`POST /api/chat`（**AI SDK v6 `ToolLoopAgent`**・`stepCountIs(6)`・SSE ストリーミング＋`data-map` パート・IP レート制限／入力 500 字／45s abort）。主 LLM は **Gemini Flash 系**（§10.2）だが `gemini-2.5-flash` は 2026-07 に新規非対応のため既定は `gemini-flash-latest`（env 切替可・固定版は P8c eval）。
 - **P8b（2026-07-12）**：`src/components/chat`＝`ChatPanel`（`@ai-sdk/react` の `useChat`・デスクトップ左併設／モバイル vaul 2スナップ）／`ChatMessage`＋`InlineCard`（**既存 PanelStack で compact インライン描画**）／`panelGroups`（⤢昇格パラメータをツール入力から復元）／`useApplyMapActions`（`onData` で mapActions を即時：selectStation→?grp・highlight・flyTo・clear）／`usePromote`＋`PromotionHost`（駅詳細→右ドロワー・ランキング/散布→既存モーダルを preset で）／`linkifyStations`／`SuggestionChips`。既存 UI は無改変拡張（`MapView` ハイライト層/flyTo/padding・ダイアログ preset・ヘッダ✦AI/⌘K）。→ **「クリックでも会話でも同じ場所に同じ部品」**（§4）をヘッドレスで実証（console error 0）。
-- **不変条件**：`src/domain`・`src/shared/protocol`・既存 API・`src/db` は P8a/P8b とも**無改変**。P8c（eval）は未着手。
+- **P8c（2026-07-12）**：評価・強化。`src/ai/eval`（`cases`＝ゴールデン20問／`score`＝純関数採点＋単体テスト）＋`tests/chat-eval.test.ts`（実 /api/chat に SSE で採点・`EVAL=1` で実行）。**eval 20/20 合格**。**モデル確定**（§10.7・[`p8c_eval_report.md`](./p8c_eval_report.md)）：無料既定を **`gemini-flash-lite-latest`**（`gemini-flash-latest` は無料 20 req/日で不足）に。P8a/P8b の**レビュー起点ブラッシュアップ**（プロンプト簡潔化・都道府県厳格化・429/エラー UX・IME 誤送信防止・`inert` a11y・本文リッチテキスト・ハイライト全国可視化 等）も同梱。
+- **不変条件**：`src/domain`・`src/shared/protocol`・既存 API・`src/db` は P8a/P8b/P8c とも**無改変**（純加算）。**Step2 DoD 達成**（会話がクリックと同じ描画パス・eval 合格・純加算）。
 
 ---
 
@@ -308,10 +309,11 @@ GraphAI（receptron・v2系・TypeScript・v2.0.18/2026）は **非同期デー�
 - `system-prompt.ts`：ドメイン説明＋カタログ＋GUI Chat Protocol 指示。
 - streaming：`app/api/chat` が Web Streams/SSE でトークンと Protocol を送出、`components/chat` が**構造化UIと同じ描画パス**で地図/グラフに反映（§4）。
 
-### 10.7 未決事項（PoC で確定）
-- 採用する Gemini Flash 系モデル（2.5 / 3 / 3.5）の**日本語ツール選択精度**（駅名・指標の曖昧性解決）。不足なら Claude Haiku 4.5 へ。
-- GraphAI を **既定にするか AI SDK 併用か**（複雑クエリ PoC の結果次第）。
-- **任意半径クエリ**（§5.2）を LLM から扱う場合の集計方式（事前計算6半径＋補間 or PostGIS 幾何）。
+### 10.7 確定事項（P8c の eval・2026-07 で確定。詳細は [`p8c_eval_report.md`](./p8c_eval_report.md)）
+- **採用モデル**：ゴールデン **20 問 eval が 20/20 合格**。**無料デプロイの既定＝`gemini-flash-lite-latest`**（高速 ~3s・日本語ツール選択良好・無料日次枠が実用的）。品質重視/本番は**有料枠 or Vertex AI** の `gemini-flash-latest`（＝3.5-flash）または `gemini-3-flash-preview` に `GEMINI_MODEL` で差し替え。
+  - **無料枠の現実（決め手）**：`gemini-2.5-flash` は新規非対応（404）／`gemini-flash-latest` は **20 req/日**で無料運用に耐えない／`gemini-flash-lite-latest` は残枠あり・高速。→ プロバイダ抽象（`GEMINI_MODEL`）で 1 行差し替え可能にしてある。フォールバックは Claude Haiku 4.5 / GPT-4.1-mini / Groq。
+- **GraphAI**：20 問（検索→詳細→本文・カタログ照会→ランキング・散布・2 駅比較・曖昧駅名・データ外拒否）が **AI SDK v6 `ToolLoopAgent` 単体で完結** → **不採用（既定は AI SDK v6）**。並列 fan-out（例「A駅とB駅を複数指標で並列比較」）が主戦場になった段階で低リスクに再評価（§10.4・可逆）。
+- **任意半径クエリ**（§5.2）を LLM から扱う集計方式（事前計算6半径＋補間 or PostGIS 幾何）は**将来拡張**（未着手）。
 
 ### 10.8 参考
 - GraphAI: [receptron/graphai](https://github.com/receptron/graphai)（[LLM agents](https://github.com/receptron/graphai/blob/main/agents/llm_agents/README.md) / [Streaming](https://github.com/receptron/graphai/blob/main/docs/guide/Streaming.md) / [@receptron/graphai_express](https://www.npmjs.com/package/@receptron/graphai_express)）・[GraphAI 解説(Zenn)](https://zenn.dev/singularity/articles/graphai-index)

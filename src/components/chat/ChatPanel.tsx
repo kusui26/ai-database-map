@@ -62,8 +62,10 @@ function ChatBody() {
   const { messages, sendMessage, status, stop, error, setMessages } = useChat<ChatUIMessage>({
     transport,
     onData: (part) => {
-      // data-map は送信前にサーバで検証済みだが、クライアントでも parse して型を確定させる。
-      if (part.type === 'data-map') applyMapActions(mapResponseSchema.parse(part.data))
+      // data-map はサーバ検証済みだが、クライアントでも safeParse して型を確定＋失敗時は無視（防御的）。
+      if (part.type !== 'data-map') return
+      const parsed = mapResponseSchema.safeParse(part.data)
+      if (parsed.success) applyMapActions(parsed.data)
     },
   })
 
@@ -167,6 +169,8 @@ function ChatBody() {
             value={input}
             onChange={(event) => setInput(event.target.value.slice(0, MAX_INPUT_CHARS))}
             onKeyDown={(event) => {
+              // IME 変換中の Enter（漢字確定など）は送信しない（日本語入力で誤送信を防ぐ）。
+              if (event.nativeEvent.isComposing || event.keyCode === 229) return
               if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault()
                 send(input)
@@ -214,11 +218,14 @@ export function ChatPanel() {
   const isDesktop = useIsDesktop()
   const open = useChatStore((state) => state.open)
   const setOpen = useChatStore((state) => state.setOpen)
-  const [snap, setSnap] = useState<number | string | null>(0.5)
+  // 初期は上スナップ＝1（コンテンツ全体＝入力まで見える）。下スナップ 0.5 へドラッグすると地図が動くのが見える。
+  const [snap, setSnap] = useState<number | string | null>(1)
 
   if (isDesktop) {
     return (
       <aside
+        // 閉じている間はフォーカスを内部へ入れない（aria-hidden だけでは tab 順から外れないため inert）。
+        inert={!open}
         aria-hidden={!open}
         aria-label="AI チャット"
         className={cn(
@@ -235,13 +242,14 @@ export function ChatPanel() {
     <Drawer.Root
       open={open}
       onOpenChange={(next) => setOpen(next)}
-      snapPoints={[0.5, 0.92]}
+      snapPoints={[0.5, 1]}
       activeSnapPoint={snap}
       setActiveSnapPoint={setSnap}
       modal={false}
     >
       <Drawer.Portal>
-        <Drawer.Content className="fixed inset-x-0 bottom-0 z-30 flex h-[92vh] flex-col rounded-t-2xl bg-white outline-none">
+        {/* snapPoints はコンテンツ高の割合。上スナップ=1 で全コンテンツ（入力まで）を表示、高さ 85dvh で上に地図が覗く。 */}
+        <Drawer.Content className="fixed inset-x-0 bottom-0 z-30 flex h-[85dvh] flex-col rounded-t-2xl bg-white outline-none">
           <div className="mx-auto mt-3 mb-1 h-1.5 w-10 shrink-0 rounded-full bg-slate-300" />
           <Drawer.Title className="sr-only">AI チャット</Drawer.Title>
           <ChatBody />

@@ -5,7 +5,7 @@
  * 叩かせ、テキストをストリーミングする。ループ完了後、assemble.ts が **MapResponse(Zod検証済)** を
  * data-map パートで送出する（パネル・地図操作は domain が決定的に生成＝幻覚しない）。
  *
- * ガード：IP レート制限・入力 500 文字上限・30s タイムアウト・鍵未設定は 503・エラー封筒。
+ * ガード：IP レート制限・入力 500 文字上限・履歴合計上限・45s abort・鍵未設定は 503・エラー封筒。
  * `domain`・既存 API・protocol は無改変（純加算）。
  */
 
@@ -61,13 +61,24 @@ function messageText(message: InboundMessage): string {
   return (message.content ?? '').trim()
 }
 
-/** リクエスト元 IP（プロキシヘッダ優先）。 */
+/** リクエスト元 IP。プラットフォームが設定する x-real-ip を優先（XFF 左端は詐称可能）。 */
 function clientIp(request: Request): string {
+  const realIp = request.headers.get('x-real-ip')
+  if (realIp !== null && realIp.length > 0) return realIp
   const forwarded = request.headers.get('x-forwarded-for')
-  if (forwarded !== null && forwarded.length > 0) {
-    return forwarded.split(',')[0]?.trim() ?? 'unknown'
+  return forwarded?.split(',')[0]?.trim() ?? 'unknown'
+}
+
+/** 会話履歴の合計文字数の上限（500 字ガードを履歴詰め込みで回避されないため・plan_fable §7）。 */
+const MAX_CONVERSATION_CHARS = 4000
+
+/** ストリームエラーをユーザー向けの短い日本語に変換（無料枠 429/混雑は専用文言に）。 */
+function friendlyError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  if (/429|quota|rate|RESOURCE_EXHAUSTED|overloaded|503|UNAVAILABLE/i.test(message)) {
+    return 'ただいま混雑しています（無料枠の上限の可能性があります）。少し時間をおいて再度お試しください。'
   }
-  return request.headers.get('x-real-ip') ?? 'unknown'
+  return '応答の生成に失敗しました。時間をおいて再度お試しください。'
 }
 
 /** text だけの UIMessage を構築（id は convertToModelMessages で不要）。 */
@@ -119,6 +130,10 @@ export async function POST(request: Request): Promise<Response> {
   if (lastUser.text.length > MAX_INPUT_CHARS) {
     return apiError('BAD_REQUEST', `入力は ${MAX_INPUT_CHARS} 文字以内にしてください。`, 400)
   }
+  const totalChars = conversation.reduce((sum, message) => sum + message.text.length, 0)
+  if (totalChars > MAX_CONVERSATION_CHARS) {
+    return apiError('BAD_REQUEST', '会話が長くなりました。新しい会話を始めてください。', 400)
+  }
 
   // 4) ツールループ＋ストリーミング
   const uiMessages = conversation.map((message) => textMessage(message.role, message.text))
@@ -133,22 +148,27 @@ export async function POST(request: Request): Promise<Response> {
         tools,
         stopWhen: stepCountIs(MAX_TOOL_STEPS),
         temperature: 0.2,
+        // 対話は fail-fast 寄りに。既定 2 だと無料枠 429 の retry-after を待って長く固まる。
+        maxRetries: 1,
       })
       const modelMessages = await convertToModelMessages(uiMessages)
       const result = await agent.stream({
         messages: modelMessages,
         abortSignal: AbortSignal.timeout(CHAT_TIMEOUT_MS),
       })
-      // テキスト/ツールパートを即時ストリーム（返答中に地図操作の材料が揃う）
-      writer.merge(result.toUIMessageStream<ChatUIMessage>())
-      // ループ完了後、domain が決定的に組み立てた MapResponse を data-map で送出
-      const text = await result.text
+      // テキスト/ツールパートを即時ストリーム。内側にも friendlyError を渡す
+      // （渡さないと SDK 既定の英語 "An error occurred." がクライアントに届く）。
+      writer.merge(result.toUIMessageStream<ChatUIMessage>({ onError: friendlyError }))
+      // ループ完了後、domain が決定的に組み立てた MapResponse を data-map で送出。
+      // 生成が途中でエラー/中断しても、それまでの副産物からパネル/地図を組み立てて返す
+      // （.catch で二重エラー＋data-map 欠落を防ぐ）。
+      const text = await Promise.resolve(result.text).catch(() => '')
       const mapResponse = mapResponseSchema.parse(assemble(collector.drain(), text))
       writer.write({ type: 'data-map', data: mapResponse })
     },
     onError: (error) => {
-      console.error('[api/chat] stream error:', error)
-      return 'エラーが発生しました。時間をおいて再試行してください。'
+      console.error('[api/chat] stream error:', error instanceof Error ? error.message : error)
+      return friendlyError(error)
     },
   })
 

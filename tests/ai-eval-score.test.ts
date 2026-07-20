@@ -81,9 +81,9 @@ describe('scoreCase', () => {
 })
 
 describe('EVAL_CASES', () => {
-  it('20 問・id 一意・全問に期待あり', () => {
-    expect(EVAL_CASES.length).toBe(20)
-    expect(new Set(EVAL_CASES.map((c) => c.id)).size).toBe(20)
+  it('22 問・id 一意・全問に期待あり', () => {
+    expect(EVAL_CASES.length).toBe(22)
+    expect(new Set(EVAL_CASES.map((c) => c.id)).size).toBe(22)
     for (const testCase of EVAL_CASES) {
       expect(testCase.query.length).toBeGreaterThan(0)
       expect(Object.keys(testCase.expect).length).toBeGreaterThan(0)

@@ -13,10 +13,14 @@ const INITIAL: readonly string[] = [
   '品川駅について教えて',
 ]
 
+// 駅選択中の掘り下げ（「この駅」はサーバの地図文脈が選択駅に解決＝P8e）。
 const AFTER_STATION: readonly string[] = [
+  'この駅の人口推移は？',
   'この駅の地価の推移は？',
+  'この駅のバス停の数は？',
+  'この駅の事業所数は？',
+  'この駅の従業者数は？',
   '半径5kmで詳しく',
-  '近くの駅と比べて',
 ]
 
 const AFTER_GENERAL: readonly string[] = [
@@ -32,7 +36,8 @@ export function SuggestionChips({
   onPick: (text: string) => void
 }) {
   const { grp } = useMapUrlState()
-  const chips = !hasMessages ? INITIAL : grp !== null ? AFTER_STATION : AFTER_GENERAL
+  // 駅選択中は会話の有無に依らず掘り下げサジェストを出す（選んですぐ「ポチポチ」探索できる・P8e）。
+  const chips = grp !== null ? AFTER_STATION : hasMessages ? AFTER_GENERAL : INITIAL
 
   return (
     <div className="flex flex-wrap gap-1.5">

@@ -19,7 +19,9 @@ import {
 } from 'ai'
 import { z } from 'zod'
 import { mapResponseSchema } from '@/shared/protocol'
+import { RADII_M } from '@/shared/constants'
 import { apiError } from '@/lib/http'
+import { stationByGrp } from '@/db/queries'
 import {
   CHAT_TIMEOUT_MS,
   chatModel,
@@ -29,7 +31,7 @@ import {
 } from '@/ai/client'
 import { createCollector } from '@/ai/types'
 import { type ChatUIMessage, createTools } from '@/ai/tools'
-import { buildSystemPrompt } from '@/ai/system-prompt'
+import { buildSystemPrompt, mapContextPrompt } from '@/ai/system-prompt'
 import { assemble } from '@/ai/assemble'
 import { rateLimit } from '@/ai/rate-limit'
 
@@ -46,6 +48,9 @@ const inboundMessageSchema = z.object({
 })
 const inboundSchema = z.object({
   messages: z.array(inboundMessageSchema).min(1).max(50),
+  // 地図で選択中の駅・半径（P8e）。クライアントが sendMessage の body で同送する。
+  selectedGrp: z.string().optional(),
+  radiusM: z.number().optional(),
 })
 
 type InboundMessage = z.infer<typeof inboundMessageSchema>
@@ -85,6 +90,21 @@ function friendlyError(error: unknown): string {
 function textMessage(role: 'user' | 'assistant', text: string): Omit<UIMessage, 'id'> {
   const parts: UIMessage['parts'] = [{ type: 'text', text }]
   return { role, parts }
+}
+
+/**
+ * 地図で選択中の駅（＋半径）を LLM 文脈へ解決する（P8e）。
+ * 未選択・不正半径・未存在 grp・DB 失敗のいずれでも空文字を返し、文脈なしで安全に続行する。
+ */
+async function resolveMapContext(selectedGrp?: string, radiusM?: number): Promise<string> {
+  if (selectedGrp === undefined || selectedGrp.length === 0) return ''
+  const radius = RADII_M.find((valid) => valid === radiusM) ?? 1000
+  try {
+    const station = await stationByGrp(selectedGrp)
+    return station === null ? '' : mapContextPrompt(station, radius)
+  } catch {
+    return ''
+  }
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -135,6 +155,9 @@ export async function POST(request: Request): Promise<Response> {
     return apiError('BAD_REQUEST', '会話が長くなりました。新しい会話を始めてください。', 400)
   }
 
+  // 地図で選択中の駅を LLM の文脈に（P8e）。未選択・解決失敗なら文脈なしで続行（安全側）。
+  const mapContext = await resolveMapContext(parsed.data.selectedGrp, parsed.data.radiusM)
+
   // 4) ツールループ＋ストリーミング
   const uiMessages = conversation.map((message) => textMessage(message.role, message.text))
   const collector = createCollector()
@@ -144,7 +167,7 @@ export async function POST(request: Request): Promise<Response> {
     execute: async ({ writer }) => {
       const agent = new ToolLoopAgent({
         model: chatModel(),
-        instructions: buildSystemPrompt(),
+        instructions: buildSystemPrompt() + mapContext,
         tools,
         stopWhen: stepCountIs(MAX_TOOL_STEPS),
         temperature: 0.2,

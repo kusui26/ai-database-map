@@ -13,8 +13,10 @@ import { useChat } from '@ai-sdk/react'
 import { Drawer } from 'vaul'
 import { mapResponseSchema } from '@/shared/protocol'
 import { cn } from '@/lib/utils'
+import { radiusLabel } from '@/shared/constants'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { useMapUrlState } from '@/components/map/useMapUrlState'
+import { useStationDetail } from '@/components/detail/useStationDetail'
 import { useMapStore } from '@/stores/mapStore'
 import { useChatStore } from '@/stores/chatStore'
 import { type ChatUIMessage } from './types'
@@ -53,10 +55,12 @@ function Thread({ messages, busy }: { messages: readonly ChatUIMessage[]; busy: 
 
 /** チャットの中身（デスクトップ／モバイル共通）。 */
 function ChatBody() {
-  const { setGrp } = useMapUrlState()
+  const { grp, setGrp, radiusM } = useMapUrlState()
   const setHighlightedGrps = useMapStore((state) => state.setHighlightedGrps)
   const closeChat = useChatStore((state) => state.setOpen)
   const applyMapActions = useApplyMapActions()
+  // 選択駅の名前（インジケータ表示用）。ドロワーと SWR キャッシュを共有＝追加フェッチなし。
+  const { detail: selectedDetail } = useStationDetail(grp)
 
   const transport = useMemo(() => new DefaultChatTransport<ChatUIMessage>({ api: '/api/chat' }), [])
   const { messages, sendMessage, status, stop, error, setMessages } = useChat<ChatUIMessage>({
@@ -75,7 +79,11 @@ function ChatBody() {
   const send = (text: string): void => {
     const trimmed = text.trim()
     if (trimmed.length === 0 || trimmed.length > MAX_INPUT_CHARS || busy) return
-    void sendMessage({ text: trimmed })
+    // 地図で駅を選択中なら、その選択を文脈として同送する（「この駅」等の解決に使う・P8e）。
+    void sendMessage(
+      { text: trimmed },
+      grp === null ? undefined : { body: { selectedGrp: grp, radiusM } },
+    )
     setInput('')
   }
 
@@ -146,6 +154,21 @@ function ChatBody() {
 
       {/* サジェスト＋入力 */}
       <div className="space-y-2 border-t border-slate-100 px-3 py-3">
+        {/* 現在の対象（地図で選択中の駅）。以降の「この駅…」がこの駅を指すことを可視化（P8e）。 */}
+        {grp !== null && (
+          <div className="flex items-center gap-1.5 rounded-lg bg-indigo-50 px-2.5 py-1.5 text-xs text-indigo-700">
+            <svg viewBox="0 0 24 24" className="size-3.5 shrink-0" fill="currentColor" aria-hidden>
+              <path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5Z" />
+            </svg>
+            <span className="min-w-0 truncate">
+              現在の対象：
+              <span className="font-semibold">
+                {selectedDetail?.station.stationName ?? '選択中の駅'}
+              </span>
+              駅（{radiusLabel(radiusM)}圏）
+            </span>
+          </div>
+        )}
         {(!hasMessages || !busy) && <SuggestionChips hasMessages={hasMessages} onPick={send} />}
         {hasMessages && (
           <div className="flex justify-end">

@@ -6,7 +6,7 @@
  * カタログ要約はカタログ駆動（catalog-digest）で生成＝指標追加が自動反映される。
  */
 
-import { RADII_M } from '@/shared/constants'
+import { RADII_M, radiusLabel } from '@/shared/constants'
 import { systemCatalogSummary } from './catalog-digest'
 
 /** 集約半径の表示（例 "500m/1km/2km/5km/10km/20km"）。 */
@@ -43,5 +43,25 @@ export function buildSystemPrompt(): string {
     '- **収録データ外**（天気・経路検索・営業情報・個人情報など）や**将来の予測・助言の断定**（例「来年の地価は上がる」）は、',
     '  **数値を作らず**、できない旨を1文で伝え、代わりに扱える実績データを1つ提案する（例「将来予測はできませんが、地価の推移の実績なら表示できます」）。',
     '- 都道府県は正式名（例「神奈川県」）。指標キーは推測で作らず、確証がなければ getMetricsCatalog で確認する。',
+  ].join('\n')
+}
+
+/**
+ * 地図で駅を選択中のとき `buildSystemPrompt()` に連結する文脈（P8e）。
+ * 「この駅」「ここ」や駅名省略の追随質問を**選択駅**に解決させ、過去の会話より優先させる。
+ * ただし別駅名の明示・一般質問（ランキング等）には縛られないよう明記する（＝選択が足枷にならない）。
+ */
+export function mapContextPrompt(
+  station: { label: string; prefecture: string; grp: string },
+  radiusM: number,
+): string {
+  return [
+    '',
+    '# 現在の地図の状態（重要）',
+    `ユーザーは地図で「${station.label}（${station.prefecture}）」を半径${radiusLabel(radiusM)}圏で選択中です（grp="${station.grp}"）。`,
+    '- 「この駅」「ここ」や、駅名を省いた追随質問（例「地価の推移は？」「人口は？」「バス停は？」）は、**この選択駅**を指します。',
+    '- 過去の会話に別の駅が出ていても、**現在の選択駅を優先**してください。',
+    '- ただし、ユーザーが**別の駅名を明示**したらその駅を、**一般質問**（都道府県ランキング・散布・カタログ照会など）では選択に縛られず答えてください。',
+    `- この駅は searchStations を省き、getStationDetail に grp="${station.grp}"（必要なら radiusM=${radiusM}）を直接渡して取得できます。`,
   ].join('\n')
 }

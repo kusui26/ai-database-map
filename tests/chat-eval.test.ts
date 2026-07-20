@@ -1,5 +1,5 @@
 /**
- * P8c 評価 runner：ゴールデン 20 問を実 /api/chat（SSE）に投げ、score.ts で採点する。
+ * P8c 評価 runner：ゴールデン 22 問を実 /api/chat（SSE）に投げ、score.ts で採点する。
  *
  * 通常の `pnpm test` では **スキップ**（LLM/DB/課金に依存）。実行は：
  *   1) 別端末で dev サーバ起動：`pnpm dev`（.env に GEMINI_API_KEY・SUPABASE_* が必要）
@@ -27,8 +27,8 @@ const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 
 type AskResult = EvalObserved & { errored: boolean }
 
-/** 1 クエリを /api/chat に投げ、ツール列・パネル・本文を SSE から収集する。 */
-async function ask(query: string): Promise<AskResult> {
+/** 1 クエリを /api/chat に投げ、ツール列・パネル・本文を SSE から収集する（P8e: 選択駅も同送）。 */
+async function ask(query: string, selectedGrp?: string, radiusM?: number): Promise<AskResult> {
   const toolCalls: { name: string; input: Record<string, unknown> }[] = []
   let panelTypes: string[] = []
   let actionTypes: string[] = []
@@ -40,7 +40,10 @@ async function ask(query: string): Promise<AskResult> {
   const response = await fetch(`${BASE_URL}/api/chat`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ messages: [{ role: 'user', parts: [{ type: 'text', text: query }] }] }),
+    body: JSON.stringify({
+      messages: [{ role: 'user', parts: [{ type: 'text', text: query }] }],
+      ...(selectedGrp !== undefined ? { selectedGrp, radiusM } : {}),
+    }),
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
   if (response.body === null)
@@ -99,7 +102,7 @@ async function ask(query: string): Promise<AskResult> {
   return { toolCalls, panelTypes, actionTypes, text, haystack, mapResponseValid, errored }
 }
 
-describe.skipIf(!ENABLED)('P8c eval — ゴールデン 20 問', () => {
+describe.skipIf(!ENABLED)('P8c eval — ゴールデン 22 問', () => {
   it(
     '合格率を計測する',
     async () => {
@@ -114,11 +117,11 @@ describe.skipIf(!ENABLED)('P8c eval — ゴールデン 20 問', () => {
         if (!firstAsk) await sleep(THROTTLE_MS)
         firstAsk = false
 
-        let observed = await ask(testCase.query)
+        let observed = await ask(testCase.query, testCase.selectedGrp, testCase.radiusM)
         // quota/一時エラーで data-map が来なければ 1 度だけ長めに待って再試行
         if (!observed.mapResponseValid || observed.errored) {
           await sleep(65_000)
-          observed = await ask(testCase.query)
+          observed = await ask(testCase.query, testCase.selectedGrp, testCase.radiusM)
         }
 
         const result = scoreCase(testCase.expect, observed)

@@ -9,6 +9,9 @@ export type EvalCase = {
   readonly id: string
   readonly category: string
   readonly query: string
+  /** 地図で選択中の駅（P8e・文脈依存ケース）。runner が body で同送する。 */
+  readonly selectedGrp?: string
+  readonly radiusM?: number
   readonly expect: EvalExpectation
 }
 
@@ -210,6 +213,32 @@ export const EVAL_CASES: readonly EvalCase[] = [
     expect: {
       noPanels: true,
       textNonEmpty: true,
+    },
+  },
+
+  // --- 地図文脈（P8e・選択駅を会話の主題に） ---
+  {
+    // 東京を選択中に駅名を省いた追随質問 → 選択駅の地価を、検索を省いて getStationDetail 直呼び
+    id: 'context-followup-landprice',
+    category: '地図文脈',
+    query: '地価の推移は？',
+    selectedGrp: '東京#0',
+    radiusM: 1000,
+    expect: {
+      toolCalls: [{ name: 'getStationDetail', inputIncludes: { grp: '東京#0', category: 'land_price' } }],
+      select: true,
+    },
+  },
+  {
+    // 東京を選択中でも、別駅を明示したらそちら（選択に縛られない）
+    id: 'context-explicit-override',
+    category: '地図文脈',
+    query: '新宿駅の人口は？',
+    selectedGrp: '東京#0',
+    radiusM: 1000,
+    expect: {
+      toolCalls: [{ name: 'searchStations', inputIncludes: { query: '新宿' } }],
+      contains: ['新宿'],
     },
   },
 ]

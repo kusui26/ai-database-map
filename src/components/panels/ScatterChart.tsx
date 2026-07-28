@@ -9,6 +9,7 @@ import { type ScatterPanel } from '@/shared/protocol'
 import { formatCompact, formatNumber, formatWithUnit, type MetricFormat } from '@/shared/format'
 import { clusterColor } from '@/shared/constants'
 import { ensureChartRegistered } from '@/components/charts/chart-setup'
+import { groupPointsByCluster } from './scatterDatasets'
 import { cn } from '@/lib/utils'
 
 ensureChartRegistered()
@@ -36,10 +37,8 @@ export function ScatterChart({
   const yFormat = inferFormat(panel.yUnit)
 
   // クラスタ別に点を保持（Chart.js には {x,y} のみ渡し、駅名/grp はこの配列から index で引く＝as 不要）。
-  const clusters = useMemo(() => {
-    const count = Math.max(1, panel.clusterCount)
-    return Array.from({ length: count }, (_, c) => panel.points.filter((p) => p.cluster === c))
-  }, [panel.points, panel.clusterCount])
+  // 実在するクラスタ番号だけで束ねるため、上流の clusterCount に依存せず点が落ちない。
+  const clusters = useMemo(() => groupPointsByCluster(panel.points), [panel.points])
 
   const data: ChartData<'scatter'> = useMemo(
     () => ({

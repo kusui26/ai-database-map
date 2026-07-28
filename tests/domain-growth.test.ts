@@ -46,6 +46,63 @@ describe('kmeans（決定的）', () => {
   })
 })
 
+/**
+ * クラスタ番号は 0..m-1 の連番（欠番なし）でなければならない。
+ * 欠番があると描画側で最大番号の点が無言で落ちる
+ * （docs/260728_fix_scatter_chart_sparse_cluster_labels.md）。
+ */
+describe('kmeans：クラスタ番号の連番不変条件', () => {
+  const isContiguous = (labels: readonly number[]): boolean =>
+    labels.length === 0 || new Set(labels).size === Math.max(...labels) + 1
+
+  it('回帰：空クラスタが生じる既知の入力でも欠番を作らない', () => {
+    // 修正前は [0,0,2,2,0,3,2]（1 が欠番）を返し、描画時に 7 点中 1 点が落ちていた。
+    const points = [2, 2, 8, 7, 1, 0, 12].map((x) => ({ x, y: 0 }))
+    const labels = kmeans(points)
+    expect(isContiguous(labels)).toBe(true)
+    expect(new Set(labels).size).toBe(3)
+    // 同じ集団分けが保たれる（詰めても分割そのものは不変）。
+    expect(labels[0]).toBe(labels[1])
+    expect(labels[2]).toBe(labels[3])
+    expect(labels[5]).not.toBe(labels[0])
+  })
+
+  it('ランダム探索（離散値・小標本を厚く）でも常に連番', () => {
+    const prng = (seed: number) => {
+      let state = seed >>> 0
+      return () => {
+        state = (state + 0x6d2b79f5) | 0
+        let t = Math.imul(state ^ (state >>> 15), 1 | state)
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+      }
+    }
+    for (let trial = 0; trial < 4000; trial += 1) {
+      const rand = prng(trial * 2654435761 + 17)
+      const n = 5 + Math.floor(rand() * 15)
+      const points = Array.from({ length: n }, () => ({ x: Math.floor(rand() * 13), y: 0 }))
+      expect(isContiguous(kmeans(points))).toBe(true)
+    }
+  })
+
+  it('境界：空・1 点・n<=k・全点同一値でも連番', () => {
+    expect(isContiguous(kmeans([]))).toBe(true)
+    expect(kmeans([{ x: 1, y: 1 }])).toEqual([0])
+    expect(
+      isContiguous(
+        kmeans([
+          { x: 1, y: 1 },
+          { x: 2, y: 2 },
+          { x: 3, y: 3 },
+        ]),
+      ),
+    ).toBe(true)
+    expect(kmeans(Array.from({ length: 8 }, () => ({ x: 7, y: 7 })))).toEqual(
+      Array.from({ length: 8 }, () => 0),
+    )
+  })
+})
+
 describe('buildGrowth', () => {
   const rows: ValueRow[] = [
     { grp: 'a', stationName: 'A', key: 'pop_gr_2020_2015_1km', value: 5 },
@@ -99,5 +156,24 @@ describe('buildGrowth', () => {
     expect(scatterPanel(buildGrowth(rows, 'pop_gr_2020_2015_1km', 'rate_covid')).title).toContain(
       '全国',
     )
+  })
+
+  it('clusterCount は常に max(cluster)+1（描画側の前提と一致する）', () => {
+    const many: ValueRow[] = [2, 2, 8, 7, 1, 0, 12].flatMap((x, i) => [
+      { grp: `s${i}`, stationName: `駅${i}`, key: 'pop_gr_2020_2015_1km', value: x },
+      { grp: `s${i}`, stationName: `駅${i}`, key: 'rate_covid', value: 0 },
+    ])
+    for (const input of [rows, many]) {
+      const g = buildGrowth(input, 'pop_gr_2020_2015_1km', 'rate_covid')
+      const clusters = g.points.map((p) => p.cluster)
+      expect(g.clusterCount).toBe(Math.max(...clusters) + 1)
+      expect(new Set(clusters).size).toBe(g.clusterCount)
+    }
+  })
+
+  it('境界：点が 0 件でも clusterCount は 0 で破綻しない', () => {
+    const g = buildGrowth([], 'pop_gr_2020_2015_1km', 'rate_covid')
+    expect(g.points).toHaveLength(0)
+    expect(g.clusterCount).toBe(0)
   })
 })

@@ -87,6 +87,27 @@ export const CATEGORY_COLORS: Readonly<Record<Category, string>> = {
   employee: '#db2777', // pink-600
 }
 
+/**
+ * 散布図クラスタの配色（旧プロジェクト Station Area Database Map と同一の 4 色）。
+ *
+ * クラスタ番号は k-means の任意 index で意味を持たないため、色は「集団の区別」だけを担う
+ * （凡例は出さない・docs/260728_scatter_plot_color.md）。決定的 k-means は k=4 のため 4 色で足り、
+ * それを超える番号は clusterColor() が循環させる。非空タプル型で空配列を型として禁止する。
+ */
+export const CLUSTER_COLORS: readonly [string, ...string[]] = [
+  '#ff6384', // ピンクレッド
+  '#36a2eb', // ブルー
+  '#ffce56', // イエロー
+  '#4bc0c0', // ティール
+]
+
+/** クラスタ番号 → 配色（範囲外・負値・小数は剰余で循環し、必ず色を返す純関数）。 */
+export function clusterColor(clusterIndex: number): string {
+  const size = CLUSTER_COLORS.length
+  const wrapped = ((Math.trunc(clusterIndex) % size) + size) % size
+  return CLUSTER_COLORS[wrapped] ?? CLUSTER_COLORS[0]
+}
+
 // --- 都道府県（47） -----------------------------------------------------
 
 /** 都道府県（JIS X 0401 コード＋名称）。ランキングの都道府県フィルタ等で使用。 */

@@ -7,22 +7,12 @@ import { Scatter } from 'react-chartjs-2'
 import { type ChartData, type ChartOptions } from 'chart.js'
 import { type ScatterPanel } from '@/shared/protocol'
 import { formatCompact, formatNumber, formatWithUnit, type MetricFormat } from '@/shared/format'
+import { clusterColor } from '@/shared/constants'
 import { ensureChartRegistered } from '@/components/charts/chart-setup'
 import { cn } from '@/lib/utils'
 
 ensureChartRegistered()
 
-// クラスタ配色（決定的 k-means の 4 前後のクラスタ＋余裕）。
-const CLUSTER_COLORS = [
-  '#4f46e5',
-  '#059669',
-  '#d97706',
-  '#db2777',
-  '#0891b2',
-  '#7c3aed',
-  '#dc2626',
-  '#ca8a04',
-]
 const AXIS_COLOR = '#94a3b8'
 const HEIGHT_PX: Record<'compact' | 'full', number> = { compact: 220, full: 340 }
 
@@ -56,7 +46,7 @@ export function ScatterChart({
       datasets: clusters.map((clusterPoints, c) => ({
         label: `クラスタ${c + 1}`,
         data: clusterPoints.map((p) => ({ x: p.x, y: p.y })),
-        backgroundColor: CLUSTER_COLORS[c % CLUSTER_COLORS.length],
+        backgroundColor: clusterColor(c),
         pointRadius: compact ? 1.5 : 2.5,
         pointHoverRadius: 5,
       })),

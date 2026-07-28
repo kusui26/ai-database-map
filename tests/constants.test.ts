@@ -4,6 +4,8 @@ import {
   CATEGORIES,
   CATEGORY_COLORS,
   CATEGORY_LABELS_JA,
+  CLUSTER_COLORS,
+  clusterColor,
   PREFECTURES,
   RADII_M,
   RADIUS_LABELS,
@@ -48,6 +50,45 @@ describe('配色トークン', () => {
   it('アクセント・警告色が有効な hex', () => {
     expect(ACCENT_COLOR).toMatch(HEX_COLOR)
     expect(WARNING_COLOR).toMatch(HEX_COLOR)
+  })
+})
+
+describe('CLUSTER_COLORS（散布図クラスタ配色）', () => {
+  it('旧プロジェクト（Station Area Database Map）と同一の 4 色を保持する', () => {
+    // 旧アプリ GrowthRateGraphModal.vue の clusterColors（rgba・alpha=1）と等価な hex。
+    expect(CLUSTER_COLORS).toEqual(['#ff6384', '#36a2eb', '#ffce56', '#4bc0c0'])
+  })
+
+  it('全て有効な hex・重複なし', () => {
+    for (const color of CLUSTER_COLORS) {
+      expect(color).toMatch(HEX_COLOR)
+    }
+    expect(new Set(CLUSTER_COLORS).size).toBe(CLUSTER_COLORS.length)
+  })
+
+  it('アクセント（選択駅）・警告（信頼性フラグ）と衝突しない', () => {
+    expect(CLUSTER_COLORS).not.toContain(ACCENT_COLOR)
+    expect(CLUSTER_COLORS).not.toContain(WARNING_COLOR)
+  })
+})
+
+describe('clusterColor', () => {
+  it('クラスタ番号 0..n-1 は定義順の色を返す', () => {
+    CLUSTER_COLORS.forEach((color, index) => {
+      expect(clusterColor(index)).toBe(color)
+    })
+  })
+
+  it('色数を超える番号は循環する（k=4 超のクラスタでも必ず着色）', () => {
+    expect(clusterColor(CLUSTER_COLORS.length)).toBe(CLUSTER_COLORS[0])
+    expect(clusterColor(CLUSTER_COLORS.length + 2)).toBe(CLUSTER_COLORS[2])
+  })
+
+  it('負値・小数・巨大値でも必ずパレット内の色を返す', () => {
+    for (const index of [-1, -5, 0.5, 3.9, 1_000_001]) {
+      expect(CLUSTER_COLORS).toContain(clusterColor(index))
+    }
+    expect(clusterColor(-1)).toBe(CLUSTER_COLORS[CLUSTER_COLORS.length - 1])
   })
 })
 

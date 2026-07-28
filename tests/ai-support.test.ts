@@ -6,12 +6,12 @@
 import { describe, expect, it } from 'vitest'
 import { checkRateLimit, resetRateLimitStore } from '@/ai/rate-limit'
 import {
+  baseMetricDetail,
   categoryDigests,
   metricsCatalogDigest,
-  suggestMetricKeys,
   systemCatalogSummary,
-  variantsForBaseMetric,
 } from '@/ai/catalog-digest'
+import { suggestMetricKeys } from '@/ai/metric-resolver'
 
 describe('checkRateLimit（固定窓・now 注入で純粋）', () => {
   it('上限までは許可し、超過で拒否＋retryAfter を返す', () => {
@@ -50,17 +50,35 @@ describe('catalog-digest（カタログ駆動）', () => {
     }
   })
 
-  it('variantsForBaseMetric は正確なキーを返す（rank/compare にそのまま渡せる）', () => {
-    const variants = variantsForBaseMetric('pop_gr')
-    expect(variants.length).toBeGreaterThan(0)
-    expect(variants.some((variant) => variant.key === 'pop_gr_2020_2015_1km')).toBe(true)
-    // 半径つきの変種を持つ
-    expect(variants.some((variant) => variant.radiusM === 1000)).toBe(true)
+  it('baseMetricDetail は変種を列挙せず、半径一覧 × 年一覧 ＋ 既定キーに畳む', () => {
+    const detail = baseMetricDetail('pop_gr')
+    expect(detail.variantCount).toBeGreaterThan(20) // 実データは 54 変種
+    expect(detail.radii).toEqual([500, 1000, 2000, 5000, 10000, 20000])
+    expect(detail.years).toContain('2015→2020')
+    expect(detail.defaultKey).toBe('pop_gr_2020_2015_1km')
+    expect(detail.usage).toContain('metric="pop_gr"')
   })
 
-  it('metricsCatalogDigest：baseMetric 指定で variants、無指定で categories', () => {
+  it('baseMetricDetail の返却量は変種の全列挙より 1 桁小さい', () => {
+    // 旧実装は pop_gr で約 7.4KB（≈2,400 トークン）。往復ごとに文脈へ積み上がっていた。
+    const size = JSON.stringify(baseMetricDetail('pop_gr')).length
+    expect(size).toBeLessThan(1000)
+  })
+
+  it('将来推計は推計時点（vintage）も返す', () => {
+    const detail = baseMetricDetail('pop_pred')
+    expect(detail.vintages).toContain(2024)
+  })
+
+  it('半径非依存の指標は radii が空', () => {
+    const detail = baseMetricDetail('pax_rate') // rate_yoy / rate_covid
+    expect(detail.radii).toEqual([])
+    expect(detail.variantCount).toBe(2)
+  })
+
+  it('metricsCatalogDigest：baseMetric 指定で詳細、無指定で categories', () => {
     const byBase = JSON.stringify(metricsCatalogDigest({ baseMetric: 'pop_gr' }))
-    expect(byBase).toContain('pop_gr_2020_2015_1km')
+    expect(byBase).toContain('pop_gr_2020_2015_1km') // 既定キー
     const top = JSON.stringify(metricsCatalogDigest({}))
     expect(top).toContain('categories')
     expect(top).toContain('人口')
@@ -72,9 +90,11 @@ describe('catalog-digest（カタログ駆動）', () => {
     expect(suggestions.every((key) => key.startsWith('pop'))).toBe(true)
   })
 
-  it('systemCatalogSummary はカテゴリ英名と例キーを含む', () => {
+  it('systemCatalogSummary はカテゴリ英名と、ツールに渡すファミリ名を含む', () => {
     const summary = systemCatalogSummary()
     expect(summary).toContain('(population)')
-    expect(summary).toContain('例:')
+    expect(summary).toContain('[pop_gr｜') // キーではなくファミリ名を提示する
+    // 半径非依存で少数のファミリ（意味の異なる指標が同居）はキーを列挙する
+    expect(summary).toContain('rate_yoy/rate_covid')
   })
 })

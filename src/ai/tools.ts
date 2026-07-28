@@ -9,7 +9,7 @@
 
 import { tool, type InferUITools, type UIMessage } from 'ai'
 import { z } from 'zod'
-import { categorySchema, isRankableKey, requireEntry } from '@/shared/catalog'
+import { categorySchema, requireEntry } from '@/shared/catalog'
 import { PREFECTURES, RADII_M, type RadiusM } from '@/shared/constants'
 import { type MapResponse } from '@/shared/protocol'
 import {
@@ -24,7 +24,8 @@ import { buildRanking } from '@/domain/ranking/presenter'
 import { buildGrowth } from '@/domain/growth/presenter'
 import { type EffectCollector } from './types'
 import { panelsForStationDetail, summarizePanels } from './assemble'
-import { metricsCatalogDigest, suggestMetricKeys } from './catalog-digest'
+import { metricsCatalogDigest } from './catalog-digest'
+import { resolveMetricKey, type MetricResolution } from './metric-resolver'
 
 /** 既定の集約半径（1km＝アプリ既定）。 */
 const DEFAULT_RADIUS_M: RadiusM = 1000
@@ -72,13 +73,19 @@ function unknownPrefectures(unknown: readonly string[]): { error: string; hint: 
   }
 }
 
-/** 未知の指標キーに対する構造化エラー（LLM が getMetricsCatalog で再解決するための手掛かり）。 */
-function unknownMetric(key: string): { error: string; hint: string; didYouMean: string[] } {
-  return {
-    error: `未知またはランキング不可の指標キー: ${key}`,
-    hint: 'getMetricsCatalog で category / baseMetric を指定し、正確なキーを取得してください。',
-    didYouMean: suggestMetricKeys(key),
-  }
+/** 指標の解決失敗 → LLM 向けの構造化エラー（次の一手を hint で示す）。 */
+function metricError(resolution: Extract<MetricResolution, { ok: false }>): {
+  error: string
+  hint: string
+  didYouMean: readonly string[]
+} {
+  return { error: resolution.error, hint: resolution.hint, didYouMean: resolution.didYouMean }
+}
+
+/** 解決時の補正・既定の説明をまとめる（無ければ undefined＝返却に含めない）。 */
+function resolutionNote(...notes: readonly (string | null)[]): string | undefined {
+  const merged = notes.filter((note): note is string => note !== null && note.length > 0)
+  return merged.length > 0 ? merged.join('・') : undefined
 }
 
 /**
@@ -154,12 +161,24 @@ export function createTools(collector: EffectCollector) {
       },
     }),
 
-    /** 都道府県×指標のランキング（上位/下位）。指標は正確なカタログキーで。 */
+    /** 都道府県×指標のランキング（上位/下位）。指標はキーでもファミリ名でもよい。 */
     rankStations: tool({
       description:
-        '指標（正確なカタログキー）で駅を並べ替え上位/下位を返す。キーが不明なら先に getMetricsCatalog。prefectures 未指定は全国。',
+        '指標で駅を並べ替え上位/下位を返す。metric はカタログキー（pop_gr_2020_2015_1km）でも指標ファミリ（pop_gr）でもよく、ファミリなら radiusM / year で確定する（未指定は 1km・直近5年）。prefectures 未指定は全国。',
       inputSchema: z.object({
-        metric: z.string().describe('カタログキー。例: pop_gr_2020_2015_1km, rate_covid'),
+        metric: z
+          .string()
+          .describe(
+            'カタログキー（例 pop_gr_2020_2015_1km）または指標ファミリ（例 pop_gr, lp_gr）',
+          ),
+        radiusM: z
+          .number()
+          .optional()
+          .describe(
+            '集約半径(m): 500/1000/2000/5000/10000/20000。省略時 1000。半径非依存の指標では無視',
+          ),
+        year: z.number().optional().describe('対象年（増減率では新しい方の年）。省略時は直近'),
+        yearBase: z.number().optional().describe('増減率の基準年（古い方の年）'),
         prefectures: z
           .array(z.string())
           .optional()
@@ -172,19 +191,31 @@ export function createTools(collector: EffectCollector) {
           .describe(`件数(1-${MAX_RANK_LIMIT}・既定 ${DEFAULT_RANK_LIMIT})`),
         excludeLowN: z.boolean().optional().describe('母数の小さい駅(⚠)を除外'),
       }),
-      execute: async ({ metric, prefectures, order, limit, excludeLowN }) => {
+      execute: async ({
+        metric,
+        radiusM,
+        year,
+        yearBase,
+        prefectures,
+        order,
+        limit,
+        excludeLowN,
+      }) => {
         try {
-          if (!isRankableKey(metric)) return unknownMetric(metric)
+          const resolved = resolveMetricKey({ metric, radiusM, year, yearBase })
+          if (!resolved.ok) return metricError(resolved)
           const { names: prefs, unknown } = normalizePrefectures(prefectures ?? [])
           if (unknown.length > 0) return unknownPrefectures(unknown)
           const dir = order ?? 'desc'
           const lim = Math.min(Math.max(limit ?? DEFAULT_RANK_LIMIT, 1), MAX_RANK_LIMIT)
           const exclude = excludeLowN ?? false
-          const { rows, total } = await rankByColumn(metric, prefs, dir, lim, 0, exclude)
-          const response = buildRanking(metric, prefs, dir, rows, total, 0)
+          const { rows, total } = await rankByColumn(resolved.key, prefs, dir, lim, 0, exclude)
+          const response = buildRanking(resolved.key, prefs, dir, rows, total, 0)
           collector.push({ kind: 'ranking', response })
           return {
             metric: response.metric.labelJa,
+            resolvedMetric: resolved.key,
+            note: resolutionNote(resolved.note),
             unit: response.metric.unit,
             prefectures: response.prefectures,
             order: dir,
@@ -206,28 +237,36 @@ export function createTools(collector: EffectCollector) {
     /** 2 指標の増減率散布＋クラスタ（決定的 k-means）。 */
     compareGrowth: tool({
       description:
-        '2 つの指標(x,y・正確なカタログキー)で駅を散布しクラスタ化する。増減率どうしの相関を見るのに使う。prefectures 未指定は全国。',
+        '2 つの指標(x,y)で駅を散布しクラスタ化する。x/y はカタログキーでも指標ファミリ（pop_gr, lp_gr, rate_covid …）でもよく、radiusM を添えれば半径依存の指標がそれで確定する（未指定は 1km・直近5年）。prefectures 未指定は全国。',
       inputSchema: z.object({
-        x: z.string().describe('x 軸のカタログキー。例: pop_gr_2020_2015_2km'),
-        y: z.string().describe('y 軸のカタログキー。例: rate_covid'),
+        x: z
+          .string()
+          .describe('x 軸のカタログキーまたは指標ファミリ。例: pop_gr, pop_gr_2020_2015_2km'),
+        y: z.string().describe('y 軸のカタログキーまたは指標ファミリ。例: rate_covid, lp_gr'),
+        radiusM: z
+          .number()
+          .optional()
+          .describe('集約半径(m): 500/1000/2000/5000/10000/20000。x/y の半径依存の指標に適用'),
         prefectures: z.array(z.string()).optional().describe('都道府県名の配列。省略で全国'),
         excludeLowN: z.boolean().optional().describe('母数の小さい駅(⚠)を除外'),
       }),
-      execute: async ({ x, y, prefectures, excludeLowN }) => {
+      execute: async ({ x, y, radiusM, prefectures, excludeLowN }) => {
         try {
-          if (!isRankableKey(x)) return unknownMetric(x)
-          if (!isRankableKey(y)) return unknownMetric(y)
+          const xResolved = resolveMetricKey({ metric: x, radiusM })
+          if (!xResolved.ok) return metricError(xResolved)
+          const yResolved = resolveMetricKey({ metric: y, radiusM })
+          if (!yResolved.ok) return metricError(yResolved)
           const { names: prefs, unknown } = normalizePrefectures(prefectures ?? [])
           if (unknown.length > 0) return unknownPrefectures(unknown)
           const exclude = excludeLowN ?? false
-          const keys = [x, y]
+          const keys = [xResolved.key, yResolved.key]
           if (exclude) {
-            for (const entry of [requireEntry(x), requireEntry(y)]) {
+            for (const entry of [requireEntry(xResolved.key), requireEntry(yResolved.key)]) {
               if (entry.reliabilityFlagKey !== null) keys.push(entry.reliabilityFlagKey)
             }
           }
           const valueRows = await valuesForColumns(keys, prefs)
-          const response = buildGrowth(valueRows, x, y, {
+          const response = buildGrowth(valueRows, xResolved.key, yResolved.key, {
             excludeLowN: exclude,
             prefectures: prefs,
           })
@@ -235,6 +274,8 @@ export function createTools(collector: EffectCollector) {
           return {
             x: response.x.labelJa,
             y: response.y.labelJa,
+            resolvedMetrics: { x: xResolved.key, y: yResolved.key },
+            note: resolutionNote(xResolved.note, yResolved.note),
             prefectures: response.prefectures,
             pointCount: response.points.length,
             clusterCount: response.clusterCount,

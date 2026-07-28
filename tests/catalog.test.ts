@@ -12,10 +12,10 @@ import {
 import { CATEGORIES, RADII_M } from '@/shared/constants'
 
 describe('catalog（Zod ロード）', () => {
-  it('583 エントリ・12 属性・カウント整合', () => {
-    expect(catalog.entryCount).toBe(583)
-    expect(entries.length).toBe(583)
-    expect(catalog.stationAttributes.length).toBe(12)
+  it('585 エントリ・10 属性・カウント整合', () => {
+    expect(catalog.entryCount).toBe(585)
+    expect(entries.length).toBe(585)
+    expect(catalog.stationAttributes.length).toBe(10)
     expect(catalog.entryCount + catalog.stationAttributeCount).toBe(catalog.columnCount)
   })
 
@@ -34,9 +34,9 @@ describe('catalog（Zod ロード）', () => {
     expect(() => requireEntry('___missing___')).toThrow()
   })
 
-  it('カテゴリ別エントリ数の合計が 583', () => {
+  it('カテゴリ別エントリ数の合計が 585', () => {
     const total = CATEGORIES.reduce((sum, cat) => sum + entriesForCategory(cat).length, 0)
-    expect(total).toBe(583)
+    expect(total).toBe(585)
   })
 
   it('rankable は flag / hidden_ratio を含まない', () => {
@@ -47,13 +47,15 @@ describe('catalog（Zod ロード）', () => {
     expect(isRankableKey('___missing___')).toBe(false)
   })
 
-  it('全エントリの reliabilityFlagKey は実在 key を指す', () => {
-    const keys = new Set(entries.map((e) => e.key))
-    // 識別列のフラグ（flag_yoy/flag_covid）は entries 外なので許容
-    const identityFlags = new Set(['flag_yoy', 'flag_covid'])
+  it('全エントリの reliabilityFlagKey は実在する flag 種別エントリを指す（再発防止）', () => {
+    // かつて flag_yoy/flag_covid は駅属性で entries 外だったため参照先が解決できず、
+    // ランキング除外・散布除外・詳細バッジが無効化していた。この不変条件で恒久的に検出する。
+    const byKey = new Map(entries.map((e) => [e.key, e]))
     for (const e of entries) {
       if (e.reliabilityFlagKey === null) continue
-      expect(keys.has(e.reliabilityFlagKey) || identityFlags.has(e.reliabilityFlagKey)).toBe(true)
+      const flag = byKey.get(e.reliabilityFlagKey)
+      expect(flag, `${e.key} の reliabilityFlagKey=${e.reliabilityFlagKey} がエントリに不在`).toBeDefined()
+      expect(flag?.kind).toBe('flag')
     }
   })
 })

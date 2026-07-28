@@ -28,8 +28,6 @@ const station: StationRow = {
   paxLatest: 1262604,
   lpNearUse: '商業地',
   levelComplete: false,
-  flagYoy: false,
-  flagCovid: false,
 }
 
 const values = new Map<string, number>([

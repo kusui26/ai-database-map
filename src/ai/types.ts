@@ -40,12 +40,21 @@ export type EffectCollector = {
   drain(): readonly ToolEffect[]
 }
 
-/** 空の収集器を生成する。 */
-export function createCollector(): EffectCollector {
+/**
+ * 空の収集器を生成する。
+ *
+ * `onPush` を渡すと、ツールが成果を記録するたびに**その時点の全副産物**を通知する。
+ * これにより、後段（LLM の本文生成）が中断・失敗しても、成功済みのツールぶんの
+ * パネル/地図操作を先に届けられる（docs/260728_chat_scatter_plot_timeout_mitigation.md フェーズ1）。
+ */
+export function createCollector(
+  onPush?: (effects: readonly ToolEffect[]) => void,
+): EffectCollector {
   const effects: ToolEffect[] = []
   return {
     push: (effect) => {
       effects.push(effect)
+      onPush?.([...effects])
     },
     drain: () => effects,
   }

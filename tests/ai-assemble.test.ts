@@ -17,8 +17,15 @@ import {
   panelsForRanking,
   panelsForStationDetail,
   summarizePanels,
+  textOrFallback,
 } from '@/ai/assemble'
-import { type GrowthEffect, type RankingEffect, type StationDetailEffect } from '@/ai/types'
+import {
+  createCollector,
+  type GrowthEffect,
+  type RankingEffect,
+  type StationDetailEffect,
+  type ToolEffect,
+} from '@/ai/types'
 
 const station: StationRow = {
   grp: '東京#0',
@@ -209,5 +216,85 @@ describe('summarizePanels', () => {
     const summary = summarizePanels(panelsForRanking(rankingEffect))
     expect(summary).toContain('1位 流山おおたかの森')
     expect(summary).toContain('⚠') // 2位は lown フラグ
+  })
+})
+
+/**
+ * fail-soft（docs/260728_chat_scatter_plot_timeout_mitigation.md フェーズ1）：
+ * 中断・エラー・ステップ上限のいずれでも「無言の応答」にしない。
+ */
+describe('textOrFallback', () => {
+  it('本文があればそのまま返す（前後の空白は落とす）', () => {
+    expect(textOrFallback('  結果です。 ', 3, 'aborted')).toBe('結果です。')
+    expect(textOrFallback('結果です。', 0, 'failed')).toBe('結果です。')
+  })
+
+  it('本文が空でパネルがあるときは「表示した」ことを伝える', () => {
+    for (const outcome of ['ok', 'aborted', 'failed'] as const) {
+      const text = textOrFallback('', 2, outcome)
+      expect(text.length).toBeGreaterThan(0)
+      expect(text).toContain('表示しました')
+    }
+    expect(textOrFallback('', 1, 'aborted')).toContain('時間内')
+  })
+
+  it('本文もパネルも無いときは再試行を促す（終わり方で文言が変わる）', () => {
+    expect(textOrFallback('', 0, 'aborted')).toContain('時間内に取得できませんでした')
+    expect(textOrFallback('', 0, 'failed')).toContain('時間をおいて')
+    expect(textOrFallback('', 0, 'ok')).toContain('指標や地域を変えて')
+  })
+
+  it('空白のみの本文はフォールバックに置き換える', () => {
+    expect(textOrFallback('   \n ', 0, 'ok')).toContain('うまく取得できませんでした')
+  })
+
+  it('outcome 省略時は通常終了（ok）として扱う', () => {
+    expect(textOrFallback('', 0)).toBe(textOrFallback('', 0, 'ok'))
+  })
+
+  it('フォールバック文を入れた MapResponse も Zod を通る', () => {
+    const response = assemble([growthEffect], textOrFallback('', 1, 'aborted'))
+    expect(mapResponseSchema.safeParse(response).success).toBe(true)
+    expect(response.messages).toHaveLength(1)
+  })
+})
+
+describe('createCollector（部分成果の通知フック）', () => {
+  it('push のたびに「その時点の全副産物」を通知する', () => {
+    const snapshots: (readonly ToolEffect[])[] = []
+    const collector = createCollector((effects) => snapshots.push(effects))
+    collector.push(paxEffect)
+    collector.push(rankingEffect)
+    collector.push(growthEffect)
+    expect(snapshots.map((snapshot) => snapshot.length)).toEqual([1, 2, 3])
+    expect(snapshots[2]?.map((effect) => effect.kind)).toEqual([
+      'stationDetail',
+      'ranking',
+      'growth',
+    ])
+  })
+
+  it('通知されるのはスナップショット（後続の push で過去の通知が変わらない）', () => {
+    const snapshots: (readonly ToolEffect[])[] = []
+    const collector = createCollector((effects) => snapshots.push(effects))
+    collector.push(rankingEffect)
+    collector.push(growthEffect)
+    expect(snapshots[0]).toHaveLength(1) // 2 回目の push で 1 回目の通知が伸びない
+    expect(collector.drain()).toHaveLength(2)
+  })
+
+  it('通知された副産物からパネルを組み立てられる（途中で中断しても描ける）', () => {
+    const partials: number[] = []
+    const collector = createCollector((effects) =>
+      partials.push(assemble(effects, '').panels.length),
+    )
+    collector.push(growthEffect)
+    expect(partials[0]).toBeGreaterThan(0)
+  })
+
+  it('フックなしでも従来どおり動く（後方互換）', () => {
+    const collector = createCollector()
+    collector.push(growthEffect)
+    expect(collector.drain()).toHaveLength(1)
   })
 })

@@ -1,10 +1,10 @@
 # メトリクス・カタログ ラベル一覧（自動生成）
 
-`pipeline/build_catalog.py` が `station_dataset.csv`（595列）から生成。 値列 583 エントリ ＋ 駅属性 12。
+`pipeline/build_catalog.py` が `station_dataset.csv`（595列）から生成。 値列 585 エントリ ＋ 駅属性 10。
 
 凡例: `key` — ラベル 〔単位・format・rankable・⚠→信頼性フラグ〕
 
-## 乗降客数（passenger）— 16件
+## 乗降客数（passenger）— 18件
 
 - `pax_2011` — 乗降客数（2011年） 〔人/日・int・rankable〕
 - `pax_2012` — 乗降客数（2012年） 〔人/日・int・rankable〕
@@ -21,7 +21,9 @@
 - `pax_2023` — 乗降客数（2023年） 〔人/日・int・rankable〕
 - `pax_2024` — 乗降客数（2024年） 〔人/日・int・rankable〕
 - `rate_yoy` — 乗降客数 前年増減率（2023→2024年） 〔%・percent1・rankable・⚠→flag_yoy〕
+- `flag_yoy` — 乗降客数 前年増減率 信頼性フラグ（|前年比|>30%） 〔—・—・not-rankable〕
 - `rate_covid` — 乗降客数 コロナ前後増減率 〔%・percent1・rankable・⚠→flag_covid〕
+- `flag_covid` — 乗降客数 コロナ前後増減率 信頼性フラグ（被覆<100%／pre<2019／|率|>100%） 〔—・—・not-rankable〕
 
 ## 人口（population）— 132件
 
@@ -620,6 +622,4 @@
 - `n_op` — 延べ事業者数（number）
 - `operators` — 運営会社名（pax規模降順・「・」連結）（string）
 - `level_complete` — 乗降客時系列の完全性（boolean）
-- `flag_yoy` — 前年比（rate_yoy）異常値フラグ（boolean）
-- `flag_covid` — コロナ前後比（rate_covid）信頼性フラグ（boolean）
 

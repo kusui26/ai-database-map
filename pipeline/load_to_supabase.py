@@ -33,7 +33,7 @@ COPY_CHUNK = 500_000
 STATION_COLUMNS = [
     "id", "grp", "station_name", "label", "search_label", "prefecture",
     "lon", "lat", "n_op", "operators", "pax_latest", "lp_near_use",
-    "level_complete", "flag_yoy", "flag_covid",
+    "level_complete",
 ]
 
 
@@ -84,6 +84,12 @@ def main() -> int:
     colid: dict[str, int] = {e["key"]: i for i, e in enumerate(entries, start=1)}
 
     value_keys = [k for k in df.columns if k in colid]
+    # bool の値列（flag_covid/flag_yoy 等の信頼性フラグ）は 0/1 に正規化する。
+    # station_values は float8 列で、bool のままだと COPY で失敗するため。2列の特別扱いではなく
+    # 「bool の値列は一律 0/1」という汎用ルール（将来 bool フラグが増えても自動追従・リファクタ耐性）。
+    for k in value_keys:
+        if pd.api.types.is_bool_dtype(df[k]):
+            df[k] = df[k].astype("int8")
     text_value = [k for k in value_keys if not pd.api.types.is_numeric_dtype(df[k])]
     if text_value != ["lp_near_use"]:
         raise SystemExit(f"想定外の非数値メトリクス列: {text_value}（stations 側の対応が必要）")
@@ -126,8 +132,7 @@ def main() -> int:
                     "lon": df["lon"], "lat": df["lat"], "n_op": df["n_op"],
                     "operators": df["operators"],
                     "pax_latest": df["pax_latest"], "lp_near_use": df["lp_near_use"],
-                    "level_complete": df["level_complete"], "flag_yoy": df["flag_yoy"],
-                    "flag_covid": df["flag_covid"],
+                    "level_complete": df["level_complete"],
                 }
             )
             with cur.copy(f"copy public.stations ({','.join(STATION_COLUMNS)}) from stdin") as cp:
@@ -138,8 +143,7 @@ def main() -> int:
                         float(row.lon), float(row.lat),
                         _int_or_none(row.n_op), _text_or_none(row.operators),
                         _int_or_none(row.pax_latest), _text_or_none(row.lp_near_use),
-                        _bool_or_none(row.level_complete), _bool_or_none(row.flag_yoy),
-                        _bool_or_none(row.flag_covid),
+                        _bool_or_none(row.level_complete),
                     ])
             print(f"  stations copied in {time.time() - t0:.1f}s")
 

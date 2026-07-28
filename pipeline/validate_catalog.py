@@ -20,7 +20,7 @@ CAT_PATH = ROOT / "src" / "shared" / "catalog" / "catalog.json"
 
 # docs/dataset.md §2 のカテゴリ別 値列数（ドキュメント＝独立した真実）
 EXPECTED_CATEGORY_COUNTS = {
-    "passenger": 16,  # pax 14 + rate 2
+    "passenger": 18,  # pax 14 + rate 2 + flag 2（flag_yoy/flag_covid）
     "population": 132,  # 実績42 + 増減率54 + lowbase36
     "population_forecast": 180,  # 推計114 + 推計増減率60 + 誤差6
     "land_price": 153,  # lp_med(年次20×5=100) + lp_n5 + lp_lown5 + lp_gr20 + lp_gr_lown20 + lp_near3
@@ -28,11 +28,11 @@ EXPECTED_CATEGORY_COUNTS = {
     "establishment": 36,  # estab_n18 + estab_gr12 + estab_gr_lown6
     "employee": 30,  # emp_n18 + emp_gr12
 }
-EXPECTED_ENTRY_TOTAL = 583
+EXPECTED_ENTRY_TOTAL = 585
 EXPECTED_COLUMN_TOTAL = 595
 IDENTITY = {
     "grp", "station_name", "label", "search_label", "prefecture",
-    "lon", "lat", "n_op", "operators", "level_complete", "flag_yoy", "flag_covid",
+    "lon", "lat", "n_op", "operators", "level_complete",
 }
 ALLOWED_UNITS = {"人", "人/日", "円/㎡", "%", "箇所", "事業所", "m", None}
 ALLOWED_FORMATS = {"int", "decimal1", "percent1", "ratio1", "yen", None}
@@ -92,13 +92,14 @@ def main() -> int:
     check(all(e["kind"] in ALLOWED_KINDS for e in entries), "kind が語彙内",
           f"{sorted({e['kind'] for e in entries if e['kind'] not in ALLOWED_KINDS})}")
 
-    # 5. 信頼性フラグ参照が実在し、かつフラグ列である
+    # 5. 信頼性フラグ参照が「flag 種別の実在エントリ」を指す（＝除外/バッジが機能する不変条件・再発防止）
+    #    ※ かつて flag_yoy/flag_covid は駅属性で entries 外だったため参照先が解決できず、除外もバッジも無効化していた。
+    entry_by_key = {e["key"]: e for e in entries}
     refs = [(e["key"], e["reliabilityFlagKey"]) for e in entries if e["reliabilityFlagKey"]]
-    missing = [(k, f) for k, f in refs if f not in header_set]
-    check(not missing, "reliabilityFlagKey が全て実在列", f"{missing[:3]}")
-    is_flag = re.compile(r"(lowbase|lown)")
-    nonflag = [(k, f) for k, f in refs if not (is_flag.search(f) or f in ("flag_yoy", "flag_covid"))]
-    check(not nonflag, "reliabilityFlagKey がフラグ列を指す", f"{nonflag[:3]}")
+    missing = [(k, f) for k, f in refs if f not in entry_by_key]
+    check(not missing, "reliabilityFlagKey が全て実在エントリ（metric_columns 化される）", f"{missing[:3]}")
+    nonflag = [(k, f) for k, f in refs if entry_by_key.get(f, {}).get("kind") != "flag"]
+    check(not nonflag, "reliabilityFlagKey が flag 種別エントリを指す", f"{nonflag[:3]}")
 
     # 6. radiusM が key のサフィックスと整合
     bad_radius = [e["key"] for e in entries if e["radiusM"] != radius_from_key(e["key"])]

@@ -86,7 +86,9 @@ SRC: dict[str, tuple[str, str]] = {
     ),
 }
 
-# --- 識別・駅属性（11列・指標ではない） ---------------------------------
+# --- 識別・駅属性（10列・指標ではない） ---------------------------------
+# ※ flag_yoy / flag_covid は信頼性フラグ（他の lowbase/lown と同じ「flag 種別メトリクス」）
+#   なので駅属性ではなく build_entry で値エントリ化する（除外/バッジは値経由で解決するため）。
 IDENTITY_COLUMNS: list[dict[str, str]] = [
     {"key": "grp", "type": "string", "labelJa": "駅グループID", "role": "id"},
     {"key": "station_name", "type": "string", "labelJa": "駅名", "role": "name"},
@@ -98,8 +100,6 @@ IDENTITY_COLUMNS: list[dict[str, str]] = [
     {"key": "n_op", "type": "number", "labelJa": "延べ事業者数", "role": "attribute"},
     {"key": "operators", "type": "string", "labelJa": "運営会社名（pax規模降順・「・」連結）", "role": "attribute"},
     {"key": "level_complete", "type": "boolean", "labelJa": "乗降客時系列の完全性", "role": "flag"},
-    {"key": "flag_yoy", "type": "boolean", "labelJa": "前年比（rate_yoy）異常値フラグ", "role": "flag"},
-    {"key": "flag_covid", "type": "boolean", "labelJa": "コロナ前後比（rate_covid）信頼性フラグ", "role": "flag"},
 ]
 
 # 型・語彙（validate と共有する参照。値の妥当性検証に使う）
@@ -179,6 +179,16 @@ def build_entry(col: str) -> CatalogEntry:
     if col == "rate_covid":
         return _make(col, "pax_rate", "growth", "passenger", "乗降客数 コロナ前後増減率",
                      "%", "percent1", flag="flag_covid")
+    # 乗降の信頼性フラグ（他の lowbase/lown と同じ flag 種別メトリクス。rankable=False）。
+    # rate_yoy/rate_covid の reliabilityFlagKey が指す先＝除外/バッジがこの値で機能する。
+    if col == "flag_yoy":
+        return _make(col, "pax_flag", "flag", "passenger",
+                     "乗降客数 前年増減率 信頼性フラグ（|前年比|>30%）", None, None,
+                     year=2024, yearBase=2023, rankable=False)
+    if col == "flag_covid":
+        return _make(col, "pax_flag", "flag", "passenger",
+                     "乗降客数 コロナ前後増減率 信頼性フラグ（被覆<100%／pre<2019／|率|>100%）",
+                     None, None, rankable=False)
 
     # --- 人口 実績（population） ---
     m = re.fullmatch(rf"pop_(\d{{4}})_({RT})", col)

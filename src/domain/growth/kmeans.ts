@@ -36,7 +36,22 @@ function stdev(arr: readonly number[], m: number): number {
 const dist2 = (a: Vec2, b: Vec2): number => (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2
 
 /**
- * points を k クラスタに分割し、各点のクラスタ番号（0..k-1）を返す。
+ * クラスタ番号を昇順に 0..m-1 へ詰める（欠番を除去・既に連番なら恒等）。
+ *
+ * Lloyd 反復は空クラスタを作りうるため、生の割当は `{0, 2, 3}` のように欠番を含みうる。
+ * 消費側（描画・要約）は「0..m-1 の連番」を前提にするため、ここで不変条件を成立させる
+ * （docs/260728_fix_scatter_chart_sparse_cluster_labels.md）。昇順で詰めるので、
+ * 欠番のない通常ケースでは割当がまったく変わらない。
+ */
+function compactLabels(labels: readonly number[]): number[] {
+  const ordered = [...new Set(labels)].sort((a, b) => a - b)
+  const rank = new Map(ordered.map((label, index) => [label, index]))
+  return labels.map((label) => rank.get(label) ?? 0)
+}
+
+/**
+ * points を最大 k クラスタに分割し、各点のクラスタ番号を返す。
+ * 返す番号は **0..m-1 の連番（m ≤ k・欠番なし）** で、m は実際に生じたクラスタ数。
  * n <= k の場合は各点を別クラスタにする。
  */
 export function kmeans(
@@ -127,5 +142,6 @@ export function kmeans(
     if (!changed) break
   }
 
-  return assign
+  // 空クラスタが生じた場合に欠番が残らないよう詰める（早期 return の経路は既に連番）。
+  return compactLabels(assign)
 }

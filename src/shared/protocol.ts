@@ -89,6 +89,11 @@ export const scatterPointSchema = z.object({
   name: z.string(),
   x: z.number(),
   y: z.number(),
+  /**
+   * クラスタ番号。**`0..clusterCount-1` の連番（欠番なし）** が不変条件で、
+   * domain の k-means が正規化して保証する（docs/260728_fix_scatter_chart_sparse_cluster_labels.md）。
+   * 番号自体に意味はない（k-means の任意 index）ため、凡例は出さず色の区別にのみ使う。
+   */
   cluster: z.number(),
 })
 export type ScatterPoint = z.infer<typeof scatterPointSchema>

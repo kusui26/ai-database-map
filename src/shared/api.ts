@@ -60,8 +60,6 @@ export const stationRowSchema = z.object({
   paxLatest: z.number().nullable(),
   lpNearUse: z.string().nullable(),
   levelComplete: z.boolean().nullable(),
-  flagYoy: z.boolean().nullable(),
-  flagCovid: z.boolean().nullable(),
 })
 export type StationRow = z.infer<typeof stationRowSchema>
 

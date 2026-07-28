@@ -170,12 +170,10 @@ const stationRowSchema = z.object({
   pax_latest: z.number().nullable(),
   lp_near_use: z.string().nullable(),
   level_complete: z.boolean().nullable(),
-  flag_yoy: z.boolean().nullable(),
-  flag_covid: z.boolean().nullable(),
 })
 
 const STATION_COLUMNS =
-  'grp,station_name,label,search_label,prefecture,lon,lat,n_op,operators,pax_latest,lp_near_use,level_complete,flag_yoy,flag_covid'
+  'grp,station_name,label,search_label,prefecture,lon,lat,n_op,operators,pax_latest,lp_near_use,level_complete'
 
 export async function stationByGrp(grp: string): Promise<StationRow | null> {
   const { data, error } = await db()
@@ -199,8 +197,6 @@ export async function stationByGrp(grp: string): Promise<StationRow | null> {
     paxLatest: row.pax_latest,
     lpNearUse: row.lp_near_use,
     levelComplete: row.level_complete,
-    flagYoy: row.flag_yoy,
-    flagCovid: row.flag_covid,
   }
 }
 

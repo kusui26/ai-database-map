@@ -2,8 +2,8 @@
   "version": 1,
   "generatedFrom": "data/derived/station_dataset.csv",
   "columnCount": 595,
-  "stationAttributeCount": 12,
-  "entryCount": 583,
+  "stationAttributeCount": 10,
+  "entryCount": 585,
   "radii": [
     500,
     1000,
@@ -80,18 +80,6 @@
       "key": "level_complete",
       "type": "boolean",
       "labelJa": "乗降客時系列の完全性",
-      "role": "flag"
-    },
-    {
-      "key": "flag_yoy",
-      "type": "boolean",
-      "labelJa": "前年比（rate_yoy）異常値フラグ",
-      "role": "flag"
-    },
-    {
-      "key": "flag_covid",
-      "type": "boolean",
-      "labelJa": "コロナ前後比（rate_covid）信頼性フラグ",
       "role": "flag"
     }
   ],
@@ -367,6 +355,24 @@
       "license": "CC BY 4.0 相当（国土数値情報 利用約款・出典明記で商用可）"
     },
     {
+      "key": "flag_yoy",
+      "baseMetric": "pax_flag",
+      "kind": "flag",
+      "category": "passenger",
+      "labelJa": "乗降客数 前年増減率 信頼性フラグ（|前年比|>30%）",
+      "unit": null,
+      "format": null,
+      "radiusM": null,
+      "year": 2024,
+      "yearBase": 2023,
+      "vintage": null,
+      "reliabilityFlagKey": null,
+      "rankable": false,
+      "higherIsBetter": null,
+      "source": "国土数値情報「駅別乗降客数」(S12-25)",
+      "license": "CC BY 4.0 相当（国土数値情報 利用約款・出典明記で商用可）"
+    },
+    {
       "key": "rate_covid",
       "baseMetric": "pax_rate",
       "kind": "growth",
@@ -380,6 +386,24 @@
       "vintage": null,
       "reliabilityFlagKey": "flag_covid",
       "rankable": true,
+      "higherIsBetter": null,
+      "source": "国土数値情報「駅別乗降客数」(S12-25)",
+      "license": "CC BY 4.0 相当（国土数値情報 利用約款・出典明記で商用可）"
+    },
+    {
+      "key": "flag_covid",
+      "baseMetric": "pax_flag",
+      "kind": "flag",
+      "category": "passenger",
+      "labelJa": "乗降客数 コロナ前後増減率 信頼性フラグ（被覆<100%／pre<2019／|率|>100%）",
+      "unit": null,
+      "format": null,
+      "radiusM": null,
+      "year": null,
+      "yearBase": null,
+      "vintage": null,
+      "reliabilityFlagKey": null,
+      "rankable": false,
       "higherIsBetter": null,
       "source": "国土数値情報「駅別乗降客数」(S12-25)",
       "license": "CC BY 4.0 相当（国土数値情報 利用約款・出典明記で商用可）"

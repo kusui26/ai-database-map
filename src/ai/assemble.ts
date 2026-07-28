@@ -103,6 +103,43 @@ export function mapActionsForEffect(effect: ToolEffect): MapAction[] {
   }
 }
 
+/** ターンの終わり方（本文が空のときの言い換えを決める）。 */
+export type ChatOutcome = 'ok' | 'aborted' | 'failed'
+
+/** 本文が空のまま終わったときの代替文（純関数）。 */
+const FALLBACK_TEXT: Readonly<Record<ChatOutcome, { withPanels: string; withoutPanels: string }>> =
+  {
+    ok: {
+      withPanels: '地図とグラフを表示しました。',
+      withoutPanels: 'うまく取得できませんでした。指標や地域を変えて、もう一度お試しください。',
+    },
+    aborted: {
+      withPanels: '地図とグラフを表示しました（説明の生成は時間内に終わりませんでした）。',
+      withoutPanels: '時間内に取得できませんでした。もう一度お試しください。',
+    },
+    failed: {
+      withPanels: '地図とグラフを表示しました（説明の生成に失敗しました）。',
+      withoutPanels: 'うまく取得できませんでした。時間をおいて再度お試しください。',
+    },
+  }
+
+/**
+ * LLM 本文が空でも「無言の応答」にしないための文を決める（純関数）。
+ *
+ * 中断（45s abort）・エラー（429 等）・ステップ上限のいずれで終わっても、
+ * ユーザーには必ず状況が伝わるようにする（同上ドキュメント フェーズ1）。
+ */
+export function textOrFallback(
+  text: string,
+  panelCount: number,
+  outcome: ChatOutcome = 'ok',
+): string {
+  const trimmed = text.trim()
+  if (trimmed.length > 0) return trimmed
+  const fallback = FALLBACK_TEXT[outcome]
+  return panelCount > 0 ? fallback.withPanels : fallback.withoutPanels
+}
+
 /**
  * ツール副産物と LLM 本文から MapResponse を組み立てる（Zod で 100% 通過する構造）。
  * ツールを 1 つも呼ばなかった場合でも、本文だけの妥当な応答になる。

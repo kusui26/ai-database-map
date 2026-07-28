@@ -32,7 +32,7 @@ import {
 import { createCollector } from '@/ai/types'
 import { type ChatUIMessage, createTools } from '@/ai/tools'
 import { buildSystemPrompt, mapContextPrompt } from '@/ai/system-prompt'
-import { assemble } from '@/ai/assemble'
+import { assemble, textOrFallback, type ChatOutcome } from '@/ai/assemble'
 import { rateLimit } from '@/ai/rate-limit'
 
 export const runtime = 'nodejs'
@@ -76,6 +76,21 @@ function clientIp(request: Request): string {
 
 /** 会話履歴の合計文字数の上限（500 字ガードを履歴詰め込みで回避されないため・plan_fable §7）。 */
 const MAX_CONVERSATION_CHARS = 4000
+
+/**
+ * data-map パートの固定 id。ツール成功のたびに同じ id で上書きし、
+ * 最後の完全版が権威になる（部分成果の先出し・fail-soft）。
+ */
+const MAP_PART_ID = 'map'
+
+/**
+ * ターンの終わり方を判定する（本文が空のときの言い換えに使う）。
+ * 中断は AbortSignal を直接見る（abort 時に `result.text` は reject せず空で解決しうるため）。
+ */
+function outcomeOf(aborted: boolean, failureCount: number): ChatOutcome {
+  if (aborted) return 'aborted'
+  return failureCount > 0 ? 'failed' : 'ok'
+}
 
 /** ストリームエラーをユーザー向けの短い日本語に変換（無料枠 429/混雑は専用文言に）。 */
 function friendlyError(error: unknown): string {
@@ -160,34 +175,56 @@ export async function POST(request: Request): Promise<Response> {
 
   // 4) ツールループ＋ストリーミング
   const uiMessages = conversation.map((message) => textMessage(message.role, message.text))
-  const collector = createCollector()
-  const tools = createTools(collector)
 
   const stream = createUIMessageStream<ChatUIMessage>({
     execute: async ({ writer }) => {
+      // ツールが成果を出すたびに、その時点のパネル/地図操作を先に送る（fail-soft）。
+      // 同じ id で上書きするため、最後に送る完全版が常に権威になる。
+      const collector = createCollector((effects) => {
+        writer.write({
+          type: 'data-map',
+          id: MAP_PART_ID,
+          data: mapResponseSchema.parse(assemble(effects, '')),
+        })
+      })
       const agent = new ToolLoopAgent({
         model: chatModel(),
         instructions: buildSystemPrompt() + mapContext,
-        tools,
+        tools: createTools(collector),
         stopWhen: stepCountIs(MAX_TOOL_STEPS),
         temperature: 0.2,
         // 対話は fail-fast 寄りに。既定 2 だと無料枠 429 の retry-after を待って長く固まる。
         maxRetries: 1,
       })
       const modelMessages = await convertToModelMessages(uiMessages)
-      const result = await agent.stream({
-        messages: modelMessages,
-        abortSignal: AbortSignal.timeout(CHAT_TIMEOUT_MS),
-      })
+      const abortSignal = AbortSignal.timeout(CHAT_TIMEOUT_MS)
+      const result = await agent.stream({ messages: modelMessages, abortSignal })
       // テキスト/ツールパートを即時ストリーム。内側にも friendlyError を渡す
       // （渡さないと SDK 既定の英語 "An error occurred." がクライアントに届く）。
-      writer.merge(result.toUIMessageStream<ChatUIMessage>({ onError: friendlyError }))
+      const failures: unknown[] = []
+      writer.merge(
+        result.toUIMessageStream<ChatUIMessage>({
+          onError: (error) => {
+            failures.push(error)
+            return friendlyError(error)
+          },
+        }),
+      )
       // ループ完了後、domain が決定的に組み立てた MapResponse を data-map で送出。
       // 生成が途中でエラー/中断しても、それまでの副産物からパネル/地図を組み立てて返す
-      // （.catch で二重エラー＋data-map 欠落を防ぐ）。
-      const text = await Promise.resolve(result.text).catch(() => '')
-      const mapResponse = mapResponseSchema.parse(assemble(collector.drain(), text))
-      writer.write({ type: 'data-map', data: mapResponse })
+      // （reject を握って二重エラー＋data-map 欠落を防ぐ）。
+      const text = await Promise.resolve(result.text).catch((error: unknown) => {
+        failures.push(error)
+        return ''
+      })
+      const effects = collector.drain()
+      // 本文が空でも必ず一言返す（中断・エラー・ステップ上限のいずれでも無言にしない）。
+      const panelCount = assemble(effects, '').panels.length
+      const outcome = outcomeOf(abortSignal.aborted, failures.length)
+      const mapResponse = mapResponseSchema.parse(
+        assemble(effects, textOrFallback(text, panelCount, outcome)),
+      )
+      writer.write({ type: 'data-map', id: MAP_PART_ID, data: mapResponse })
     },
     onError: (error) => {
       console.error('[api/chat] stream error:', error instanceof Error ? error.message : error)

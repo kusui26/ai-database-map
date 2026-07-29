@@ -6,19 +6,34 @@
  * 指標追加が UI/AI に同時反映される（.claude/CLAUDE.md §2「API こそがプロダクト」）。
  */
 
-import { type CatalogEntry, entriesForCategory, rankableForCategory } from '@/shared/catalog'
+import { type CatalogEntry, rankableForCategory } from '@/shared/catalog'
 import { CATEGORIES, CATEGORY_LABELS_JA, type Category } from '@/shared/constants'
-import { baseMetricLabel, variantLabel } from '@/domain/metrics'
+import { baseMetricLabel } from '@/domain/metrics'
+import { defaultKeyForBaseMetric } from './metric-resolver'
 
-/** 指標変種 1 件の要約（ランキング/散布に渡す正確なキーつき）。 */
-export type VariantDigest = {
-  readonly key: string
+/**
+ * 指標ファミリの詳細（**変種を全列挙しない**）。
+ *
+ * 以前は 1 ファミリで最大 114 変種・7〜15KB を返しており、ツールループの各ステップで
+ * その全文が入力に積み上がっていた（docs/260728_chat_scatter_plot_timeout_mitigation.md §2.5）。
+ * キーの確定は metric-resolver がサーバ側で行うため、LLM には
+ * 「どの半径・どの年が使えるか」と「既定キー」だけを渡せば足りる。
+ */
+export type BaseMetricDetail = {
+  readonly baseMetric: string
   readonly labelJa: string
-  readonly radiusM: number | null
-  readonly year: number | null
-  readonly yearBase: number | null
-  readonly vintage: number | null
+  readonly variantCount: number
+  /** 対応する集約半径（m・昇順）。空＝半径に依存しない指標。 */
+  readonly radii: readonly number[]
+  /** 対象年（増減率は `2015→2020` 形式）。 */
+  readonly years: readonly string[]
+  /** 将来推計の推計時点（2024=R6 / 2018=H30）。無い指標では省略。 */
+  readonly vintages?: readonly number[]
+  /** 既定で選ばれるキー（rank/compare に metric として渡せる）。 */
+  readonly defaultKey: string | null
   readonly unit: string | null
+  /** 指標の指定方法（LLM への案内）。 */
+  readonly usage: string
 }
 
 /** baseMetric（指標ファミリ）の要約。 */
@@ -56,7 +71,10 @@ function radiiOf(entries: readonly CatalogEntry[]): number[] {
   return [...set].sort((a, b) => a - b)
 }
 
-/** カテゴリ 1 件の baseMetric ダイジェスト。 */
+/**
+ * カテゴリ 1 件の baseMetric ダイジェスト。
+ * 例キーは **metric-resolver が既定で選ぶキー**にそろえる（プロンプトの例と実際の解決を一致させる）。
+ */
 function baseMetricsFor(category: Category): BaseMetricDigest[] {
   const groups = groupByBaseMetric(rankableForCategory(category))
   return [...groups.entries()].flatMap(([baseMetric, entries]) => {
@@ -66,7 +84,7 @@ function baseMetricsFor(category: Category): BaseMetricDigest[] {
       {
         baseMetric,
         labelJa: baseMetricLabel(baseMetric),
-        exampleKey: example.key,
+        exampleKey: defaultKeyForBaseMetric(baseMetric) ?? example.key,
         radii: radiiOf(entries),
       },
     ]
@@ -82,31 +100,56 @@ export function categoryDigests(): CategoryDigest[] {
   }))
 }
 
-/** baseMetric の全変種（rankable）を正確なキー付きで返す（getMetricsCatalog の絞り込み）。 */
-export function variantsForBaseMetric(baseMetric: string): VariantDigest[] {
+/** ファミリに属する rankable エントリ。 */
+function entriesForBaseMetric(baseMetric: string): readonly CatalogEntry[] {
   return CATEGORIES.flatMap((category) =>
-    rankableForCategory(category)
-      .filter((entry) => entry.baseMetric === baseMetric)
-      .map((entry) => ({
-        key: entry.key,
-        labelJa: variantLabel(entry),
-        radiusM: entry.radiusM,
-        year: entry.year,
-        yearBase: entry.yearBase,
-        vintage: entry.vintage,
-        unit: entry.unit,
-      })),
+    rankableForCategory(category).filter((entry) => entry.baseMetric === baseMetric),
   )
+}
+
+/** 年（増減率は年ペア）の一覧。 */
+function yearsOf(entries: readonly CatalogEntry[]): string[] {
+  const labels = new Set(
+    entries.flatMap((entry) => {
+      if (entry.year === null) return []
+      return [entry.yearBase === null ? `${entry.year}` : `${entry.yearBase}→${entry.year}`]
+    }),
+  )
+  return [...labels]
+}
+
+/** 推計時点（将来推計のみ・降順）。 */
+function vintagesOf(entries: readonly CatalogEntry[]): number[] {
+  const vintages = new Set(
+    entries.flatMap((entry) => (entry.vintage === null ? [] : [entry.vintage])),
+  )
+  return [...vintages].sort((a, b) => b - a)
+}
+
+/**
+ * baseMetric の詳細（**畳み込み済み**：半径一覧 × 年一覧 ＋ 既定キー）。
+ * 変種の全列挙をやめ、返却量を数百バイト規模に抑える（§8 の決定 4）。
+ */
+export function baseMetricDetail(baseMetric: string): BaseMetricDetail {
+  const entries = entriesForBaseMetric(baseMetric)
+  const head = entries[0]
+  const vintages = vintagesOf(entries)
+  return {
+    baseMetric,
+    labelJa: baseMetricLabel(baseMetric),
+    variantCount: entries.length,
+    radii: radiiOf(entries),
+    years: yearsOf(entries),
+    ...(vintages.length > 0 ? { vintages } : {}),
+    defaultKey: defaultKeyForBaseMetric(baseMetric),
+    unit: head?.unit ?? null,
+    usage: `rankStations / compareGrowth には metric="${baseMetric}" と radiusM（必要なら year）を渡せばよい。キーを組み立てる必要はない。`,
+  }
 }
 
 /** getMetricsCatalog の返却（判別可能な 3 形）。 */
 export type MetricsCatalogDigest =
-  | {
-      readonly baseMetric: string
-      readonly labelJa: string
-      readonly variantCount: number
-      readonly variants: VariantDigest[]
-    }
+  | BaseMetricDetail
   | CategoryDigest
   | {
       readonly categories: {
@@ -118,7 +161,7 @@ export type MetricsCatalogDigest =
 
 /**
  * getMetricsCatalog ツールの返却本体。
- * - baseMetric 指定：その変種の正確なキー一覧（ランキング/散布にそのまま渡せる）。
+ * - baseMetric 指定：半径一覧 × 年一覧 ＋ 既定キー（**変種は列挙しない**）。
  * - category 指定：その配下の baseMetric 一覧（次に baseMetric で絞り込む）。
  * - 無指定：カテゴリ一覧。
  */
@@ -127,13 +170,7 @@ export function metricsCatalogDigest(input: {
   baseMetric?: string
 }): MetricsCatalogDigest {
   if (input.baseMetric !== undefined) {
-    const variants = variantsForBaseMetric(input.baseMetric)
-    return {
-      baseMetric: input.baseMetric,
-      labelJa: baseMetricLabel(input.baseMetric),
-      variantCount: variants.length,
-      variants,
-    }
+    return baseMetricDetail(input.baseMetric)
   }
   if (input.category !== undefined) {
     const digest = categoryDigests().find((entry) => entry.category === input.category)
@@ -157,15 +194,34 @@ function radiusHint(radii: readonly number[]): string {
   return radii.map((radius) => (radius >= 1000 ? `${radius / 1000}km` : `${radius}m`)).join('/')
 }
 
+/** 半径非依存で少数のファミリは**キーを列挙**する上限（別物の指標が同居しうるため）。 */
+const ENUMERATE_KEYS_MAX = 4
+
 /**
- * system-prompt に埋め込むカタログ要約（カテゴリ→baseMetric・例キー・半径）。
- * カタログ駆動で生成するため、指標追加で自動的に更新される。
+ * ツールに渡す指標トークン。
+ * 通常はファミリ名だが、半径非依存で変種が少ないファミリ（例 `pax_rate` = 前年比／コロナ前後比）は
+ * **意味の異なる指標が同居**しているため、キーを列挙して曖昧さを残さない。
+ */
+function familyToken(baseMetric: string, radii: readonly number[]): string {
+  if (radii.length > 0) return baseMetric
+  const keys = entriesForBaseMetric(baseMetric).map((entry) => entry.key)
+  return keys.length > 0 && keys.length <= ENUMERATE_KEYS_MAX ? keys.join('/') : baseMetric
+}
+
+/**
+ * system-prompt に埋め込むカタログ要約（カテゴリ→**ツールに渡す指標トークン**・対応半径）。
+ *
+ * ツールにはファミリ名（`pop_gr` 等）をそのまま渡せるため、キー文字列ではなく
+ * **ファミリ名を見せる**（LLM がキーを組み立てずに済む）。カタログ駆動で自動更新。
  */
 export function systemCatalogSummary(): string {
   const lines: string[] = []
   for (const category of categoryDigests()) {
     const bases = category.baseMetrics
-      .map((base) => `${base.labelJa}[例:${base.exampleKey}｜${radiusHint(base.radii)}]`)
+      .map(
+        (base) =>
+          `${base.labelJa}[${familyToken(base.baseMetric, base.radii)}｜${radiusHint(base.radii)}]`,
+      )
       .join('、')
     lines.push(`- ${category.labelJa}(${category.category})：${bases}`)
   }
@@ -179,19 +235,4 @@ export function knownBaseMetrics(): string[] {
     for (const entry of rankableForCategory(category)) set.add(entry.baseMetric)
   }
   return [...set]
-}
-
-/** 指標キーの推定候補（不正キー時に近い baseMetric の例キーを返す）。 */
-export function suggestMetricKeys(bad: string): string[] {
-  const lowered = bad.toLowerCase()
-  const suggestions: string[] = []
-  for (const category of CATEGORIES) {
-    for (const entry of entriesForCategory(category)) {
-      if (!entry.rankable) continue
-      if (entry.baseMetric.toLowerCase().startsWith(lowered.split('_')[0] ?? lowered)) {
-        suggestions.push(entry.key)
-      }
-    }
-  }
-  return suggestions.slice(0, 8)
 }

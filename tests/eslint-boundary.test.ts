@@ -12,6 +12,12 @@ import { describe, expect, it } from 'vitest'
  */
 const projectRoot = process.cwd()
 
+/**
+ * ESLint の初回起動（flat config の解決）は単体でも 3 秒前後かかり、
+ * スイート全体を並列実行すると既定の 5 秒を超えることがある。ここだけ余裕を持たせる。
+ */
+const ESLINT_TIMEOUT_MS = 30_000
+
 async function lintDomainRuleIds(fileName: string, code: string): Promise<string[]> {
   const eslint = new ESLint({ cwd: projectRoot })
   const filePath = path.join(projectRoot, 'src', 'domain', fileName)
@@ -21,27 +27,39 @@ async function lintDomainRuleIds(fileName: string, code: string): Promise<string
 }
 
 describe('アーキテクチャ境界（ESLint import ルール）', () => {
-  it('domain → UI/app/ai の import を no-restricted-imports で検出する', async () => {
-    const ruleIds = await lintDomainRuleIds(
-      '__boundary_violation_probe__.ts',
-      "import { Panel } from '@/components/panel'\nexport const value = 1\n",
-    )
-    expect(ruleIds).toContain('no-restricted-imports')
-  })
+  it(
+    'domain → UI/app/ai の import を no-restricted-imports で検出する',
+    async () => {
+      const ruleIds = await lintDomainRuleIds(
+        '__boundary_violation_probe__.ts',
+        "import { Panel } from '@/components/panel'\nexport const value = 1\n",
+      )
+      expect(ruleIds).toContain('no-restricted-imports')
+    },
+    ESLINT_TIMEOUT_MS,
+  )
 
-  it('相対パスでの UI 依存も検出する', async () => {
-    const ruleIds = await lintDomainRuleIds(
-      '__boundary_relative_probe__.ts',
-      "import { Panel } from '../components/panel'\nexport const value = 1\n",
-    )
-    expect(ruleIds).toContain('no-restricted-imports')
-  })
+  it(
+    '相対パスでの UI 依存も検出する',
+    async () => {
+      const ruleIds = await lintDomainRuleIds(
+        '__boundary_relative_probe__.ts',
+        "import { Panel } from '../components/panel'\nexport const value = 1\n",
+      )
+      expect(ruleIds).toContain('no-restricted-imports')
+    },
+    ESLINT_TIMEOUT_MS,
+  )
 
-  it('domain → shared の正当な import は許可する', async () => {
-    const ruleIds = await lintDomainRuleIds(
-      '__boundary_ok_probe__.ts',
-      "import { RADII_M } from '@/shared/constants'\nexport const count = RADII_M.length\n",
-    )
-    expect(ruleIds).not.toContain('no-restricted-imports')
-  })
+  it(
+    'domain → shared の正当な import は許可する',
+    async () => {
+      const ruleIds = await lintDomainRuleIds(
+        '__boundary_ok_probe__.ts',
+        "import { RADII_M } from '@/shared/constants'\nexport const count = RADII_M.length\n",
+      )
+      expect(ruleIds).not.toContain('no-restricted-imports')
+    },
+    ESLINT_TIMEOUT_MS,
+  )
 })

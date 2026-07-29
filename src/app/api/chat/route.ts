@@ -5,7 +5,8 @@
  * 叩かせ、テキストをストリーミングする。ループ完了後、assemble.ts が **MapResponse(Zod検証済)** を
  * data-map パートで送出する（パネル・地図操作は domain が決定的に生成＝幻覚しない）。
  *
- * ガード：IP レート制限・入力 500 文字上限・履歴合計上限・45s abort・鍵未設定は 503・エラー封筒。
+ * ガード：IP レート制限・入力 500 文字上限・履歴合計上限・50s abort・鍵未設定は 503・エラー封筒。
+ * ツールが成果を出すたびに data-map を先出しし、本文が空でも必ず一言返す（fail-soft）。
  * `domain`・既存 API・protocol は無改変（純加算）。
  */
 
@@ -123,8 +124,9 @@ async function resolveMapContext(selectedGrp?: string, radiusM?: number): Promis
 }
 
 export async function POST(request: Request): Promise<Response> {
+  const startedAt = Date.now()
   // 1) レート制限（IP・固定窓）
-  const limit = rateLimit(clientIp(request), Date.now())
+  const limit = rateLimit(clientIp(request), startedAt)
   if (!limit.ok) {
     const retryAfter = Math.ceil(limit.retryAfterMs / 1000)
     return apiError(
@@ -225,6 +227,10 @@ export async function POST(request: Request): Promise<Response> {
         assemble(effects, textOrFallback(text, panelCount, outcome)),
       )
       writer.write({ type: 'data-map', id: MAP_PART_ID, data: mapResponse })
+      // 1 行サマリ（本番での再発検知用・発話内容は出さない）。
+      console.info(
+        `[api/chat] ${outcome} ${Date.now() - startedAt}ms effects=${effects.length} panels=${panelCount} text=${text.length > 0}`,
+      )
     },
     onError: (error) => {
       console.error('[api/chat] stream error:', error instanceof Error ? error.message : error)

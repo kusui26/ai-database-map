@@ -139,14 +139,25 @@ export type ValueRow = { grp: string; stationName: string; key: string; value: n
 export async function valuesForColumns(
   keys: string[],
   prefectures: string[],
+  operators: readonly string[] = [],
 ): Promise<ValueRow[]> {
   // 全国は行数が max-rows(=1000) を超えるため、RPC は単一 jsonb で返す（配列を検証）。
   const raw = await rpc('values_for_columns', {
     column_keys: keys,
     prefs: prefectures.length > 0 ? prefectures : null, // 空は null＝全国
+    ops: operators.length > 0 ? [...operators] : null, // 空は null＝全社
   })
   const rows = z.array(valueRowSchema).parse(raw)
   return rows.map((r) => ({ grp: r.grp, stationName: r.station_name, key: r.key, value: r.value }))
+}
+
+// --- 運営会社（散布の絞り込み用の一覧） ---------------------------------
+const operatorRowSchema = z.object({ name: z.string(), station_count: z.number() })
+
+/** 運営会社の一覧（社名＋駅グループ数・多い順）。セレクタと AI ツールが参照する。 */
+export async function operatorNames(): Promise<{ name: string; stationCount: number }[]> {
+  const rows = await rpcRows('operator_names', {}, operatorRowSchema)
+  return rows.map((r) => ({ name: r.name, stationCount: r.station_count }))
 }
 
 // --- 駅詳細 -------------------------------------------------------------

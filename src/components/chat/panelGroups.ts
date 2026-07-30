@@ -103,6 +103,7 @@ function scatterPromotion(panel: Panel, toolCalls: readonly ToolCall[]): Promoti
     xKey,
     yKey,
     prefectures: readStringArray(call?.input.prefectures),
+    operators: readStringArray(call?.input.operators),
     excludeLowN: readBool(call?.input.excludeLowN),
   }
 }

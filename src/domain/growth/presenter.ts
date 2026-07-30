@@ -19,6 +19,8 @@ export type ValueRow = {
 export type GrowthOptions = {
   readonly excludeLowN?: boolean
   readonly prefectures?: readonly string[]
+  /** 運営会社の絞り込み（絞り込み自体は DB 側・ここは応答へ載せて表示に使う・260730）。 */
+  readonly operators?: readonly string[]
 }
 
 export function buildGrowth(
@@ -67,6 +69,7 @@ export function buildGrowth(
     x: { key: xEntry.key, labelJa: xEntry.labelJa, unit: xEntry.unit },
     y: { key: yEntry.key, labelJa: yEntry.labelJa, unit: yEntry.unit },
     prefectures: [...(options.prefectures ?? [])],
+    operators: [...(options.operators ?? [])],
     clusterCount: new Set(clusters).size,
     excludedLowN,
     points,

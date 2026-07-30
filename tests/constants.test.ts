@@ -6,9 +6,12 @@ import {
   CATEGORY_LABELS_JA,
   CLUSTER_COLORS,
   clusterColor,
+  operatorLabel,
   PREFECTURES,
+  prefectureLabel,
   RADII_M,
   RADIUS_LABELS,
+  selectionLabel,
   WARNING_COLOR,
 } from '@/shared/constants'
 
@@ -89,6 +92,26 @@ describe('clusterColor', () => {
       expect(CLUSTER_COLORS).toContain(clusterColor(index))
     }
     expect(clusterColor(-1)).toBe(CLUSTER_COLORS[CLUSTER_COLORS.length - 1])
+  })
+})
+
+describe('selectionLabel（複数選択の表示ラベル）', () => {
+  it('空は emptyLabel、1–2 件は連結、3 件以上は先頭＋他N件', () => {
+    expect(selectionLabel([], '全社')).toBe('全社')
+    expect(selectionLabel(['東日本旅客鉄道'], '全社')).toBe('東日本旅客鉄道')
+    expect(selectionLabel(['東日本旅客鉄道', '東京地下鉄'], '全社')).toBe(
+      '東日本旅客鉄道・東京地下鉄',
+    )
+    expect(selectionLabel(['東日本旅客鉄道', '東京地下鉄', '東京都'], '全社')).toBe(
+      '東日本旅客鉄道 他2件',
+    )
+  })
+
+  it('都道府県・運営会社のラベルは同じ文法で空文言だけが違う', () => {
+    expect(prefectureLabel([])).toBe('全国')
+    expect(operatorLabel([])).toBe('全社')
+    expect(prefectureLabel(['千葉県', '埼玉県'])).toBe('千葉県・埼玉県')
+    expect(operatorLabel(['東武鉄道', '西武鉄道'])).toBe('東武鉄道・西武鉄道')
   })
 })
 

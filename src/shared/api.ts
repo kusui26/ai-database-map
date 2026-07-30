@@ -43,6 +43,7 @@ export const growthQuerySchema = z.object({
   x: z.string(),
   y: z.string(),
   prefectures: z.array(z.string()).default([]), // 空＝全国（P6c）
+  operators: z.array(z.string()).default([]), // 空＝全社（260730・「・」分割の完全一致 OR）
   excludeLowN: boolFlag,
 })
 
@@ -128,11 +129,24 @@ export const growthResponseSchema = z.object({
   x: metricRefSchema,
   y: metricRefSchema,
   prefectures: z.array(z.string()), // 空＝全国（P6c）
+  operators: z.array(z.string()).default([]), // 空＝全社（260730）
   clusterCount: z.number(),
   excludedLowN: z.number(),
   points: z.array(scatterPointSchema),
 })
 export type GrowthResponse = z.infer<typeof growthResponseSchema>
+
+/** 運営会社の一覧（GET /api/operators）。散布の会社セレクタが参照する。 */
+export const operatorSchema = z.object({
+  name: z.string(),
+  stationCount: z.number(),
+})
+export type Operator = z.infer<typeof operatorSchema>
+
+export const operatorsResponseSchema = z.object({
+  operators: z.array(operatorSchema), // 駅グループ数の多い順
+})
+export type OperatorsResponse = z.infer<typeof operatorsResponseSchema>
 
 export const healthResponseSchema = z.object({ ok: z.literal(true) })
 export type HealthResponse = z.infer<typeof healthResponseSchema>

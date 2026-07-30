@@ -1,6 +1,6 @@
 'use client'
 
-/** 散布（/api/growth）の取得フック（SWR）。open 中のみ・x/y/都道府県/除外の変更で再取得。 */
+/** 散布（/api/growth）の取得フック（SWR）。open 中のみ・x/y/都道府県/運営会社/除外の変更で再取得。 */
 
 import useSWR from 'swr'
 import { type GrowthResponse, growthResponseSchema } from '@/shared/api'
@@ -30,11 +30,13 @@ export function useGrowth(
   x: string,
   y: string,
   prefectures: string[],
+  operators: string[],
   excludeLowN: boolean,
   enabled: boolean,
 ): GrowthState {
   const params = new URLSearchParams({ x, y })
   if (prefectures.length > 0) params.set('prefecture', prefectures.join(','))
+  if (operators.length > 0) params.set('operators', operators.join(','))
   if (excludeLowN) params.set('excludeLowN', 'true')
   const key = enabled ? `/api/growth?${params.toString()}` : null
 

@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * 散布図のモーダル（FAB から開く）。x/y 指標ピッカ × 都道府県 × 低分母除外 → /api/growth
+ * 散布図のモーダル（FAB から開く）。x/y 指標ピッカ × 都道府県 × 運営会社 × 低分母除外 → /api/growth
  * （決定的 k-means 済み）→ Chart.js 散布（クラスタ色分け）。点クリックで駅選択（?grp）。
  */
 
@@ -14,6 +14,7 @@ import { scatterPanel } from '@/domain/growth/panel'
 import { useMapUrlState } from '@/components/map/useMapUrlState'
 import { ScatterChart, SCATTER_HEIGHT } from '@/components/panels/ScatterChart'
 import { MetricSelect } from '@/components/metrics/MetricSelect'
+import { OperatorMultiSelect } from '@/components/metrics/OperatorMultiSelect'
 import { PrefectureMultiSelect } from '@/components/metrics/PrefectureMultiSelect'
 import { useGrowth } from './useGrowth'
 
@@ -29,6 +30,8 @@ export type ScatterInitial = {
   readonly xKey: string
   readonly yKey: string
   readonly prefectures: readonly string[]
+  /** 運営会社の絞り込み（260730・省略時は全社）。 */
+  readonly operators?: readonly string[]
   readonly excludeLowN: boolean
 }
 
@@ -49,12 +52,16 @@ export function ScatterDialog({
   const [yCategory, setYCategory] = useState<Category>(getEntry(initialY)?.category ?? Y_CATEGORY)
   const [yKey, setYKey] = useState<string>(initialY)
   const [prefectures, setPrefectures] = useState<string[]>(initial ? [...initial.prefectures] : [])
+  const [operators, setOperators] = useState<string[]>(
+    initial ? [...(initial.operators ?? [])] : [],
+  )
   const [excludeLowN, setExcludeLowN] = useState<boolean>(initial?.excludeLowN ?? false)
 
   const { growth, isLoading, isValidating, error } = useGrowth(
     xKey,
     yKey,
     prefectures,
+    operators,
     excludeLowN,
     open,
   )
@@ -106,6 +113,7 @@ export function ScatterDialog({
           <div className="space-y-2 border-b border-slate-100 px-4 py-3">
             <div className="flex flex-wrap items-center gap-3">
               <PrefectureMultiSelect selected={prefectures} onChange={setPrefectures} />
+              <OperatorMultiSelect selected={operators} onChange={setOperators} />
               <label className="flex cursor-pointer items-center gap-1.5 text-sm text-slate-600">
                 <input
                   type="checkbox"

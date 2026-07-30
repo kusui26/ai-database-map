@@ -29,8 +29,8 @@ export type GrowthState = {
 export function useGrowth(
   x: string,
   y: string,
-  prefectures: string[],
-  operators: string[],
+  prefectures: readonly string[],
+  operators: readonly string[],
   excludeLowN: boolean,
   enabled: boolean,
 ): GrowthState {

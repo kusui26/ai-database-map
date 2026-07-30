@@ -152,12 +152,25 @@ export async function valuesForColumns(
 }
 
 // --- 運営会社（散布の絞り込み用の一覧） ---------------------------------
-const operatorRowSchema = z.object({ name: z.string(), station_count: z.number() })
+const operatorRowSchema = z.object({
+  name: z.string(),
+  station_count: z.number(),
+  prefectures: z.array(z.string()).nullable().default([]), // 走行する都道府県（260731）
+})
 
-/** 運営会社の一覧（社名＋駅グループ数・多い順）。セレクタと AI ツールが参照する。 */
-export async function operatorNames(): Promise<{ name: string; stationCount: number }[]> {
+/**
+ * 運営会社の一覧（社名＋駅グループ数＋走行する都道府県・駅数の多い順）。
+ * セレクタ・都道府県との連動・AI ツールが参照する。
+ */
+export async function operatorNames(): Promise<
+  { name: string; stationCount: number; prefectures: string[] }[]
+> {
   const rows = await rpcRows('operator_names', {}, operatorRowSchema)
-  return rows.map((r) => ({ name: r.name, stationCount: r.station_count }))
+  return rows.map((r) => ({
+    name: r.name,
+    stationCount: r.station_count,
+    prefectures: r.prefectures ?? [],
+  }))
 }
 
 // --- 駅詳細 -------------------------------------------------------------

@@ -6,12 +6,15 @@
  * 都道府県（47 件）と違い会社は **181 件**あるため、検索と「駅数の多い順」が要る
  * （上位 10 社で延べの 56% を占めるので、多くの用途は検索なしで届く）。
  * 空＝全社。複数選択は OR（どれか 1 社でも運営していれば対象）。
+ *
+ * 260731：都道府県との連動。`allowed` を渡すと、選択中の県を走らない会社は**グレーアウト**し
+ * （0 件になる組合せを防ぐ）、選択中の会社の都道府県をまとめて選ぶボタンを出す。
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { type Operator } from '@/shared/api'
 import { operatorLabel } from '@/shared/constants'
 import { cn } from '@/lib/utils'
-import { useOperators } from './useOperators'
 
 /** 一覧に表示する最大件数（検索で絞り込めるため上限を設けて描画量を抑える）。 */
 const MAX_VISIBLE = 60
@@ -19,16 +22,31 @@ const MAX_VISIBLE = 60
 export function OperatorMultiSelect({
   selected,
   onChange,
+  operators,
+  isLoading,
+  error,
+  allowed,
+  onApplyPrefectures,
+  applyPrefectureCount,
   className,
 }: {
   selected: string[]
   onChange: (operators: string[]) => void
+  operators: readonly Operator[]
+  isLoading: boolean
+  error: Error | undefined
+  /** 選べる会社（未指定＝全社）。含まれない会社はグレーアウト。 */
+  allowed?: readonly string[]
+  /** 「選択中の会社の都道府県を選ぶ」ボタン（未指定なら出さない）。 */
+  onApplyPrefectures?: () => void
+  /** 上記ボタンに表示する県数（0 なら出さない）。 */
+  applyPrefectureCount?: number
   className?: string
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const ref = useRef<HTMLDivElement>(null)
-  const { operators, isLoading, error } = useOperators(open)
+  const allowedSet = useMemo(() => (allowed === undefined ? null : new Set(allowed)), [allowed])
 
   useEffect(() => {
     if (!open) return
@@ -45,16 +63,24 @@ export function OperatorMultiSelect({
     onChange(selected.includes(name) ? selected.filter((o) => o !== name) : [...selected, name])
   }
 
-  // 選択済みは常に先頭（検索で消えて解除できなくなるのを防ぐ）。
+  // 並びは「選択済み → 選べる → グレーアウト」。検索で消えて解除できなくなるのを防ぐ。
   const visible = useMemo(() => {
     const keyword = query.trim()
     const matched = operators.filter(
       (operator) => keyword.length === 0 || operator.name.includes(keyword),
     )
-    const chosen = matched.filter((operator) => selected.includes(operator.name))
-    const rest = matched.filter((operator) => !selected.includes(operator.name))
-    return [...chosen, ...rest].slice(0, MAX_VISIBLE)
-  }, [operators, query, selected])
+    const rank = (operator: Operator): number => {
+      if (selected.includes(operator.name)) return 0
+      if (allowedSet === null || allowedSet.has(operator.name)) return 1
+      return 2
+    }
+    return [...matched].sort((a, b) => rank(a) - rank(b)).slice(0, MAX_VISIBLE)
+  }, [operators, query, selected, allowedSet])
+
+  const showApply =
+    onApplyPrefectures !== undefined &&
+    applyPrefectureCount !== undefined &&
+    applyPrefectureCount > 0
 
   return (
     <div ref={ref} className={cn('relative', className)}>
@@ -93,6 +119,20 @@ export function OperatorMultiSelect({
           >
             全社（すべて解除）
           </button>
+          {showApply && (
+            <button
+              type="button"
+              onClick={onApplyPrefectures}
+              className="mb-1 w-full rounded-md bg-indigo-50 px-2 py-1 text-left text-xs font-medium text-indigo-700 hover:bg-indigo-100"
+            >
+              この会社の都道府県を選択（{applyPrefectureCount}県）
+            </button>
+          )}
+          {allowedSet !== null && (
+            <p className="mb-1 px-2 text-xs text-slate-400">
+              選択中の都道府県を走る {allowedSet.size} 社のみ選べます
+            </p>
+          )}
           <div className="min-h-0 flex-1 overflow-y-auto">
             {error !== undefined && (
               <p className="px-2 py-1 text-xs text-amber-600">会社一覧を取得できませんでした。</p>
@@ -101,23 +141,38 @@ export function OperatorMultiSelect({
             {!isLoading && error === undefined && visible.length === 0 && (
               <p className="px-2 py-1 text-xs text-slate-400">該当する会社がありません。</p>
             )}
-            {visible.map((operator) => (
-              <label
-                key={operator.name}
-                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-sm text-slate-700 hover:bg-slate-50"
-              >
-                <input
-                  type="checkbox"
-                  checked={selected.includes(operator.name)}
-                  onChange={() => toggle(operator.name)}
-                  className="size-4 shrink-0 accent-indigo-600"
-                />
-                <span className="min-w-0 flex-1 truncate">{operator.name}</span>
-                <span className="shrink-0 text-xs text-slate-400 tabular-nums">
-                  {operator.stationCount}
-                </span>
-              </label>
-            ))}
+            {visible.map((operator) => {
+              const checked = selected.includes(operator.name)
+              const disabled = allowedSet !== null && !allowedSet.has(operator.name) && !checked
+              return (
+                <label
+                  key={operator.name}
+                  className={cn(
+                    'flex items-center gap-2 rounded-md px-2 py-1 text-sm',
+                    disabled
+                      ? 'cursor-not-allowed text-slate-300'
+                      : 'cursor-pointer text-slate-700 hover:bg-slate-50',
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    disabled={disabled}
+                    onChange={() => toggle(operator.name)}
+                    className="size-4 shrink-0 accent-indigo-600 disabled:opacity-40"
+                  />
+                  <span className="min-w-0 flex-1 truncate">{operator.name}</span>
+                  <span
+                    className={cn(
+                      'shrink-0 text-xs tabular-nums',
+                      disabled ? 'text-slate-300' : 'text-slate-400',
+                    )}
+                  >
+                    {operator.stationCount}
+                  </span>
+                </label>
+              )
+            })}
           </div>
         </div>
       )}

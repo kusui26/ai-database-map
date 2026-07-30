@@ -12,7 +12,7 @@ import { getEntry } from '@/shared/catalog'
 import { DEFAULT_SCATTER_X, DEFAULT_SCATTER_Y, rankableGroups } from '@/domain/metrics'
 import { scatterPanel } from '@/domain/growth/panel'
 import { useMapUrlState } from '@/components/map/useMapUrlState'
-import { ScatterChart } from '@/components/panels/ScatterChart'
+import { ScatterChart, SCATTER_HEIGHT } from '@/components/panels/ScatterChart'
 import { MetricSelect } from '@/components/metrics/MetricSelect'
 import { PrefectureMultiSelect } from '@/components/metrics/PrefectureMultiSelect'
 import { useGrowth } from './useGrowth'
@@ -82,7 +82,7 @@ export function ScatterDialog({
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm" />
         <Dialog.Content
-          className="fixed top-1/2 left-1/2 z-50 flex max-h-[88vh] w-[calc(100vw-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl bg-white shadow-2xl focus:outline-none"
+          className="fixed top-1/2 left-1/2 z-50 flex max-h-[88vh] w-[calc(100vw-2rem)] max-w-4xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl bg-white shadow-2xl focus:outline-none"
           aria-describedby={undefined}
         >
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
@@ -148,8 +148,13 @@ export function ScatterDialog({
             ) : (
               <div className="relative">
                 {growth === undefined ? (
-                  // 初回はチャート節（タイトル2行＋340pxチャート≒396px）と同じ高さ＝到着時にサイズ不変。
-                  <div className="grid h-[396px] place-items-center text-sm text-slate-400">
+                  // 初回はチャート節と同じ高さ＝データ到着時にサイズが変わらない（P6d）。
+                  // 加算する 2rem は「タイトル 1 行（text-base=24px）＋mt-2（8px）」ぶん。
+                  // 幅 896px では既定の指標ラベルが 1 行に収まる（実測でズレ 0px）。
+                  <div
+                    className="grid place-items-center text-sm text-slate-400"
+                    style={{ height: `calc(${SCATTER_HEIGHT.full} + 2rem)` }}
+                  >
                     {isLoading ? '集計中…' : '指標を選んでください'}
                   </div>
                 ) : (

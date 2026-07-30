@@ -15,7 +15,19 @@ import { cn } from '@/lib/utils'
 ensureChartRegistered()
 
 const AXIS_COLOR = '#94a3b8'
-const HEIGHT_PX: Record<'compact' | 'full', number> = { compact: 220, full: 340 }
+
+/**
+ * チャートの高さ（CSS 値）。
+ *
+ * `full`（散布モーダル）は幅 896px に対して縦横比が横長になりすぎないよう、
+ * 画面高に追従させたうえで 440px を上限にする（docs/260730_scatter_plot_size.md）。
+ * 低い画面では 48vh まで縮み、モーダルの `max-h-[88vh]` を突き抜けない。
+ * `compact`（チャット内インラインカード）は従来どおり固定 220px。
+ */
+export const SCATTER_HEIGHT: Readonly<Record<'compact' | 'full', string>> = {
+  compact: '220px',
+  full: 'clamp(300px, 48vh, 440px)',
+}
 
 /** 単位から整形指定を推定（散布の tooltip/軸用）。 */
 function inferFormat(unit: string | null): MetricFormat {
@@ -131,7 +143,7 @@ export function ScatterChart({
           {panel.points.length}駅・{panel.clusterCount}クラスタ
         </span>
       </div>
-      <div className="mt-2" style={{ height: HEIGHT_PX[compact ? 'compact' : 'full'] }}>
+      <div className="mt-2" style={{ height: SCATTER_HEIGHT[compact ? 'compact' : 'full'] }}>
         {panel.points.length > 0 ? (
           <Scatter data={data} options={options} />
         ) : (

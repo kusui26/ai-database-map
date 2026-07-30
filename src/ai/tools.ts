@@ -237,7 +237,7 @@ export function createTools(collector: EffectCollector) {
     /** 2 指標の増減率散布＋クラスタ（決定的 k-means）。 */
     compareGrowth: tool({
       description:
-        '2 つの指標(x,y)で駅を散布しクラスタ化する。x/y はカタログキーでも指標ファミリ（pop_gr, lp_gr, rate_covid …）でもよく、radiusM を添えれば半径依存の指標がそれで確定する（未指定は 1km・直近5年）。prefectures 未指定は全国。',
+        '2 つの指標(x,y)で駅を散布しクラスタ化する。x/y はカタログキーでも指標ファミリ（pop_gr, lp_gr, rate_covid …）でもよく、radiusM を添えれば半径依存の指標がそれで確定する（未指定は 1km・直近5年）。prefectures 未指定は全国、operators 未指定は全社。',
       inputSchema: z.object({
         x: z
           .string()
@@ -248,9 +248,15 @@ export function createTools(collector: EffectCollector) {
           .optional()
           .describe('集約半径(m): 500/1000/2000/5000/10000/20000。x/y の半径依存の指標に適用'),
         prefectures: z.array(z.string()).optional().describe('都道府県名の配列。省略で全国'),
+        operators: z
+          .array(z.string())
+          .optional()
+          .describe(
+            '運営会社名の配列（正式名称・例 ["東日本旅客鉄道"]。JR東日本ではない）。どれか1社でも運営する駅が対象。省略で全社',
+          ),
         excludeLowN: z.boolean().optional().describe('母数の小さい駅(⚠)を除外'),
       }),
-      execute: async ({ x, y, radiusM, prefectures, excludeLowN }) => {
+      execute: async ({ x, y, radiusM, prefectures, operators, excludeLowN }) => {
         try {
           const xResolved = resolveMetricKey({ metric: x, radiusM })
           if (!xResolved.ok) return metricError(xResolved)
@@ -265,10 +271,12 @@ export function createTools(collector: EffectCollector) {
               if (entry.reliabilityFlagKey !== null) keys.push(entry.reliabilityFlagKey)
             }
           }
-          const valueRows = await valuesForColumns(keys, prefs)
+          const ops = (operators ?? []).map((name) => name.trim()).filter((name) => name.length > 0)
+          const valueRows = await valuesForColumns(keys, prefs, ops)
           const response = buildGrowth(valueRows, xResolved.key, yResolved.key, {
             excludeLowN: exclude,
             prefectures: prefs,
+            operators: ops,
           })
           collector.push({ kind: 'growth', response })
           return {
@@ -277,6 +285,7 @@ export function createTools(collector: EffectCollector) {
             resolvedMetrics: { x: xResolved.key, y: yResolved.key },
             note: resolutionNote(xResolved.note, yResolved.note),
             prefectures: response.prefectures,
+            operators: response.operators,
             pointCount: response.points.length,
             clusterCount: response.clusterCount,
             excludedLowN: response.excludedLowN,

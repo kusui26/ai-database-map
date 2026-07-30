@@ -23,6 +23,8 @@ export type Promotion =
       readonly xKey: string
       readonly yKey: string
       readonly prefectures: readonly string[]
+      /** 運営会社の絞り込み（260730・空＝全社）。 */
+      readonly operators: readonly string[]
       readonly excludeLowN: boolean
     }
 

@@ -158,6 +158,32 @@ describe('buildGrowth', () => {
     )
   })
 
+  it('scatterPanel：運営会社で絞ったらタイトルに併記する（260730）', () => {
+    const panel = scatterPanel(
+      buildGrowth(rows, 'pop_gr_2020_2015_1km', 'rate_covid', {
+        prefectures: ['千葉県'],
+        operators: ['東日本旅客鉄道'],
+      }),
+    )
+    expect(panel.title).toContain('千葉県・東日本旅客鉄道')
+    expect(() => panelSchema.parse(panel)).not.toThrow()
+  })
+
+  it('scatterPanel：運営会社を絞らないときは従来どおり都道府県だけ', () => {
+    const panel = scatterPanel(
+      buildGrowth(rows, 'pop_gr_2020_2015_1km', 'rate_covid', { prefectures: ['千葉県'] }),
+    )
+    expect(panel.title).toContain('（千葉県）')
+  })
+
+  it('buildGrowth：operators は応答にそのまま載る（絞り込み自体は DB 側）', () => {
+    const response = buildGrowth(rows, 'pop_gr_2020_2015_1km', 'rate_covid', {
+      operators: ['東武鉄道', '西武鉄道'],
+    })
+    expect(response.operators).toEqual(['東武鉄道', '西武鉄道'])
+    expect(buildGrowth(rows, 'pop_gr_2020_2015_1km', 'rate_covid').operators).toEqual([])
+  })
+
   it('clusterCount は常に max(cluster)+1（描画側の前提と一致する）', () => {
     const many: ValueRow[] = [2, 2, 8, 7, 1, 0, 12].flatMap((x, i) => [
       { grp: `s${i}`, stationName: `駅${i}`, key: 'pop_gr_2020_2015_1km', value: x },

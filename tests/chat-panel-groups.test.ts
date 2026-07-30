@@ -81,13 +81,37 @@ describe('buildPanelGroups', () => {
     })
   })
 
-  it('散布は x/y ラベル一致で x/y キー・都道府県を復元', () => {
+  it('散布は x/y ラベル一致で x/y キー・都道府県を復元（運営会社なしは空配列）', () => {
     const groups = buildPanelGroups([scatter], toolCalls)
     expect(groups[0]?.promotion).toEqual({
       kind: 'scatter',
       xKey: 'pop_gr_2020_2015_2km',
       yKey: 'rate_covid',
       prefectures: ['東京都'],
+      operators: [],
+      excludeLowN: false,
+    })
+  })
+
+  it('散布の運営会社フィルタも昇格パラメータに復元される（260730）', () => {
+    const withOperators: ToolCall[] = [
+      {
+        name: 'compareGrowth',
+        input: {
+          x: 'pop_gr_2020_2015_2km',
+          y: 'rate_covid',
+          prefectures: ['東京都'],
+          operators: ['東日本旅客鉄道', '東京地下鉄'],
+        },
+      },
+    ]
+    const groups = buildPanelGroups([scatter], withOperators)
+    expect(groups[0]?.promotion).toEqual({
+      kind: 'scatter',
+      xKey: 'pop_gr_2020_2015_2km',
+      yKey: 'rate_covid',
+      prefectures: ['東京都'],
+      operators: ['東日本旅客鉄道', '東京地下鉄'],
       excludeLowN: false,
     })
   })

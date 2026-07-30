@@ -52,6 +52,7 @@ export function PromotionHost() {
         xKey: promotion.xKey,
         yKey: promotion.yKey,
         prefectures: promotion.prefectures,
+        operators: promotion.operators,
         excludeLowN: promotion.excludeLowN,
       }}
     />

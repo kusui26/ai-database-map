@@ -69,7 +69,10 @@ export function ScatterDialog({
   const [operators, setOperators] = useState<string[]>(
     initial ? [...(initial.operators ?? [])] : [],
   )
-  const [excludeLowN, setExcludeLowN] = useState<boolean>(initial?.excludeLowN ?? false)
+  // 既定で低分母（⚠）を除外する：母数が小さい駅の増減率・中央値は外れ値になりやすく、
+  // 既定の散布が数駅の極端値に引きずられるため（チャットからの昇格時は AI が実際に
+  // 使った条件をそのまま反映する＝initial 優先）。
+  const [excludeLowN, setExcludeLowN] = useState<boolean>(initial?.excludeLowN ?? true)
 
   const prefectures = link.prefectures
   const {

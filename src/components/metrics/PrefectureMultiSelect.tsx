@@ -1,22 +1,33 @@
 'use client'
 
-/** 都道府県の複数選択（ポップオーバー＋チェックボックス・P6c）。空＝全国。 */
+/**
+ * 都道府県の複数選択（ポップオーバー＋チェックボックス・P6c）。空＝全国。
+ *
+ * `allowed` を渡すと、そこに含まれない県は**グレーアウト**して選べなくする（260731）。
+ * 運営会社を選んでいるとき、その会社が走らない県は 0 件になるため
+ * （docs/260730_scatter_plot_prefecture_to_operaters.md）。すでに選択済みの県は
+ * 解除できるよう活かしておく（行き止まりを作らない）。
+ */
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { PREFECTURES, prefectureLabel } from '@/shared/constants'
 import { cn } from '@/lib/utils'
 
 export function PrefectureMultiSelect({
   selected,
   onChange,
+  allowed,
   className,
 }: {
   selected: string[]
   onChange: (prefectures: string[]) => void
+  /** 選べる都道府県（未指定＝全 47）。含まれない県はグレーアウト。 */
+  allowed?: readonly string[]
   className?: string
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const allowedSet = useMemo(() => (allowed === undefined ? null : new Set(allowed)), [allowed])
 
   useEffect(() => {
     if (!open) return
@@ -42,7 +53,13 @@ export function PrefectureMultiSelect({
         className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 transition-colors hover:border-slate-300"
       >
         <span className="max-w-[9rem] truncate">{prefectureLabel(selected)}</span>
-        <svg viewBox="0 0 24 24" className="size-3.5 text-slate-400" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg
+          viewBox="0 0 24 24"
+          className="size-3.5 text-slate-400"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
           <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </button>
@@ -56,20 +73,35 @@ export function PrefectureMultiSelect({
           >
             全国（すべて解除）
           </button>
-          {PREFECTURES.map((p) => (
-            <label
-              key={p.code}
-              className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-sm text-slate-700 hover:bg-slate-50"
-            >
-              <input
-                type="checkbox"
-                checked={selected.includes(p.name)}
-                onChange={() => toggle(p.name)}
-                className="size-4 accent-indigo-600"
-              />
-              {p.name}
-            </label>
-          ))}
+          {allowedSet !== null && (
+            <p className="mb-1 px-2 text-xs text-slate-400">
+              選択中の会社が走る {allowedSet.size} 県のみ選べます
+            </p>
+          )}
+          {PREFECTURES.map((p) => {
+            const checked = selected.includes(p.name)
+            const disabled = allowedSet !== null && !allowedSet.has(p.name) && !checked
+            return (
+              <label
+                key={p.code}
+                className={cn(
+                  'flex items-center gap-2 rounded-md px-2 py-1 text-sm',
+                  disabled
+                    ? 'cursor-not-allowed text-slate-300'
+                    : 'cursor-pointer text-slate-700 hover:bg-slate-50',
+                )}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={disabled}
+                  onChange={() => toggle(p.name)}
+                  className="size-4 accent-indigo-600 disabled:opacity-40"
+                />
+                {p.name}
+              </label>
+            )
+          })}
         </div>
       )}
     </div>

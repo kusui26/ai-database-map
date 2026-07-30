@@ -140,6 +140,11 @@ export type GrowthResponse = z.infer<typeof growthResponseSchema>
 export const operatorSchema = z.object({
   name: z.string(),
   stationCount: z.number(),
+  /**
+   * その会社が走行する都道府県（260731・都道府県セレクタとの連動に使う）。
+   * 1 日キャッシュの古い応答には無いことがあるため optional＋既定 `[]`（連動が無効になるだけ）。
+   */
+  prefectures: z.array(z.string()).default([]),
 })
 export type Operator = z.infer<typeof operatorSchema>
 

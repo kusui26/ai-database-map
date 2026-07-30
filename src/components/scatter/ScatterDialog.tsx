@@ -5,7 +5,7 @@
  * （決定的 k-means 済み）→ Chart.js 散布（クラスタ色分け）。点クリックで駅選択（?grp）。
  */
 
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { type Category } from '@/shared/constants'
 import { getEntry } from '@/shared/catalog'
@@ -16,7 +16,18 @@ import { ScatterChart, SCATTER_HEIGHT } from '@/components/panels/ScatterChart'
 import { MetricSelect } from '@/components/metrics/MetricSelect'
 import { OperatorMultiSelect } from '@/components/metrics/OperatorMultiSelect'
 import { PrefectureMultiSelect } from '@/components/metrics/PrefectureMultiSelect'
+import { useOperators } from '@/components/metrics/useOperators'
 import { useGrowth } from './useGrowth'
+import {
+  applyManualPrefectures,
+  EMPTY_LINK,
+  type LinkState,
+  operatorsInPrefectures,
+  prefectureIndex,
+  prefecturesOfOperators,
+  pruneAutoPrefectures,
+  selectOperatorPrefectures,
+} from './operatorLink'
 
 const X_CATEGORY: Category = getEntry(DEFAULT_SCATTER_X)?.category ?? 'population'
 const Y_CATEGORY: Category = getEntry(DEFAULT_SCATTER_Y)?.category ?? 'passenger'
@@ -51,11 +62,54 @@ export function ScatterDialog({
   const [xKey, setXKey] = useState<string>(initialX)
   const [yCategory, setYCategory] = useState<Category>(getEntry(initialY)?.category ?? Y_CATEGORY)
   const [yKey, setYKey] = useState<string>(initialY)
-  const [prefectures, setPrefectures] = useState<string[]>(initial ? [...initial.prefectures] : [])
+  // 都道府県は「手動で入れた分」と「会社連動で入った分（auto）」を区別して持つ（260731）。
+  const [link, setLink] = useState<LinkState>(
+    initial ? { prefectures: [...initial.prefectures], auto: [] } : EMPTY_LINK,
+  )
   const [operators, setOperators] = useState<string[]>(
     initial ? [...(initial.operators ?? [])] : [],
   )
   const [excludeLowN, setExcludeLowN] = useState<boolean>(initial?.excludeLowN ?? false)
+
+  const prefectures = link.prefectures
+  const {
+    operators: operatorList,
+    isLoading: operatorsLoading,
+    error: operatorsError,
+  } = useOperators(open)
+  const index = useMemo(() => prefectureIndex(operatorList), [operatorList])
+
+  // 双方向の連動：会社を選べば県の候補が、県を選べば会社の候補が絞られる（未選択なら全件）。
+  const allowedPrefectures = useMemo(
+    () => (operators.length === 0 ? undefined : prefecturesOfOperators(operators, index)),
+    [operators, index],
+  )
+  const allowedOperators = useMemo(
+    () =>
+      prefectures.length === 0 ? undefined : operatorsInPrefectures(prefectures, operatorList),
+    [prefectures, operatorList],
+  )
+  const applyCount = useMemo(
+    () =>
+      prefecturesOfOperators(operators, index).filter(
+        (prefecture) => !prefectures.includes(prefecture),
+      ).length,
+    [operators, index, prefectures],
+  )
+
+  const onPrefectures = useCallback((next: string[]) => {
+    setLink((state) => applyManualPrefectures(state, next))
+  }, [])
+  const onOperators = useCallback(
+    (next: string[]) => {
+      setOperators(next)
+      setLink((state) => pruneAutoPrefectures(state, next, index))
+    },
+    [index],
+  )
+  const onApplyPrefectures = useCallback(() => {
+    setLink((state) => selectOperatorPrefectures(state, operators, index))
+  }, [operators, index])
 
   const { growth, isLoading, isValidating, error } = useGrowth(
     xKey,
@@ -112,8 +166,21 @@ export function ScatterDialog({
 
           <div className="space-y-2 border-b border-slate-100 px-4 py-3">
             <div className="flex flex-wrap items-center gap-3">
-              <PrefectureMultiSelect selected={prefectures} onChange={setPrefectures} />
-              <OperatorMultiSelect selected={operators} onChange={setOperators} />
+              <PrefectureMultiSelect
+                selected={[...prefectures]}
+                onChange={onPrefectures}
+                allowed={allowedPrefectures}
+              />
+              <OperatorMultiSelect
+                selected={operators}
+                onChange={onOperators}
+                operators={operatorList}
+                isLoading={operatorsLoading}
+                error={operatorsError}
+                allowed={allowedOperators}
+                onApplyPrefectures={onApplyPrefectures}
+                applyPrefectureCount={applyCount}
+              />
               <label className="flex cursor-pointer items-center gap-1.5 text-sm text-slate-600">
                 <input
                   type="checkbox"

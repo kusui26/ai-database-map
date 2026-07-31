@@ -42,7 +42,9 @@ export function buildStationDetail(
 
     const points = sorted.map((entry) => {
       const value = values.get(entry.key) ?? null
-      const flagKey = entry.reliabilityFlagKey
+      // バッジは notice 側で解く。除外（散布・ランキング）より広く、
+      // 「値は使えるが読むとき注意が要る」ケースも拾う（260731）。
+      const flagKey = entry.noticeFlagKey ?? entry.reliabilityFlagKey
       const flagged = flagKey !== null && values.get(flagKey) === 1
       const signed = entry.kind === 'growth' || entry.kind === 'error'
       return {

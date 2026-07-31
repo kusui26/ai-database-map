@@ -197,7 +197,10 @@ export function createTools(collector: EffectCollector) {
           .int()
           .optional()
           .describe(`件数(1-${MAX_RANK_LIMIT}・既定 ${DEFAULT_RANK_LIMIT})`),
-        excludeLowN: z.boolean().optional().describe('母数の小さい駅(⚠)を除外'),
+        excludeLowN: z
+          .boolean()
+          .optional()
+          .describe('信頼性の低い値(⚠：母数が小さい・極端値)の駅を除外'),
       }),
       execute: async ({
         metric,
@@ -272,7 +275,10 @@ export function createTools(collector: EffectCollector) {
           .describe(
             `事業者種別の配列（${ROUTE_TYPE_HINT}）。「新幹線の駅だけ」は [1]。routes とは OR。省略で全種別`,
           ),
-        excludeLowN: z.boolean().optional().describe('母数の小さい駅(⚠)を除外'),
+        excludeLowN: z
+          .boolean()
+          .optional()
+          .describe('信頼性の低い値(⚠：母数が小さい・極端値)の駅を除外'),
       }),
       execute: async ({
         x,

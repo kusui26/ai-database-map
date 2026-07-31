@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * 散布図のモーダル（FAB から開く）。x/y 指標ピッカ × 都道府県 × 運営会社 × 路線 × 低分母除外
+ * 散布図のモーダル（FAB から開く）。x/y 指標ピッカ × 都道府県 × 運営会社 × 路線 × ⚠除外
  * → /api/growth（決定的 k-means 済み）→ Chart.js 散布（クラスタ色分け）。点クリックで駅選択（?grp）。
  */
 
@@ -84,9 +84,11 @@ export function ScatterDialog({
   const [routeTypes, setRouteTypes] = useState<number[]>(
     initial ? [...(initial.routeTypes ?? [])] : [],
   )
-  // 既定で低分母（⚠）を除外する：母数が小さい駅の増減率・中央値は外れ値になりやすく、
-  // 既定の散布が数駅の極端値に引きずられるため（チャットからの昇格時は AI が実際に
-  // 使った条件をそのまま反映する＝initial 優先）。
+  // 既定で信頼性の低い値（⚠）を除外する：母数が小さい駅の増減率・中央値は外れ値に
+  // なりやすく、既定の散布が数駅の極端値に引きずられるため（チャットからの昇格時は
+  // AI が実際に使った条件をそのまま反映する＝initial 優先）。
+  // ここで落ちるのは「値が信用できない」駅だけで、「一部の社しかデータが無い」駅は
+  // 落とさない（バッジで注意を促す・docs/260731_reliability_flag_semantics.md）。
   const [excludeLowN, setExcludeLowN] = useState<boolean>(initial?.excludeLowN ?? true)
 
   const prefectures = link.prefectures
@@ -224,7 +226,7 @@ export function ScatterDialog({
                   onChange={(e) => setExcludeLowN(e.target.checked)}
                   className="size-4 accent-indigo-600"
                 />
-                低分母（⚠）を除外
+                信頼性の低い値（⚠）を除外
               </label>
             </div>
             <div className="flex items-center gap-2">
@@ -273,7 +275,7 @@ export function ScatterDialog({
                     <ScatterChart panel={scatterPanel(growth)} onSelect={onSelect} />
                     {growth.excludedLowN > 0 && (
                       <p className="mt-2 text-xs text-slate-400">
-                        低分母（信頼性フラグ）の {growth.excludedLowN} 駅を除外しています。
+                        信頼性フラグ（低分母・極端値）の {growth.excludedLowN} 駅を除外しています。
                       </p>
                     )}
                   </>

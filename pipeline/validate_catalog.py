@@ -20,7 +20,7 @@ CAT_PATH = ROOT / "src" / "shared" / "catalog" / "catalog.json"
 
 # docs/dataset.md §2 のカテゴリ別 値列数（ドキュメント＝独立した真実）
 EXPECTED_CATEGORY_COUNTS = {
-    "passenger": 18,  # pax 14 + rate 2 + flag 2（flag_yoy/flag_covid）
+    "passenger": 19,  # pax 14 + rate 2 + flag 3（flag_yoy/flag_covid/flag_covid_lown）
     "population": 132,  # 実績42 + 増減率54 + lowbase36
     "population_forecast": 180,  # 推計114 + 推計増減率60 + 誤差6
     "land_price": 153,  # lp_med(年次20×5=100) + lp_n5 + lp_lown5 + lp_gr20 + lp_gr_lown20 + lp_near3
@@ -28,8 +28,8 @@ EXPECTED_CATEGORY_COUNTS = {
     "establishment": 36,  # estab_n18 + estab_gr12 + estab_gr_lown6
     "employee": 30,  # emp_n18 + emp_gr12
 }
-EXPECTED_ENTRY_TOTAL = 585
-EXPECTED_COLUMN_TOTAL = 595
+EXPECTED_ENTRY_TOTAL = 586
+EXPECTED_COLUMN_TOTAL = 596
 IDENTITY = {
     "grp", "station_name", "label", "search_label", "prefecture",
     "lon", "lat", "n_op", "operators", "level_complete",
@@ -100,6 +100,18 @@ def main() -> int:
     check(not missing, "reliabilityFlagKey が全て実在エントリ（metric_columns 化される）", f"{missing[:3]}")
     nonflag = [(k, f) for k, f in refs if entry_by_key.get(f, {}).get("kind") != "flag"]
     check(not nonflag, "reliabilityFlagKey が flag 種別エントリを指す", f"{nonflag[:3]}")
+
+    # 5b. 注意フラグ（バッジ用）も同じ不変条件を満たす。除外用と別々に持つのは、
+    #     複合フラグ（flag_covid）で「除外すべき条件」と「注意を促すだけの条件」が
+    #     混ざるため（docs/260731_reliability_flag_semantics.md）。
+    notices = [(e["key"], e["noticeFlagKey"]) for e in entries if e.get("noticeFlagKey")]
+    missing_notice = [(k, f) for k, f in notices if f not in entry_by_key]
+    check(not missing_notice, "noticeFlagKey が全て実在エントリ", f"{missing_notice[:3]}")
+    nonflag_notice = [(k, f) for k, f in notices if entry_by_key.get(f, {}).get("kind") != "flag"]
+    check(not nonflag_notice, "noticeFlagKey が flag 種別エントリを指す", f"{nonflag_notice[:3]}")
+    # 除外フラグを持つ指標は必ず注意フラグも持つ（＝除外される値が無印になることはない）
+    silent = [e["key"] for e in entries if e["reliabilityFlagKey"] and not e.get("noticeFlagKey")]
+    check(not silent, "除外フラグを持つ指標は注意フラグも持つ", f"{silent[:3]}")
 
     # 6. radiusM が key のサフィックスと整合
     bad_radius = [e["key"] for e in entries if e["radiusM"] != radius_from_key(e["key"])]

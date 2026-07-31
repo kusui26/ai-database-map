@@ -140,6 +140,22 @@ describe('buildGrowth', () => {
     expect(g.points[0]?.grp).toBe('b')
   })
 
+  it('乗降コロナ前後の除外は低分母フラグだけを見る（被覆の大駅を落とさない・260731）', () => {
+    // 新横浜は flag_covid=1（被覆 3/5）だが低分母ではない → 残す。
+    // 御厨は |率|>100% の小駅 → 落とす。
+    const covid: ValueRow[] = [
+      { grp: '新横浜#0', stationName: '新横浜', key: 'pop_gr_2020_2015_2km', value: 4.1 },
+      { grp: '新横浜#0', stationName: '新横浜', key: 'rate_covid', value: -22.8 },
+      { grp: '新横浜#0', stationName: '新横浜', key: 'flag_covid_lown', value: 0 },
+      { grp: '御厨#1', stationName: '御厨', key: 'pop_gr_2020_2015_2km', value: 1 },
+      { grp: '御厨#1', stationName: '御厨', key: 'rate_covid', value: 4777.9 },
+      { grp: '御厨#1', stationName: '御厨', key: 'flag_covid_lown', value: 1 },
+    ]
+    const g = buildGrowth(covid, 'pop_gr_2020_2015_2km', 'rate_covid', { excludeLowN: true })
+    expect(g.points.map((p) => p.grp)).toEqual(['新横浜#0'])
+    expect(g.excludedLowN).toBe(1)
+  })
+
   it('scatterPanel：GrowthResponse → scatter Panel（title/軸/点/クラスタ）', () => {
     const panel = scatterPanel(
       buildGrowth(rows, 'pop_gr_2020_2015_1km', 'rate_covid', { prefectures: ['千葉県'] }),

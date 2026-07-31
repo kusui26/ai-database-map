@@ -12,9 +12,9 @@ import {
 import { CATEGORIES, RADII_M } from '@/shared/constants'
 
 describe('catalog（Zod ロード）', () => {
-  it('585 エントリ・10 属性・カウント整合', () => {
-    expect(catalog.entryCount).toBe(585)
-    expect(entries.length).toBe(585)
+  it('586 エントリ・10 属性・カウント整合', () => {
+    expect(catalog.entryCount).toBe(586)
+    expect(entries.length).toBe(586)
     expect(catalog.stationAttributes.length).toBe(10)
     expect(catalog.entryCount + catalog.stationAttributeCount).toBe(catalog.columnCount)
   })
@@ -34,9 +34,9 @@ describe('catalog（Zod ロード）', () => {
     expect(() => requireEntry('___missing___')).toThrow()
   })
 
-  it('カテゴリ別エントリ数の合計が 585', () => {
+  it('カテゴリ別エントリ数の合計が 586', () => {
     const total = CATEGORIES.reduce((sum, cat) => sum + entriesForCategory(cat).length, 0)
-    expect(total).toBe(585)
+    expect(total).toBe(586)
   })
 
   it('rankable は flag / hidden_ratio を含まない', () => {
@@ -54,8 +54,36 @@ describe('catalog（Zod ロード）', () => {
     for (const e of entries) {
       if (e.reliabilityFlagKey === null) continue
       const flag = byKey.get(e.reliabilityFlagKey)
-      expect(flag, `${e.key} の reliabilityFlagKey=${e.reliabilityFlagKey} がエントリに不在`).toBeDefined()
+      expect(
+        flag,
+        `${e.key} の reliabilityFlagKey=${e.reliabilityFlagKey} がエントリに不在`,
+      ).toBeDefined()
       expect(flag?.kind).toBe('flag')
     }
+  })
+
+  it('noticeFlagKey も実在する flag 種別を指し、除外フラグを持つ指標には必ずある（260731）', () => {
+    // バッジ（notice）と除外（reliability）を分けたため、両方に同じ不変条件が要る。
+    // notice が欠けると「除外される値なのに無印」という取り違えが起きる。
+    const byKey = new Map(entries.map((e) => [e.key, e]))
+    for (const e of entries) {
+      if (e.reliabilityFlagKey !== null) {
+        expect(e.noticeFlagKey, `${e.key} に noticeFlagKey が無い`).not.toBeNull()
+      }
+      if (e.noticeFlagKey === null) continue
+      expect(byKey.get(e.noticeFlagKey)?.kind, `${e.key} の noticeFlagKey`).toBe('flag')
+    }
+  })
+
+  it('乗降コロナ前後：除外は低分母だけ・バッジは複合フラグ（260731 の恒久対応）', () => {
+    // flag_covid は「被覆<100%／pre<2019／|率|>100%」の OR で、被覆で落ちるのは
+    // 新宿・横浜・新横浜のような大駅。除外はそこを含めず、注意喚起だけに使う。
+    const rateCovid = entries.find((e) => e.key === 'rate_covid')
+    expect(rateCovid?.reliabilityFlagKey).toBe('flag_covid_lown')
+    expect(rateCovid?.noticeFlagKey).toBe('flag_covid')
+    // 他の指標は両者が一致（挙動が変わらないことの保証）
+    const others = entries.filter((e) => e.key !== 'rate_covid' && e.reliabilityFlagKey !== null)
+    expect(others.length).toBeGreaterThan(70)
+    for (const e of others) expect(e.noticeFlagKey).toBe(e.reliabilityFlagKey)
   })
 })

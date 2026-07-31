@@ -62,6 +62,34 @@ describe('buildStationDetail', () => {
     expect(find('pop_gr', 2000)?.points[0]?.flagged).toBe(false) // = 0
   })
 
+  it('バッジは notice フラグで解く：被覆<100% の大駅は ⚠ が残る（260731）', () => {
+    // rate_covid は 除外=flag_covid_lown（|率|>100%）／バッジ=flag_covid（複合）。
+    // 新宿のように「一部の社しかデータが無い」駅は、除外はされないが ⚠ は出す。
+    const shinjuku = buildStationDetail(
+      station,
+      new Map<string, number>([
+        ['rate_covid', -16.9],
+        ['flag_covid', 1], // 被覆 4/5
+        ['flag_covid_lown', 0], // 低分母ではない
+      ]),
+    )
+    const point = shinjuku.series.find((s) => s.baseMetric === 'pax_rate')?.points[0]
+    expect(point?.formatted).toBe('-16.9%')
+    expect(point?.flagged).toBe(true)
+  })
+
+  it('バッジ：注意フラグが立たなければ ⚠ は出ない', () => {
+    const clean = buildStationDetail(
+      station,
+      new Map<string, number>([
+        ['rate_covid', -5.7],
+        ['flag_covid', 0],
+        ['flag_covid_lown', 0],
+      ]),
+    )
+    expect(clean.series.find((s) => s.baseMetric === 'pax_rate')?.points[0]?.flagged).toBe(false)
+  })
+
   it('将来推計は vintage（R6=2024 / H30=2018）で別系列', () => {
     expect(find('pop_pred', 1000, 2024)?.points[0]?.value).toBe(5800)
     expect(find('pop_pred', 1000, 2018)?.points[0]?.value).toBe(5900)

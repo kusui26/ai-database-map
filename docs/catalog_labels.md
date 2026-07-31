@@ -1,10 +1,10 @@
 # メトリクス・カタログ ラベル一覧（自動生成）
 
-`pipeline/build_catalog.py` が `station_dataset.csv`（595列）から生成。 値列 585 エントリ ＋ 駅属性 10。
+`pipeline/build_catalog.py` が `station_dataset.csv`（596列）から生成。 値列 586 エントリ ＋ 駅属性 10。
 
 凡例: `key` — ラベル 〔単位・format・rankable・⚠→信頼性フラグ〕
 
-## 乗降客数（passenger）— 18件
+## 乗降客数（passenger）— 19件
 
 - `pax_2011` — 乗降客数（2011年） 〔人/日・int・rankable〕
 - `pax_2012` — 乗降客数（2012年） 〔人/日・int・rankable〕
@@ -22,8 +22,9 @@
 - `pax_2024` — 乗降客数（2024年） 〔人/日・int・rankable〕
 - `rate_yoy` — 乗降客数 前年増減率（2023→2024年） 〔%・percent1・rankable・⚠→flag_yoy〕
 - `flag_yoy` — 乗降客数 前年増減率 信頼性フラグ（|前年比|>30%） 〔—・—・not-rankable〕
-- `rate_covid` — 乗降客数 コロナ前後増減率 〔%・percent1・rankable・⚠→flag_covid〕
-- `flag_covid` — 乗降客数 コロナ前後増減率 信頼性フラグ（被覆<100%／pre<2019／|率|>100%） 〔—・—・not-rankable〕
+- `rate_covid` — 乗降客数 コロナ前後増減率 〔%・percent1・rankable・⚠→flag_covid_lown〕
+- `flag_covid` — 乗降客数 コロナ前後増減率 注意フラグ（被覆<100%／pre<2019／|率|>100%） 〔—・—・not-rankable〕
+- `flag_covid_lown` — 乗降客数 コロナ前後増減率 低分母フラグ（|率|>100%＝小駅の分母ノイズ） 〔—・—・not-rankable〕
 
 ## 人口（population）— 132件
 

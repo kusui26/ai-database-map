@@ -36,7 +36,15 @@ export const catalogEntrySchema = z.object({
   year: z.number().nullable(),
   yearBase: z.number().nullable(),
   vintage: z.number().nullable(),
+  /** **除外**に使うフラグ列の key（＝値が信用できない＝低分母・極端値）。 */
   reliabilityFlagKey: z.string().nullable(),
+  /**
+   * **バッジ**に使うフラグ列の key（＝読むとき注意が要る）。ほとんどの指標では
+   * `reliabilityFlagKey` と同じで、複数条件を束ねたフラグを持つ指標だけ食い違う
+   * （rate_covid：除外は低分母のみ／バッジは被覆・参照年も含む・260731）。
+   * 古い catalog.json でも壊れないよう既定は null（＝従来どおり除外用を使う）。
+   */
+  noticeFlagKey: z.string().nullable().default(null),
   rankable: z.boolean(),
   higherIsBetter: z.boolean().nullable(),
   source: z.string(),

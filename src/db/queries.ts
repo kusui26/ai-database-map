@@ -140,12 +140,16 @@ export async function valuesForColumns(
   keys: string[],
   prefectures: string[],
   operators: readonly string[] = [],
+  routes: readonly string[] = [],
+  routeTypes: readonly number[] = [],
 ): Promise<ValueRow[]> {
   // 全国は行数が max-rows(=1000) を超えるため、RPC は単一 jsonb で返す（配列を検証）。
   const raw = await rpc('values_for_columns', {
     column_keys: keys,
     prefs: prefectures.length > 0 ? prefectures : null, // 空は null＝全国
     ops: operators.length > 0 ? [...operators] : null, // 空は null＝全社
+    routes: routes.length > 0 ? [...routes] : null, // 空は null＝全路線（260731）
+    route_types: routeTypes.length > 0 ? [...routeTypes] : null, // 空は null＝全種別
   })
   const rows = z.array(valueRowSchema).parse(raw)
   return rows.map((r) => ({ grp: r.grp, stationName: r.station_name, key: r.key, value: r.value }))
@@ -170,6 +174,30 @@ export async function operatorNames(): Promise<
     name: r.name,
     stationCount: r.station_count,
     prefectures: r.prefectures ?? [],
+  }))
+}
+
+// --- 路線（散布の絞り込み用の一覧・260731） -----------------------------
+const routeRowSchema = z.object({
+  route: z.string(),
+  station_count: z.number(),
+  operators: z.array(z.string()).nullable().default([]),
+  route_types: z.array(z.number()).nullable().default([]),
+})
+
+/**
+ * 路線の一覧（路線名＋駅グループ数＋運営会社＋事業者種別・駅数の多い順）。
+ * 同名で会社が異なる路線があるため（「本線」は 10 社）、operators を併せて返す。
+ */
+export async function routeNames(): Promise<
+  { route: string; stationCount: number; operators: string[]; routeTypes: number[] }[]
+> {
+  const rows = await rpcRows('route_names', {}, routeRowSchema)
+  return rows.map((r) => ({
+    route: r.route,
+    stationCount: r.station_count,
+    operators: r.operators ?? [],
+    routeTypes: r.route_types ?? [],
   }))
 }
 

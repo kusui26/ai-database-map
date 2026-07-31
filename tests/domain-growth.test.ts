@@ -176,6 +176,38 @@ describe('buildGrowth', () => {
     expect(panel.title).toContain('（千葉県）')
   })
 
+  it('scatterPanel：路線・種別で絞ったらタイトルに併記する（260731）', () => {
+    const byRoute = scatterPanel(
+      buildGrowth(rows, 'pop_gr_2020_2015_1km', 'rate_covid', {
+        operators: ['東海旅客鉄道'],
+        routes: ['東海道新幹線'],
+      }),
+    )
+    expect(byRoute.title).toContain('全国・東海旅客鉄道・東海道新幹線')
+
+    const byType = scatterPanel(
+      buildGrowth(rows, 'pop_gr_2020_2015_1km', 'rate_covid', {
+        operators: ['東海旅客鉄道'],
+        routeTypes: [1],
+      }),
+    )
+    expect(byType.title).toContain('東海旅客鉄道・新幹線')
+    expect(() => panelSchema.parse(byType)).not.toThrow()
+  })
+
+  it('buildGrowth：routes / routeTypes も応答に載る（絞り込み自体は DB 側）', () => {
+    const response = buildGrowth(rows, 'pop_gr_2020_2015_1km', 'rate_covid', {
+      routes: ['東海道線'],
+      routeTypes: [1, 2],
+    })
+    expect(response.routes).toEqual(['東海道線'])
+    expect(response.routeTypes).toEqual([1, 2])
+    const bare = buildGrowth(rows, 'pop_gr_2020_2015_1km', 'rate_covid')
+    expect(bare.routes).toEqual([])
+    expect(bare.routeTypes).toEqual([])
+    expect(scatterPanel(bare).title).toContain('（全国）') // 絞っていなければ従来どおり
+  })
+
   it('buildGrowth：operators は応答にそのまま載る（絞り込み自体は DB 側）', () => {
     const response = buildGrowth(rows, 'pop_gr_2020_2015_1km', 'rate_covid', {
       operators: ['東武鉄道', '西武鉄道'],

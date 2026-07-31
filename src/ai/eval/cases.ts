@@ -1,5 +1,5 @@
 /**
- * P8c 評価：ゴールデン 20 問（駅詳細・ランキング・散布・比較・曖昧駅名・カタログ探索・データ外拒否）。
+ * P8c 評価：ゴールデン 23 問（駅詳細・ランキング・散布・比較・曖昧駅名・カタログ探索・データ外拒否）。
  * 各問は自然言語クエリと、機械判定できる期待（score.ts）を持つ。代表性を重視して分野を網羅する。
  */
 
@@ -133,6 +133,16 @@ export const EVAL_CASES: readonly EvalCase[] = [
       panels: ['scatter'],
     },
   },
+  {
+    // 260731：種別コード 1 を LLM が自分で選べるか（路線名の推測に逃げないか）。
+    id: 'scatter-shinkansen',
+    category: '散布',
+    query: '新幹線の駅だけで人口増減率と乗降客の回復率を散布図にして',
+    expect: {
+      toolCalls: [{ name: 'compareGrowth', inputIncludes: { routeTypes: [1] } }],
+      panels: ['scatter'],
+    },
+  },
 
   // --- 2 駅比較 ---
   {
@@ -225,7 +235,9 @@ export const EVAL_CASES: readonly EvalCase[] = [
     selectedGrp: '東京#0',
     radiusM: 1000,
     expect: {
-      toolCalls: [{ name: 'getStationDetail', inputIncludes: { grp: '東京#0', category: 'land_price' } }],
+      toolCalls: [
+        { name: 'getStationDetail', inputIncludes: { grp: '東京#0', category: 'land_price' } },
+      ],
       select: true,
     },
   },

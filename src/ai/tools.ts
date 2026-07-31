@@ -10,7 +10,7 @@
 import { tool, type InferUITools, type UIMessage } from 'ai'
 import { z } from 'zod'
 import { categorySchema, requireEntry } from '@/shared/catalog'
-import { PREFECTURES, RADII_M, type RadiusM } from '@/shared/constants'
+import { PREFECTURES, RADII_M, type RadiusM, ROUTE_TYPES, routeTypeLabel } from '@/shared/constants'
 import { type MapResponse } from '@/shared/protocol'
 import {
   rankByColumn,
@@ -33,6 +33,14 @@ const DEFAULT_RADIUS_M: RadiusM = 1000
 const DEFAULT_RANK_LIMIT = 20
 /** ランキング最大件数（チャット内は上位に絞る）。 */
 const MAX_RANK_LIMIT = 50
+
+/** 事業者種別コードの説明（ツール定義に埋め込む・表示名は constants の単一定義から生成）。 */
+const ROUTE_TYPE_HINT = ROUTE_TYPES.map((type) => `${type}:${routeTypeLabel(type)}`).join(' ')
+
+/** 名前配列の前後空白を落とし、空文字を除く（会社名・路線名の共通前処理）。 */
+function nonEmptyNames(input: readonly string[] | undefined): string[] {
+  return (input ?? []).map((name) => name.trim()).filter((name) => name.length > 0)
+}
 
 /** 入力の半径を有効な集約半径に解決（未知は既定 1km）。 */
 function resolveRadius(input: number | undefined): RadiusM {
@@ -237,7 +245,7 @@ export function createTools(collector: EffectCollector) {
     /** 2 指標の増減率散布＋クラスタ（決定的 k-means）。 */
     compareGrowth: tool({
       description:
-        '2 つの指標(x,y)で駅を散布しクラスタ化する。x/y はカタログキーでも指標ファミリ（pop_gr, lp_gr, rate_covid …）でもよく、radiusM を添えれば半径依存の指標がそれで確定する（未指定は 1km・直近5年）。prefectures 未指定は全国、operators 未指定は全社。',
+        '2 つの指標(x,y)で駅を散布しクラスタ化する。x/y はカタログキーでも指標ファミリ（pop_gr, lp_gr, rate_covid …）でもよく、radiusM を添えれば半径依存の指標がそれで確定する（未指定は 1km・直近5年）。prefectures 未指定は全国、operators 未指定は全社、routes/routeTypes 未指定は全路線。',
       inputSchema: z.object({
         x: z
           .string()
@@ -254,9 +262,28 @@ export function createTools(collector: EffectCollector) {
           .describe(
             '運営会社名の配列（正式名称・例 ["東日本旅客鉄道"]。JR東日本ではない）。どれか1社でも運営する駅が対象。省略で全社',
           ),
+        routes: z
+          .array(z.string())
+          .optional()
+          .describe('路線名の配列（例 ["東海道新幹線"]）。省略で全路線'),
+        routeTypes: z
+          .array(z.number().int())
+          .optional()
+          .describe(
+            `事業者種別の配列（${ROUTE_TYPE_HINT}）。「新幹線の駅だけ」は [1]。routes とは OR。省略で全種別`,
+          ),
         excludeLowN: z.boolean().optional().describe('母数の小さい駅(⚠)を除外'),
       }),
-      execute: async ({ x, y, radiusM, prefectures, operators, excludeLowN }) => {
+      execute: async ({
+        x,
+        y,
+        radiusM,
+        prefectures,
+        operators,
+        routes,
+        routeTypes,
+        excludeLowN,
+      }) => {
         try {
           const xResolved = resolveMetricKey({ metric: x, radiusM })
           if (!xResolved.ok) return metricError(xResolved)
@@ -271,21 +298,33 @@ export function createTools(collector: EffectCollector) {
               if (entry.reliabilityFlagKey !== null) keys.push(entry.reliabilityFlagKey)
             }
           }
-          const ops = (operators ?? []).map((name) => name.trim()).filter((name) => name.length > 0)
-          const valueRows = await valuesForColumns(keys, prefs, ops)
+          const ops = nonEmptyNames(operators)
+          const lines = nonEmptyNames(routes)
+          const types = (routeTypes ?? []).filter((type) => ROUTE_TYPES.some((t) => t === type))
+          const valueRows = await valuesForColumns(keys, prefs, ops, lines, types)
           const response = buildGrowth(valueRows, xResolved.key, yResolved.key, {
             excludeLowN: exclude,
             prefectures: prefs,
             operators: ops,
+            routes: lines,
+            routeTypes: types,
           })
           collector.push({ kind: 'growth', response })
+          // 路線名の綴り違いや、会社と路線の食い違い（例 東海旅客鉄道 × 東北新幹線）は
+          // 0 件になるだけで区別がつかない。LLM が「無い」と誤断定しないよう理由を添える。
+          const emptyNote =
+            response.points.length === 0 && (lines.length > 0 || types.length > 0)
+              ? '該当が 0 件でした。路線名は正式名称（例「東海道新幹線」）で指定し、会社と路線が同じ事業者のものか確認してください。'
+              : null
           return {
             x: response.x.labelJa,
             y: response.y.labelJa,
             resolvedMetrics: { x: xResolved.key, y: yResolved.key },
-            note: resolutionNote(xResolved.note, yResolved.note),
+            note: resolutionNote(xResolved.note, yResolved.note, emptyNote),
             prefectures: response.prefectures,
             operators: response.operators,
+            routes: response.routes,
+            routeTypes: response.routeTypes.map(routeTypeLabel),
             pointCount: response.points.length,
             clusterCount: response.clusterCount,
             excludedLowN: response.excludedLowN,

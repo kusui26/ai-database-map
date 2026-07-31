@@ -53,6 +53,8 @@ export function PromotionHost() {
         yKey: promotion.yKey,
         prefectures: promotion.prefectures,
         operators: promotion.operators,
+        routes: promotion.routes,
+        routeTypes: promotion.routeTypes,
         excludeLowN: promotion.excludeLowN,
       }}
     />

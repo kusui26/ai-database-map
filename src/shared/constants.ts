@@ -218,3 +218,25 @@ export function routeTypeLabel(code: number): string {
 export function routeLabel(routes: readonly string[]): string {
   return selectionLabel(routes, '全路線')
 }
+
+/**
+ * 路線セレクタのボタン表示（路線と種別は 1 つのコントロールで扱う・空＝全路線）。
+ * 種別を先に並べる：「新幹線」だけを押す使い方が最も多く、先頭に出したほうが読み取りやすい。
+ */
+export function routeFilterLabel(routes: readonly string[], routeTypes: readonly number[]): string {
+  return routeLabel([...routeTypes.map(routeTypeLabel), ...routes])
+}
+
+/**
+ * 路線一覧の 1 行の表示名。**同名の路線が複数社にあるときだけ**識別子を足す
+ * （§9 決定 5：常に会社名を併記すると幅 200px で切れる）。
+ *
+ * 識別子は会社名ではなく**会社数**にする。実測では重複 28 本すべてで会社名の併記が
+ * 行幅（約 14 字）に収まらず（「山陽線（九州旅客鉄道・西日本旅客鉄道）」＝18 字）、
+ * 切れた表示は識別子として役に立たないため。会社数は「この名前を選ぶと N 社ぶんが対象」
+ * （§9 決定 4）という、選択時にいちばん効く情報でもある。会社名の全文は
+ * ホバー（title 属性）と、会社名での検索で辿れる。
+ */
+export function routeOptionLabel(route: string, operators: readonly string[]): string {
+  return operators.length <= 1 ? route : `${route}（${operators.length}社）`
+}

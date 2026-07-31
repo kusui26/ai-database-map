@@ -25,6 +25,9 @@ export type Promotion =
       readonly prefectures: readonly string[]
       /** 運営会社の絞り込み（260730・空＝全社）。 */
       readonly operators: readonly string[]
+      /** 路線・事業者種別の絞り込み（260731・空＝全路線。両者は OR）。 */
+      readonly routes: readonly string[]
+      readonly routeTypes: readonly number[]
       readonly excludeLowN: boolean
     }
 

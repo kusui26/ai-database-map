@@ -1,10 +1,11 @@
 /**
- * P8c 評価 runner：ゴールデン 22 問を実 /api/chat（SSE）に投げ、score.ts で採点する。
+ * P8c 評価 runner：ゴールデン 23 問を実 /api/chat（SSE）に投げ、score.ts で採点する。
  *
  * 通常の `pnpm test` では **スキップ**（LLM/DB/課金に依存）。実行は：
  *   1) 別端末で dev サーバ起動：`pnpm dev`（.env に GEMINI_API_KEY・SUPABASE_* が必要）
  *   2) `EVAL=1 pnpm exec vitest run tests/chat-eval.test.ts`
  *      （ポート変更時は `CHAT_BASE_URL=http://localhost:PORT`／閾値は `EVAL_PASS`／間隔は `EVAL_THROTTLE_MS`）
+ *      失敗問だけの再実行は `EVAL_ONLY=id1,id2`（モデル側の遅延で落ちた問を全 23 問流さず確認する）
  *
  * Gemini 無料枠は 5 req/分・1 問が多段ツールで数回モデルを呼ぶため、問間にスロットルを入れ、
  * quota で失敗した問は 1 度だけクールダウン再試行する。合格率と各問の内訳を出力する。
@@ -22,6 +23,8 @@ const PASS_THRESHOLD = Number(process.env.EVAL_PASS ?? '16')
 const THROTTLE_MS = Number(process.env.EVAL_THROTTLE_MS ?? '45000')
 const REQUEST_TIMEOUT_MS = 75_000
 const REPORT_PATH = process.env.EVAL_REPORT ?? ''
+/** 実行する問を id で絞る（空＝全問）。落ちた問だけを流し直すため。 */
+const ONLY = (process.env.EVAL_ONLY ?? '').split(',').filter((id) => id.length > 0)
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -102,17 +105,18 @@ async function ask(query: string, selectedGrp?: string, radiusM?: number): Promi
   return { toolCalls, panelTypes, actionTypes, text, haystack, mapResponseValid, errored }
 }
 
-describe.skipIf(!ENABLED)('P8c eval — ゴールデン 22 問', () => {
+describe.skipIf(!ENABLED)('P8c eval — ゴールデン 23 問', () => {
   it(
     '合格率を計測する',
     async () => {
+      const cases = ONLY.length > 0 ? EVAL_CASES.filter((c) => ONLY.includes(c.id)) : EVAL_CASES
       const lines: string[] = ['# P8c eval レポート', '', `対象: ${BASE_URL}`, '']
       const rows: string[] = ['| # | id | 分野 | 合否 | 失敗チェック |', '|---|---|---|---|---|']
       let passed = 0
       let firstAsk = true
 
-      for (let index = 0; index < EVAL_CASES.length; index += 1) {
-        const testCase = EVAL_CASES[index]
+      for (let index = 0; index < cases.length; index += 1) {
+        const testCase = cases[index]
         if (testCase === undefined) continue
         if (!firstAsk) await sleep(THROTTLE_MS)
         firstAsk = false
@@ -132,20 +136,20 @@ describe.skipIf(!ENABLED)('P8c eval — ゴールデン 22 問', () => {
         )
         // 進捗ログ
         console.log(
-          `[${index + 1}/${EVAL_CASES.length}] ${result.pass ? 'PASS' : 'FAIL'} ${testCase.id}` +
+          `[${index + 1}/${cases.length}] ${result.pass ? 'PASS' : 'FAIL'} ${testCase.id}` +
             `  tools=${observed.toolCalls.map((call) => call.name).join(',')}` +
             `  panels=${observed.panelTypes.join(',')}` +
             (failed.length > 0 ? `  ✗ ${failed.join('；')}` : ''),
         )
       }
 
-      const rate = `${passed}/${EVAL_CASES.length}`
+      const rate = `${passed}/${cases.length}`
       lines.push(`**合格率: ${rate}（閾値 ${PASS_THRESHOLD}）**`, '', ...rows, '')
       const report = lines.join('\n')
       console.log('\n' + report)
       if (REPORT_PATH.length > 0) writeFileSync(REPORT_PATH, report)
 
-      expect(passed).toBeGreaterThanOrEqual(PASS_THRESHOLD)
+      expect(passed).toBeGreaterThanOrEqual(ONLY.length > 0 ? 0 : PASS_THRESHOLD)
     },
     45 * 60 * 1000,
   )

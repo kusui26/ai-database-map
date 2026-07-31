@@ -43,6 +43,11 @@ function readStringArray(value: unknown): string[] {
     ? value.filter((item): item is string => typeof item === 'string')
     : []
 }
+function readNumberArray(value: unknown): number[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is number => typeof item === 'number' && Number.isInteger(item))
+    : []
+}
 function readBool(value: unknown): boolean {
   return value === true
 }
@@ -104,6 +109,8 @@ function scatterPromotion(panel: Panel, toolCalls: readonly ToolCall[]): Promoti
     yKey,
     prefectures: readStringArray(call?.input.prefectures),
     operators: readStringArray(call?.input.operators),
+    routes: readStringArray(call?.input.routes),
+    routeTypes: readNumberArray(call?.input.routeTypes),
     excludeLowN: readBool(call?.input.excludeLowN),
   }
 }

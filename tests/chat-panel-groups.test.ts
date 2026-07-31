@@ -89,6 +89,8 @@ describe('buildPanelGroups', () => {
       yKey: 'rate_covid',
       prefectures: ['東京都'],
       operators: [],
+      routes: [],
+      routeTypes: [],
       excludeLowN: false,
     })
   })
@@ -112,8 +114,53 @@ describe('buildPanelGroups', () => {
       yKey: 'rate_covid',
       prefectures: ['東京都'],
       operators: ['東日本旅客鉄道', '東京地下鉄'],
+      routes: [],
+      routeTypes: [],
       excludeLowN: false,
     })
+  })
+
+  it('散布の路線・種別フィルタも昇格パラメータに復元される（260731）', () => {
+    const withRoutes: ToolCall[] = [
+      {
+        name: 'compareGrowth',
+        input: {
+          x: 'pop_gr_2020_2015_2km',
+          y: 'rate_covid',
+          operators: ['東海旅客鉄道'],
+          routes: ['東海道新幹線'],
+          routeTypes: [1],
+        },
+      },
+    ]
+    const groups = buildPanelGroups([scatter], withRoutes)
+    expect(groups[0]?.promotion).toEqual({
+      kind: 'scatter',
+      xKey: 'pop_gr_2020_2015_2km',
+      yKey: 'rate_covid',
+      prefectures: [],
+      operators: ['東海旅客鉄道'],
+      routes: ['東海道新幹線'],
+      routeTypes: [1],
+      excludeLowN: false,
+    })
+  })
+
+  it('壊れた routeTypes（文字列・小数）は無視して昇格する（型ガード）', () => {
+    const broken: ToolCall[] = [
+      {
+        name: 'compareGrowth',
+        input: {
+          x: 'pop_gr_2020_2015_2km',
+          y: 'rate_covid',
+          routes: ['東海道新幹線', 42],
+          routeTypes: ['1', 1.5, 2],
+        },
+      },
+    ]
+    const promotion = buildPanelGroups([scatter], broken)[0]?.promotion
+    expect(promotion?.kind === 'scatter' ? promotion.routes : null).toEqual(['東海道新幹線'])
+    expect(promotion?.kind === 'scatter' ? promotion.routeTypes : null).toEqual([2])
   })
 
   it('複数効果が混在しても境界を正しく分ける（詳細→ランキング→散布）', () => {

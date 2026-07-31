@@ -1,8 +1,8 @@
 'use client'
 
 /**
- * 散布図のモーダル（FAB から開く）。x/y 指標ピッカ × 都道府県 × 運営会社 × 低分母除外 → /api/growth
- * （決定的 k-means 済み）→ Chart.js 散布（クラスタ色分け）。点クリックで駅選択（?grp）。
+ * 散布図のモーダル（FAB から開く）。x/y 指標ピッカ × 都道府県 × 運営会社 × 路線 × 低分母除外
+ * → /api/growth（決定的 k-means 済み）→ Chart.js 散布（クラスタ色分け）。点クリックで駅選択（?grp）。
  */
 
 import { useCallback, useMemo, useState } from 'react'
@@ -16,7 +16,9 @@ import { ScatterChart, SCATTER_HEIGHT } from '@/components/panels/ScatterChart'
 import { MetricSelect } from '@/components/metrics/MetricSelect'
 import { OperatorMultiSelect } from '@/components/metrics/OperatorMultiSelect'
 import { PrefectureMultiSelect } from '@/components/metrics/PrefectureMultiSelect'
+import { RouteMultiSelect } from '@/components/metrics/RouteMultiSelect'
 import { useOperators } from '@/components/metrics/useOperators'
+import { useRoutes } from '@/components/metrics/useRoutes'
 import { useGrowth } from './useGrowth'
 import {
   applyManualPrefectures,
@@ -28,6 +30,12 @@ import {
   pruneAutoPrefectures,
   selectOperatorPrefectures,
 } from './operatorLink'
+import {
+  intersectAllowed,
+  narrowedByLabel,
+  operatorsOfRouteFilter,
+  routesOfOperators,
+} from './routeLink'
 
 const X_CATEGORY: Category = getEntry(DEFAULT_SCATTER_X)?.category ?? 'population'
 const Y_CATEGORY: Category = getEntry(DEFAULT_SCATTER_Y)?.category ?? 'passenger'
@@ -43,6 +51,9 @@ export type ScatterInitial = {
   readonly prefectures: readonly string[]
   /** 運営会社の絞り込み（260730・省略時は全社）。 */
   readonly operators?: readonly string[]
+  /** 路線・事業者種別の絞り込み（260731・省略時は全路線。両者は OR）。 */
+  readonly routes?: readonly string[]
+  readonly routeTypes?: readonly number[]
   readonly excludeLowN: boolean
 }
 
@@ -69,6 +80,10 @@ export function ScatterDialog({
   const [operators, setOperators] = useState<string[]>(
     initial ? [...(initial.operators ?? [])] : [],
   )
+  const [routes, setRoutes] = useState<string[]>(initial ? [...(initial.routes ?? [])] : [])
+  const [routeTypes, setRouteTypes] = useState<number[]>(
+    initial ? [...(initial.routeTypes ?? [])] : [],
+  )
   // 既定で低分母（⚠）を除外する：母数が小さい駅の増減率・中央値は外れ値になりやすく、
   // 既定の散布が数駅の極端値に引きずられるため（チャットからの昇格時は AI が実際に
   // 使った条件をそのまま反映する＝initial 優先）。
@@ -80,18 +95,29 @@ export function ScatterDialog({
     isLoading: operatorsLoading,
     error: operatorsError,
   } = useOperators(open)
+  const { routes: routeList, isLoading: routesLoading, error: routesError } = useRoutes(open)
   const index = useMemo(() => prefectureIndex(operatorList), [operatorList])
 
-  // 双方向の連動：会社を選べば県の候補が、県を選べば会社の候補が絞られる（未選択なら全件）。
+  // 双方向の連動：会社を選べば県・路線の候補が、県や路線を選べば会社の候補が絞られる
+  // （未選択なら全件）。会社の候補は都道府県と路線の**両方**の条件を満たすものだけ。
   const allowedPrefectures = useMemo(
     () => (operators.length === 0 ? undefined : prefecturesOfOperators(operators, index)),
     [operators, index],
   )
-  const allowedOperators = useMemo(
-    () =>
-      prefectures.length === 0 ? undefined : operatorsInPrefectures(prefectures, operatorList),
-    [prefectures, operatorList],
+  const allowedRoutes = useMemo(
+    () => (operators.length === 0 ? undefined : routesOfOperators(operators, routeList)),
+    [operators, routeList],
   )
+  const allowedOperators = useMemo(() => {
+    const byPrefecture =
+      prefectures.length === 0 ? undefined : operatorsInPrefectures(prefectures, operatorList)
+    const byRoute =
+      routes.length === 0 && routeTypes.length === 0
+        ? undefined
+        : operatorsOfRouteFilter(routes, routeTypes, routeList)
+    return intersectAllowed(byPrefecture, byRoute)
+  }, [prefectures, operatorList, routes, routeTypes, routeList])
+  const operatorScope = narrowedByLabel(prefectures, routes, routeTypes)
   const applyCount = useMemo(
     () =>
       prefecturesOfOperators(operators, index).filter(
@@ -115,11 +141,7 @@ export function ScatterDialog({
   }, [operators, index])
 
   const { growth, isLoading, isValidating, error } = useGrowth(
-    xKey,
-    yKey,
-    prefectures,
-    operators,
-    excludeLowN,
+    { x: xKey, y: yKey, prefectures, operators, routes, routeTypes, excludeLowN },
     open,
   )
 
@@ -181,8 +203,19 @@ export function ScatterDialog({
                 isLoading={operatorsLoading}
                 error={operatorsError}
                 allowed={allowedOperators}
+                allowedScope={operatorScope}
                 onApplyPrefectures={onApplyPrefectures}
                 applyPrefectureCount={applyCount}
+              />
+              <RouteMultiSelect
+                selected={routes}
+                selectedTypes={routeTypes}
+                onChange={setRoutes}
+                onChangeTypes={setRouteTypes}
+                routes={routeList}
+                isLoading={routesLoading}
+                error={routesError}
+                allowed={allowedRoutes}
               />
               <label className="flex cursor-pointer items-center gap-1.5 text-sm text-slate-600">
                 <input

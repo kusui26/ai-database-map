@@ -13,7 +13,9 @@ import {
   RADIUS_LABELS,
   ROUTE_TYPE_LABELS,
   ROUTE_TYPES,
+  routeFilterLabel,
   routeLabel,
+  routeOptionLabel,
   routeTypeLabel,
   selectionLabel,
   WARNING_COLOR,
@@ -136,6 +138,37 @@ describe('事業者種別（路線・260731）', () => {
     expect(routeLabel([])).toBe('全路線')
     expect(routeLabel(['東海道新幹線'])).toBe('東海道新幹線')
     expect(routeLabel(['東海道新幹線', '山陽新幹線', '東北新幹線'])).toBe('東海道新幹線 他2件')
+  })
+
+  it('セレクタのボタンは種別と路線をまとめて表示する（種別が先）', () => {
+    expect(routeFilterLabel([], [])).toBe('全路線')
+    expect(routeFilterLabel([], [1])).toBe('新幹線')
+    expect(routeFilterLabel(['東海道線'], [1])).toBe('新幹線・東海道線')
+    expect(routeFilterLabel(['東海道線', '中央線'], [1])).toBe('新幹線 他2件')
+  })
+
+  it('一覧の表示名は同名路線が複数社にあるときだけ識別子を足す（決定 5）', () => {
+    expect(routeOptionLabel('東海道新幹線', ['東海旅客鉄道'])).toBe('東海道新幹線')
+    expect(routeOptionLabel('東海道線', [])).toBe('東海道線') // 会社不明でも壊れない
+    // 会社名の併記は実測で 28 本すべてが行幅に収まらないため、会社数に畳む。
+    expect(routeOptionLabel('山陽線', ['九州旅客鉄道', '西日本旅客鉄道'])).toBe('山陽線（2社）')
+    expect(routeOptionLabel('本線', ['京成電鉄', '広島電鉄', '函館市'])).toBe('本線（3社）')
+  })
+
+  it('一覧の表示名は行幅（約 14 字）に収まる', () => {
+    const longest = routeOptionLabel('東海道本線支線', [
+      'A',
+      'B',
+      'C',
+      'D',
+      'E',
+      'F',
+      'G',
+      'H',
+      'I',
+      'J',
+    ])
+    expect(longest.length).toBeLessThanOrEqual(14)
   })
 })
 

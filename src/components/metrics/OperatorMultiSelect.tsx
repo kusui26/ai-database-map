@@ -7,8 +7,9 @@
  * （上位 10 社で延べの 56% を占めるので、多くの用途は検索なしで届く）。
  * 空＝全社。複数選択は OR（どれか 1 社でも運営していれば対象）。
  *
- * 260731：都道府県との連動。`allowed` を渡すと、選択中の県を走らない会社は**グレーアウト**し
+ * 260731：都道府県・路線との連動。`allowed` を渡すと、その条件に合わない会社は**グレーアウト**し
  * （0 件になる組合せを防ぐ）、選択中の会社の都道府県をまとめて選ぶボタンを出す。
+ * 何で絞られているかは条件によって変わるため、説明文の主語は `allowedScope` で受け取る。
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -26,6 +27,7 @@ export function OperatorMultiSelect({
   isLoading,
   error,
   allowed,
+  allowedScope,
   onApplyPrefectures,
   applyPrefectureCount,
   className,
@@ -37,6 +39,8 @@ export function OperatorMultiSelect({
   error: Error | undefined
   /** 選べる会社（未指定＝全社）。含まれない会社はグレーアウト。 */
   allowed?: readonly string[]
+  /** 候補を絞っている条件の名前（例「都道府県・路線」）。説明文に出す。 */
+  allowedScope?: string
   /** 「選択中の会社の都道府県を選ぶ」ボタン（未指定なら出さない）。 */
   onApplyPrefectures?: () => void
   /** 上記ボタンに表示する県数（0 なら出さない）。 */
@@ -130,7 +134,7 @@ export function OperatorMultiSelect({
           )}
           {allowedSet !== null && (
             <p className="mb-1 px-2 text-xs text-slate-400">
-              選択中の都道府県を走る {allowedSet.size} 社のみ選べます
+              選択中の{allowedScope ?? '条件'}に合う {allowedSet.size} 社のみ選べます
             </p>
           )}
           <div className="min-h-0 flex-1 overflow-y-auto">

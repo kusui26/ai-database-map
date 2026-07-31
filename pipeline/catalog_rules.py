@@ -121,7 +121,8 @@ class CatalogEntry:
     year: int | None  # 対象年（増減率は新年）
     yearBase: int | None  # 増減率の分母年
     vintage: int | None  # 将来推計の推計時点（2024=R6 / 2018=H30）
-    reliabilityFlagKey: str | None  # 対応する lowbase/lown/flag 列の key
+    reliabilityFlagKey: str | None  # **除外**に使うフラグ列の key（＝値が信用できない）
+    noticeFlagKey: str | None  # **バッジ**に使うフラグ列の key（＝読むとき注意が要る）
     rankable: bool  # ランキング/散布の候補にするか
     higherIsBetter: bool | None  # 用途（鉄道/出店/住宅）で反転するため既定 null
     source: str
@@ -142,6 +143,7 @@ def _make(
     yearBase: int | None = None,
     vintage: int | None = None,
     flag: str | None = None,
+    notice: str | None = None,
     rankable: bool = True,
     srckey: str | None = None,
 ) -> CatalogEntry:
@@ -159,6 +161,9 @@ def _make(
         yearBase=yearBase,
         vintage=vintage,
         reliabilityFlagKey=flag,
+        # 既定では「除外に使うフラグ＝注意喚起にも使う」。両者が食い違うのは、
+        # 複数の条件を 1 本に束ねたフラグ（flag_covid）を持つ指標だけ（260731）。
+        noticeFlagKey=notice if notice is not None else flag,
         rankable=rankable,
         higherIsBetter=None,
         source=source,
@@ -177,8 +182,12 @@ def build_entry(col: str) -> CatalogEntry:
         return _make(col, "pax_rate", "growth", "passenger", "乗降客数 前年増減率（2023→2024年）",
                      "%", "percent1", year=2024, yearBase=2023, flag="flag_yoy")
     if col == "rate_covid":
+        # 除外は「低分母（|率|>100%）」だけに絞る。flag_covid は被覆<100%・pre<2019 も
+        # 束ねており、そのままだと新宿・横浜・新横浜のような大駅が「低分母」の名目で
+        # 消えてしまう（docs/260731_reliability_flag_semantics.md）。被覆・参照年は
+        # 値そのものを損なわない（basket 内で like-for-like）ためバッジで注意を促す。
         return _make(col, "pax_rate", "growth", "passenger", "乗降客数 コロナ前後増減率",
-                     "%", "percent1", flag="flag_covid")
+                     "%", "percent1", flag="flag_covid_lown", notice="flag_covid")
     # 乗降の信頼性フラグ（他の lowbase/lown と同じ flag 種別メトリクス。rankable=False）。
     # rate_yoy/rate_covid の reliabilityFlagKey が指す先＝除外/バッジがこの値で機能する。
     if col == "flag_yoy":
@@ -187,7 +196,11 @@ def build_entry(col: str) -> CatalogEntry:
                      year=2024, yearBase=2023, rankable=False)
     if col == "flag_covid":
         return _make(col, "pax_flag", "flag", "passenger",
-                     "乗降客数 コロナ前後増減率 信頼性フラグ（被覆<100%／pre<2019／|率|>100%）",
+                     "乗降客数 コロナ前後増減率 注意フラグ（被覆<100%／pre<2019／|率|>100%）",
+                     None, None, rankable=False)
+    if col == "flag_covid_lown":
+        return _make(col, "pax_flag", "flag", "passenger",
+                     "乗降客数 コロナ前後増減率 低分母フラグ（|率|>100%＝小駅の分母ノイズ）",
                      None, None, rankable=False)
 
     # --- 人口 実績（population） ---

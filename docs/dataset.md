@@ -45,14 +45,15 @@ Step1 の中核資産である駅×半径データセットの**全体像・全�
 
 > ⚠ `flag_yoy` / `flag_covid` は**信頼性フラグ**（他の `*_lowbase` / `*_lown` と同じ flag 種別メトリクス）のため、駅属性ではなく**乗降客数の指標**として §2.2 に置く（除外・バッジが値経由で機能するよう metric_columns/station_values 化する・260727）。
 
-### 2.2 乗降客数（S12・18列）→ `docs/passenger_aggregation.md`
+### 2.2 乗降客数（S12・19列）→ `docs/passenger_aggregation.md`
 | 列パターン | 数 | 型 | 説明 |
 |---|---|---|---|
 | `pax_{2011…2024}` | 14 | int | 各年の 1 日平均乗降客数（グループ合算・在の社のみ）|
 | `rate_yoy` | 1 | float% | 直近前年比（2024 ÷ 2023）|
 | `rate_covid` | 1 | float% | コロナ前→後（事業者単位）|
 | `flag_yoy` | 1 | int8 | `rate_yoy` 信頼性フラグ（\|前年比\|>30%＝1）。他 lowbase/lown と同じ flag 種別メトリクス |
-| `flag_covid` | 1 | int8 | `rate_covid` 信頼性フラグ（被覆<100%／pre<2019／\|率\|>100%＝1）|
+| `flag_covid` | 1 | int8 | `rate_covid` **注意**フラグ（被覆<100%／pre<2019／\|率\|>100%＝1）。バッジ用（`noticeFlagKey`）|
+| `flag_covid_lown` | 1 | int8 | `rate_covid` **低分母**フラグ（\|率\|>100%＝1）。**除外用**（`reliabilityFlagKey`）・260731 |
 
 ### 2.3 人口 実績（国勢調査メッシュ・面積按分・42列）→ `docs/population_mesh.md`
 | 列パターン | 数 | 型 | 説明 |

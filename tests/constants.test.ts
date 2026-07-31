@@ -11,6 +11,10 @@ import {
   prefectureLabel,
   RADII_M,
   RADIUS_LABELS,
+  ROUTE_TYPE_LABELS,
+  ROUTE_TYPES,
+  routeLabel,
+  routeTypeLabel,
   selectionLabel,
   WARNING_COLOR,
 } from '@/shared/constants'
@@ -112,6 +116,26 @@ describe('selectionLabel（複数選択の表示ラベル）', () => {
     expect(operatorLabel([])).toBe('全社')
     expect(prefectureLabel(['千葉県', '埼玉県'])).toBe('千葉県・埼玉県')
     expect(operatorLabel(['東武鉄道', '西武鉄道'])).toBe('東武鉄道・西武鉄道')
+  })
+})
+
+describe('事業者種別（路線・260731）', () => {
+  it('5 種別に表示名があり、新幹線はコード 1', () => {
+    expect(ROUTE_TYPES).toEqual([1, 2, 3, 4, 5])
+    expect(routeTypeLabel(1)).toBe('新幹線')
+    for (const type of ROUTE_TYPES) {
+      expect(ROUTE_TYPE_LABELS[type].length).toBeGreaterThan(0)
+    }
+  })
+
+  it('未知のコードでも壊れない（安全側のフォールバック）', () => {
+    expect(routeTypeLabel(9)).toBe('種別9')
+  })
+
+  it('路線ラベルは空＝全路線（都道府県・会社と同じ文法）', () => {
+    expect(routeLabel([])).toBe('全路線')
+    expect(routeLabel(['東海道新幹線'])).toBe('東海道新幹線')
+    expect(routeLabel(['東海道新幹線', '山陽新幹線', '東北新幹線'])).toBe('東海道新幹線 他2件')
   })
 })
 

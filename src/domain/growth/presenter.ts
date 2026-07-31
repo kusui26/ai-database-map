@@ -21,6 +21,10 @@ export type GrowthOptions = {
   readonly prefectures?: readonly string[]
   /** 運営会社の絞り込み（絞り込み自体は DB 側・ここは応答へ載せて表示に使う・260730）。 */
   readonly operators?: readonly string[]
+  /** 路線の絞り込み（同上・260731）。 */
+  readonly routes?: readonly string[]
+  /** 事業者種別の絞り込み（1:新幹線 …・同上・260731）。 */
+  readonly routeTypes?: readonly number[]
 }
 
 export function buildGrowth(
@@ -70,6 +74,8 @@ export function buildGrowth(
     y: { key: yEntry.key, labelJa: yEntry.labelJa, unit: yEntry.unit },
     prefectures: [...(options.prefectures ?? [])],
     operators: [...(options.operators ?? [])],
+    routes: [...(options.routes ?? [])],
+    routeTypes: [...(options.routeTypes ?? [])],
     clusterCount: new Set(clusters).size,
     excludedLowN,
     points,

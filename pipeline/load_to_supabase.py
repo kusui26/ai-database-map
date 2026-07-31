@@ -24,6 +24,8 @@ from pathlib import Path
 import pandas as pd
 import psycopg
 
+from load_station_routes import ROUTES_CSV, copy_station_routes
+
 ROOT = Path(__file__).resolve().parents[1]
 CSV_PATH = ROOT / "data" / "derived" / "station_dataset.csv"
 CATALOG_PATH = ROOT / "src" / "shared" / "catalog" / "catalog.json"
@@ -146,6 +148,16 @@ def main() -> int:
                         _bool_or_none(row.level_complete),
                     ])
             print(f"  stations copied in {time.time() - t0:.1f}s")
+
+            # --- station_routes（路線・260731）を同じトランザクションで入れ直す ---
+            # stations の truncate cascade で消えるため、全量投入のたびに再投入する。
+            # CSV が無い環境（路線を生成していない）ではスキップし、投入自体は止めない。
+            if ROUTES_CSV.exists():
+                t0 = time.time()
+                routes_written = copy_station_routes(cur, ROUTES_CSV)
+                print(f"  station_routes ({routes_written:,} 行) copied in {time.time() - t0:.1f}s")
+            else:
+                print(f"  station_routes: {ROUTES_CSV.name} が無いためスキップ")
 
             # --- 数値メトリクスを melt（NaN スキップ）→ station_values を COPY ---
             t0 = time.time()

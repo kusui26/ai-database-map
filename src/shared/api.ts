@@ -44,6 +44,8 @@ export const growthQuerySchema = z.object({
   y: z.string(),
   prefectures: z.array(z.string()).default([]), // 空＝全国（P6c）
   operators: z.array(z.string()).default([]), // 空＝全社（260730・「・」分割の完全一致 OR）
+  routes: z.array(z.string()).default([]), // 空＝全路線（260731）
+  routeTypes: z.array(z.number().int()).default([]), // 空＝全種別（1:新幹線 …・routes とは OR）
   excludeLowN: boolFlag,
 })
 
@@ -130,6 +132,8 @@ export const growthResponseSchema = z.object({
   y: metricRefSchema,
   prefectures: z.array(z.string()), // 空＝全国（P6c）
   operators: z.array(z.string()).default([]), // 空＝全社（260730）
+  routes: z.array(z.string()).default([]), // 空＝全路線（260731）
+  routeTypes: z.array(z.number()).default([]), // 空＝全種別（260731）
   clusterCount: z.number(),
   excludedLowN: z.number(),
   points: z.array(scatterPointSchema),
@@ -152,6 +156,22 @@ export const operatorsResponseSchema = z.object({
   operators: z.array(operatorSchema), // 駅グループ数の多い順
 })
 export type OperatorsResponse = z.infer<typeof operatorsResponseSchema>
+
+/** 路線の一覧（GET /api/routes）。散布の路線セレクタが参照する（260731）。 */
+export const routeSchema = z.object({
+  route: z.string(),
+  stationCount: z.number(),
+  /** その路線を運営する会社（同名で会社が異なる路線があるため配列・例「本線」は 10 社）。 */
+  operators: z.array(z.string()).default([]),
+  /** 事業者種別（1:JR新幹線 2:JR在来線 3:公営 4:民営 5:第三セクター）。同名で異なる場合がある。 */
+  routeTypes: z.array(z.number()).default([]),
+})
+export type Route = z.infer<typeof routeSchema>
+
+export const routesResponseSchema = z.object({
+  routes: z.array(routeSchema), // 駅グループ数の多い順
+})
+export type RoutesResponse = z.infer<typeof routesResponseSchema>
 
 export const healthResponseSchema = z.object({ ok: z.literal(true) })
 export type HealthResponse = z.infer<typeof healthResponseSchema>

@@ -188,3 +188,33 @@ export function prefectureLabel(prefectures: readonly string[]): string {
 export function operatorLabel(operators: readonly string[]): string {
   return selectionLabel(operators, '全社')
 }
+
+// --- 路線（事業者種別・260731） -----------------------------------------
+
+/**
+ * 事業者種別コード（国土数値情報 S12 の `S12_005`）。
+ * 「新幹線駅のみ」は名前の部分一致ではなく**このコード 1** で厳密に表現できる
+ * （docs/260730_scatter_plot_routes.md §1.2）。
+ */
+export const ROUTE_TYPES = [1, 2, 3, 4, 5] as const
+export type RouteType = (typeof ROUTE_TYPES)[number]
+
+/** 事業者種別の表示名（チップ・パネルタイトルで共用）。 */
+export const ROUTE_TYPE_LABELS: Readonly<Record<RouteType, string>> = {
+  1: '新幹線',
+  2: 'JR在来線',
+  3: '公営鉄道',
+  4: '民営鉄道',
+  5: '第三セクター',
+}
+
+/** コード → 表示名（未知のコードはそのまま数値を返す・安全側）。 */
+export function routeTypeLabel(code: number): string {
+  const known = ROUTE_TYPES.find((type) => type === code)
+  return known === undefined ? `種別${code}` : ROUTE_TYPE_LABELS[known]
+}
+
+/** 選択路線の表示ラベル（空＝全路線・260731）。 */
+export function routeLabel(routes: readonly string[]): string {
+  return selectionLabel(routes, '全路線')
+}

@@ -76,8 +76,37 @@ describe('buildPanelGroups', () => {
       kind: 'ranking',
       metricKey: 'pop_gr_2020_2015_1km',
       prefectures: ['千葉県'],
+      operators: [],
+      routes: [],
+      routeTypes: [],
       order: 'desc',
       excludeLowN: true,
+    })
+  })
+
+  it('ランキングの運営会社・路線・種別も昇格パラメータに復元される（260801）', () => {
+    const withFilters: ToolCall[] = [
+      {
+        name: 'rankStations',
+        input: {
+          metric: 'pop_gr_2020_2015_1km',
+          operators: ['東海旅客鉄道'],
+          routes: ['東海道新幹線'],
+          routeTypes: [1, '2'],
+          order: 'asc',
+        },
+      },
+    ]
+    const promotion = buildPanelGroups([rankingTable], withFilters)[0]?.promotion
+    expect(promotion).toEqual({
+      kind: 'ranking',
+      metricKey: 'pop_gr_2020_2015_1km',
+      prefectures: [],
+      operators: ['東海旅客鉄道'],
+      routes: ['東海道新幹線'],
+      routeTypes: [1], // 文字列 '2' は型ガードで落ちる
+      order: 'asc',
+      excludeLowN: false,
     })
   })
 
@@ -181,6 +210,9 @@ describe('buildPanelGroups', () => {
       kind: 'ranking',
       metricKey: 'pop_gr_2020_2015_1km',
       prefectures: [],
+      operators: [],
+      routes: [],
+      routeTypes: [],
       order: 'desc',
       excludeLowN: false,
     })

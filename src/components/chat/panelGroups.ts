@@ -84,6 +84,9 @@ function rankingPromotion(panel: Panel, toolCalls: readonly ToolCall[]): Promoti
     kind: 'ranking',
     metricKey: panel.metricKey,
     prefectures: readStringArray(input.prefectures),
+    operators: readStringArray(input.operators),
+    routes: readStringArray(input.routes),
+    routeTypes: readNumberArray(input.routeTypes),
     order: readOrder(input.order),
     excludeLowN: readBool(input.excludeLowN),
   }

@@ -34,6 +34,9 @@ export function PromotionHost() {
         initial={{
           metricKey: promotion.metricKey,
           prefectures: promotion.prefectures,
+          operators: promotion.operators,
+          routes: promotion.routes,
+          routeTypes: promotion.routeTypes,
           order: promotion.order,
           excludeLowN: promotion.excludeLowN,
         }}

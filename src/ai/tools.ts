@@ -172,7 +172,7 @@ export function createTools(collector: EffectCollector) {
     /** 都道府県×指標のランキング（上位/下位）。指標はキーでもファミリ名でもよい。 */
     rankStations: tool({
       description:
-        '指標で駅を並べ替え上位/下位を返す。metric はカタログキー（pop_gr_2020_2015_1km）でも指標ファミリ（pop_gr）でもよく、ファミリなら radiusM / year で確定する（未指定は 1km・直近5年）。prefectures 未指定は全国。',
+        '指標で駅を並べ替え上位/下位を返す。metric はカタログキー（pop_gr_2020_2015_1km）でも指標ファミリ（pop_gr）でもよく、ファミリなら radiusM / year で確定する（未指定は 1km・直近5年）。prefectures 未指定は全国、operators 未指定は全社、routes/routeTypes 未指定は全路線。',
       inputSchema: z.object({
         metric: z
           .string()
@@ -191,6 +191,22 @@ export function createTools(collector: EffectCollector) {
           .array(z.string())
           .optional()
           .describe('都道府県名の配列。例: ["神奈川県"]。省略で全国'),
+        operators: z
+          .array(z.string())
+          .optional()
+          .describe(
+            '運営会社名の配列（正式名称・例 ["東日本旅客鉄道"]。JR東日本ではない）。どれか1社でも運営する駅が対象。省略で全社',
+          ),
+        routes: z
+          .array(z.string())
+          .optional()
+          .describe('路線名の配列（例 ["東海道新幹線"]）。省略で全路線'),
+        routeTypes: z
+          .array(z.number().int())
+          .optional()
+          .describe(
+            `事業者種別の配列（${ROUTE_TYPE_HINT}）。「新幹線の駅だけ」は [1]。routes とは OR。省略で全種別`,
+          ),
         order: z.enum(['asc', 'desc']).optional().describe('desc=上位(既定)/asc=下位'),
         limit: z
           .number()
@@ -208,6 +224,9 @@ export function createTools(collector: EffectCollector) {
         year,
         yearBase,
         prefectures,
+        operators,
+        routes,
+        routeTypes,
         order,
         limit,
         excludeLowN,
@@ -220,15 +239,41 @@ export function createTools(collector: EffectCollector) {
           const dir = order ?? 'desc'
           const lim = Math.min(Math.max(limit ?? DEFAULT_RANK_LIMIT, 1), MAX_RANK_LIMIT)
           const exclude = excludeLowN ?? false
-          const { rows, total } = await rankByColumn(resolved.key, prefs, dir, lim, 0, exclude)
-          const response = buildRanking(resolved.key, prefs, dir, rows, total, 0)
+          const ops = nonEmptyNames(operators)
+          const lines = nonEmptyNames(routes)
+          const types = (routeTypes ?? []).filter((type) => ROUTE_TYPES.some((t) => t === type))
+          const { rows, total } = await rankByColumn(
+            resolved.key,
+            prefs,
+            dir,
+            lim,
+            0,
+            exclude,
+            ops,
+            lines,
+            types,
+          )
+          const response = buildRanking(resolved.key, prefs, dir, rows, total, 0, {
+            operators: ops,
+            routes: lines,
+            routeTypes: types,
+          })
           collector.push({ kind: 'ranking', response })
+          // 路線名の綴り違いや、会社と路線の食い違いは 0 件になるだけで区別がつかない。
+          // LLM が「無い」と誤断定しないよう理由を添える（compareGrowth と同じ扱い）。
+          const emptyNote =
+            total === 0 && (lines.length > 0 || types.length > 0)
+              ? '該当が 0 件でした。路線名は正式名称（例「東海道新幹線」）で指定し、会社と路線が同じ事業者のものか確認してください。'
+              : null
           return {
             metric: response.metric.labelJa,
             resolvedMetric: resolved.key,
-            note: resolutionNote(resolved.note),
+            note: resolutionNote(resolved.note, emptyNote),
             unit: response.metric.unit,
             prefectures: response.prefectures,
+            operators: response.operators,
+            routes: response.routes,
+            routeTypes: response.routeTypes.map(routeTypeLabel),
             order: dir,
             total: response.total,
             rows: response.rows.slice(0, 10).map((row) => ({

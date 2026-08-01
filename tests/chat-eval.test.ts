@@ -1,5 +1,5 @@
 /**
- * P8c 評価 runner：ゴールデン 23 問を実 /api/chat（SSE）に投げ、score.ts で採点する。
+ * P8c 評価 runner：ゴールデン 24 問を実 /api/chat（SSE）に投げ、score.ts で採点する。
  *
  * 通常の `pnpm test` では **スキップ**（LLM/DB/課金に依存）。実行は：
  *   1) 別端末で dev サーバ起動：`pnpm dev`（.env に GEMINI_API_KEY・SUPABASE_* が必要）
@@ -105,7 +105,7 @@ async function ask(query: string, selectedGrp?: string, radiusM?: number): Promi
   return { toolCalls, panelTypes, actionTypes, text, haystack, mapResponseValid, errored }
 }
 
-describe.skipIf(!ENABLED)('P8c eval — ゴールデン 23 問', () => {
+describe.skipIf(!ENABLED)('P8c eval — ゴールデン 24 問', () => {
   it(
     '合格率を計測する',
     async () => {

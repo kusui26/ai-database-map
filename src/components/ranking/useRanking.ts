@@ -30,25 +30,38 @@ export type RankingState = {
   readonly error: Error | undefined
 }
 
-export function useRanking(
-  metric: string,
-  prefectures: string[],
-  order: Order,
-  excludeLowN: boolean,
-  enabled: boolean,
-): RankingState {
+/** ランキングの条件（そのままクエリ文字列になる・空配列＝絞らない）。 */
+export type RankingQuery = {
+  readonly metric: string
+  readonly prefectures: readonly string[]
+  readonly operators: readonly string[]
+  readonly routes: readonly string[]
+  readonly routeTypes: readonly number[]
+  readonly order: Order
+  readonly excludeLowN: boolean
+}
+
+/** 条件＋ページ番号 → リクエスト URL（絞っていない軸は載せない＝キャッシュが効く）。 */
+export function rankingUrl(query: RankingQuery, pageIndex: number): string {
+  const params = new URLSearchParams({
+    metric: query.metric,
+    order: query.order,
+    limit: String(PAGE_SIZE),
+    offset: String(pageIndex * PAGE_SIZE),
+  })
+  if (query.prefectures.length > 0) params.set('prefecture', query.prefectures.join(','))
+  if (query.operators.length > 0) params.set('operators', query.operators.join(','))
+  if (query.routes.length > 0) params.set('routes', query.routes.join(','))
+  if (query.routeTypes.length > 0) params.set('routeTypes', query.routeTypes.join(','))
+  if (query.excludeLowN) params.set('excludeLowN', 'true')
+  return `/api/ranking?${params.toString()}`
+}
+
+export function useRanking(query: RankingQuery, enabled: boolean): RankingState {
   const getKey = (pageIndex: number, previous: RankingResponse | null): string | null => {
     if (!enabled) return null
     if (previous !== null && previous.rows.length < PAGE_SIZE) return null // 末尾に到達
-    const params = new URLSearchParams({
-      metric,
-      order,
-      limit: String(PAGE_SIZE),
-      offset: String(pageIndex * PAGE_SIZE),
-    })
-    if (prefectures.length > 0) params.set('prefecture', prefectures.join(','))
-    if (excludeLowN) params.set('excludeLowN', 'true')
-    return `/api/ranking?${params.toString()}`
+    return rankingUrl(query, pageIndex)
   }
 
   const { data, error, size, setSize, isLoading, isValidating } = useSWRInfinite(

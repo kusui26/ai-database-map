@@ -16,7 +16,7 @@ import {
   prefecturesOfOperators,
   pruneAutoPrefectures,
   selectOperatorPrefectures,
-} from '@/components/scatter/operatorLink'
+} from '@/components/metrics/operatorLink'
 
 const OPERATORS: Operator[] = [
   {

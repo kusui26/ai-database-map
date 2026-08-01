@@ -5,7 +5,7 @@
  * → /api/growth（決定的 k-means 済み）→ Chart.js 散布（クラスタ色分け）。点クリックで駅選択（?grp）。
  */
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { type Category } from '@/shared/constants'
 import { getEntry } from '@/shared/catalog'
@@ -14,28 +14,9 @@ import { scatterPanel } from '@/domain/growth/panel'
 import { useMapUrlState } from '@/components/map/useMapUrlState'
 import { ScatterChart, SCATTER_HEIGHT } from '@/components/panels/ScatterChart'
 import { MetricSelect } from '@/components/metrics/MetricSelect'
-import { OperatorMultiSelect } from '@/components/metrics/OperatorMultiSelect'
-import { PrefectureMultiSelect } from '@/components/metrics/PrefectureMultiSelect'
-import { RouteMultiSelect } from '@/components/metrics/RouteMultiSelect'
-import { useOperators } from '@/components/metrics/useOperators'
-import { useRoutes } from '@/components/metrics/useRoutes'
+import { StationFilterControls } from '@/components/metrics/StationFilterControls'
+import { useStationFilters } from '@/components/metrics/useStationFilters'
 import { useGrowth } from './useGrowth'
-import {
-  applyManualPrefectures,
-  EMPTY_LINK,
-  type LinkState,
-  operatorsInPrefectures,
-  prefectureIndex,
-  prefecturesOfOperators,
-  pruneAutoPrefectures,
-  selectOperatorPrefectures,
-} from './operatorLink'
-import {
-  intersectAllowed,
-  narrowedByLabel,
-  operatorsOfRouteFilter,
-  routesOfOperators,
-} from './routeLink'
 
 const X_CATEGORY: Category = getEntry(DEFAULT_SCATTER_X)?.category ?? 'population'
 const Y_CATEGORY: Category = getEntry(DEFAULT_SCATTER_Y)?.category ?? 'passenger'
@@ -73,77 +54,15 @@ export function ScatterDialog({
   const [xKey, setXKey] = useState<string>(initialX)
   const [yCategory, setYCategory] = useState<Category>(getEntry(initialY)?.category ?? Y_CATEGORY)
   const [yKey, setYKey] = useState<string>(initialY)
-  // 都道府県は「手動で入れた分」と「会社連動で入った分（auto）」を区別して持つ（260731）。
-  const [link, setLink] = useState<LinkState>(
-    initial ? { prefectures: [...initial.prefectures], auto: [] } : EMPTY_LINK,
-  )
-  const [operators, setOperators] = useState<string[]>(
-    initial ? [...(initial.operators ?? [])] : [],
-  )
-  const [routes, setRoutes] = useState<string[]>(initial ? [...(initial.routes ?? [])] : [])
-  const [routeTypes, setRouteTypes] = useState<number[]>(
-    initial ? [...(initial.routeTypes ?? [])] : [],
-  )
+  // 絞り込み（都道府県・会社・路線・種別）と連動は散布とランキングで共有する（260801）。
+  const filters = useStationFilters(open, initial)
   // 既定で信頼性の低い値（⚠）を除外する：母数が小さい駅の増減率・中央値は外れ値に
   // なりやすく、既定の散布が数駅の極端値に引きずられるため（チャットからの昇格時は
   // AI が実際に使った条件をそのまま反映する＝initial 優先）。
-  // ここで落ちるのは「値が信用できない」駅だけで、「一部の社しかデータが無い」駅は
-  // 落とさない（バッジで注意を促す・docs/260731_reliability_flag_semantics.md）。
   const [excludeLowN, setExcludeLowN] = useState<boolean>(initial?.excludeLowN ?? true)
 
-  const prefectures = link.prefectures
-  const {
-    operators: operatorList,
-    isLoading: operatorsLoading,
-    error: operatorsError,
-  } = useOperators(open)
-  const { routes: routeList, isLoading: routesLoading, error: routesError } = useRoutes(open)
-  const index = useMemo(() => prefectureIndex(operatorList), [operatorList])
-
-  // 双方向の連動：会社を選べば県・路線の候補が、県や路線を選べば会社の候補が絞られる
-  // （未選択なら全件）。会社の候補は都道府県と路線の**両方**の条件を満たすものだけ。
-  const allowedPrefectures = useMemo(
-    () => (operators.length === 0 ? undefined : prefecturesOfOperators(operators, index)),
-    [operators, index],
-  )
-  const allowedRoutes = useMemo(
-    () => (operators.length === 0 ? undefined : routesOfOperators(operators, routeList)),
-    [operators, routeList],
-  )
-  const allowedOperators = useMemo(() => {
-    const byPrefecture =
-      prefectures.length === 0 ? undefined : operatorsInPrefectures(prefectures, operatorList)
-    const byRoute =
-      routes.length === 0 && routeTypes.length === 0
-        ? undefined
-        : operatorsOfRouteFilter(routes, routeTypes, routeList)
-    return intersectAllowed(byPrefecture, byRoute)
-  }, [prefectures, operatorList, routes, routeTypes, routeList])
-  const operatorScope = narrowedByLabel(prefectures, routes, routeTypes)
-  const applyCount = useMemo(
-    () =>
-      prefecturesOfOperators(operators, index).filter(
-        (prefecture) => !prefectures.includes(prefecture),
-      ).length,
-    [operators, index, prefectures],
-  )
-
-  const onPrefectures = useCallback((next: string[]) => {
-    setLink((state) => applyManualPrefectures(state, next))
-  }, [])
-  const onOperators = useCallback(
-    (next: string[]) => {
-      setOperators(next)
-      setLink((state) => pruneAutoPrefectures(state, next, index))
-    },
-    [index],
-  )
-  const onApplyPrefectures = useCallback(() => {
-    setLink((state) => selectOperatorPrefectures(state, operators, index))
-  }, [operators, index])
-
   const { growth, isLoading, isValidating, error } = useGrowth(
-    { x: xKey, y: yKey, prefectures, operators, routes, routeTypes, excludeLowN },
+    { x: xKey, y: yKey, ...filters.values, excludeLowN },
     open,
   )
 
@@ -193,32 +112,7 @@ export function ScatterDialog({
 
           <div className="space-y-2 border-b border-slate-100 px-4 py-3">
             <div className="flex flex-wrap items-center gap-3">
-              <PrefectureMultiSelect
-                selected={[...prefectures]}
-                onChange={onPrefectures}
-                allowed={allowedPrefectures}
-              />
-              <OperatorMultiSelect
-                selected={operators}
-                onChange={onOperators}
-                operators={operatorList}
-                isLoading={operatorsLoading}
-                error={operatorsError}
-                allowed={allowedOperators}
-                allowedScope={operatorScope}
-                onApplyPrefectures={onApplyPrefectures}
-                applyPrefectureCount={applyCount}
-              />
-              <RouteMultiSelect
-                selected={routes}
-                selectedTypes={routeTypes}
-                onChange={setRoutes}
-                onChangeTypes={setRouteTypes}
-                routes={routeList}
-                isLoading={routesLoading}
-                error={routesError}
-                allowed={allowedRoutes}
-              />
+              <StationFilterControls state={filters} />
               <label className="flex cursor-pointer items-center gap-1.5 text-sm text-slate-600">
                 <input
                   type="checkbox"

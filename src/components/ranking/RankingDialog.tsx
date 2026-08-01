@@ -1,7 +1,8 @@
 'use client'
 
 /**
- * ランキングのモーダル（FAB から開く・P6c 改善）。複数県×指標（半径付き）×上位下位×⚠除外。
+ * ランキングのモーダル（FAB から開く・P6c 改善）。
+ * 絞り込み（都道府県×運営会社×路線・種別）×指標（半径付き）×上位下位×⚠除外。
  * /api/ranking をページング（もっと見る）で全件まで。行クリックで駅選択（?grp）＝flyTo＋詳細。
  */
 
@@ -14,6 +15,7 @@ import { DEFAULT_RANKING_KEY, rankableGroups } from '@/domain/metrics'
 import { rankingPanel } from '@/domain/ranking/panel'
 import { useMapUrlState } from '@/components/map/useMapUrlState'
 import { RankingTable } from '@/components/panels/RankingTable'
+import { useStationFilters } from '@/components/metrics/useStationFilters'
 import { MetricPicker } from './MetricPicker'
 import { useRanking } from './useRanking'
 
@@ -23,6 +25,10 @@ const DEFAULT_CATEGORY: Category = getEntry(DEFAULT_RANKING_KEY)?.category ?? 'p
 export type RankingInitial = {
   readonly metricKey: string
   readonly prefectures: readonly string[]
+  /** 運営会社・路線・事業者種別の絞り込み（260801・省略時は絞らない）。 */
+  readonly operators?: readonly string[]
+  readonly routes?: readonly string[]
+  readonly routeTypes?: readonly number[]
   readonly order: Order
   readonly excludeLowN: boolean
 }
@@ -42,15 +48,15 @@ export function RankingDialog({
     getEntry(initialKey)?.category ?? DEFAULT_CATEGORY,
   )
   const [metricKey, setMetricKey] = useState<string>(initialKey)
-  const [prefectures, setPrefectures] = useState<string[]>(initial ? [...initial.prefectures] : [])
+  // 絞り込みと連動は散布と共有する（260801）。
+  const filters = useStationFilters(open, initial)
   const [order, setOrder] = useState<Order>(initial?.order ?? 'desc')
-  const [excludeLowN, setExcludeLowN] = useState<boolean>(initial?.excludeLowN ?? false)
+  // 既定で信頼性の低い値（⚠）を除外する。散布（PR #40）と揃え、同じデータを見ているのに
+  // 2 画面で母集団が違う、という食い違いを無くす（チャットからの昇格は initial 優先）。
+  const [excludeLowN, setExcludeLowN] = useState<boolean>(initial?.excludeLowN ?? true)
 
   const { ranking, total, isLoading, isLoadingMore, canLoadMore, loadMore, error } = useRanking(
-    metricKey,
-    prefectures,
-    order,
-    excludeLowN,
+    { metric: metricKey, ...filters.values, order, excludeLowN },
     open,
   )
 
@@ -97,12 +103,11 @@ export function RankingDialog({
             <MetricPicker
               category={category}
               metricKey={metricKey}
-              prefectures={prefectures}
+              filters={filters}
               order={order}
               excludeLowN={excludeLowN}
               onCategory={onCategory}
               onMetric={setMetricKey}
-              onPrefectures={setPrefectures}
               onOrder={setOrder}
               onExcludeLowN={setExcludeLowN}
             />

@@ -5,7 +5,7 @@ import {
   narrowedByLabel,
   operatorsOfRouteFilter,
   routesOfOperators,
-} from '@/components/scatter/routeLink'
+} from '@/components/metrics/routeLink'
 
 /** 実データの縮図：重複路線名（本線＝10 社）・新幹線（種別 1）・単独会社の路線。 */
 const ROUTES: readonly Route[] = [

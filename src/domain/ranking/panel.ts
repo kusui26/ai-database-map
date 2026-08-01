@@ -4,7 +4,7 @@
  */
 
 import { type RankingResponse } from '@/shared/api'
-import { prefectureLabel } from '@/shared/constants'
+import { scopeLabel } from '@/domain/scope'
 import { type PanelSize, type RankingTablePanel } from '@/shared/protocol'
 
 export function rankingPanel(
@@ -14,7 +14,7 @@ export function rankingPanel(
   const direction = response.order === 'desc' ? '上位' : '下位'
   return {
     type: 'rankingTable',
-    title: `${response.metric.labelJa}（${prefectureLabel(response.prefectures)}・${direction}）`,
+    title: `${response.metric.labelJa}（${scopeLabel(response)}・${direction}）`,
     metricKey: response.metric.key,
     unit: response.metric.unit,
     rows: response.rows,

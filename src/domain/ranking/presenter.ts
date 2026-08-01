@@ -17,6 +17,13 @@ export type RankRawRow = {
   readonly rank: number
 }
 
+/** 絞り込み条件（省略時は絞らない）。散布の GrowthOptions と対になる（260801）。 */
+export type RankingOptions = {
+  readonly operators?: readonly string[]
+  readonly routes?: readonly string[]
+  readonly routeTypes?: readonly number[]
+}
+
 export function buildRanking(
   metricKey: string,
   prefectures: readonly string[],
@@ -24,12 +31,16 @@ export function buildRanking(
   rows: readonly RankRawRow[],
   total: number,
   offset: number,
+  options: RankingOptions = {},
 ): RankingResponse {
   const entry = requireEntry(metricKey)
   const signed = entry.kind === 'growth' || entry.kind === 'error'
   return {
     metric: { key: entry.key, labelJa: entry.labelJa, unit: entry.unit },
     prefectures: [...prefectures],
+    operators: [...(options.operators ?? [])],
+    routes: [...(options.routes ?? [])],
+    routeTypes: [...(options.routeTypes ?? [])],
     order,
     offset,
     total,

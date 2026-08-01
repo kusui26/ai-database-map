@@ -102,6 +102,9 @@ export async function rankByColumn(
   limit: number,
   offset: number,
   excludeLowN: boolean,
+  operators: readonly string[] = [],
+  routes: readonly string[] = [],
+  routeTypes: readonly number[] = [],
 ): Promise<{ rows: RankRow[]; total: number }> {
   const args = {
     column_key: columnKey,
@@ -110,6 +113,11 @@ export async function rankByColumn(
     lim: limit,
     off: offset,
     exclude_lown: excludeLowN,
+    // 絞り込みは散布（values_for_columns）と同じ述語を DB 側で共有している（260801）。
+    // ランキングは total とページングを SQL で数えるため、ここで渡さないと件数が狂う。
+    ops: operators.length > 0 ? operators : null,
+    routes: routes.length > 0 ? routes : null,
+    route_types: routeTypes.length > 0 ? routeTypes : null,
   }
   const raw = await rpcRows('rank_by_column', args, rankRowSchema)
   return {

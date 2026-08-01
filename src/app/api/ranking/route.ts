@@ -6,14 +6,22 @@ import { BadRequestError, CACHE, handle, json } from '@/lib/http'
 
 export const runtime = 'nodejs'
 
-/** GET /api/ranking?metric=&prefecture=&order=&limit= — 順位表（値＋整形＋フラグ）。 */
+/** カンマ区切りのクエリを配列に（未指定は undefined＝スキーマ既定）。 */
+function listParam(value: string | null): string[] | undefined {
+  return value === null ? undefined : value.split(',').filter(Boolean)
+}
+
+/** GET /api/ranking?metric=&prefecture=&operators=&routes=&routeTypes=&order=&limit= — 順位表。 */
 export function GET(request: Request): Promise<Response> {
   return handle(async () => {
     const params = new URL(request.url).searchParams
-    const prefParam = params.get('prefecture')
+    const typesParam = listParam(params.get('routeTypes'))
     const query = rankingQuerySchema.parse({
       metric: params.get('metric') ?? undefined,
-      prefectures: prefParam === null ? undefined : prefParam.split(',').filter(Boolean),
+      prefectures: listParam(params.get('prefecture')),
+      operators: listParam(params.get('operators')),
+      routes: listParam(params.get('routes')),
+      routeTypes: typesParam?.map(Number).filter((type) => Number.isInteger(type)),
       order: params.get('order') ?? undefined,
       limit: params.get('limit') ?? undefined,
       offset: params.get('offset') ?? undefined,
@@ -29,9 +37,16 @@ export function GET(request: Request): Promise<Response> {
       query.limit,
       query.offset,
       query.excludeLowN,
+      query.operators,
+      query.routes,
+      query.routeTypes,
     )
     return json(
-      buildRanking(query.metric, query.prefectures, query.order, rows, total, query.offset),
+      buildRanking(query.metric, query.prefectures, query.order, rows, total, query.offset, {
+        operators: query.operators,
+        routes: query.routes,
+        routeTypes: query.routeTypes,
+      }),
       CACHE.hour,
     )
   })

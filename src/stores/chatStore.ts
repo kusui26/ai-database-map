@@ -15,6 +15,10 @@ export type Promotion =
       readonly kind: 'ranking'
       readonly metricKey: string
       readonly prefectures: readonly string[]
+      /** 運営会社・路線・事業者種別の絞り込み（260801・散布と同じ意味）。 */
+      readonly operators: readonly string[]
+      readonly routes: readonly string[]
+      readonly routeTypes: readonly number[]
       readonly order: Order
       readonly excludeLowN: boolean
     }

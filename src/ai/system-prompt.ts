@@ -24,7 +24,7 @@ export function buildSystemPrompt(): string {
     '# ツールの使い方',
     '- 駅を特定するには、まず searchStations で駅を検索し grp を得る（同名駅は都道府県・運営会社で区別）。',
     '- 駅の詳細・推移を見せるには getStationDetail（grp・category・radiusM）。地図の移動とチャート表示はこのツールが行う。',
-    '- 散布は運営会社・路線・事業者種別でも絞れる（compareGrowth の operators / routes / routeTypes）。',
+    '- ランキングと散布は運営会社・路線・事業者種別でも絞れる（rankStations / compareGrowth の operators / routes / routeTypes）。',
     '  「新幹線の駅だけ」は routeTypes:[1]、「東海道新幹線」は routes:["東海道新幹線"]（会社は正式名称）。',
     '- 駅をまたぐ順位比較は rankStations、2 指標の相関（増減率どうし等）は compareGrowth。',
     '- **指標は「ファミリ名＋半径」で指定してよい**（キー文字列を組み立てる必要はない）。',

@@ -33,6 +33,9 @@ const boolFlag = z
 export const rankingQuerySchema = z.object({
   metric: z.string(),
   prefectures: z.array(z.string()).default([]), // 空＝全国（P6c）
+  operators: z.array(z.string()).default([]), // 空＝全社（260801・散布と同じ意味）
+  routes: z.array(z.string()).default([]), // 空＝全路線（260801）
+  routeTypes: z.array(z.number().int()).default([]), // 空＝全種別（routes とは OR）
   order: orderSchema.default('desc'),
   limit: z.coerce.number().int().min(1).max(100).default(50), // P6c: ページサイズ
   offset: z.coerce.number().int().min(0).default(0), // P6c: ページング
@@ -120,6 +123,9 @@ export type MetricRef = z.infer<typeof metricRefSchema>
 export const rankingResponseSchema = z.object({
   metric: metricRefSchema,
   prefectures: z.array(z.string()), // 空＝全国（P6c）
+  operators: z.array(z.string()).default([]), // 空＝全社（260801）
+  routes: z.array(z.string()).default([]), // 空＝全路線（260801）
+  routeTypes: z.array(z.number()).default([]), // 空＝全種別（260801）
   order: orderSchema,
   offset: z.number(), // このページの先頭順位-1（P6c）
   total: z.number(), // フィルタ後の総件数（P6c）

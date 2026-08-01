@@ -1,5 +1,5 @@
 /**
- * P8c 評価：ゴールデン 23 問（駅詳細・ランキング・散布・比較・曖昧駅名・カタログ探索・データ外拒否）。
+ * P8c 評価：ゴールデン 24 問（駅詳細・ランキング・散布・比較・曖昧駅名・カタログ探索・データ外拒否）。
  * 各問は自然言語クエリと、機械判定できる期待（score.ts）を持つ。代表性を重視して分野を網羅する。
  */
 
@@ -110,6 +110,19 @@ export const EVAL_CASES: readonly EvalCase[] = [
     query: '東京都で人口が最も減った駅は？',
     expect: {
       toolCalls: [{ name: 'rankStations', inputIncludes: { prefectures: ['東京都'] } }],
+      panels: ['rankingTable'],
+    },
+  },
+
+  {
+    // 260801：ランキングでも会社×種別で絞れるか（散布と同じ語彙が通るか）。
+    id: 'rank-operator-shinkansen',
+    category: 'ランキング',
+    query: '東海旅客鉄道の新幹線駅で乗降客数が多い順に教えて',
+    expect: {
+      toolCalls: [
+        { name: 'rankStations', inputIncludes: { operators: ['東海旅客鉄道'], routeTypes: [1] } },
+      ],
       panels: ['rankingTable'],
     },
   },

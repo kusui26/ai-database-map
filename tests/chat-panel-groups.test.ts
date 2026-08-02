@@ -46,9 +46,10 @@ const scatter: Panel = {
 }
 
 const toolCalls: ToolCall[] = [
-  { name: 'getStationDetail', input: { grp: '東京#0', category: 'population' } },
+  { name: 'getStationDetail', output: {}, input: { grp: '東京#0', category: 'population' } },
   {
     name: 'rankStations',
+    output: {},
     input: {
       metric: 'pop_gr_2020_2015_1km',
       prefectures: ['千葉県'],
@@ -58,6 +59,7 @@ const toolCalls: ToolCall[] = [
   },
   {
     name: 'compareGrowth',
+    output: {},
     input: { x: 'pop_gr_2020_2015_2km', y: 'rate_covid', prefectures: ['東京都'] },
   },
 ]
@@ -88,6 +90,7 @@ describe('buildPanelGroups', () => {
     const withFilters: ToolCall[] = [
       {
         name: 'rankStations',
+        output: {},
         input: {
           metric: 'pop_gr_2020_2015_1km',
           operators: ['東海旅客鉄道'],
@@ -128,6 +131,7 @@ describe('buildPanelGroups', () => {
     const withOperators: ToolCall[] = [
       {
         name: 'compareGrowth',
+        output: {},
         input: {
           x: 'pop_gr_2020_2015_2km',
           y: 'rate_covid',
@@ -153,6 +157,7 @@ describe('buildPanelGroups', () => {
     const withRoutes: ToolCall[] = [
       {
         name: 'compareGrowth',
+        output: {},
         input: {
           x: 'pop_gr_2020_2015_2km',
           y: 'rate_covid',
@@ -179,6 +184,7 @@ describe('buildPanelGroups', () => {
     const broken: ToolCall[] = [
       {
         name: 'compareGrowth',
+        output: {},
         input: {
           x: 'pop_gr_2020_2015_2km',
           y: 'rate_covid',
@@ -222,16 +228,68 @@ describe('buildPanelGroups', () => {
 })
 
 describe('toolCallsOf', () => {
-  it('tool-<name> と dynamic-tool から名前＋入力を抽出する', () => {
+  it('tool-<name> と dynamic-tool から名前＋入力＋出力を抽出する', () => {
     const parts = [
       { type: 'text', text: 'hi' },
-      { type: 'tool-rankStations', input: { metric: 'rate_covid' } },
+      {
+        type: 'tool-rankStations',
+        input: { metric: 'pop_gr' },
+        output: { resolvedMetric: 'pop_gr_2020_2015_1km' },
+      },
       { type: 'dynamic-tool', toolName: 'searchStations', input: { query: '東京' } },
       { type: 'data-map' },
     ]
     expect(toolCallsOf(parts)).toEqual([
-      { name: 'rankStations', input: { metric: 'rate_covid' } },
-      { name: 'searchStations', input: { query: '東京' } },
+      {
+        name: 'rankStations',
+        input: { metric: 'pop_gr' },
+        output: { resolvedMetric: 'pop_gr_2020_2015_1km' },
+      },
+      { name: 'searchStations', input: { query: '東京' }, output: {} },
     ])
+  })
+})
+
+/**
+ * LLM は指標を**ファミリ名**で渡してよい（system-prompt）。入力だけを見ていると
+ * `getEntry('pop_gr')` が解決できず昇格が復元できないため、ツールの出力
+ * （resolvedMetric / resolvedMetrics）を正として照合する（260802）。
+ */
+describe('ファミリ名で呼ばれた場合の昇格復元', () => {
+  it('散布：出力の resolvedMetrics からキーを復元する', () => {
+    const familyCall: ToolCall[] = [
+      {
+        name: 'compareGrowth',
+        input: { x: 'pop_gr', y: 'rate_covid', radiusM: 2000 },
+        output: { resolvedMetrics: { x: 'pop_gr_2020_2015_2km', y: 'rate_covid' } },
+      },
+    ]
+    const promotion = buildPanelGroups([scatter], familyCall)[0]?.promotion
+    expect(promotion?.kind).toBe('scatter')
+    if (promotion?.kind === 'scatter') {
+      expect(promotion.xKey).toBe('pop_gr_2020_2015_2km')
+      expect(promotion.yKey).toBe('rate_covid')
+    }
+  })
+
+  it('ランキング：出力の resolvedMetric で照合する', () => {
+    const familyCall: ToolCall[] = [
+      {
+        name: 'rankStations',
+        input: { metric: 'pop_gr', radiusM: 1000, prefectures: ['千葉県'] },
+        output: { resolvedMetric: 'pop_gr_2020_2015_1km', prefectures: ['千葉県'], order: 'asc' },
+      },
+    ]
+    const promotion = buildPanelGroups([rankingTable], familyCall)[0]?.promotion
+    expect(promotion).toEqual({
+      kind: 'ranking',
+      metricKey: 'pop_gr_2020_2015_1km',
+      prefectures: ['千葉県'],
+      operators: [],
+      routes: [],
+      routeTypes: [],
+      order: 'asc', // 出力（解決後）の並び順を採る
+      excludeLowN: false,
+    })
   })
 })

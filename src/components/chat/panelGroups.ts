@@ -13,8 +13,19 @@ import { CATEGORIES, type Category } from '@/shared/constants'
 import { type Order } from '@/shared/api'
 import { type Promotion } from '@/stores/chatStore'
 
-/** 1 メッセージ内のツール呼び出し（useChat の tool パートから抽出）。 */
-export type ToolCall = { readonly name: string; readonly input: Record<string, unknown> }
+/**
+ * 1 メッセージ内のツール呼び出し（useChat の tool パートから抽出）。
+ *
+ * `output` も持つ理由：LLM は指標を**ファミリ名**で渡してよい仕様なので
+ * （system-prompt「指標はファミリ名＋半径で指定してよい」）、`input.x` は
+ * `pop_gr` のようにカタログキーでないことがある。ツールは解決後のキーを
+ * `resolvedMetric` / `resolvedMetrics` として返すので、**出力を正**として照合する（260802）。
+ */
+export type ToolCall = {
+  readonly name: string
+  readonly input: Record<string, unknown>
+  readonly output: Record<string, unknown>
+}
 
 /** 駅詳細昇格（ドロワーを grp＋焦点カテゴリで開く）。 */
 export type DetailPromotion = {
@@ -72,23 +83,47 @@ function detailPromotion(
   return { kind: 'detail', grp: card.grp, category: readCategory(call?.input.category) }
 }
 
-/** ランキング昇格（panel.metricKey と一致する rankStations 呼び出しの都道府県/順序/除外を復元）。 */
+/** 出力にあれば出力を、無ければ入力を採る（出力は正規化済み＝都道府県名や会社名が整っている）。 */
+function preferOutput(
+  output: Record<string, unknown>,
+  input: Record<string, unknown>,
+  key: string,
+): string[] {
+  const fromOutput = readStringArray(output[key])
+  return fromOutput.length > 0 ? fromOutput : readStringArray(input[key])
+}
+
+/** ランキング昇格（panel.metricKey と一致する rankStations 呼び出しの条件を復元）。 */
 function rankingPromotion(panel: Panel, toolCalls: readonly ToolCall[]): Promotion | null {
   if (panel.type !== 'rankingTable') return null
   const call = toolCalls.find(
     (candidate) =>
-      candidate.name === 'rankStations' && readString(candidate.input.metric) === panel.metricKey,
+      candidate.name === 'rankStations' &&
+      // 解決後のキーで照合する（入力はファミリ名のことがある）。
+      (readString(candidate.output.resolvedMetric) === panel.metricKey ||
+        readString(candidate.input.metric) === panel.metricKey),
   )
   const input = call?.input ?? {}
+  const output = call?.output ?? {}
   return {
     kind: 'ranking',
     metricKey: panel.metricKey,
-    prefectures: readStringArray(input.prefectures),
-    operators: readStringArray(input.operators),
-    routes: readStringArray(input.routes),
+    prefectures: preferOutput(output, input, 'prefectures'),
+    operators: preferOutput(output, input, 'operators'),
+    routes: preferOutput(output, input, 'routes'),
+    // routeTypes の出力は表示名（「新幹線」）なので、コードを持つ入力だけを使う。
     routeTypes: readNumberArray(input.routeTypes),
-    order: readOrder(input.order),
+    order: readOrder(output.order ?? input.order),
     excludeLowN: readBool(input.excludeLowN),
+  }
+}
+
+/** compareGrowth 呼び出しから x/y のカタログキーを取り出す（解決後の出力を優先）。 */
+function scatterKeys(call: ToolCall): { x: string | undefined; y: string | undefined } {
+  const resolved = asRecord(call.output.resolvedMetrics)
+  return {
+    x: readString(resolved.x) ?? readString(call.input.x),
+    y: readString(resolved.y) ?? readString(call.input.y),
   }
 }
 
@@ -97,24 +132,24 @@ function scatterPromotion(panel: Panel, toolCalls: readonly ToolCall[]): Promoti
   if (panel.type !== 'scatter') return null
   const call = toolCalls.find((candidate) => {
     if (candidate.name !== 'compareGrowth') return false
-    const x = readString(candidate.input.x)
-    const y = readString(candidate.input.y)
+    const { x, y } = scatterKeys(candidate)
     return (
       getEntry(x ?? '')?.labelJa === panel.xLabel && getEntry(y ?? '')?.labelJa === panel.yLabel
     )
   })
-  const xKey = readString(call?.input.x)
-  const yKey = readString(call?.input.y)
-  if (xKey === undefined || yKey === undefined) return null // キー不明なら昇格しない
+  if (call === undefined) return null // キー不明なら昇格しない
+  const { x: xKey, y: yKey } = scatterKeys(call)
+  if (xKey === undefined || yKey === undefined) return null
   return {
     kind: 'scatter',
     xKey,
     yKey,
-    prefectures: readStringArray(call?.input.prefectures),
-    operators: readStringArray(call?.input.operators),
-    routes: readStringArray(call?.input.routes),
-    routeTypes: readNumberArray(call?.input.routeTypes),
-    excludeLowN: readBool(call?.input.excludeLowN),
+    prefectures: preferOutput(call.output, call.input, 'prefectures'),
+    operators: preferOutput(call.output, call.input, 'operators'),
+    routes: preferOutput(call.output, call.input, 'routes'),
+    // routeTypes の出力は表示名なので、コードを持つ入力だけを使う。
+    routeTypes: readNumberArray(call.input.routeTypes),
+    excludeLowN: readBool(call.input.excludeLowN),
   }
 }
 
@@ -153,17 +188,23 @@ export function buildPanelGroups(
   return groups
 }
 
-/** useChat のメッセージ parts から静的ツール呼び出し（名前＋入力）を抽出する。 */
+/** useChat のメッセージ parts からツール呼び出し（名前＋入力＋出力）を抽出する。 */
 export function toolCallsOf(parts: readonly { type: string }[]): ToolCall[] {
   const calls: ToolCall[] = []
   for (const part of parts) {
     if (part.type.startsWith('tool-')) {
       const record = asRecord(part)
-      calls.push({ name: part.type.slice('tool-'.length), input: asRecord(record.input) })
+      calls.push({
+        name: part.type.slice('tool-'.length),
+        input: asRecord(record.input),
+        output: asRecord(record.output),
+      })
     } else if (part.type === 'dynamic-tool') {
       const record = asRecord(part)
       const name = readString(record.toolName)
-      if (name !== undefined) calls.push({ name, input: asRecord(record.input) })
+      if (name !== undefined) {
+        calls.push({ name, input: asRecord(record.input), output: asRecord(record.output) })
+      }
     }
   }
   return calls

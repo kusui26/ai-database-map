@@ -4,7 +4,7 @@
  * 左併設チャットパネル（plan_fable §2.4「AIインタラクション UI」・ルール①〜⑤）。
  * デスクトップ＝左サイドパネル（開閉・地図は常に可視）／モバイル＝vaul ボトムシート（半分⇔全画面）。
  * useChat で /api/chat をストリーミング。data-map の mapActions は onData で **即時**地図へ反映。
- * パネルは既存部品でインライン描画し、⤢ でクリックUIと同じ場所へ昇格する。
+ * 図はスレッドに描かず、参照チップから ChatCanvas（narrow はモーダル）で開く。
  */
 
 import { useMemo, useState } from 'react'
@@ -15,6 +15,7 @@ import { mapResponseSchema } from '@/shared/protocol'
 import { cn } from '@/lib/utils'
 import { radiusLabel } from '@/shared/constants'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
+import { useIsWide } from '@/hooks/useIsWide'
 import { useMapUrlState } from '@/components/map/useMapUrlState'
 import { useStationDetail } from '@/components/detail/useStationDetail'
 import { useMapStore } from '@/stores/mapStore'
@@ -23,6 +24,7 @@ import { type ChatUIMessage } from './types'
 import { ChatMessage } from './ChatMessage'
 import { SuggestionChips } from './SuggestionChips'
 import { useApplyMapActions } from './useApplyMapActions'
+import { useCanvasAutoOpen } from './useCanvasAutoOpen'
 
 /** 入力の最大文字数（サーバ /api/chat の 500 字上限に合わせる）。 */
 const MAX_INPUT_CHARS = 500
@@ -72,6 +74,9 @@ function ChatBody() {
       if (parsed.success) applyMapActions(parsed.data)
     },
   })
+
+  // 回答に図が含まれたらキャンバスへ（広い画面のみ。narrow はチップから手動で開く）。
+  useCanvasAutoOpen(messages, useIsWide())
 
   const [input, setInput] = useState('')
   const busy = status === 'submitted' || status === 'streaming'

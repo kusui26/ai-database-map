@@ -2,34 +2,18 @@
 
 /**
  * チャット 1 メッセージの描画。ユーザーは右吹き出し、アシスタントは本文（駅名チップ化）＋
- * data-map のパネルを効果グループ単位のインラインカードで（既存部品で・新規描画コードなし）。
+ * 図への**参照チップ**（図の実体はキャンバス／モーダル側・260802）。
+ * 昇格先が無いグループ（markdown 等）だけは、従来どおりその場に描く。
  */
 
 import { type MapResponse } from '@/shared/protocol'
+import { PanelStack } from '@/components/panels/PanelRenderer'
 import { useMapUrlState } from '@/components/map/useMapUrlState'
 import { type ChatUIMessage } from './types'
 import { buildPanelGroups, toolCallsOf } from './panelGroups'
-import { InlineCard } from './InlineCard'
+import { textOf, mapResponseOf } from './messageParts'
+import { PanelChip } from './PanelChip'
 import { RichText } from './richText'
-
-type Part = ChatUIMessage['parts'][number]
-
-/** text パートを連結。 */
-function textOf(parts: readonly Part[]): string {
-  return parts
-    .filter((part) => part.type === 'text')
-    .map((part) => (part.type === 'text' ? part.text : ''))
-    .join('')
-}
-
-/** 最後の data-map（MapResponse）を取り出す。 */
-function mapResponseOf(parts: readonly Part[]): MapResponse | null {
-  for (let index = parts.length - 1; index >= 0; index -= 1) {
-    const part = parts[index]
-    if (part !== undefined && part.type === 'data-map') return part.data
-  }
-  return null
-}
 
 /** 応答に出た駅名 → grp（本文リンク化の辞書。確実に grp が分かる範囲に限定）。 */
 function nameToGrp(response: MapResponse): Map<string, string> {
@@ -69,9 +53,16 @@ export function ChatMessage({ message }: { message: ChatUIMessage }) {
           <RichText text={text} nameToGrp={dict} onSelect={(grp) => void setGrp(grp)} />
         </div>
       )}
-      {groups.map((group, index) => (
-        <InlineCard key={index} group={group} />
-      ))}
+      {groups.map((group, index) =>
+        group.promotion === null ? (
+          // 昇格先が無い＝図ではない（markdown 等）。テキストと同じ扱いでその場に出す。
+          <div key={index} className="rounded-xl bg-white p-3 ring-1 ring-slate-200">
+            <PanelStack panels={group.panels} onSelect={(grp) => void setGrp(grp)} />
+          </div>
+        ) : (
+          <PanelChip key={index} group={group} promotion={group.promotion} />
+        ),
+      )}
     </div>
   )
 }

@@ -30,8 +30,12 @@ const PromotionHost = dynamic(
   () => import('./chat/PromotionHost').then((mod) => mod.PromotionHost),
   { ssr: false },
 )
+// キャンバス（回答の図）は、図が出るまで読み込まない＝初期表示は地図のまま（260802）。
+const ChatCanvas = dynamic(() => import('./canvas/ChatCanvas').then((mod) => mod.ChatCanvas), {
+  ssr: false,
+})
 
-/** アプリシェル：全面地図＋浮遊ヘッダ（ロゴ・検索・半径・✦AI）＋左下 FAB＋左チャット。 */
+/** アプリシェル：全面地図＋浮遊ヘッダ（ロゴ・検索・半径・✦AI）＋左下 FAB＋左チャット＋キャンバス。 */
 export function MapShell() {
   const chatOpen = useChatStore((state) => state.open)
   const setChatOpen = useChatStore((state) => state.setOpen)
@@ -56,6 +60,7 @@ export function MapShell() {
       <StationDetailPanel />
       {chatSeen && <ChatPanel />}
       {chatSeen && <PromotionHost />}
+      {chatSeen && <ChatCanvas />}
     </main>
   )
 }

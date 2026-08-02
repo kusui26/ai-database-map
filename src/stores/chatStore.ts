@@ -41,12 +41,19 @@ type ChatStore = {
   setOpen: (open: boolean) => void
   toggle: () => void
 
-  /** ランキング/散布の昇格要求（PromotionHost が preset でモーダルを開く）。 */
+  /** ランキング/散布の昇格要求（広い画面はキャンバス、narrow は PromotionHost がモーダルで開く）。 */
   promotion: Promotion | null
   /** 同一 promotion でも再マウントさせるための単調増加シーケンス。 */
   promotionSeq: number
   promote: (promotion: Promotion) => void
   clearPromotion: () => void
+
+  /**
+   * 自動表示で最後に適用した回答の鍵（`canvasTargetOf` の key）。
+   * 同じ回答では二度と自動で開かないための記録で、閉じても消さない（260802）。
+   */
+  canvasKey: string | null
+  setCanvasKey: (key: string) => void
 
   /** 駅詳細昇格時にドロワーで開く焦点タブ（1 回消費）。 */
   requestedCategory: Category | null
@@ -62,6 +69,9 @@ export const useChatStore = create<ChatStore>((set) => ({
   promotionSeq: 0,
   promote: (promotion) => set((state) => ({ promotion, promotionSeq: state.promotionSeq + 1 })),
   clearPromotion: () => set({ promotion: null }),
+
+  canvasKey: null,
+  setCanvasKey: (canvasKey) => set({ canvasKey }),
 
   requestedCategory: null,
   setRequestedCategory: (category) => set({ requestedCategory: category }),

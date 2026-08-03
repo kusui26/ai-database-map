@@ -17,6 +17,7 @@ import { type HoverInfo, useMapStore } from '@/stores/mapStore'
 import { useChatStore } from '@/stores/chatStore'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { HoverTooltip } from './HoverTooltip'
+import { loadStations } from './stationsSource'
 import { useMapUrlState } from './useMapUrlState'
 
 const STYLE_URL = process.env.NEXT_PUBLIC_MAP_STYLE_URL ?? '/map/gsi-pale-style.json'
@@ -262,6 +263,10 @@ export function MapView() {
     const container = containerRef.current
     if (container === null) return
 
+    // 駅データの取得を**地図の生成より先に**始める。以前は load の中で fetch していたため、
+    // スタイルとタイルが揃うまで取りに行きもしなかった（260803・§4-②）。
+    const stations = loadStations()
+
     const map = new maplibregl.Map({
       container,
       style: STYLE_URL,
@@ -274,27 +279,36 @@ export function MapView() {
     // 拡大縮小は左下（ロゴと重ならない・デスクトップは FAB の上／CSS で余白）
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-left')
 
+    // 待っている間にアンマウントされたら、消えた地図に触らない。
+    let disposed = false
+
     map.on('load', () => {
       void (async () => {
-        const response = await fetch('/api/stations/geojson')
-        const featureCollection: FeatureCollection = await response.json()
-        collectCoords(featureCollection, coordsRef.current)
-        map.addSource('stations', {
-          type: 'geojson',
-          data: featureCollection,
-          cluster: true,
-          clusterMaxZoom: 9,
-          clusterRadius: 48,
-        })
-        map.addSource('radius', { type: 'geojson', data: EMPTY_FC })
-        map.addSource('highlight', { type: 'geojson', data: EMPTY_FC }) // 非クラスタ（ハイライト専用）
-        addLayers(map)
-        addHandlers(map, setGrpRef, setHoveredRef)
-        setReady(true)
+        try {
+          const featureCollection: FeatureCollection = await stations
+          if (disposed) return
+          collectCoords(featureCollection, coordsRef.current)
+          map.addSource('stations', {
+            type: 'geojson',
+            data: featureCollection,
+            cluster: true,
+            clusterMaxZoom: 9,
+            clusterRadius: 48,
+          })
+          map.addSource('radius', { type: 'geojson', data: EMPTY_FC })
+          map.addSource('highlight', { type: 'geojson', data: EMPTY_FC }) // 非クラスタ（ハイライト専用）
+          addLayers(map)
+          addHandlers(map, setGrpRef, setHoveredRef)
+          setReady(true)
+        } catch (error) {
+          // 駅が出ないだけで地図は使える。原因を残して静かに諦める。
+          console.error('駅データを地図に追加できませんでした', error)
+        }
       })()
     })
 
     return () => {
+      disposed = true
       map.remove()
       mapRef.current = null
       setReady(false)

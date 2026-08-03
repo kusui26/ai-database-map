@@ -86,7 +86,7 @@ def main() -> int:
         # 8) 千葉県 増減率 desc Top1 = CSV（grp・値）＋信頼性フラグ同梱
         expc = chiba.loc[chiba["pop_gr_2020_2015_1km"].idxmax()]
         res = call("select * from public.rank_by_column(%s,%s,%s,%s)",
-                   ("pop_gr_2020_2015_1km", "千葉県", "desc", 1))
+                   ("pop_gr_2020_2015_1km", ["千葉県"], "desc", 1))
         check(res and res[0]["grp"] == expc["grp"] and close(res[0]["value"], expc["pop_gr_2020_2015_1km"]),
               "rank 千葉県 pop_gr_2020_2015_1km desc Top1 = CSV",
               f"db={res[0]['grp'] if res else None}/{res[0]['value'] if res else None} csv={expc['grp']}/{expc['pop_gr_2020_2015_1km']}")
@@ -100,14 +100,21 @@ def main() -> int:
               "station_bundle(東京) の pop_2020_5km = CSV値",
               f"db={bundle.get('pop_2020_5km')} csv={tokyo['pop_2020_5km']}")
 
-        # 10) values_for_columns（千葉県）の値が CSV と一致
-        res = call("select * from public.values_for_columns(%s,%s)",
-                   (["pop_2020_1km", "pax_2024"], "千葉県"))
-        vmap = {(r["grp"], r["key"]): r["value"] for r in res}
+        # 10) 散布（千葉県）の値が CSV と一致（260804：values_for_columns → scatter_points）
+        res = call("select * from public.scatter_points(%s,%s,%s,%s,%s)",
+                   ("pop_2020_1km", "pax_2024", None, None, ["千葉県"]))
+        points = {r["grp"]: r for r in res[0]["scatter_points"]}
         c0 = chiba.iloc[0]
-        check(close(vmap.get((c0["grp"], "pop_2020_1km")), c0["pop_2020_1km"]),
-              "values_for_columns(千葉県) の pop_2020_1km が CSV と一致",
-              f"db={vmap.get((c0['grp'], 'pop_2020_1km'))} csv={c0['pop_2020_1km']}")
+        check(close(points.get(c0["grp"], {}).get("x"), c0["pop_2020_1km"]),
+              "scatter_points(千葉県) の pop_2020_1km が CSV と一致",
+              f"db={points.get(c0['grp'], {}).get('x')} csv={c0['pop_2020_1km']}")
+        check(close(points.get(c0["grp"], {}).get("y"), c0["pax_2024"]),
+              "scatter_points(千葉県) の pax_2024 が CSV と一致",
+              f"db={points.get(c0['grp'], {}).get('y')} csv={c0['pax_2024']}")
+        # 畳んだ形＝1 駅 1 行（縦持ち時代は 1 駅 × キー数の行が返っていた）
+        check(len(points) == len(res[0]["scatter_points"]),
+              "scatter_points は駅ごとに 1 行（重複なし）",
+              f"駅 {len(points)} / 行 {len(res[0]['scatter_points'])}")
 
         # 11) セキュリティ：不正 key はホワイトリスト照合で空（注入不能）
         res = call("select * from public.rank_by_column(%s,%s,%s,%s)",

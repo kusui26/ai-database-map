@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { panelSchema } from '@/shared/protocol'
 import { kmeans, type Point2D } from '@/domain/growth/kmeans'
-import { buildGrowth, type ValueRow } from '@/domain/growth/presenter'
+import { buildGrowth, type ScatterRow } from '@/domain/growth/presenter'
 import { scatterPanel } from '@/domain/growth/panel'
 
 /** 決定的なブロブ（乱数なし）。 */
@@ -104,11 +104,10 @@ describe('kmeans：クラスタ番号の連番不変条件', () => {
 })
 
 describe('buildGrowth', () => {
-  const rows: ValueRow[] = [
-    { grp: 'a', stationName: 'A', key: 'pop_gr_2020_2015_1km', value: 5 },
-    { grp: 'a', stationName: 'A', key: 'rate_covid', value: -3 },
-    { grp: 'b', stationName: 'B', key: 'pop_gr_2020_2015_1km', value: 50 },
-    { grp: 'b', stationName: 'B', key: 'rate_covid', value: -30 },
+  // DB（scatter_points）が駅 1 行に畳んで返す形。x/y が欠ける駅は DB 側で除かれている。
+  const rows: ScatterRow[] = [
+    { grp: 'a', stationName: 'A', x: 5, y: -3, xFlag: null, yFlag: null },
+    { grp: 'b', stationName: 'B', x: 50, y: -30, xFlag: null, yFlag: null },
   ]
 
   it('grp で pivot して (x,y) 点・メタ情報', () => {
@@ -119,20 +118,23 @@ describe('buildGrowth', () => {
     expect(g.points.every((p) => typeof p.cluster === 'number')).toBe(true)
   })
 
-  it('x か y が欠ける駅は除外', () => {
-    const partial: ValueRow[] = [
-      { grp: 'c', stationName: 'C', key: 'pop_gr_2020_2015_1km', value: 1 },
-    ]
-    expect(
-      buildGrowth([...rows, ...partial], 'pop_gr_2020_2015_1km', 'rate_covid').points,
-    ).toHaveLength(2)
+  // 260804：x か y が欠ける駅は DB（scatter_points）が返さないので、ここには届かない。
+  // 代わりに「フラグが無い／値が無い」ときに落とさないことを守る。
+  it('フラグが null（指標にフラグが無い・値が無い）の駅は除外しない', () => {
+    const g = buildGrowth(rows, 'pop_gr_2020_2015_1km', 'rate_covid', { excludeLowN: true })
+    expect(g.points).toHaveLength(2)
+    expect(g.excludedLowN).toBe(0)
+  })
+
+  it('excludeLowN を指定しなければフラグが立っていても残す', () => {
+    const flagged: ScatterRow[] = [{ grp: 'a', stationName: 'A', x: 1, y: 2, xFlag: 1, yFlag: 1 }]
+    expect(buildGrowth(flagged, 'pop_gr_2020_2015_1km', 'rate_covid').points).toHaveLength(1)
   })
 
   it('excludeLowN で lown フラグの立つ駅を除外', () => {
-    const withFlags: ValueRow[] = [
-      ...rows,
-      { grp: 'a', stationName: 'A', key: 'pop_lowbase_2015_1km', value: 1 }, // a はフラグ立ち
-      { grp: 'b', stationName: 'B', key: 'pop_lowbase_2015_1km', value: 0 },
+    const withFlags: ScatterRow[] = [
+      { grp: 'a', stationName: 'A', x: 5, y: -3, xFlag: 1, yFlag: null }, // a はフラグ立ち
+      { grp: 'b', stationName: 'B', x: 50, y: -30, xFlag: 0, yFlag: null },
     ]
     const g = buildGrowth(withFlags, 'pop_gr_2020_2015_1km', 'rate_covid', { excludeLowN: true })
     expect(g.points).toHaveLength(1)
@@ -143,13 +145,9 @@ describe('buildGrowth', () => {
   it('乗降コロナ前後の除外は低分母フラグだけを見る（被覆の大駅を落とさない・260731）', () => {
     // 新横浜は flag_covid=1（被覆 3/5）だが低分母ではない → 残す。
     // 御厨は |率|>100% の小駅 → 落とす。
-    const covid: ValueRow[] = [
-      { grp: '新横浜#0', stationName: '新横浜', key: 'pop_gr_2020_2015_2km', value: 4.1 },
-      { grp: '新横浜#0', stationName: '新横浜', key: 'rate_covid', value: -22.8 },
-      { grp: '新横浜#0', stationName: '新横浜', key: 'flag_covid_lown', value: 0 },
-      { grp: '御厨#1', stationName: '御厨', key: 'pop_gr_2020_2015_2km', value: 1 },
-      { grp: '御厨#1', stationName: '御厨', key: 'rate_covid', value: 4777.9 },
-      { grp: '御厨#1', stationName: '御厨', key: 'flag_covid_lown', value: 1 },
+    const covid: ScatterRow[] = [
+      { grp: '新横浜#0', stationName: '新横浜', x: 4.1, y: -22.8, xFlag: 0, yFlag: 0 },
+      { grp: '御厨#1', stationName: '御厨', x: 1, y: 4777.9, xFlag: 0, yFlag: 1 },
     ]
     const g = buildGrowth(covid, 'pop_gr_2020_2015_2km', 'rate_covid', { excludeLowN: true })
     expect(g.points.map((p) => p.grp)).toEqual(['新横浜#0'])
@@ -233,10 +231,14 @@ describe('buildGrowth', () => {
   })
 
   it('clusterCount は常に max(cluster)+1（描画側の前提と一致する）', () => {
-    const many: ValueRow[] = [2, 2, 8, 7, 1, 0, 12].flatMap((x, i) => [
-      { grp: `s${i}`, stationName: `駅${i}`, key: 'pop_gr_2020_2015_1km', value: x },
-      { grp: `s${i}`, stationName: `駅${i}`, key: 'rate_covid', value: 0 },
-    ])
+    const many: ScatterRow[] = [2, 2, 8, 7, 1, 0, 12].map((x, i) => ({
+      grp: `s${i}`,
+      stationName: `駅${i}`,
+      x,
+      y: 0,
+      xFlag: null,
+      yFlag: null,
+    }))
     for (const input of [rows, many]) {
       const g = buildGrowth(input, 'pop_gr_2020_2015_1km', 'rate_covid')
       const clusters = g.points.map((p) => p.cluster)

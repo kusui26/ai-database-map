@@ -1,6 +1,6 @@
 import { isRankableKey, requireEntry } from '@/shared/catalog'
 import { growthQuerySchema } from '@/shared/api'
-import { valuesForColumns } from '@/db/queries'
+import { scatterPoints } from '@/db/queries'
 import { buildGrowth } from '@/domain/growth/presenter'
 import { BadRequestError, CACHE, handle, json } from '@/lib/http'
 
@@ -29,20 +29,17 @@ export function GET(request: Request): Promise<Response> {
       if (!isRankableKey(key)) throw new BadRequestError(`散布不可の metric です: ${key}`)
     }
 
-    const keys = [query.x, query.y]
-    if (query.excludeLowN) {
-      for (const entry of [requireEntry(query.x), requireEntry(query.y)]) {
-        if (entry.reliabilityFlagKey !== null) keys.push(entry.reliabilityFlagKey)
-      }
-    }
+    // 信頼性フラグは除外するときだけ引く（引かなければ DB 側の集計も軽い）。
+    const flags = query.excludeLowN
+      ? [requireEntry(query.x).reliabilityFlagKey, requireEntry(query.y).reliabilityFlagKey]
+      : [null, null]
 
-    const rows = await valuesForColumns(
-      keys,
-      query.prefectures,
-      query.operators,
-      query.routes,
-      query.routeTypes,
-    )
+    const rows = await scatterPoints(query.x, query.y, flags[0] ?? null, flags[1] ?? null, {
+      prefectures: query.prefectures,
+      operators: query.operators,
+      routes: query.routes,
+      routeTypes: query.routeTypes,
+    })
     return json(
       buildGrowth(rows, query.x, query.y, {
         excludeLowN: query.excludeLowN,

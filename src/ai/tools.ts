@@ -17,7 +17,7 @@ import {
   searchStations,
   stationBundle,
   stationByGrp,
-  valuesForColumns,
+  scatterPoints,
 } from '@/db/queries'
 import { buildStationDetail } from '@/domain/stations/presenter'
 import { buildRanking } from '@/domain/ranking/presenter'
@@ -343,16 +343,23 @@ export function createTools(collector: EffectCollector) {
           const { names: prefs, unknown } = normalizePrefectures(prefectures ?? [])
           if (unknown.length > 0) return unknownPrefectures(unknown)
           const exclude = excludeLowN ?? false
-          const keys = [xResolved.key, yResolved.key]
-          if (exclude) {
-            for (const entry of [requireEntry(xResolved.key), requireEntry(yResolved.key)]) {
-              if (entry.reliabilityFlagKey !== null) keys.push(entry.reliabilityFlagKey)
-            }
-          }
+          // 信頼性フラグは除外するときだけ引く（引かなければ DB 側の集計も軽い）。
+          const flags = exclude
+            ? [
+                requireEntry(xResolved.key).reliabilityFlagKey,
+                requireEntry(yResolved.key).reliabilityFlagKey,
+              ]
+            : [null, null]
           const ops = nonEmptyNames(operators)
           const lines = nonEmptyNames(routes)
           const types = (routeTypes ?? []).filter((type) => ROUTE_TYPES.some((t) => t === type))
-          const valueRows = await valuesForColumns(keys, prefs, ops, lines, types)
+          const valueRows = await scatterPoints(
+            xResolved.key,
+            yResolved.key,
+            flags[0] ?? null,
+            flags[1] ?? null,
+            { prefectures: prefs, operators: ops, routes: lines, routeTypes: types },
+          )
           const response = buildGrowth(valueRows, xResolved.key, yResolved.key, {
             excludeLowN: exclude,
             prefectures: prefs,

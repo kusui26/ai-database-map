@@ -144,6 +144,16 @@ const valueRowSchema = z.object({
 /** buildGrowth の入力（ValueRow）と構造一致。 */
 export type ValueRow = { grp: string; stationName: string; key: string; value: number }
 
+/** buildGrowth の入力（ScatterRow）と構造一致（駅 1 行に畳んだ形・260804）。 */
+export type ScatterRow = {
+  grp: string
+  stationName: string
+  x: number
+  y: number
+  xFlag: number | null
+  yFlag: number | null
+}
+
 export async function valuesForColumns(
   keys: string[],
   prefectures: string[],
@@ -161,6 +171,60 @@ export async function valuesForColumns(
   })
   const rows = z.array(valueRowSchema).parse(raw)
   return rows.map((r) => ({ grp: r.grp, stationName: r.station_name, key: r.key, value: r.value }))
+}
+
+// --- 散布（駅 1 行に畳んだ形・260804） ---------------------------------
+const scatterRowSchema = z.object({
+  grp: z.string(),
+  station_name: z.string(),
+  x: z.number(),
+  y: z.number(),
+  x_flag: z.number().nullable(),
+  y_flag: z.number().nullable(),
+})
+
+/** 散布の絞り込み条件（DB 側で解決する。空＝絞らない）。 */
+export type ScatterFilters = {
+  readonly prefectures: readonly string[]
+  readonly operators: readonly string[]
+  readonly routes: readonly string[]
+  readonly routeTypes: readonly number[]
+}
+
+/**
+ * 散布の点（駅ごとに x・y と、それぞれの信頼性フラグ）。
+ *
+ * 以前は values_for_columns が**縦持ち**（1 駅 × キーごとに 1 行）を返し、アプリ側で pivot して
+ * いた。grp と駅名が最大 4 回重複するため、実測で DB 5,272ms / JSON 2,978KB かかっていた。
+ * SQL 側で畳むと **1,345ms / 658KB**（docs/260803_processing_speed.md §4-⑤）。
+ * x か y が欠ける駅は DB で落とす（描けないため。従来のアプリ側の間引きと同じ結果）。
+ */
+export async function scatterPoints(
+  xKey: string,
+  yKey: string,
+  xFlagKey: string | null,
+  yFlagKey: string | null,
+  filters: ScatterFilters,
+): Promise<ScatterRow[]> {
+  const raw = await rpc('scatter_points', {
+    x_key: xKey,
+    y_key: yKey,
+    x_flag_key: xFlagKey,
+    y_flag_key: yFlagKey,
+    prefs: filters.prefectures.length > 0 ? [...filters.prefectures] : null,
+    ops: filters.operators.length > 0 ? [...filters.operators] : null,
+    routes: filters.routes.length > 0 ? [...filters.routes] : null,
+    route_types: filters.routeTypes.length > 0 ? [...filters.routeTypes] : null,
+  })
+  const rows = z.array(scatterRowSchema).parse(raw)
+  return rows.map((r) => ({
+    grp: r.grp,
+    stationName: r.station_name,
+    x: r.x,
+    y: r.y,
+    xFlag: r.x_flag,
+    yFlag: r.y_flag,
+  }))
 }
 
 // --- 運営会社（散布の絞り込み用の一覧） ---------------------------------

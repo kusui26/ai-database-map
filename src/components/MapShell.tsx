@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { useChatStore } from '@/stores/chatStore'
+import { useMapUrlState } from './map/useMapUrlState'
 import { AppHeader } from './AppHeader'
 import { Fab } from './Fab'
 import { OfflineBanner } from './OfflineBanner'
@@ -39,7 +40,15 @@ const ChatCanvas = dynamic(() => import('./canvas/ChatCanvas').then((mod) => mod
 export function MapShell() {
   const chatOpen = useChatStore((state) => state.open)
   const setChatOpen = useChatStore((state) => state.setOpen)
+  const { grp } = useMapUrlState()
+  const promotion = useChatStore((state) => state.promotion)
   const [chatSeen, setChatSeen] = useState(false)
+  // 駅詳細と図の表示先（キャンバス／モーダル）は「何も出さない状態」でも重い依存
+  // （Chart.js・メトリクスカタログ）を連れてくる。初回に必要になるまでマウントしない
+  // ＝初期表示で読み込まない（260803・§4-③）。
+  // 一度出したら以後は保持する（閉じるアニメーションと内部状態を壊さない）。
+  const [detailSeen, setDetailSeen] = useState(false)
+  const [promotionSeen, setPromotionSeen] = useState(false)
 
   // 初回ロード時、デスクトップ幅ならチャットを既定オープン（P8d 案B）。
   // モバイルは既定クローズ＝地図の初見を優先し、ChatPanel の遅延ロードを維持（mobile LCP に影響なし）。
@@ -51,16 +60,24 @@ export function MapShell() {
     if (chatOpen) setChatSeen(true)
   }, [chatOpen])
 
+  useEffect(() => {
+    if (grp !== null) setDetailSeen(true)
+  }, [grp])
+
+  useEffect(() => {
+    if (promotion !== null) setPromotionSeen(true)
+  }, [promotion])
+
   return (
     <main className="relative h-dvh w-screen overflow-hidden bg-slate-50">
       <MapView />
       <AppHeader />
       <OfflineBanner />
       <Fab />
-      <StationDetailPanel />
+      {detailSeen && <StationDetailPanel />}
       {chatSeen && <ChatPanel />}
-      {chatSeen && <PromotionHost />}
-      {chatSeen && <ChatCanvas />}
+      {promotionSeen && <PromotionHost />}
+      {promotionSeen && <ChatCanvas />}
     </main>
   )
 }

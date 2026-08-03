@@ -1,19 +1,25 @@
 /**
  * ドメイン：散布図（増減率×増減率など）の組立（純関数）。
- * values_for_columns の生行を grp で pivot → (x,y) 点 → 決定的 k-means → GrowthResponse。
+ * scatter_points の行（駅 1 行）→ 決定的 k-means → GrowthResponse。
  * excludeLowN 指定時は x/y の信頼性フラグ（lown）が立つ駅を除外する。
+ *
+ * 260804：pivot は SQL 側へ移した（DB 5,272ms→1,345ms・JSON 2,978KB→658KB）。
+ * ここは「除外して数える」ことに専念する。
  */
 
 import { requireEntry } from '@/shared/catalog'
 import { type GrowthResponse } from '@/shared/api'
 import { kmeans } from './kmeans'
 
-/** values_for_columns RPC の1行（key ごとに縦持ち）。 */
-export type ValueRow = {
+/** scatter_points RPC の 1 行（駅ごとに x・y と、それぞれの信頼性フラグ）。 */
+export type ScatterRow = {
   readonly grp: string
   readonly stationName: string
-  readonly key: string
-  readonly value: number
+  readonly x: number
+  readonly y: number
+  /** x の信頼性フラグの値（無い指標・値が無い駅は null）。 */
+  readonly xFlag: number | null
+  readonly yFlag: number | null
 }
 
 export type GrowthOptions = {
@@ -28,42 +34,23 @@ export type GrowthOptions = {
 }
 
 export function buildGrowth(
-  rows: readonly ValueRow[],
+  rows: readonly ScatterRow[],
   xKey: string,
   yKey: string,
   options: GrowthOptions = {},
 ): GrowthResponse {
   const xEntry = requireEntry(xKey)
   const yEntry = requireEntry(yKey)
-  const xFlag = xEntry.reliabilityFlagKey
-  const yFlag = yEntry.reliabilityFlagKey
 
-  // grp で pivot
-  const byGrp = new Map<string, { name: string; values: Map<string, number> }>()
-  for (const row of rows) {
-    const bucket = byGrp.get(row.grp) ?? {
-      name: row.stationName,
-      values: new Map<string, number>(),
-    }
-    bucket.values.set(row.key, row.value)
-    byGrp.set(row.grp, bucket)
-  }
-
+  // x・y が揃った駅だけが届く（DB 側で間引き済み）。ここでは信頼性フラグの除外だけを行う。
   const kept: { grp: string; name: string; x: number; y: number }[] = []
   let excludedLowN = 0
-  for (const [grp, { name, values }] of byGrp) {
-    const x = values.get(xKey)
-    const y = values.get(yKey)
-    if (x === undefined || y === undefined) continue
-    if (options.excludeLowN === true) {
-      const flagged =
-        (xFlag !== null && values.get(xFlag) === 1) || (yFlag !== null && values.get(yFlag) === 1)
-      if (flagged) {
-        excludedLowN += 1
-        continue
-      }
+  for (const row of rows) {
+    if (options.excludeLowN === true && (row.xFlag === 1 || row.yFlag === 1)) {
+      excludedLowN += 1
+      continue
     }
-    kept.push({ grp, name, x, y })
+    kept.push({ grp: row.grp, name: row.stationName, x: row.x, y: row.y })
   }
 
   const clusters = kmeans(kept.map((p) => ({ x: p.x, y: p.y })))

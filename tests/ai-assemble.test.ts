@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest'
 import { type StationRow } from '@/shared/api'
 import { buildStationDetail } from '@/domain/stations/presenter'
 import { buildRanking, type RankRawRow } from '@/domain/ranking/presenter'
-import { buildGrowth, type ValueRow } from '@/domain/growth/presenter'
+import { buildGrowth, type ScatterRow } from '@/domain/growth/presenter'
 import { mapResponseSchema, panelSchema } from '@/shared/protocol'
 import {
   assemble,
@@ -93,11 +93,9 @@ const rankingEffect: RankingEffect = {
   response: buildRanking('pop_gr_2020_2015_1km', ['千葉県'], 'desc', rankRows, 2, 0),
 }
 
-const valueRows: ValueRow[] = [
-  { grp: 'A#0', stationName: 'A駅', key: 'pop_gr_2020_2015_2km', value: 5 },
-  { grp: 'A#0', stationName: 'A駅', key: 'rate_covid', value: -3 },
-  { grp: 'B#0', stationName: 'B駅', key: 'pop_gr_2020_2015_2km', value: 8 },
-  { grp: 'B#0', stationName: 'B駅', key: 'rate_covid', value: -6 },
+const valueRows: ScatterRow[] = [
+  { grp: 'A#0', stationName: 'A駅', x: 5, y: -3, xFlag: null, yFlag: null },
+  { grp: 'B#0', stationName: 'B駅', x: 8, y: -6, xFlag: null, yFlag: null },
 ]
 const growthEffect: GrowthEffect = {
   kind: 'growth',

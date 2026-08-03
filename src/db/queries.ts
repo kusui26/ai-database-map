@@ -113,7 +113,7 @@ export async function rankByColumn(
     lim: limit,
     off: offset,
     exclude_lown: excludeLowN,
-    // 絞り込みは散布（values_for_columns）と同じ述語を DB 側で共有している（260801）。
+    // 絞り込みは散布（scatter_points）と同じ述語を DB 側で共有している（260801）。
     // ランキングは total とページングを SQL で数えるため、ここで渡さないと件数が狂う。
     ops: operators.length > 0 ? operators : null,
     routes: routes.length > 0 ? routes : null,
@@ -133,18 +133,8 @@ export async function rankByColumn(
   }
 }
 
-// --- 散布（複数指標の縦持ち） -------------------------------------------
-const valueRowSchema = z.object({
-  grp: z.string(),
-  station_name: z.string(),
-  key: z.string(),
-  value: z.number(),
-})
-
-/** buildGrowth の入力（ValueRow）と構造一致。 */
-export type ValueRow = { grp: string; stationName: string; key: string; value: number }
-
-/** buildGrowth の入力（ScatterRow）と構造一致（駅 1 行に畳んだ形・260804）。 */
+// --- 散布（駅 1 行に畳んだ形・260804） ---------------------------------
+/** buildGrowth の入力（ScatterRow）と構造一致。 */
 export type ScatterRow = {
   grp: string
   stationName: string
@@ -154,26 +144,6 @@ export type ScatterRow = {
   yFlag: number | null
 }
 
-export async function valuesForColumns(
-  keys: string[],
-  prefectures: string[],
-  operators: readonly string[] = [],
-  routes: readonly string[] = [],
-  routeTypes: readonly number[] = [],
-): Promise<ValueRow[]> {
-  // 全国は行数が max-rows(=1000) を超えるため、RPC は単一 jsonb で返す（配列を検証）。
-  const raw = await rpc('values_for_columns', {
-    column_keys: keys,
-    prefs: prefectures.length > 0 ? prefectures : null, // 空は null＝全国
-    ops: operators.length > 0 ? [...operators] : null, // 空は null＝全社
-    routes: routes.length > 0 ? [...routes] : null, // 空は null＝全路線（260731）
-    route_types: routeTypes.length > 0 ? [...routeTypes] : null, // 空は null＝全種別
-  })
-  const rows = z.array(valueRowSchema).parse(raw)
-  return rows.map((r) => ({ grp: r.grp, stationName: r.station_name, key: r.key, value: r.value }))
-}
-
-// --- 散布（駅 1 行に畳んだ形・260804） ---------------------------------
 const scatterRowSchema = z.object({
   grp: z.string(),
   station_name: z.string(),
@@ -194,9 +164,9 @@ export type ScatterFilters = {
 /**
  * 散布の点（駅ごとに x・y と、それぞれの信頼性フラグ）。
  *
- * 以前は values_for_columns が**縦持ち**（1 駅 × キーごとに 1 行）を返し、アプリ側で pivot して
- * いた。grp と駅名が最大 4 回重複するため、実測で DB 5,272ms / JSON 2,978KB かかっていた。
- * SQL 側で畳むと **1,345ms / 658KB**（docs/260803_processing_speed.md §4-⑤）。
+ * 以前は縦持ち（1 駅 × キーごとに 1 行）を返し、アプリ側で pivot していた。grp と駅名が
+ * 最大 4 回重複するため、アプリが検証する JSON が 3,256KB あった。SQL 側で畳むと 756KB
+ * （転送は 336KB → 112KB・docs/260803_processing_speed.md §15.3）。
  * x か y が欠ける駅は DB で落とす（描けないため。従来のアプリ側の間引きと同じ結果）。
  */
 export async function scatterPoints(

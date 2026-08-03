@@ -1,0 +1,14 @@
+-- 旧 values_for_columns を削除する（260804）。
+--
+-- 散布は scatter_points（駅 1 行に畳んだ形）へ移行済み（20260804005856）。移行のときは
+-- 「DB を先に適用してからアプリを配信する」ため、切り替えの間だけ旧コードが呼びうるので
+-- 残していた。配信が完了したのでここで落とす（docs/260803_processing_speed.md §15.1）。
+--
+-- 削除前に確認したこと：
+--   * アプリ（src/）に呼び出しが無い（scatterPoints へ置換済み）
+--   * 他の関数・ビューから参照されていない（pg_proc.prosrc / pg_views を全数検索し 0 件）
+--   * 絞り込みの述語 station_matches_filters() は scatter_points と rank_by_column が
+--     共有しており、こちらは残る（同時に消さない）
+--
+-- 引数付きで指定して落とす（同名の別シグネチャを巻き込まないため。cascade は使わない）。
+drop function if exists public.values_for_columns(text[], text[], text[], text[], int[]);

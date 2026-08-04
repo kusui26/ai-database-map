@@ -21,6 +21,14 @@ export type FlyToRequest = {
 }
 
 type MapStore = {
+  /**
+   * 地図が使える状態になったか（スタイル読込＋駅データの追加まで完了）。
+   * 「初期表示が終わった」の唯一の合図として、重いチャンクの先読み開始にも使う
+   * （早すぎると地図の取得と帯域を奪い合い、LCP が悪化する・260805）。
+   */
+  ready: boolean
+  setReady: (ready: boolean) => void
+
   hovered: HoverInfo | null
   setHovered: (info: HoverInfo | null) => void
 
@@ -34,6 +42,9 @@ type MapStore = {
 }
 
 export const useMapStore = create<MapStore>((set) => ({
+  ready: false,
+  setReady: (ready) => set({ ready }),
+
   hovered: null,
   setHovered: (info) => set({ hovered: info }),
 

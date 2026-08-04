@@ -8,7 +8,12 @@ import { RadiusControl } from './RadiusControl'
 import { StationSearch } from './StationSearch'
 
 // About は初回オープンまで読み込まない（初期バンドルから外す）。
-const AboutDialog = dynamic(() => import('./AboutDialog').then((m) => m.AboutDialog))
+// `loading` を渡して自前の Suspense 境界を作る。渡さないと初回の取得中に
+// `page.tsx` の fallback まで遡り、アプリ全体が「地図を読み込み中…」に差し替わる
+// （実測 3/3 回・約 340ms／docs/260804_loading_map.md §2）。
+const AboutDialog = dynamic(() => import('./AboutDialog').then((m) => m.AboutDialog), {
+  loading: () => null,
+})
 
 function InfoIcon() {
   return (

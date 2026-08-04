@@ -1,19 +1,19 @@
 'use client'
 
 import { type ReactNode, useState } from 'react'
-import dynamic from 'next/dynamic'
 import { PANEL_GAP_PX, PANEL_WIDTH_PX } from '@/shared/constants'
 import { useChatStore } from '@/stores/chatStore'
+import { useMapStore } from '@/stores/mapStore'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
+import { usePrefetchOnIdle } from '@/hooks/usePrefetchOnIdle'
+// 初期バンドルから外す：ダイアログ（散布は Chart.js を含む）は初回オープンまで読み込まない。
+// 遅延ロードの定義は共通モジュールに置く（Suspense 境界の付け忘れを 1 か所に閉じ込めるため）。
+import { DIALOG_LOADERS, RankingDialog, ScatterDialog } from './lazyDialogs'
 
 /** FAB とチャットパネルのあいだの余白。 */
 const FAB_GAP_PX = 8
 /** チャットを開いているときの FAB の左端（パネル幅から算出・260804）。 */
 const FAB_LEFT_WITH_CHAT_PX = PANEL_GAP_PX + PANEL_WIDTH_PX + FAB_GAP_PX
-
-// 初期バンドルから外す：ダイアログ（散布は Chart.js を含む）は初回オープンまで読み込まない。
-const RankingDialog = dynamic(() => import('./ranking/RankingDialog').then((m) => m.RankingDialog))
-const ScatterDialog = dynamic(() => import('./scatter/ScatterDialog').then((m) => m.ScatterDialog))
 
 function TrophyIcon() {
   return (
@@ -84,6 +84,10 @@ export function Fab() {
   const chatOpen = useChatStore((state) => state.open)
   const isDesktop = useIsDesktop()
   const shifted = isDesktop && chatOpen
+  // クリック後にチャンク取得を待たせないため、地図が出たあとのアイドル時間に先読みしておく。
+  // 地図の準備完了を待つのは、早く始めると地図の取得と帯域を奪い合って LCP が悪化するため。
+  const mapReady = useMapStore((state) => state.ready)
+  usePrefetchOnIdle(DIALOG_LOADERS, mapReady)
   return (
     <>
       <div

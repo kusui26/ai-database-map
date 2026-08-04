@@ -11,7 +11,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { FeatureCollection } from 'geojson'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { ACCENT_COLOR } from '@/shared/constants'
+import { ACCENT_COLOR, PANEL_WIDTH_PX } from '@/shared/constants'
 import { circlePolygon } from '@/shared/geo'
 import { type HoverInfo, useMapStore } from '@/stores/mapStore'
 import { useChatStore } from '@/stores/chatStore'
@@ -23,8 +23,8 @@ import { useMapUrlState } from './useMapUrlState'
 const STYLE_URL = process.env.NEXT_PUBLIC_MAP_STYLE_URL ?? '/map/gsi-pale-style.json'
 const TOKYO_STATION: [number, number] = [139.767, 35.681]
 const BASE_PAD = 64
-const CHAT_PANEL_PX = 400 // 左チャットパネル幅（開時に flyTo を可視領域中心へ寄せる）
-const DRAWER_PANEL_PX = 380 // 右ドロワー幅（駅詳細オープン時）
+// 左チャット／右ドロワーの幅は共通定数（260804）。ここを合わせないと flyTo が
+// 選択駅をパネルの裏に置いてしまう。
 const EMPTY_FC: FeatureCollection = { type: 'FeatureCollection', features: [] }
 const NONE = '__none__'
 
@@ -37,8 +37,8 @@ function flyPadding(
   return {
     top: BASE_PAD,
     bottom: BASE_PAD,
-    left: isDesktop && chatOpen ? CHAT_PANEL_PX + BASE_PAD : BASE_PAD,
-    right: isDesktop && drawerOpen ? DRAWER_PANEL_PX + BASE_PAD : BASE_PAD,
+    left: isDesktop && chatOpen ? PANEL_WIDTH_PX + BASE_PAD : BASE_PAD,
+    right: isDesktop && drawerOpen ? PANEL_WIDTH_PX + BASE_PAD : BASE_PAD,
   }
 }
 

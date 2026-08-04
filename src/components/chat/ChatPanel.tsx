@@ -13,7 +13,7 @@ import { useChat } from '@ai-sdk/react'
 import { Drawer } from 'vaul'
 import { mapResponseSchema } from '@/shared/protocol'
 import { cn } from '@/lib/utils'
-import { radiusLabel } from '@/shared/constants'
+import { PANEL_WIDTH_CSS, radiusLabel } from '@/shared/constants'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { useIsWide } from '@/hooks/useIsWide'
 import { useMapUrlState } from '@/components/map/useMapUrlState'
@@ -256,8 +256,10 @@ export function ChatPanel() {
         inert={!open}
         aria-hidden={!open}
         aria-label="AI チャット"
+        // 幅は駅詳細ドロワーと共通の定数から（260804・両パネルを同じ幅に揃える）。
+        style={{ width: PANEL_WIDTH_CSS }}
         className={cn(
-          'absolute top-20 bottom-3 left-3 z-30 flex w-[min(400px,calc(100%-1.5rem))] flex-col overflow-hidden rounded-2xl bg-white/95 shadow-2xl ring-1 ring-slate-200 backdrop-blur transition-[transform,opacity] duration-300 ease-out',
+          'absolute top-20 bottom-3 left-3 z-30 flex flex-col overflow-hidden rounded-2xl bg-white/95 shadow-2xl ring-1 ring-slate-200 backdrop-blur transition-[transform,opacity] duration-300 ease-out',
           open ? 'translate-x-0 opacity-100' : 'pointer-events-none -translate-x-[120%] opacity-0',
         )}
       >

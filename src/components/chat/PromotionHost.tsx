@@ -9,16 +9,11 @@
  * ここは narrow・モバイルだけを受け持つ（同じ図が二重に出ないようにする）。
  */
 
-import dynamic from 'next/dynamic'
 import { useChatStore } from '@/stores/chatStore'
 import { useIsWide } from '@/hooks/useIsWide'
-
-const RankingDialog = dynamic(() =>
-  import('@/components/ranking/RankingDialog').then((module) => module.RankingDialog),
-)
-const ScatterDialog = dynamic(() =>
-  import('@/components/scatter/ScatterDialog').then((module) => module.ScatterDialog),
-)
+// FAB と同じ遅延ロードを使う（Suspense 境界の定義を二重に持たない・260805）。
+// 同じモジュールなので、FAB 側の先読みがそのままここにも効く。
+import { RankingDialog, ScatterDialog } from '@/components/lazyDialogs'
 
 export function PromotionHost() {
   const promotion = useChatStore((state) => state.promotion)

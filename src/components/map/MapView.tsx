@@ -7,7 +7,7 @@
  * クリックで選択（flyTo＋ハイライト＋半径サークル）、状態は URL（?grp&r）に同期。
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import type { FeatureCollection } from 'geojson'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
@@ -234,7 +234,9 @@ export function MapView() {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const coordsRef = useRef<Map<string, Coord>>(new Map())
-  const [ready, setReady] = useState(false)
+  // 「地図が使える」は他（重いチャンクの先読みの開始条件）でも要るのでストアに持つ。
+  const ready = useMapStore((state) => state.ready)
+  const setReady = useMapStore((state) => state.setReady)
 
   const { grp, setGrp, radiusM } = useMapUrlState()
   const setHovered = useMapStore((state) => state.setHovered)

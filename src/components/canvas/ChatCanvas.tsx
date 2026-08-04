@@ -11,20 +11,23 @@
  * - 駅を選ぶと右に詳細ドロワーが開くため、そのぶん右端を空けて重ならないようにする。
  */
 
+import { PANEL_GAP_PX, PANEL_WIDTH_PX } from '@/shared/constants'
 import { useChatStore } from '@/stores/chatStore'
 import { useIsWide } from '@/hooks/useIsWide'
 import { useMapUrlState } from '@/components/map/useMapUrlState'
 import { ScatterBody } from '@/components/scatter/ScatterBody'
 import { RankingBody } from '@/components/ranking/RankingBody'
 
-/** チャット（左 12＋幅 400）の右隣に置くときの左端。 */
-const LEFT_WITH_CHAT_PX = 424
+// 左右端はパネル幅の共通定数から算出する（260804）。直書きすると、パネル幅を変えたときに
+// キャンバスがドロワーと重なる。
+/** チャット（左余白＋幅）の右隣に置くときの左端。 */
+const LEFT_WITH_CHAT_PX = PANEL_GAP_PX + PANEL_WIDTH_PX + PANEL_GAP_PX
 /** チャットを閉じているときの左端（他パネルと同じ余白）。 */
-const LEFT_ALONE_PX = 12
-/** 駅詳細ドロワー（幅 380＋余白）を避けるときの右端。 */
-const RIGHT_WITH_DETAIL_PX = 404
+const LEFT_ALONE_PX = PANEL_GAP_PX
+/** 駅詳細ドロワー（幅＋余白）を避けるときの右端。 */
+const RIGHT_WITH_DETAIL_PX = PANEL_WIDTH_PX + PANEL_GAP_PX + PANEL_GAP_PX
 /** 通常の右端（他パネルと同じ余白）。 */
-const RIGHT_PX = 12
+const RIGHT_PX = PANEL_GAP_PX
 /** 散布ダイアログと同じ最大幅（`max-w-4xl`）。 */
 const MAX_WIDTH_PX = 896
 

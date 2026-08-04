@@ -2,8 +2,14 @@
 
 import { type ReactNode, useState } from 'react'
 import dynamic from 'next/dynamic'
+import { PANEL_GAP_PX, PANEL_WIDTH_PX } from '@/shared/constants'
 import { useChatStore } from '@/stores/chatStore'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
+
+/** FAB とチャットパネルのあいだの余白。 */
+const FAB_GAP_PX = 8
+/** チャットを開いているときの FAB の左端（パネル幅から算出・260804）。 */
+const FAB_LEFT_WITH_CHAT_PX = PANEL_GAP_PX + PANEL_WIDTH_PX + FAB_GAP_PX
 
 // 初期バンドルから外す：ダイアログ（散布は Chart.js を含む）は初回オープンまで読み込まない。
 const RankingDialog = dynamic(() => import('./ranking/RankingDialog').then((m) => m.RankingDialog))
@@ -74,14 +80,14 @@ export function Fab() {
   // 一度開いたら以後もマウントし続ける（初回のみチャンク取得・状態は保持）。
   const [rankingSeen, setRankingSeen] = useState(false)
   const [scatterSeen, setScatterSeen] = useState(false)
-  // デスクトップでチャットを開くと FAB が左パネルに隠れるため右へ寄せる。
+  // デスクトップでチャットを開くと FAB が左パネルに隠れるため右へ寄せる（位置はパネル幅から算出）。
   const chatOpen = useChatStore((state) => state.open)
   const isDesktop = useIsDesktop()
   const shifted = isDesktop && chatOpen
   return (
     <>
       <div
-        style={shifted ? { left: 420 } : undefined}
+        style={shifted ? { left: FAB_LEFT_WITH_CHAT_PX } : undefined}
         className="pointer-events-auto absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 gap-2 transition-[left] duration-300 sm:left-4 sm:translate-x-0"
       >
         <FabButton

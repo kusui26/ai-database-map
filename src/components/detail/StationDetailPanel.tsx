@@ -10,7 +10,13 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Drawer } from 'vaul'
 import { type Panel } from '@/shared/protocol'
 import { type StationDetail } from '@/shared/api'
-import { type Category, CATEGORY_LABELS_JA, RADII_M, RADIUS_LABELS } from '@/shared/constants'
+import {
+  type Category,
+  CATEGORY_LABELS_JA,
+  PANEL_WIDTH_CSS,
+  RADII_M,
+  RADIUS_LABELS,
+} from '@/shared/constants'
 import {
   busPanels,
   employeePanels,
@@ -256,8 +262,11 @@ export function StationDetailPanel() {
         // 閉じている間はフォーカスを内部へ入れない（body は閉じアニメのため残すが tab/a11y 順から外す）。
         inert={!open}
         aria-hidden={!open}
+        // 幅は AI チャットと共通の定数から（260804）。カテゴリのタブ帯（404px）が
+        // 既定でスライドしないだけの幅を確保する。狭い画面では min() で縮む。
+        style={{ width: PANEL_WIDTH_CSS }}
         className={cn(
-          'pointer-events-auto absolute top-20 right-3 bottom-3 z-30 flex w-[min(380px,calc(100%-1.5rem))] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200 transition-[transform,opacity] duration-300 ease-out',
+          'pointer-events-auto absolute top-20 right-3 bottom-3 z-30 flex flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200 transition-[transform,opacity] duration-300 ease-out',
           open ? 'translate-x-0 opacity-100' : 'pointer-events-none translate-x-[120%] opacity-0',
         )}
       >

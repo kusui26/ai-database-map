@@ -2,3 +2,5 @@
 # インストール: python3 -m pip install -r pipeline/requirements.txt
 pandas>=2.3
 psycopg[binary]>=3.3
+requests>=2.32     # e-Stat API（fetch_income / fetch_working_age_mesh）
+openpyxl>=3.1      # 総務省 xlsx の読み取り（fetch_income）

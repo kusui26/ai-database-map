@@ -24,6 +24,32 @@ python3 pipeline/validate_catalog.py   # CSV・dataset.md §2 と全数照合（
 データ更新やデータセット拡張（`dataset.md` §3 の定石）でCSV列が増減したら、`build` → `validate`
 を再実行してカタログを更新する。列名から機械生成するため **指標追加＝列追加**でUI/API/AIが自動追従する。
 
+## 所得データの取得（260812）
+
+駅×半径の「1 人当たり課税対象所得（＝平均年収）」を作るための素データを取る
+（設計は `docs/260811_income.md`）。**どちらも `data/` に落とすだけで、コミットされるのはコードのみ。**
+
+```bash
+python3 pipeline/fetch_income.py              # 課税対象所得・納税義務者数（2015/2020/2025 年度）
+python3 pipeline/fetch_working_age_mesh.py    # 15〜64 歳人口の 250m メッシュ（2015/2020・按分の重み）
+```
+
+| スクリプト | 取得先 | 出力 | 検証 |
+|---|---|---|---|
+| `fetch_income.py` | 2015/2020＝e-Stat API（社会・人口統計体系）／**2025＝総務省 xlsx** | `data/市町村税課税状況/income_{年度}.csv`（1,741 団体）| 全国計を既知の値と照合 |
+| `fetch_working_age_mesh.py` | e-Stat API（国勢調査 250m メッシュ・`cdCat01=0100`）| `data/国勢調査_人口及び世帯_{年}_mesh250/age1564_<区画>.csv`（151 区画）| 全国計を公式値と照合 |
+
+**なぜ 2025 年度だけ取得元が違うか**：SSDS は 2024 年度までで、令和7年度（2025 年度）は
+総務省サイトにしか無い。SSDS への反映は毎年 6 月頃なので、API だけに寄せると常に 1 年遅れる。
+`fetch_income.py` が**出力の列・単位・件数を 2 経路で揃える**ので、下流は取得元を意識しない。
+
+**罠**（どちらも検証で担保している）
+
+- SSDS の 5 桁コードには **`13100 東京都 特別区部`（23 区の集計行）**が混ざる。除外しないと
+  課税対象所得が 30.5 兆円ぶん二重計上になる（政令市は「市計」に値があり行政区は `-` なので除外しない）。
+- 15〜64 歳メッシュの保存名は **`age1564_*.csv`**。`mesh` で始めるとノートブックの人口ローダ
+  （`mesh*.csv` を glob）に混ざる。
+
 ## 独立検証（260812）
 
 `data/derived/` の生成は**すべてノートブック 1 回で完結する**（`script/create_dataset_for_AI_Database_Map.ipynb`）。
@@ -46,4 +72,5 @@ python3 pipeline/verify_station_routes.py   # 路線表を最近傍マッチン�
 ## 前提
 
 - Python 3.12 系（`python3 --version`）。カタログ生成は標準ライブラリのみ（pandas 不要）。
+- 取得スクリプトは `requests` / `pandas` / `openpyxl` と `.env` の `ESTAT_APP_ID` を使う。
 - `data/derived/station_dataset.csv` が存在すること（生成は `script/` のノートブック）。

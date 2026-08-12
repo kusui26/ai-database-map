@@ -1,17 +1,22 @@
-"""路線データの生成（260731）— S12 の路線名・事業者種別を既存の駅グループへ貼る。
+"""路線データを独立検証する（260731 → 260812 で検証専用に）。
 
 国土数値情報「駅別乗降客数」S12-25 は `S12_003` に路線名、`S12_005` に事業者種別コード
-（1:JR新幹線 / 2:JR在来線 / 3:公営鉄道 / 4:民営鉄道 / 5:第三セクター）を持つ。ノートブックは
-この 2 列を読んでいるが出力していないため、派生 CSV にも DB にも路線が存在しない。
+（1:JR新幹線 / 2:JR在来線 / 3:公営鉄道 / 4:民営鉄道 / 5:第三セクター）を持つ。
 
-**ノートブックは再実行しない**（他列への偶発差分を避ける・docs/260727_data_check.md §4.2 と同じ判断）。
-代わりに、S12 の各レコードを **既存の駅グループ（駅名 + 半径1km クラスタ）へ最近傍で対応づける**。
-grp は「同名グループ同士が 1km 以上離れる」性質を持つため（docs/passenger_aggregation.md §3.1）、
-同名グループのうち最も近いものを選べば一意に決まる。実測では 10,534 件すべてが一致し、
-距離は中央値 55m・最大 706m だった（docs/260730_scatter_plot_routes.md §2）。
+**`data/derived/station_routes.csv` は現在ノートブックが直接出力する**
+（`script/create_dataset_for_AI_Database_Map.ipynb` の CSV 出力セル）。S12 の各レコードには
+駅グループ化のセルで `grp` が付いているので、**対応づけは構成上そのまま**＝推定が入らない。
 
-    python3 pipeline/build_station_routes.py
-    → data/derived/station_routes.csv（grp, operator, route, route_type）＋ 自己検証レポート
+以前は本スクリプトが S12 を読み直し、**駅名が同じグループのうち最も近いもの**へ距離ベースで
+貼り直していた（10,534 件すべて一致・中央値 55m・最大 706m）。ノートブックを再実行した
+260812 に本体へ畳んだ（docs/260811_income.md §4.2）。
+
+本スクリプトは**書き出しをやめ、検証だけを行う**。空間的に独立な方法（最近傍マッチング）で
+路線表を再構成し、ノートブックの出力と**完全に一致するか**を確かめる。
+経路が違うのに同じ結果になることが、双方の正しさの裏付けになる。
+
+    python3 pipeline/verify_station_routes.py
+    → PASS で exit 0 / 1 つでも崩れたら exit 1
 """
 
 from __future__ import annotations
@@ -26,7 +31,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 S12_ZIP = ROOT / "data" / "駅別乗降客数データ" / "S12-25_GML.zip"
 STATIONS_CSV = ROOT / "data" / "derived" / "station_dataset.csv"
-OUT_CSV = ROOT / "data" / "derived" / "station_routes.csv"
+ROUTES_CSV = ROOT / "data" / "derived" / "station_routes.csv"
 
 STATION_NAME = "S12_001"
 OPERATOR = "S12_002"
@@ -134,12 +139,30 @@ def main() -> int:
             print(f"NG: {failure}")
         return 1
 
-    OUT_CSV.parent.mkdir(parents=True, exist_ok=True)
-    with OUT_CSV.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.writer(handle)
-        writer.writerow(["grp", "operator", "route", "route_type"])
-        writer.writerows(sorted(rows))
-    print(f"OK: {OUT_CSV.relative_to(ROOT)} に {len(rows)} 行を書き出しました")
+    # --- ノートブック出力との突き合わせ（本スクリプトの主目的） ---
+    if not ROUTES_CSV.exists():
+        print(f"NG: {ROUTES_CSV.relative_to(ROOT)} がありません（ノートブックの実行が必要）")
+        return 1
+    with ROUTES_CSV.open(encoding="utf-8", newline="") as handle:
+        reader = csv.reader(handle)
+        header = next(reader)
+        expected_header = ["grp", "operator", "route", "route_type"]
+        if header != expected_header:
+            print(f"NG: 列が想定と違う: {header}（期待 {expected_header}）")
+            return 1
+        notebook_rows = {(g, o, r, int(t)) for g, o, r, t in reader}
+
+    only_notebook = notebook_rows - rows
+    only_nearest = rows - notebook_rows
+    print(f"ノートブック出力 {len(notebook_rows)} 行 / 最近傍で再構成 {len(rows)} 行")
+    if only_notebook or only_nearest:
+        print(f"NG: 一致しません（ノートブックのみ {len(only_notebook)} 件 / 再構成のみ {len(only_nearest)} 件）")
+        for label, diff in (("ノートブックのみ", only_notebook), ("再構成のみ", only_nearest)):
+            for row in sorted(diff)[:5]:
+                print(f"    {label}: {row}")
+        return 1
+
+    print(f"OK: ノートブック出力と最近傍による再構成が {len(rows)} 行すべてで一致しました")
     return 0
 
 

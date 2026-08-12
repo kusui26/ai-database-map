@@ -6,7 +6,7 @@ Step1 の中核資産である駅×半径データセットの**全体像・全�
 
 ## 1. 概要
 
-- **生成物**：`script/create_dataset_for_AI_Database_Map.ipynb` → **`data/derived/station_dataset.csv`（9,273 駅グループ × 595 列）**。あわせて監査明細 `station_operator_detail.csv`（1群×1社）、地価パネル `station_landprice_yearly.csv`（ロング形式）を出力。
+- **生成物**：`script/create_dataset_for_AI_Database_Map.ipynb` → **`data/derived/station_dataset.csv`（9,273 駅グループ × 596 列）**。あわせて監査明細 `station_operator_detail.csv`（1群×1社）、地価パネル `station_landprice_yearly.csv`（ロング形式）、路線 `station_routes.csv`（1群×1社×1路線・10,424 行）を出力。
   - **P5d（2026-07-09）**：`station_dataset.csv` を「すべてを含む単一ベース」に統一。地価中央値を**年次系列 `lp_med_{年}_{R}`（2007–2026・単年 `lp_med_{R}` を置換）**にし、運営会社名を `operators`（1群×1社を pax 規模降順で `・` 連結した単一文字列）として畳み込む。監査 CSV（yearly / operator_detail）は温存。UI/API/AI はカタログ再生成＋再ロードで自動追従。
 - **単位＝駅グループ（`grp`）**：同名・近接駅を 1km クラスタで統合した駅単位（`docs/passenger_aggregation.md`）。1 行 1 駅グループ。
 - **半径**：**500m / 1km / 2km / 5km / 10km / 20km**（過去プロジェクトの 1/2/5/10km を刷新・統一。※地価のみ後述の理由で 500m–10km）。
@@ -26,7 +26,7 @@ Step1 の中核資産である駅×半径データセットの**全体像・全�
 
 ---
 
-## 2. 全カラム一覧（595列）
+## 2. 全カラム一覧（596列）
 
 半径サフィックス `{R}` ∈ `{500m, 1km, 2km, 5km, 10km, 20km}`。増減率（`*_gr_*`）は分母年の値が 0 の駅で NaN。カウント・水準は 0 を有意値として保持（NaN にしない）。
 
@@ -119,7 +119,7 @@ Step1 の中核資産である駅×半径データセットの**全体像・全�
 | `emp_gr_2021_{旧}_{R}` | 12 | float% | 従業者 増減率 |
 | `estab_gr_lown_{R}` | 6 | int8 | `estab_n_2012 < 5` の低分母フラグ（事業所・従業者の両増減率に共通）|
 
-> **合計**：10＋18＋42＋54＋36＋114＋60＋6＋153＋36＋66 ＝ **595 列**（識別 10・乗降 18〔flag_yoy/flag_covid を信頼性フラグ＝乗降指標へ再分類・260727〕。P5d：地価 58→153〔lp_med 年次 100〕）。
+> **合計**：10＋**19**＋42＋54＋36＋114＋60＋6＋153＋36＋66 ＝ **596 列**（識別 10・乗降 19〔flag_yoy/flag_covid を信頼性フラグ＝乗降指標へ再分類・260727、flag_covid_lown を追加・260731〕。P5d：地価 58→153〔lp_med 年次 100〕）。
 
 ---
 
@@ -152,7 +152,7 @@ Step1 の中核資産である駅×半径データセットの**全体像・全�
 
 ## 5. スキーマ設計への含意（Step1→Step2）
 
-- 現状 CSV は 595 列の**ワイド表**だが、DB では **正規化（`station_metrics(station_id, metric, radius_m, year, value)` 等）＋メトリクス・カタログ表**へ落とす前提（`.claude/CLAUDE.md` §3）。上記の命名規約 `{接頭辞}_{年}_{半径}` がそのまま `(metric, year, radius)` の 3 軸に対応する。
+- 現状 CSV は 596 列の**ワイド表**だが、DB では **正規化（`station_metrics(station_id, metric, radius_m, year, value)` 等）＋メトリクス・カタログ表**へ落とす前提（`.claude/CLAUDE.md` §3）。上記の命名規約 `{接頭辞}_{年}_{半径}` がそのまま `(metric, year, radius)` の 3 軸に対応する。
 - **メトリクス・カタログ**（指標・単位・ラベル・半径・年・信頼性フラグの定義）は、UI と Gemini が同一の意味で消費するための単一の真実。本カラム一覧がその原型。
 
 ---

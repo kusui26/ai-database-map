@@ -1,8 +1,11 @@
 """station_routes の投入（260731）— 路線 CSV → Supabase（冪等・COPY）。
 
-`pipeline/build_station_routes.py` が作る `data/derived/station_routes.csv`（grp, operator,
+`script/` のノートブックが出力する `data/derived/station_routes.csv`（grp, operator,
 route, route_type）を `public.station_routes` へ入れる。grp → station_id は DB 側の
 `stations` から解決するため、駅の採番を再現する必要はない。
+（260812 以前は `pipeline/build_station_routes.py` が最近傍マッチングで生成していた。
+現在は同じ内容をノートブックが直接出力し、旧スクリプトは `verify_station_routes.py` として
+突き合わせ検証だけを行う・`docs/260811_income.md` §4.2）
 
 冪等性: truncate → COPY を単一トランザクションで実行（失敗時はロールバック＝旧データ保持）。
 `load_to_supabase.py` の全量投入からも `copy_station_routes()` を呼べるようにしてある
@@ -57,7 +60,7 @@ def main() -> int:
     from load_to_supabase import db_params
 
     if not ROUTES_CSV.exists():
-        raise SystemExit(f"{ROUTES_CSV} がありません。先に build_station_routes.py を実行してください")
+        raise SystemExit(f"{ROUTES_CSV} がありません。先に script/ のノートブックを実行してください")
     with psycopg.connect(**db_params()) as conn:
         with conn.cursor() as cur:
             written = copy_station_routes(cur)

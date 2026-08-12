@@ -427,6 +427,25 @@
       "license": "CC BY 4.0 相当（国土数値情報 利用約款・出典明記で商用可）"
     },
     {
+      "key": "flag_covid_lown",
+      "baseMetric": "pax_flag",
+      "kind": "flag",
+      "category": "passenger",
+      "labelJa": "乗降客数 コロナ前後増減率 低分母フラグ（|率|>100%＝小駅の分母ノイズ）",
+      "unit": null,
+      "format": null,
+      "radiusM": null,
+      "year": null,
+      "yearBase": null,
+      "vintage": null,
+      "reliabilityFlagKey": null,
+      "noticeFlagKey": null,
+      "rankable": false,
+      "higherIsBetter": null,
+      "source": "国土数値情報「駅別乗降客数」(S12-25)",
+      "license": "CC BY 4.0 相当（国土数値情報 利用約款・出典明記で商用可）"
+    },
+    {
       "key": "pop_2020_500m",
       "baseMetric": "pop",
       "kind": "level",
@@ -11198,25 +11217,6 @@
       "higherIsBetter": null,
       "source": "経済センサス‑活動調査 地域メッシュ統計（総務省・経済産業省／e-Stat）",
       "license": "CC BY 4.0 相当（e-Stat 利用規約・出典明記で商用可）"
-    },
-    {
-      "key": "flag_covid_lown",
-      "baseMetric": "pax_flag",
-      "kind": "flag",
-      "category": "passenger",
-      "labelJa": "乗降客数 コロナ前後増減率 低分母フラグ（|率|>100%＝小駅の分母ノイズ）",
-      "unit": null,
-      "format": null,
-      "radiusM": null,
-      "year": null,
-      "yearBase": null,
-      "vintage": null,
-      "reliabilityFlagKey": null,
-      "noticeFlagKey": null,
-      "rankable": false,
-      "higherIsBetter": null,
-      "source": "国土数値情報「駅別乗降客数」(S12-25)",
-      "license": "CC BY 4.0 相当（国土数値情報 利用約款・出典明記で商用可）"
     }
   ]
 }

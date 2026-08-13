@@ -30,6 +30,7 @@ RT = r"(?:500m|1km|2km|5km|10km|20km)"
 CATEGORY_ORDER: list[str] = [
     "passenger",
     "population",
+    "income",
     "population_forecast",
     "land_price",
     "bus",
@@ -39,6 +40,7 @@ CATEGORY_ORDER: list[str] = [
 CATEGORY_LABELS: dict[str, str] = {
     "passenger": "乗降客数",
     "population": "人口",
+    "income": "所得",
     "population_forecast": "将来推計人口",
     "land_price": "地価",
     "bus": "バス",
@@ -54,6 +56,12 @@ SRC: dict[str, tuple[str, str]] = {
     ),
     "population": (
         "総務省 国勢調査 地域メッシュ統計（e-Stat）",
+        "CC BY 4.0（政府統計・出典明記で商用可）",
+    ),
+    "income": (
+        # 2015/2020年度は e-Stat 社会・人口統計体系、2025年度は総務省サイトの xlsx が出所
+        # （SSDS は 2024 年度まで）。どちらも同じ原表＝『市町村税課税状況等の調』第11表。
+        "総務省『市町村税課税状況等の調』（e-Stat 社会・人口統計体系／2025年度は総務省 xlsx）",
         "CC BY 4.0（政府統計・出典明記で商用可）",
     ),
     "population_forecast": (
@@ -103,7 +111,7 @@ IDENTITY_COLUMNS: list[dict[str, str]] = [
 ]
 
 # 型・語彙（validate と共有する参照。値の妥当性検証に使う）
-UNITS = {"人", "人/日", "円/㎡", "%", "箇所", "事業所", "m", None}
+UNITS = {"人", "人/日", "円/㎡", "%", "箇所", "事業所", "m", "万円/人", "百万円", None}
 FORMATS = {"int", "decimal1", "percent1", "ratio1", "yen", None}
 KINDS = {"level", "growth", "flag", "error", "ratio"}
 
@@ -227,6 +235,47 @@ def build_entry(col: str) -> CatalogEntry:
         return _make(col, "pop_lowbase", "flag", "population",
                      f"人口 低基準フラグ（{y}年・{r}圏／基準人口<50人）", None, None,
                      radiusM=RADIUS_M[r], year=y, rankable=False)
+
+    # --- 所得（income・docs/income.md §5-§6） ---
+    # 年は**課税年度**（値は前年の所得）。ラベルに「年度」と書いて実績年と区別する。
+    m = re.fullmatch(rf"inc_pc_(\d{{4}})_({RT})", col)
+    if m:
+        y, r = int(m[1]), m[2]
+        return _make(col, "inc_pc", "level", "income",
+                     f"1人当たり課税対象所得（{y}年度・{r}圏）", "万円/人", "decimal1",
+                     radiusM=RADIUS_M[r], year=y, flag=f"inc_lown_{y}_{r}")
+    m = re.fullmatch(rf"inc_total_(\d{{4}})_({RT})", col)
+    if m:
+        y, r = int(m[1]), m[2]
+        # 総額は**合計**なので、納税義務者が少なくても値は壊れない（人口・事業所数と同じ扱い）。
+        # 低分母フラグ（除外）を付けるのは 1 人当たり（＝割り算）だけ。
+        # 政令市フラグは**除外せずバッジだけ**にする（値は正しく、粒度が粗いだけ）。
+        # 除外用が無く注意用だけを持つのは本エントリだけで、noticeFlagKey の本来の用途そのもの。
+        return _make(col, "inc_total", "level", "income",
+                     f"課税対象所得 総額（{y}年度・{r}圏）", "百万円", "int",
+                     radiusM=RADIUS_M[r], year=y, notice=f"inc_city_only_{r}")
+    m = re.fullmatch(rf"inc_gr_(\d{{4}})_(\d{{4}})_({RT})", col)
+    if m:
+        new, old, r = int(m[1]), int(m[2]), m[3]
+        # 率の分母は**旧年**の 1 人当たりなので、参照するフラグも旧年
+        # （人口の pop_gr → pop_lowbase_{旧} と同じ規則。docs/income.md §5 の実測）。
+        return _make(col, "inc_gr", "growth", "income",
+                     f"1人当たり課税対象所得 増減率（{old}→{new}年度・{r}圏）", "%", "percent1",
+                     radiusM=RADIUS_M[r], year=new, yearBase=old, flag=f"inc_lown_{old}_{r}")
+    m = re.fullmatch(rf"inc_lown_(\d{{4}})_({RT})", col)
+    if m:
+        y, r = int(m[1]), m[2]
+        return _make(col, "inc_lown", "flag", "income",
+                     f"所得 低分母フラグ（{y}年度・{r}圏／納税義務者<1,000人）", None, None,
+                     radiusM=RADIUS_M[r], year=y, rankable=False)
+    m = re.fullmatch(rf"inc_city_only_({RT})", col)
+    if m:
+        r = m[1]
+        # 政令市は所得が**市単位でしか公表されない**（行政区別が無い）。値が誤りなのではなく
+        # 粒度が粗いだけなので除外はしない。UI は駅の注記として出す（docs/income.md §5）。
+        return _make(col, "inc_city_only", "flag", "income",
+                     f"所得 政令市フラグ（{r}圏／納税義務者の過半が政令市由来＝市全体の平均）",
+                     None, None, radiusM=RADIUS_M[r], year=2025, rankable=False)
 
     # --- 将来推計人口（population_forecast） ---
     m = re.fullmatch(rf"pop_pred_2024_(\d{{4}})_({RT})", col)

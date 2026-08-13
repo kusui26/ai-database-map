@@ -1,7 +1,7 @@
 """P1 — メトリクス・カタログ生成。
 
-`data/derived/station_dataset.csv`（499列）のヘッダを読み、値列（488）を CatalogEntry へ、
-識別列（11）を駅属性へ振り分けて `src/shared/catalog/catalog.json` を出力する。
+`data/derived/station_dataset.csv`（668列）のヘッダを読み、値列（658）を CatalogEntry へ、
+識別列（10）を駅属性へ振り分けて `src/shared/catalog/catalog.json` を出力する。
 あわせて目視レビュー用の日本語ラベル一覧 `docs/catalog_labels.md` を出力する。
 
     python3 pipeline/build_catalog.py

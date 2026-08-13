@@ -3,7 +3,7 @@
  *
  * クリック（P5 の詳細パネル）と会話（Step2 のチャット）は、この同一の Panel[] を消費する
  * （.claude/CLAUDE.md §2「API こそがプロダクト」）。UI にメトリクスの意味づけを埋めない。
- * 全 5 タブ（乗降・人口・地価・バス・事業所）の Panel を選択半径で組み立てる。
+ * 各カテゴリ（乗降・人口・所得・地価・バス・事業所・従業者）の Panel を選択半径で組み立てる。
  */
 
 import { type MetricSeries, type StationDetail, type StationRow } from '@/shared/api'
@@ -17,7 +17,7 @@ import {
   type TrendChartPanel,
 } from '@/shared/protocol'
 import { CATEGORY_COLORS, RADII_M, radiusLabel } from '@/shared/constants'
-import { formatWithUnit } from '@/shared/format'
+import { formatNumber, formatWithUnit } from '@/shared/format'
 import { baseMetricLabel } from '@/domain/metrics'
 
 /** バス「現行」の代表年（P11 2022年度＋P36 2023年度 → 2023）。2点折れ線の現在側の x。 */
@@ -404,6 +404,130 @@ export function employeePanels(
   }
 
   return panels
+}
+
+/**
+ * 所得タブ：1 人当たり課税対象所得の推移 ＋ 半径別 ＋ 総額と増減率（docs/income.md §6）。
+ *
+ * 政令市（`inc_city_only`）は**点ごとのバッジではなくタブの注記**にする。所得は市区町村単位でしか
+ * 公表されないので 500m〜1km ではどの駅も自区市町村の平均になり（docs/income.md §11 の限界 #1）、
+ * 「政令市かどうか」は点の属性というより駅の置かれた条件だから。
+ */
+export function incomePanels(
+  detail: StationDetail,
+  radiusM: number,
+  size: PanelSize = 'full',
+): Panel[] {
+  const panels: Panel[] = []
+  const radius = radiusLabel(radiusM)
+
+  const perCapita = seriesAt(detail, 'inc_pc', radiusM)
+  const total = seriesAt(detail, 'inc_total', radiusM)
+  // 総額の notice が政令市フラグ（カタログ駆動）。1 点でも立てばこの半径は市平均が主。
+  const cityOnly = total?.points.some((point) => point.flagged) === true
+  const lowDenominator = perCapita?.points.some((point) => point.flagged) === true
+
+  if (perCapita !== undefined && perCapita.points.some((point) => point.value !== null)) {
+    panels.push({
+      type: 'trendChart',
+      title: `1人当たり課税対象所得の推移（${radius}圏）`,
+      unit: perCapita.unit,
+      format: perCapita.format,
+      category: 'income',
+      flags: lowDenominator
+        ? [{ label: '納税義務者が少なく1人当たりは参考値', level: 'warn' }]
+        : [],
+      series: [
+        {
+          label: baseMetricLabel('inc_pc'),
+          points: toXY(perCapita),
+          color: CATEGORY_COLORS.income,
+        },
+      ],
+      stats: incomeStats(perCapita),
+      size,
+    })
+  }
+
+  // 半径別（最新年度）：都心に近いほど高いか／周辺と比べてどうかを空間で見る。
+  const perCapitaBars: Bar[] = RADII_M.flatMap((candidate) => {
+    const point = seriesAt(detail, 'inc_pc', candidate)?.points.at(-1)
+    if (point === undefined || point.value === null) return []
+    return [
+      {
+        label: radiusLabel(candidate),
+        value: point.value,
+        formatted: point.formatted,
+        flagged: point.flagged,
+        emphasis: candidate === radiusM,
+      },
+    ]
+  })
+  if (perCapitaBars.length > 0) {
+    panels.push({
+      type: 'barChart',
+      title: '1人当たり課税対象所得（半径別・最新年度）',
+      unit: perCapita?.unit ?? '万円/人',
+      format: perCapita?.format ?? 'decimal1',
+      category: 'income',
+      bars: perCapitaBars,
+      flags: [],
+      note: '半径が大きいほど周辺の市区町村が混ざり、水準はならされる（空間比較の補助）。',
+      size,
+    })
+  }
+
+  const rows: PanelStat[] = []
+  const latestTotal = total?.points.at(-1)
+  if (latestTotal !== undefined) {
+    rows.push({
+      label: `課税対象所得 総額（${latestTotal.year ?? '?'}年度）`,
+      value: formatWithUnit(latestTotal.value, total?.format ?? 'int', total?.unit ?? '百万円'),
+      flagged: false,
+    })
+  }
+  rows.push(...growthRows(seriesAt(detail, 'inc_gr', radiusM)))
+  if (rows.length > 0) {
+    panels.push({
+      type: 'statTable',
+      title: `所得の規模と増減率（${radius}圏）`,
+      rows,
+      note: incomeNote(cityOnly),
+      size,
+    })
+  }
+
+  return panels
+}
+
+/** 全国の市区町村の 1 人当たり課税対象所得 中央値（2025年度・docs/income.md §1）。 */
+const INCOME_NATIONWIDE_MEDIAN = 309.9
+
+/** 1 人当たり所得の要約（最新年度の水準と、全国の市区町村中央値との比）。 */
+function incomeStats(series: MetricSeries): PanelStat[] {
+  const latest = series.points.at(-1)
+  if (latest === undefined || latest.value === null) return []
+  const ratio = (latest.value / INCOME_NATIONWIDE_MEDIAN - 1) * 100
+  return [
+    { label: `${latest.year ?? '?'}年度`, value: latest.formatted, flagged: latest.flagged },
+    {
+      label: '全国の市区町村中央値比',
+      value: formatNumber(ratio, 'percent1', { signed: true }),
+      flagged: latest.flagged,
+    },
+  ]
+}
+
+/** 所得タブの注記（読み違えやすい 2 点＋政令市のときだけ粒度）。 */
+function incomeNote(cityOnly: boolean): string {
+  const notes = [
+    '「所得」は給与収入ではなく給与所得控除後の額です（N年度の課税＝N−1年の所得）。',
+    '市区町村の値を半径内の15〜64歳人口で按分しています。',
+  ]
+  if (cityOnly) {
+    notes.push('この半径の納税義務者は過半が政令指定都市に属するため、値は市全体の平均が主です。')
+  }
+  return notes.join('')
 }
 
 /** 乗降タブ 1 枚分の Panel[]（駅カード → 推移チャート）。UI/AI が同一配列を描画する。 */

@@ -1,6 +1,6 @@
 # メトリクス・カタログ ラベル一覧（自動生成）
 
-`pipeline/build_catalog.py` が `station_dataset.csv`（596列）から生成。 値列 586 エントリ ＋ 駅属性 10。
+`pipeline/build_catalog.py` が `station_dataset.csv`（668列）から生成。 値列 658 エントリ ＋ 駅属性 10。
 
 凡例: `key` — ラベル 〔単位・format・rankable・⚠→信頼性フラグ〕
 
@@ -160,6 +160,81 @@
 - `pop_lowbase_2020_5km` — 人口 低基準フラグ（2020年・5km圏／基準人口<50人） 〔—・—・not-rankable〕
 - `pop_lowbase_2020_10km` — 人口 低基準フラグ（2020年・10km圏／基準人口<50人） 〔—・—・not-rankable〕
 - `pop_lowbase_2020_20km` — 人口 低基準フラグ（2020年・20km圏／基準人口<50人） 〔—・—・not-rankable〕
+
+## 所得（income）— 72件
+
+- `inc_total_2015_500m` — 課税対象所得 総額（2015年度・500m圏） 〔百万円・int・rankable〕
+- `inc_pc_2015_500m` — 1人当たり課税対象所得（2015年度・500m圏） 〔万円/人・decimal1・rankable・⚠→inc_lown_2015_500m〕
+- `inc_lown_2015_500m` — 所得 低分母フラグ（2015年度・500m圏／納税義務者<1,000人） 〔—・—・not-rankable〕
+- `inc_total_2015_1km` — 課税対象所得 総額（2015年度・1km圏） 〔百万円・int・rankable〕
+- `inc_pc_2015_1km` — 1人当たり課税対象所得（2015年度・1km圏） 〔万円/人・decimal1・rankable・⚠→inc_lown_2015_1km〕
+- `inc_lown_2015_1km` — 所得 低分母フラグ（2015年度・1km圏／納税義務者<1,000人） 〔—・—・not-rankable〕
+- `inc_total_2015_2km` — 課税対象所得 総額（2015年度・2km圏） 〔百万円・int・rankable〕
+- `inc_pc_2015_2km` — 1人当たり課税対象所得（2015年度・2km圏） 〔万円/人・decimal1・rankable・⚠→inc_lown_2015_2km〕
+- `inc_lown_2015_2km` — 所得 低分母フラグ（2015年度・2km圏／納税義務者<1,000人） 〔—・—・not-rankable〕
+- `inc_total_2015_5km` — 課税対象所得 総額（2015年度・5km圏） 〔百万円・int・rankable〕
+- `inc_pc_2015_5km` — 1人当たり課税対象所得（2015年度・5km圏） 〔万円/人・decimal1・rankable・⚠→inc_lown_2015_5km〕
+- `inc_lown_2015_5km` — 所得 低分母フラグ（2015年度・5km圏／納税義務者<1,000人） 〔—・—・not-rankable〕
+- `inc_total_2015_10km` — 課税対象所得 総額（2015年度・10km圏） 〔百万円・int・rankable〕
+- `inc_pc_2015_10km` — 1人当たり課税対象所得（2015年度・10km圏） 〔万円/人・decimal1・rankable・⚠→inc_lown_2015_10km〕
+- `inc_lown_2015_10km` — 所得 低分母フラグ（2015年度・10km圏／納税義務者<1,000人） 〔—・—・not-rankable〕
+- `inc_total_2015_20km` — 課税対象所得 総額（2015年度・20km圏） 〔百万円・int・rankable〕
+- `inc_pc_2015_20km` — 1人当たり課税対象所得（2015年度・20km圏） 〔万円/人・decimal1・rankable・⚠→inc_lown_2015_20km〕
+- `inc_lown_2015_20km` — 所得 低分母フラグ（2015年度・20km圏／納税義務者<1,000人） 〔—・—・not-rankable〕
+- `inc_total_2020_500m` — 課税対象所得 総額（2020年度・500m圏） 〔百万円・int・rankable〕
+- `inc_pc_2020_500m` — 1人当たり課税対象所得（2020年度・500m圏） 〔万円/人・decimal1・rankable・⚠→inc_lown_2020_500m〕
+- `inc_lown_2020_500m` — 所得 低分母フラグ（2020年度・500m圏／納税義務者<1,000人） 〔—・—・not-rankable〕
+- `inc_total_2020_1km` — 課税対象所得 総額（2020年度・1km圏） 〔百万円・int・rankable〕
+- `inc_pc_2020_1km` — 1人当たり課税対象所得（2020年度・1km圏） 〔万円/人・decimal1・rankable・⚠→inc_lown_2020_1km〕
+- `inc_lown_2020_1km` — 所得 低分母フラグ（2020年度・1km圏／納税義務者<1,000人） 〔—・—・not-rankable〕
+- `inc_total_2020_2km` — 課税対象所得 総額（2020年度・2km圏） 〔百万円・int・rankable〕
+- `inc_pc_2020_2km` — 1人当たり課税対象所得（2020年度・2km圏） 〔万円/人・decimal1・rankable・⚠→inc_lown_2020_2km〕
+- `inc_lown_2020_2km` — 所得 低分母フラグ（2020年度・2km圏／納税義務者<1,000人） 〔—・—・not-rankable〕
+- `inc_total_2020_5km` — 課税対象所得 総額（2020年度・5km圏） 〔百万円・int・rankable〕
+- `inc_pc_2020_5km` — 1人当たり課税対象所得（2020年度・5km圏） 〔万円/人・decimal1・rankable・⚠→inc_lown_2020_5km〕
+- `inc_lown_2020_5km` — 所得 低分母フラグ（2020年度・5km圏／納税義務者<1,000人） 〔—・—・not-rankable〕
+- `inc_total_2020_10km` — 課税対象所得 総額（2020年度・10km圏） 〔百万円・int・rankable〕
+- `inc_pc_2020_10km` — 1人当たり課税対象所得（2020年度・10km圏） 〔万円/人・decimal1・rankable・⚠→inc_lown_2020_10km〕
+- `inc_lown_2020_10km` — 所得 低分母フラグ（2020年度・10km圏／納税義務者<1,000人） 〔—・—・not-rankable〕
+- `inc_total_2020_20km` — 課税対象所得 総額（2020年度・20km圏） 〔百万円・int・rankable〕
+- `inc_pc_2020_20km` — 1人当たり課税対象所得（2020年度・20km圏） 〔万円/人・decimal1・rankable・⚠→inc_lown_2020_20km〕
+- `inc_lown_2020_20km` — 所得 低分母フラグ（2020年度・20km圏／納税義務者<1,000人） 〔—・—・not-rankable〕
+- `inc_total_2025_500m` — 課税対象所得 総額（2025年度・500m圏） 〔百万円・int・rankable〕
+- `inc_pc_2025_500m` — 1人当たり課税対象所得（2025年度・500m圏） 〔万円/人・decimal1・rankable・⚠→inc_lown_2025_500m〕
+- `inc_lown_2025_500m` — 所得 低分母フラグ（2025年度・500m圏／納税義務者<1,000人） 〔—・—・not-rankable〕
+- `inc_total_2025_1km` — 課税対象所得 総額（2025年度・1km圏） 〔百万円・int・rankable〕
+- `inc_pc_2025_1km` — 1人当たり課税対象所得（2025年度・1km圏） 〔万円/人・decimal1・rankable・⚠→inc_lown_2025_1km〕
+- `inc_lown_2025_1km` — 所得 低分母フラグ（2025年度・1km圏／納税義務者<1,000人） 〔—・—・not-rankable〕
+- `inc_total_2025_2km` — 課税対象所得 総額（2025年度・2km圏） 〔百万円・int・rankable〕
+- `inc_pc_2025_2km` — 1人当たり課税対象所得（2025年度・2km圏） 〔万円/人・decimal1・rankable・⚠→inc_lown_2025_2km〕
+- `inc_lown_2025_2km` — 所得 低分母フラグ（2025年度・2km圏／納税義務者<1,000人） 〔—・—・not-rankable〕
+- `inc_total_2025_5km` — 課税対象所得 総額（2025年度・5km圏） 〔百万円・int・rankable〕
+- `inc_pc_2025_5km` — 1人当たり課税対象所得（2025年度・5km圏） 〔万円/人・decimal1・rankable・⚠→inc_lown_2025_5km〕
+- `inc_lown_2025_5km` — 所得 低分母フラグ（2025年度・5km圏／納税義務者<1,000人） 〔—・—・not-rankable〕
+- `inc_total_2025_10km` — 課税対象所得 総額（2025年度・10km圏） 〔百万円・int・rankable〕
+- `inc_pc_2025_10km` — 1人当たり課税対象所得（2025年度・10km圏） 〔万円/人・decimal1・rankable・⚠→inc_lown_2025_10km〕
+- `inc_lown_2025_10km` — 所得 低分母フラグ（2025年度・10km圏／納税義務者<1,000人） 〔—・—・not-rankable〕
+- `inc_total_2025_20km` — 課税対象所得 総額（2025年度・20km圏） 〔百万円・int・rankable〕
+- `inc_pc_2025_20km` — 1人当たり課税対象所得（2025年度・20km圏） 〔万円/人・decimal1・rankable・⚠→inc_lown_2025_20km〕
+- `inc_lown_2025_20km` — 所得 低分母フラグ（2025年度・20km圏／納税義務者<1,000人） 〔—・—・not-rankable〕
+- `inc_gr_2025_2020_500m` — 1人当たり課税対象所得 増減率（2020→2025年度・500m圏） 〔%・percent1・rankable・⚠→inc_lown_2020_500m〕
+- `inc_gr_2025_2020_1km` — 1人当たり課税対象所得 増減率（2020→2025年度・1km圏） 〔%・percent1・rankable・⚠→inc_lown_2020_1km〕
+- `inc_gr_2025_2020_2km` — 1人当たり課税対象所得 増減率（2020→2025年度・2km圏） 〔%・percent1・rankable・⚠→inc_lown_2020_2km〕
+- `inc_gr_2025_2020_5km` — 1人当たり課税対象所得 増減率（2020→2025年度・5km圏） 〔%・percent1・rankable・⚠→inc_lown_2020_5km〕
+- `inc_gr_2025_2020_10km` — 1人当たり課税対象所得 増減率（2020→2025年度・10km圏） 〔%・percent1・rankable・⚠→inc_lown_2020_10km〕
+- `inc_gr_2025_2020_20km` — 1人当たり課税対象所得 増減率（2020→2025年度・20km圏） 〔%・percent1・rankable・⚠→inc_lown_2020_20km〕
+- `inc_gr_2025_2015_500m` — 1人当たり課税対象所得 増減率（2015→2025年度・500m圏） 〔%・percent1・rankable・⚠→inc_lown_2015_500m〕
+- `inc_gr_2025_2015_1km` — 1人当たり課税対象所得 増減率（2015→2025年度・1km圏） 〔%・percent1・rankable・⚠→inc_lown_2015_1km〕
+- `inc_gr_2025_2015_2km` — 1人当たり課税対象所得 増減率（2015→2025年度・2km圏） 〔%・percent1・rankable・⚠→inc_lown_2015_2km〕
+- `inc_gr_2025_2015_5km` — 1人当たり課税対象所得 増減率（2015→2025年度・5km圏） 〔%・percent1・rankable・⚠→inc_lown_2015_5km〕
+- `inc_gr_2025_2015_10km` — 1人当たり課税対象所得 増減率（2015→2025年度・10km圏） 〔%・percent1・rankable・⚠→inc_lown_2015_10km〕
+- `inc_gr_2025_2015_20km` — 1人当たり課税対象所得 増減率（2015→2025年度・20km圏） 〔%・percent1・rankable・⚠→inc_lown_2015_20km〕
+- `inc_city_only_500m` — 所得 政令市フラグ（500m圏／納税義務者の過半が政令市由来＝市全体の平均） 〔—・—・not-rankable〕
+- `inc_city_only_1km` — 所得 政令市フラグ（1km圏／納税義務者の過半が政令市由来＝市全体の平均） 〔—・—・not-rankable〕
+- `inc_city_only_2km` — 所得 政令市フラグ（2km圏／納税義務者の過半が政令市由来＝市全体の平均） 〔—・—・not-rankable〕
+- `inc_city_only_5km` — 所得 政令市フラグ（5km圏／納税義務者の過半が政令市由来＝市全体の平均） 〔—・—・not-rankable〕
+- `inc_city_only_10km` — 所得 政令市フラグ（10km圏／納税義務者の過半が政令市由来＝市全体の平均） 〔—・—・not-rankable〕
+- `inc_city_only_20km` — 所得 政令市フラグ（20km圏／納税義務者の過半が政令市由来＝市全体の平均） 〔—・—・not-rankable〕
 
 ## 将来推計人口（population_forecast）— 180件
 

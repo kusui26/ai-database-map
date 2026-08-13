@@ -22,19 +22,20 @@ CAT_PATH = ROOT / "src" / "shared" / "catalog" / "catalog.json"
 EXPECTED_CATEGORY_COUNTS = {
     "passenger": 19,  # pax 14 + rate 2 + flag 3（flag_yoy/flag_covid/flag_covid_lown）
     "population": 132,  # 実績42 + 増減率54 + lowbase36
+    "income": 72,  # inc_pc18 + inc_total18 + inc_gr12 + inc_lown18 + inc_city_only6
     "population_forecast": 180,  # 推計114 + 推計増減率60 + 誤差6
     "land_price": 153,  # lp_med(年次20×5=100) + lp_n5 + lp_lown5 + lp_gr20 + lp_gr_lown20 + lp_near3
     "bus": 36,
     "establishment": 36,  # estab_n18 + estab_gr12 + estab_gr_lown6
     "employee": 30,  # emp_n18 + emp_gr12
 }
-EXPECTED_ENTRY_TOTAL = 586
-EXPECTED_COLUMN_TOTAL = 596
+EXPECTED_ENTRY_TOTAL = 658
+EXPECTED_COLUMN_TOTAL = 668
 IDENTITY = {
     "grp", "station_name", "label", "search_label", "prefecture",
     "lon", "lat", "n_op", "operators", "level_complete",
 }
-ALLOWED_UNITS = {"人", "人/日", "円/㎡", "%", "箇所", "事業所", "m", None}
+ALLOWED_UNITS = {"人", "人/日", "円/㎡", "%", "箇所", "事業所", "m", "万円/人", "百万円", None}
 ALLOWED_FORMATS = {"int", "decimal1", "percent1", "ratio1", "yen", None}
 ALLOWED_KINDS = {"level", "growth", "flag", "error", "ratio"}
 ALLOWED_CATEGORIES = set(EXPECTED_CATEGORY_COUNTS)

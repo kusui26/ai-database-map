@@ -42,8 +42,8 @@ describe('RADII_M', () => {
 })
 
 describe('CATEGORIES', () => {
-  it('7 カテゴリを重複なく保持する', () => {
-    expect(CATEGORIES).toHaveLength(7)
+  it('8 カテゴリを重複なく保持する', () => {
+    expect(CATEGORIES).toHaveLength(8)
     expect(new Set(CATEGORIES).size).toBe(CATEGORIES.length)
   })
 

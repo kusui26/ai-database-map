@@ -13,6 +13,7 @@ import { CATEGORIES, type Category } from './constants'
 export const categorySchema = z.enum([
   'passenger',
   'population',
+  'income',
   'population_forecast',
   'land_price',
   'bus',
@@ -21,7 +22,9 @@ export const categorySchema = z.enum([
 ])
 
 export const kindSchema = z.enum(['level', 'growth', 'flag', 'error', 'ratio'])
-export const unitSchema = z.enum(['人', '人/日', '円/㎡', '%', '箇所', '事業所', 'm']).nullable()
+export const unitSchema = z
+  .enum(['人', '人/日', '円/㎡', '%', '箇所', '事業所', 'm', '万円/人', '百万円'])
+  .nullable()
 export const formatSchema = z.enum(['int', 'decimal1', 'percent1', 'ratio1', 'yen']).nullable()
 
 export const catalogEntrySchema = z.object({

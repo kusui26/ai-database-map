@@ -12,9 +12,9 @@ import {
 import { CATEGORIES, RADII_M } from '@/shared/constants'
 
 describe('catalog（Zod ロード）', () => {
-  it('586 エントリ・10 属性・カウント整合', () => {
-    expect(catalog.entryCount).toBe(586)
-    expect(entries.length).toBe(586)
+  it('658 エントリ・10 属性・カウント整合', () => {
+    expect(catalog.entryCount).toBe(658)
+    expect(entries.length).toBe(658)
     expect(catalog.stationAttributes.length).toBe(10)
     expect(catalog.entryCount + catalog.stationAttributeCount).toBe(catalog.columnCount)
   })
@@ -34,9 +34,9 @@ describe('catalog（Zod ロード）', () => {
     expect(() => requireEntry('___missing___')).toThrow()
   })
 
-  it('カテゴリ別エントリ数の合計が 586', () => {
+  it('カテゴリ別エントリ数の合計が 658', () => {
     const total = CATEGORIES.reduce((sum, cat) => sum + entriesForCategory(cat).length, 0)
-    expect(total).toBe(586)
+    expect(total).toBe(658)
   })
 
   it('rankable は flag / hidden_ratio を含まない', () => {
@@ -86,4 +86,31 @@ describe('catalog（Zod ロード）', () => {
     expect(others.length).toBeGreaterThan(70)
     for (const e of others) expect(e.noticeFlagKey).toBe(e.reliabilityFlagKey)
   })
+
+  it('所得：増減率は「分母年」の低分母フラグを見る（docs/income.md §5 の実測）', () => {
+    // 率の分母は旧年の 1 人当たりなので、参照するのも旧年。最新年に固定すると
+    // 「2015年の分母が 1,000 人未満なのに除外されない」駅が 1km で 90・500m で 203 残る。
+    for (const entry of entries.filter((e) => e.baseMetric === 'inc_gr')) {
+      expect(entry.yearBase).not.toBeNull()
+      expect(entry.reliabilityFlagKey).toBe(`inc_lown_${entry.yearBase}_${radiusToken(entry.key)}`)
+    }
+  })
+
+  it('所得：総額は除外せず政令市バッジだけを持つ（合計は分母の大小で壊れない）', () => {
+    // 1 人当たり（割り算）は低分母で暴れるので除外。総額（合計）は壊れないので除外しない。
+    // 政令市は所得が市単位でしか公表されず粒度が粗いだけなので、除外ではなくバッジ。
+    for (const entry of entries.filter((e) => e.baseMetric === 'inc_total')) {
+      expect(entry.reliabilityFlagKey).toBeNull()
+      expect(entry.noticeFlagKey).toBe(`inc_city_only_${radiusToken(entry.key)}`)
+    }
+    for (const entry of entries.filter((e) => e.baseMetric === 'inc_pc')) {
+      expect(entry.reliabilityFlagKey).toBe(`inc_lown_${entry.year}_${radiusToken(entry.key)}`)
+      expect(entry.noticeFlagKey).toBe(entry.reliabilityFlagKey)
+    }
+  })
 })
+
+/** 列名末尾の半径トークン（`inc_pc_2025_1km` → `1km`）。 */
+function radiusToken(key: string): string {
+  return key.slice(key.lastIndexOf('_') + 1)
+}

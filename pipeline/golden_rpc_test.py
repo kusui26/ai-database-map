@@ -100,6 +100,19 @@ def main() -> int:
               "station_bundle(東京) の pop_2020_5km = CSV値",
               f"db={bundle.get('pop_2020_5km')} csv={tokyo['pop_2020_5km']}")
 
+        # 9b) 所得（260812 追加）：新カテゴリが RPC まで通ることを 1 本で押さえる。
+        #     1 人当たりは低分母フラグ（inc_lown_2025_1km）を同梱するのが正（docs/income.md §5.1）。
+        check(close(bundle.get("inc_pc_2025_5km"), tokyo["inc_pc_2025_5km"]),
+              "station_bundle(東京) の inc_pc_2025_5km = CSV値",
+              f"db={bundle.get('inc_pc_2025_5km')} csv={tokyo['inc_pc_2025_5km']}")
+        expinc = df.loc[df["inc_pc_2025_1km"].idxmax()]
+        res = call("select * from public.rank_by_column(%s,%s,%s,%s)", ("inc_pc_2025_1km", None, "desc", 1))
+        check(res and close(res[0]["value"], expinc["inc_pc_2025_1km"]),
+              "rank inc_pc_2025_1km desc Top1 = CSV argmax",
+              f"db={res[0]['value'] if res else None} csv={expinc['inc_pc_2025_1km']}")
+        check(res and res[0]["flag_value"] is not None, "rank(inc_pc) が低分母フラグ値を同梱",
+              f"flag_value={res[0]['flag_value'] if res else None}")
+
         # 10) 散布（千葉県）の値が CSV と一致（260804：values_for_columns → scatter_points）
         res = call("select * from public.scatter_points(%s,%s,%s,%s,%s)",
                    ("pop_2020_1km", "pax_2024", None, None, ["千葉県"]))

@@ -13,6 +13,7 @@ import {
   busPanels,
   employeePanels,
   establishmentPanels,
+  incomePanels,
   landPricePanels,
   paxTrendPanel,
   populationPanels,
@@ -46,6 +47,8 @@ function categoryPanels(effect: StationDetailEffect): Panel[] {
     case 'population':
     case 'population_forecast':
       return populationPanels(detail, radiusM, 'compact')
+    case 'income':
+      return incomePanels(detail, radiusM, 'compact')
     case 'land_price':
       return landPricePanels(detail, radiusM, 'compact')
     case 'bus':

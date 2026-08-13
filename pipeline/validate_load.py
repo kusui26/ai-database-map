@@ -1,11 +1,11 @@
 """P2b — 投入の全数検証（独立照合・監査レポート生成）。
 
 CSV を独立に読み、DB（Supabase）の投入結果と照合する：
-  (a) station_values 件数 = CSV 非NaN セル数（487 数値列）
-  (b) 列ごとの件数一致（487列）
+  (a) station_values 件数 = CSV 非NaN セル数（数値列）
+  (b) 列ごとの件数一致（列数は CSV から導出）
   (c) 無作為 300 セルの値一致
   (d) 全国計（sum）一致：代表列
-  (e) DB サイズ実測（< 400MB ゲート）
+  (e) DB サイズ実測（無料枠 500MB に対する残余ゲート）
   ＋ stations/metric_columns 件数・lp_near_use・pax_latest の健全性
 
     python3 pipeline/validate_load.py   # 全 PASS で exit 0、docs/p2b_load_report.md を出力
@@ -28,6 +28,14 @@ ROOT = Path(__file__).resolve().parents[1]
 REPORT = ROOT / "docs" / "p2b_load_report.md"
 SAMPLE_N = 300
 SEED = 42
+#: Supabase 無料枠の DB 容量（MB）。ゲートはこの 95% に置く。
+FREE_TIER_LIMIT_MB = 500
+#: 指標ではない駅属性（`docs/dataset.md` §2.1）。値列数はここから導出するので、
+#: データセットに列が増えても検証値を書き換えなくてよい（かつて 488 で固定していて陳腐化した）。
+IDENTITY_COLUMNS = {
+    "grp", "station_name", "label", "search_label", "prefecture",
+    "lon", "lat", "n_op", "operators", "level_complete",
+}
 SPOT_COLUMNS = [
     "pax_2024", "pop_2020_1km", "pop_gr_2020_2015_2km",
     "lp_med_1km", "bus_n_1km", "estab_n_2021_1km", "emp_n_2021_1km",
@@ -52,7 +60,9 @@ def main() -> int:
         # metric_columns / stations 件数
         cur.execute("select count(*) from public.metric_columns")
         db_metrics = cur.fetchone()[0]
-        check(db_metrics == 488, "metric_columns 件数 = 488", f"db={db_metrics}")
+        want_metrics = len([c for c in df.columns if c not in IDENTITY_COLUMNS])
+        check(db_metrics == want_metrics, f"metric_columns 件数 = CSV 値列数 = {want_metrics}",
+              f"db={db_metrics}")
 
         cur.execute("select count(*) from public.stations")
         db_stations = cur.fetchone()[0]
@@ -64,7 +74,7 @@ def main() -> int:
         cur.execute("select count(*) from public.station_values")
         db_values = cur.fetchone()[0]
         facts["station_values"] = f"{db_values:,}"
-        check(db_values == csv_cells, "(a) station_values 件数 = CSV 非NaN セル数（487列）",
+        check(db_values == csv_cells, f"(a) station_values 件数 = CSV 非NaN セル数（{len(numeric_keys)}列）",
               f"db={db_values:,} csv={csv_cells:,}")
 
         # (b) 列ごとの件数一致
@@ -144,7 +154,13 @@ def main() -> int:
         db_mb = db_bytes / 1024 / 1024
         facts["db_size"] = f"{db_mb:.0f} MB"
         facts["tables_size"] = f"{tables_bytes / 1024 / 1024:.0f} MB"
-        check(db_mb < 400, "(e) DB サイズ < 400MB", f"{db_mb:.0f} MB")
+        # Supabase 無料枠の DB 容量は 500MB。ゲートはその 95%（＝475MB）に置く。
+        # 400MB だった当初のしきい値は「当時の実測 348MB ＋ 余裕」で、仕様ではなく目安。
+        # 所得 72 列（+666,232 行）を足して 435MB になり、残余は約 65MB。
+        # 削減余地：フラグ列 100 本のうち **値=0 の 764,678 行（全体の 13.4%・約 55MB）** は
+        # 「無ければ 0」の規約に変えれば落とせる（RPC 側の coalesce が要るので別 PR で判断する）。
+        check(db_mb < FREE_TIER_LIMIT_MB * 0.95, f"(e) DB サイズ < {FREE_TIER_LIMIT_MB * 0.95:.0f}MB"
+              f"（無料枠 {FREE_TIER_LIMIT_MB}MB の 95%）", f"{db_mb:.0f} MB")
 
     passed = sum(1 for ok, _, _ in checks if ok)
     all_ok = passed == len(checks)

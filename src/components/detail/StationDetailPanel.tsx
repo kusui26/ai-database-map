@@ -3,7 +3,7 @@
 /**
  * 駅詳細パネル（骨格＋乗降タブ）。デスクトップ＝右ドロワー／モバイル＝vaul ボトムシート。
  * ?grp 選択で開き、閉じると ?grp をクリア。カード＋タブは Protocol の Panel を PanelStack で描画する。
- * タブは 5 カテゴリ（乗降・人口・地価・バス・事業所）を実装。半径依存タブは集計半径セレクタを表示。
+ * タブは 7 カテゴリ（乗降・人口・所得・地価・バス・事業所・従業者）。半径依存タブは集計半径セレクタを表示。
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -21,6 +21,7 @@ import {
   busPanels,
   employeePanels,
   establishmentPanels,
+  incomePanels,
   landPricePanels,
   paxTrendPanel,
   populationPanels,
@@ -34,23 +35,30 @@ import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { PanelRenderer, PanelStack } from '@/components/panels/PanelRenderer'
 import { cn } from '@/lib/utils'
 
-/** 詳細タブ（表示順）。全 6 カテゴリを実装（従業者は事業所から独立・P5e）。 */
-const DETAIL_TABS: readonly Category[] = [
+/**
+ * 詳細タブ（表示順）。所得は「そこに住む人の稼ぎ」なので人口の直後に置く（`CATEGORY_ORDER` と同順）。
+ * ⚠ 7 タブでタブ帯は 460px になり、パネル幅 420px を超えて**横スライドが要る**
+ * （`tests/panel-layout.test.ts`・`docs/260805_research_add_dataset_economy.md` §16.3 で了承済み）。
+ */
+export const DETAIL_TABS: readonly Category[] = [
   'passenger',
   'population',
+  'income',
   'land_price',
   'bus',
   'establishment',
   'employee',
 ]
 
-/** タブごとの本文パネル（選択半径で再計算）。全 5 カテゴリを実装。 */
+/** タブごとの本文パネル（選択半径で再計算）。パネルの組み立てはドメイン層が持つ。 */
 function tabPanels(detail: StationDetail, tab: Category, radiusM: number): Panel[] {
   switch (tab) {
     case 'passenger':
       return [paxTrendPanel(detail)]
     case 'population':
       return populationPanels(detail, radiusM)
+    case 'income':
+      return incomePanels(detail, radiusM)
     case 'land_price':
       return landPricePanels(detail, radiusM)
     case 'bus':

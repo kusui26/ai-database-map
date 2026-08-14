@@ -6,6 +6,7 @@ import {
   employeePanels,
   establishmentPanels,
   formatPaxLatest,
+  incomePanels,
   landPricePanels,
   passengerPanels,
   paxTrendPanel,
@@ -312,13 +313,137 @@ describe('establishmentPanels / employeePanels（P5e で分離）', () => {
   })
 })
 
+
+// --- 所得（260813・PR5 で駅詳細タブに載せた） ------------------------------
+// 値は `data/derived/station_dataset.csv` の実測。テストが仕様書としても読めるようにする。
+
+/** 東京（1km 圏に政令市なし・納税義務者は十分）。500m だけは分母が小さくフラグが立つ。 */
+const incomeTokyo = buildStationDetail(
+  station,
+  new Map<string, number>([
+    ['inc_pc_2015_1km', 614.9],
+    ['inc_pc_2020_1km', 717.2],
+    ['inc_pc_2025_1km', 921.3],
+    ['inc_total_2025_1km', 28374],
+    ['inc_gr_2025_2020_1km', 28.5],
+    ['inc_gr_2025_2015_1km', 49.8],
+    ['inc_lown_2015_1km', 0],
+    ['inc_lown_2020_1km', 0],
+    ['inc_lown_2025_1km', 0],
+    ['inc_city_only_1km', 0],
+    ['inc_pc_2025_500m', 1000.3],
+    ['inc_lown_2025_500m', 1],
+    ['inc_city_only_500m', 0],
+    ['inc_pc_2025_2km', 963.9],
+    ['inc_lown_2025_2km', 0],
+    ['inc_city_only_2km', 0],
+  ]),
+)
+
+describe('incomePanels（所得タブ）', () => {
+  it('推移チャート → 半径別バー → 規模と増減率の順で返す（UI/AI 同一配列）', () => {
+    expect(incomePanels(incomeTokyo, 1000).map((panel) => panel.type)).toEqual([
+      'trendChart',
+      'barChart',
+      'statTable',
+    ])
+  })
+
+  it('推移：3 年度の折れ線＋「最新年度」「全国中央値比」の KPI', () => {
+    const chart = incomePanels(incomeTokyo, 1000)[0]
+    if (chart?.type !== 'trendChart') throw new Error('trendChart ではない')
+    expect(chart.title).toBe('1人当たり課税対象所得の推移（1km圏）')
+    expect(chart.unit).toBe('万円/人')
+    expect(chart.category).toBe('income')
+    expect(chart.series[0]?.color).toBe(CATEGORY_COLORS.income)
+    expect(chart.series[0]?.points).toEqual([
+      { x: 2015, y: 614.9 },
+      { x: 2020, y: 717.2 },
+      { x: 2025, y: 921.3 },
+    ])
+    // 全国の市区町村中央値 309.9 万円との比（921.3 / 309.9 − 1 = +197.3%）
+    expect(chart.stats).toEqual([
+      { label: '2025年度', value: '921.3', flagged: false },
+      { label: '全国の市区町村中央値比', value: '+197.3%', flagged: false },
+    ])
+    expect(chart.flags).toEqual([]) // 低分母でないので警告なし
+  })
+
+  it('半径別バー：選択半径を強調し、低分母の半径には ⚠ が付く', () => {
+    const bar = incomePanels(incomeTokyo, 1000)[1]
+    if (bar?.type !== 'barChart') throw new Error('barChart ではない')
+    expect(bar.bars).toEqual([
+      { label: '500m', value: 1000.3, formatted: '1,000.3', flagged: true, emphasis: false },
+      { label: '1km', value: 921.3, formatted: '921.3', flagged: false, emphasis: true },
+      { label: '2km', value: 963.9, formatted: '963.9', flagged: false, emphasis: false },
+    ])
+  })
+
+  it('規模と増減率：総額（百万円）＋ 5年/10年の増減率', () => {
+    const table = incomePanels(incomeTokyo, 1000)[2]
+    if (table?.type !== 'statTable') throw new Error('statTable ではない')
+    expect(table.title).toBe('所得の規模と増減率（1km圏）')
+    expect(table.rows).toEqual([
+      { label: '課税対象所得 総額（2025年度）', value: '28,374 百万円', flagged: false },
+      { label: '2020→2025', value: '+28.5%', flagged: false },
+      { label: '2015→2025', value: '+49.8%', flagged: false },
+    ])
+  })
+
+  it('注記：所得の定義と按分は常に出し、政令市のときだけ粒度の 1 文が増える', () => {
+    const plain = incomePanels(incomeTokyo, 1000)[2]
+    if (plain?.type !== 'statTable') throw new Error('statTable ではない')
+    expect(plain.note).toContain('給与収入ではなく給与所得控除後')
+    expect(plain.note).toContain('15〜64歳人口で按分')
+    expect(plain.note).not.toContain('政令指定都市')
+
+    // 横浜（1km 圏の納税義務者の過半が横浜市＝市全体の平均）。inc_total の notice で解決する。
+    const yokohama = buildStationDetail(
+      station,
+      new Map<string, number>([
+        ['inc_pc_2025_1km', 463.7],
+        ['inc_total_2025_1km', 123965],
+        ['inc_lown_2025_1km', 0],
+        ['inc_city_only_1km', 1],
+      ]),
+    )
+    const noted = incomePanels(yokohama, 1000)[2]
+    if (noted?.type !== 'statTable') throw new Error('statTable ではない')
+    expect(noted.note).toContain('政令指定都市')
+  })
+
+  it('低分母：桜田門のように分母が小さい駅は 1人当たりに警告と ⚠ が付く', () => {
+    // 皇居まわりで住民がほとんどいないため 1,376 万円と暴れる。値は消さず注意を促す。
+    const sakuradamon = buildStationDetail(
+      station,
+      new Map<string, number>([
+        ['inc_pc_2025_1km', 1376.1],
+        ['inc_total_2025_1km', 10113],
+        ['inc_lown_2025_1km', 1],
+        ['inc_city_only_1km', 0],
+      ]),
+    )
+    const chart = incomePanels(sakuradamon, 1000)[0]
+    if (chart?.type !== 'trendChart') throw new Error('trendChart ではない')
+    expect(chart.flags).toEqual([
+      { label: '納税義務者が少なく1人当たりは参考値', level: 'warn' },
+    ])
+    expect(chart.stats?.[0]?.flagged).toBe(true)
+  })
+
+  it('データが無い駅では空配列（タブは「データがありません」を出す）', () => {
+    expect(incomePanels(detail, 1000)).toEqual([])
+  })
+})
+
 describe('P5c/P5e パネルは Protocol スキーマに合致', () => {
-  it('地価・バス・事業所・従業者すべて parse できる', () => {
+  it('地価・バス・事業所・従業者・所得すべて parse できる', () => {
     const all = [
       ...landPricePanels(p5cDetail, 1000),
       ...busPanels(p5cDetail, 1000),
       ...establishmentPanels(p5cDetail, 1000),
       ...employeePanels(p5cDetail, 1000),
+      ...incomePanels(incomeTokyo, 1000),
     ]
     for (const panel of all) expect(() => panelSchema.parse(panel)).not.toThrow()
   })

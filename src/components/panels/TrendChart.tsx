@@ -112,7 +112,12 @@ export function TrendChart({ panel }: { panel: TrendChartPanel }) {
         <h3 className={cn('font-semibold text-slate-800', compact ? 'text-sm' : 'text-base')}>
           {panel.title}
         </h3>
-        {panel.unit !== null && <span className="text-xs text-slate-400">単位: {panel.unit}</span>}
+        {/* 単位はそれ自体が 1 語なので折り返さない（「万円/」「人」の 2 行割れを防ぐ）。 */}
+        {panel.unit !== null && (
+          <span className="shrink-0 text-xs whitespace-nowrap text-slate-400">
+            単位: {panel.unit}
+          </span>
+        )}
       </div>
 
       {panel.stats !== undefined && panel.stats.length > 0 && (

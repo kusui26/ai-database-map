@@ -33,6 +33,23 @@ const TAB_STRIP_WIDTH_PX = 460
 /** 最後のタブがこれだけ見えていれば「まだ続く」と分かる（実測 26px）。 */
 const MIN_VISIBLE_LAST_TAB_PX = 20
 
+/**
+ * statTable の行幅（1440px・Chromium 実測 2026-08-16／docs/260816_stat_table_layout.md）。
+ *
+ * 行は「セル幅（＝パネル幅の半分）」で 2 列に詰み、**中身が収まらない行だけ** 1 行を占める。
+ * ラベルを長くするときは、ここを実測し直して収まるか確かめる（収まらなければ 1 行になる）。
+ */
+const BODY_PADDING_PX = 16 // 詳細パネル本文の px-4
+const ROW_GAP_PX = 16 // dl の gap-x-4
+const STAT_TABLE_CELL_WIDTH_PX = 186
+const MEASURED_ROW_WIDTHS_PX = {
+  旧_総額_主語つき: 265, // 「課税対象所得 総額（2025年度）」＋「46,606,688 百万円」
+  総額_年度のみ: 171, //   「2025年度」＋「44,019,580 百万円」
+  所得増減率: 141, //       「2020→2025」＋「+57.0%」
+  地価_公示価格: 171, //     「公示価格」＋「35,300,000 円/㎡」
+  人口増減率: 141, //        「2000→2020」＋「+140.3%」
+} as const
+
 const tabWidths = Object.values(TAB_WIDTHS_PX)
 const contentWidth = tabWidths.reduce((sum, w) => sum + w, 0) + TAB_GAP_PX * (tabWidths.length - 1)
 
@@ -58,6 +75,25 @@ describe('併設パネルの幅（260804・所得タブ追加 260813）', () => 
     // ラベルが伸びる／タブが増えると帯が広がり、上の不変条件が崩れる。変えたときは実測し直す。
     const labels = DETAIL_TABS.map((category) => CATEGORY_LABELS_JA[category])
     expect(labels).toEqual(Object.keys(TAB_WIDTHS_PX))
+  })
+
+  it('statTable は「半分に収まる行」を 2 列に詰め、収まらない行だけ 1 行を占める（260816）', () => {
+    // セル幅＝(パネル幅 − 本文の左右パディング − 列ギャップ) ÷ 2。StatTable の
+    // `basis-[calc(50%-0.5rem)]` はこの幅を指す（実測 186px）。
+    const cellWidth = (PANEL_WIDTH_PX - BODY_PADDING_PX * 2 - ROW_GAP_PX) / 2
+    expect(cellWidth).toBe(STAT_TABLE_CELL_WIDTH_PX)
+
+    // 主語をラベルに書いていた頃の総額行は、セルに 79px 収まらず隣の列に重なっていた。
+    expect(MEASURED_ROW_WIDTHS_PX.旧_総額_主語つき).toBeGreaterThan(cellWidth)
+
+    // いまの行はすべてセルに収まる＝ 2 列のまま（主語は表題へ移した）。
+    const current = [
+      MEASURED_ROW_WIDTHS_PX.総額_年度のみ,
+      MEASURED_ROW_WIDTHS_PX.所得増減率,
+      MEASURED_ROW_WIDTHS_PX.地価_公示価格,
+      MEASURED_ROW_WIDTHS_PX.人口増減率,
+    ]
+    for (const width of current) expect(width).toBeLessThanOrEqual(cellWidth)
   })
 
   it('狭い画面では縮む（左右の余白ぶんを引いた min）', () => {

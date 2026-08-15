@@ -341,10 +341,11 @@ const incomeTokyo = buildStationDetail(
 )
 
 describe('incomePanels（所得タブ）', () => {
-  it('推移チャート → 半径別バー → 規模と増減率の順で返す（UI/AI 同一配列）', () => {
+  it('推移チャート → 半径別バー → 総額 → 1人当たり増減率の順で返す（UI/AI 同一配列）', () => {
     expect(incomePanels(incomeTokyo, 1000).map((panel) => panel.type)).toEqual([
       'trendChart',
       'barChart',
+      'statTable',
       'statTable',
     ])
   })
@@ -379,23 +380,35 @@ describe('incomePanels（所得タブ）', () => {
     ])
   })
 
-  it('規模と増減率：総額（百万円）＋ 5年/10年の増減率', () => {
+  // 総額（規模）と 1 人当たりの増減率は主語が違うので表を分け、主語は表題・行は年次にする（260816）。
+  it('総額：規模だけの表（最新年度 1 行・百万円）', () => {
     const table = incomePanels(incomeTokyo, 1000)[2]
     if (table?.type !== 'statTable') throw new Error('statTable ではない')
-    expect(table.title).toBe('所得の規模と増減率（1km圏）')
+    expect(table.title).toBe('課税対象所得 総額（1km圏）')
+    expect(table.rows).toEqual([{ label: '2025年度', value: '28,374 百万円', flagged: false }])
+  })
+
+  it('増減率：1人当たりの 5年/10年（表題に主語・行は年次）', () => {
+    const table = incomePanels(incomeTokyo, 1000)[3]
+    if (table?.type !== 'statTable') throw new Error('statTable ではない')
+    expect(table.title).toBe('1人当たり課税対象所得 増減率（1km圏）')
     expect(table.rows).toEqual([
-      { label: '課税対象所得 総額（2025年度）', value: '28,374 百万円', flagged: false },
       { label: '2020→2025', value: '+28.5%', flagged: false },
       { label: '2015→2025', value: '+49.8%', flagged: false },
     ])
   })
 
   it('注記：所得の定義と按分は常に出し、政令市のときだけ粒度の 1 文が増える', () => {
-    const plain = incomePanels(incomeTokyo, 1000)[2]
+    // 注記はタブ全体に効くので、表が 2 つでも最後の 1 つにだけ付く（重複させない）。
+    const panels = incomePanels(incomeTokyo, 1000)
+    const plain = panels.at(-1)
     if (plain?.type !== 'statTable') throw new Error('statTable ではない')
     expect(plain.note).toContain('給与収入ではなく給与所得控除後')
     expect(plain.note).toContain('15〜64歳人口で按分')
     expect(plain.note).not.toContain('政令指定都市')
+    const total = panels[2]
+    if (total?.type !== 'statTable') throw new Error('statTable ではない')
+    expect(total.note).toBeNull()
 
     // 横浜（1km 圏の納税義務者の過半が横浜市＝市全体の平均）。inc_total の notice で解決する。
     const yokohama = buildStationDetail(
@@ -407,8 +420,10 @@ describe('incomePanels（所得タブ）', () => {
         ['inc_city_only_1km', 1],
       ]),
     )
-    const noted = incomePanels(yokohama, 1000)[2]
+    // 増減率のデータが無い駅では表は総額だけ。それでも注記は最後の表に必ず出る。
+    const noted = incomePanels(yokohama, 1000).at(-1)
     if (noted?.type !== 'statTable') throw new Error('statTable ではない')
+    expect(noted.title).toBe('課税対象所得 総額（1km圏）')
     expect(noted.note).toContain('政令指定都市')
   })
 

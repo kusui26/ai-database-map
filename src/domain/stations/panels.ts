@@ -14,6 +14,7 @@ import {
   type PanelStat,
   type ReliabilityFlag,
   type StationCardPanel,
+  type StatTablePanel,
   type TrendChartPanel,
 } from '@/shared/protocol'
 import { CATEGORY_COLORS, RADII_M, radiusLabel } from '@/shared/constants'
@@ -407,7 +408,7 @@ export function employeePanels(
 }
 
 /**
- * 所得タブ：1 人当たり課税対象所得の推移 ＋ 半径別 ＋ 総額と増減率（docs/income.md §6）。
+ * 所得タブ：1 人当たり課税対象所得の推移 ＋ 半径別 ＋ 総額 ＋ 1 人当たりの増減率（docs/income.md §6）。
  *
  * 政令市（`inc_city_only`）は**点ごとのバッジではなくタブの注記**にする。所得は市区町村単位でしか
  * 公表されないので 500m〜1km ではどの駅も自区市町村の平均になり（docs/income.md §11 の限界 #1）、
@@ -477,27 +478,65 @@ export function incomePanels(
     })
   }
 
-  const rows: PanelStat[] = []
-  const latestTotal = total?.points.at(-1)
-  if (latestTotal !== undefined) {
-    rows.push({
-      label: `課税対象所得 総額（${latestTotal.year ?? '?'}年度）`,
-      value: formatWithUnit(latestTotal.value, total?.format ?? 'int', total?.unit ?? '百万円'),
-      flagged: false,
-    })
-  }
-  rows.push(...growthRows(seriesAt(detail, 'inc_gr', radiusM)))
-  if (rows.length > 0) {
-    panels.push({
-      type: 'statTable',
-      title: `所得の規模と増減率（${radius}圏）`,
-      rows,
-      note: incomeNote(cityOnly),
-      size,
-    })
-  }
+  panels.push(
+    ...withNoteOnLast(
+      [
+        ...incomeTotalTable(total, radius, size),
+        ...incomeGrowthTable(seriesAt(detail, 'inc_gr', radiusM), radius, size),
+      ],
+      incomeNote(cityOnly),
+    ),
+  )
 
   return panels
+}
+
+/**
+ * 課税対象所得の総額（規模）の表：最新年度の 1 行。
+ *
+ * 総額（規模）と 1 人当たりの増減率は**主語が違う**ので表を分ける。1 つの表に混ぜていた頃は
+ * 「+57.0%」が総額の増減率に見え、さらに行が 2 列のセルに収まらず隣の列の文字と重なっていた
+ * （docs/260816_stat_table_layout.md）。主語は表題・行は年次にすると、人口・地価・事業所と同じ形になる。
+ */
+function incomeTotalTable(
+  total: MetricSeries | undefined,
+  radius: string,
+  size: PanelSize,
+): StatTablePanel[] {
+  const latest = total?.points.at(-1)
+  if (latest === undefined) return []
+  const row: PanelStat = {
+    label: `${latest.year ?? '?'}年度`,
+    value: formatWithUnit(latest.value, total?.format ?? 'int', total?.unit ?? '百万円'),
+    flagged: false,
+  }
+  return [
+    { type: 'statTable', title: `課税対象所得 総額（${radius}圏）`, rows: [row], note: null, size },
+  ]
+}
+
+/** 1 人当たり課税対象所得の増減率の表（カタログの `inc_gr` は 1 人当たりの率）。 */
+function incomeGrowthTable(
+  growth: MetricSeries | undefined,
+  radius: string,
+  size: PanelSize,
+): StatTablePanel[] {
+  const rows = growthRows(growth)
+  if (rows.length === 0) return []
+  return [
+    {
+      type: 'statTable',
+      title: `1人当たり課税対象所得 増減率（${radius}圏）`,
+      rows,
+      note: null,
+      size,
+    },
+  ]
+}
+
+/** 注記（所得の定義・按分・政令市）はタブ全体に効くので、最後の表にだけ添える。 */
+function withNoteOnLast(tables: StatTablePanel[], note: string): StatTablePanel[] {
+  return tables.map((table, index) => (index === tables.length - 1 ? { ...table, note } : table))
 }
 
 /** 全国の市区町村の 1 人当たり課税対象所得 中央値（2025年度・docs/income.md §1）。 */

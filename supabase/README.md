@@ -22,6 +22,7 @@
 | `*_seed_metric_columns.sql` | `catalog.json` → `metric_columns` 488行（`pipeline/build_seed.py` が生成）                                                               |
 | `*_tighten_anon_grants.sql` | anon/authenticated を SELECT のみに厳格化（TRUNCATE/REFERENCES/TRIGGER を剥奪）                                                          |
 | `*_station_values_float4.sql` | `station_values.value` を `double precision` → `real`（容量 −46MB・260816）。⚠ **空の DB に適用すること**（データが入っているとテーブルを書き換え、ディスクのピークが 2 倍になる）|
+| `*_anon_select_only.sql` ／ `*_revoke_maintain_from_anon.sql` | anon/authenticated を**文字どおり SELECT のみ**に（Supabase の既定は `public` の新規テーブルに `arwdDxtm` を付与するため・260816）|
 
 上表は代表的なものだけ。実際に適用されるのは `supabase/migrations/` の全ファイル（タイムスタンプ順）。
 

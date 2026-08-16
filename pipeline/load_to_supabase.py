@@ -74,6 +74,11 @@ def db_params() -> dict[str, object]:
         "password": password,
         "dbname": dbname.split("?")[0],
         "sslmode": "require",
+        # ⚠ Supabase のセッション既定は extra_float_digits=0。この設定だと `real` の**テキスト表現**が
+        # 有効数字 6 桁に丸められ（3683268 → "3.68327e+06" → 3683270.0）、psycopg で受けた値が
+        # 保存値とずれる。**格納値は正しく、PostgREST も完全精度で返す**（260816 に実測）ので、
+        # ずれるのは psycopg のテキスト受信だけ。検証を厳密にするため 3 桁ぶん増やして受け取る。
+        "options": "-c extra_float_digits=3",
     }
 
 

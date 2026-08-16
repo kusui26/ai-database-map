@@ -132,8 +132,12 @@ def main() -> int:
                 samples.append((colid[k], ri + 1, float(val), k))
         cids = [s[0] for s in samples]
         sids = [s[1] for s in samples]
+        # value は float8 に拡張して受け取る。`real` のテキスト表現は「float4 として最短で
+        # 往復する 10 進数」（float4 の 397.100006… は "397.1"）なので、そのまま float64 に
+        # 読むと期待値（float32 を float64 に広げた値）と一致しない。拡張してから比較する。
         cur.execute(
-            "select sv.column_id, sv.station_id, sv.value from unnest(%s::int[], %s::int[]) "
+            "select sv.column_id, sv.station_id, sv.value::double precision "
+            "from unnest(%s::int[], %s::int[]) "
             "as u(column_id, station_id) join public.station_values sv using (column_id, station_id)",
             (cids, sids),
         )

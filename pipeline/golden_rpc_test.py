@@ -108,8 +108,6 @@ def main() -> int:
         check(res and res[0]["grp"] == expc["grp"] and close(res[0]["value"], expc["pop_gr_2020_2015_1km"]),
               "rank 千葉県 pop_gr_2020_2015_1km desc Top1 = CSV",
               f"db={res[0]['grp'] if res else None}/{res[0]['value'] if res else None} csv={expc['grp']}/{expc['pop_gr_2020_2015_1km']}")
-        check(res and res[0]["flag_value"] is not None, "rank(growth) が信頼性フラグ値を同梱",
-              f"flag_value={res[0]['flag_value'] if res else None}")
 
         # 9) 駅詳細：東京 5km 人口2020 = CSV値
         res = call("select * from public.station_bundle(%s)", (tokyo["grp"],))
@@ -128,8 +126,25 @@ def main() -> int:
         check(res and close(res[0]["value"], expinc["inc_pc_2025_1km"]),
               "rank inc_pc_2025_1km desc Top1 = CSV argmax",
               f"db={res[0]['value'] if res else None} csv={expinc['inc_pc_2025_1km']}")
-        check(res and res[0]["flag_value"] is not None, "rank(inc_pc) が低分母フラグ値を同梱",
-              f"flag_value={res[0]['flag_value'] if res else None}")
+
+        # 9b-2) 信頼性フラグの同梱（260816 に規約変更）：**フラグの 0 は格納しない**ので、
+        #       立っている駅は flag_value=1、立っていない駅は行が無く NULL で返るのが正。
+        #       1 県ぶんを全数照合して「1 と NULL の付き方が CSV と完全に一致する」ことを見る。
+        def flag_join(metric: str, flag_col: str) -> tuple[int, int, int]:
+            pref = df[df[flag_col] == 1].iloc[0]["prefecture"]
+            sub = df[(df["prefecture"] == pref) & df[metric].notna()]
+            want = {row.grp: (1.0 if getattr(row, flag_col) == 1 else None) for row in sub.itertuples()}
+            rows = call("select * from public.rank_by_column(%s,%s,%s,%s)", (metric, [pref], "desc", 9999))
+            bad = [r["grp"] for r in rows if want.get(r["grp"], "?") != r["flag_value"]]
+            return len(rows), sum(1 for v in want.values() if v == 1), len(bad)
+
+        for metric, flag_col in (("pop_gr_2020_2015_1km", "pop_lowbase_2015_1km"),
+                                 ("inc_pc_2025_1km", "inc_lown_2025_1km")):
+            n_rows, n_flagged, n_bad = flag_join(metric, flag_col)
+            check(n_rows > 0 and n_flagged > 0 and n_bad == 0,
+                  f"rank({metric}) の flag_value が CSV と全数一致"
+                  f"（{n_rows}駅中フラグ{n_flagged}件・0 は行が無く NULL）",
+                  f"不一致 {n_bad} 件")
 
         # 9c) 売上（260816 追加）：新カテゴリが RPC まで通ること ＋ **フラグの 0 を格納しない**
         #     規約（対策A）が消費側で従来どおり効くこと（行が無い＝0）を 4 本で押さえる。

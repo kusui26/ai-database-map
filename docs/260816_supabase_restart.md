@@ -425,11 +425,35 @@ python3 pipeline/golden_rpc_test.py   # 検索・最寄・bbox・ランキング
 
 ## 12. 実行記録（Phase 7 で追記する）
 
-| Phase | 実施時刻 | 所要 | 実測値・備考 |
-|---|---|---|---|
-| **0 事前準備** | 2026-08-16 19:2x | 約 20 分 | PR #68（migration 1 本・検証 2 本・loader に ANALYZE・docs 4 本）。ruff / typecheck / eslint / vitest 300 passed |
-| 1 新規作成 | | | |
-| 3 スキーマ適用 | | | |
-| 4 投入 | | | 行数・サイズ |
-| 5 検証 | | | validate_load / golden_rpc_test |
-| 6 切替 | | | `/api/health`・体感速度 |
+| Phase | 所要 | 実測値・備考 |
+|---|---|---|
+| **0 事前準備** | 約 20 分 | PR #68（float4 migration・検証 2 本の float4 対応・loader に ANALYZE・docs 4 本）。ruff / typecheck / eslint / vitest 300 passed |
+| **1 新規作成** | — | あなたが東京リージョンで作成し `.env` を更新 |
+| **2 接続確認** | 1 分 | **RTT 13.0ms**（旧シンガポール 80.6ms → −68ms）／PostgreSQL **17.6**／PostGIS 3.3.7・pg_trgm 1.6 が利用可能／`public` は空 |
+| **3 スキーマ適用** | 3 分 | migrations **20 本**（18 ＋ float4 ＋ 権限）。スキーマ検証 **10/10 PASS** |
+| **4 投入** | **48 秒** | stations 9,273／metric_columns 784／**station_values 6,020,472**（フラグの 0 を 866,141 行 省略）／routes 10,424。COPY 39.4s ＋ FK 3.3s ＋ ANALYZE 4.0s |
+| **5 検証** | 6 分 | `validate_load.py` **10/10 PASS**／`golden_rpc_test.py` **21/21 PASS** |
+| 6 切替 | | `/api/health`・体感速度 |
+
+### 12.1 容量の実測（float4 の効果）
+
+| | 実測 |
+|---|---:|
+| **DB 全体** | **417 MB**（無料枠 500MB の **83%**）|
+| `station_values` | 389 MB（本体 208 ＋ 索引 180）|
+| 1 行あたり | **67.7 バイト**（本体 **36.2** ＋ 索引 31.4）|
+| 旧 DB（float8）| 74.5 バイト/行 → **6.8 バイト/行の削減** |
+| float8 のままだった場合 | **456 MB**（＝事前の見積りと一致）|
+
+事前の見積り「本体 44.3 → 36.3 バイト・DB 約 410MB」に対し、実測は **36.2 バイト・417MB**。
+差の 7MB は索引が 30.2 → 31.4 バイト/行に増えたぶん（行数が 5.72M → 6.02M に増えて
+B-tree のページ充填率が変わったため）。**無料枠に対する余裕は 83MB。**
+
+### 12.2 実行中に見つけたこと（4 件）
+
+| # | 見つかったこと | 対処 |
+|---|---|---|
+| 1 | **anon / authenticated に INSERT・UPDATE・DELETE が残っていた**。既存の `tighten_anon_grants` は TRUNCATE/REFERENCES/TRIGGER しか剥がしておらず、Supabase の既定（public の新規テーブルに ALL）が効いたまま。RLS が SELECT のみなので実害は無かったが、README の記述と食い違う | マイグレーション **`20260816234947_anon_select_only.sql`** を追加（全テーブルから書き込み権限を剥奪＋既定権限も変更）。再検証で 4 テーブルとも SELECT のみを確認 |
+| 2 | **`extra_float_digits = 0`（Supabase の既定）だと `real` のテキスト表現が 6 桁に丸まる**（3683268 → `3.68327e+06` → 3683270.0）。**格納値は正しく、PostgREST は完全精度で返す**（実測：`3683268` / `164.199996948242`）ので**アプリは無影響**。影響を受けるのは psycopg でテキスト受信する検証スクリプトだけ | `db_params()` に `options: -c extra_float_digits=3` を追加。さらに (c) の照合は **SQL 側で `value::double precision`** に拡張してから比較（`real` の最短表現 "397.1" を float64 で読むと float32 の厳密値と一致しないため）|
+| 3 | `golden_rpc_test` の 2 件が FAIL：「rank が信頼性フラグ値を同梱」。**対策A（フラグの 0 を格納しない）の当然の帰結**で、フラグ 0 の駅は行が無く `flag_value=NULL` になる | 期待を**より強い全数照合**に置き換えた：1 県ぶんの全駅で「CSV のフラグ 1 → `flag_value=1`／0 → NULL」が完全一致することを検証（212 駅中 6 件／185 駅中 111 件で PASS）|
+| 4 | シードの `metric_columns` は 488 ではなく **489**（`reliability_flag_semantics` が `flag_covid_lown` を追加していた）| 私の期待値が古かっただけ。投入で 784 に置き換わる |

@@ -1,6 +1,6 @@
 /**
  * Chart.js の必要コンポーネントだけを一度登録する（tree-shaking 構成）。
- * 折れ線＋塗り＋棒＋散布＋ツールチップ。チャート系コンポーネントの import 時に呼ぶ。
+ * 折れ線＋塗り＋棒＋散布＋ツールチップ＋凡例。チャート系コンポーネントの import 時に呼ぶ。
  */
 
 import {
@@ -9,6 +9,7 @@ import {
   CategoryScale,
   Chart,
   Filler,
+  Legend,
   LinearScale,
   LineController,
   LineElement,
@@ -33,6 +34,7 @@ export function ensureChartRegistered(): void {
     CategoryScale,
     Filler,
     Tooltip,
+    Legend, // 積み上げ縦棒の内訳を読むのに要る（折れ線は従来どおり凡例を出さない・260817）
   )
   registered = true
 }

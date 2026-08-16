@@ -3,7 +3,7 @@
 /**
  * 駅詳細パネル（骨格＋乗降タブ）。デスクトップ＝右ドロワー／モバイル＝vaul ボトムシート。
  * ?grp 選択で開き、閉じると ?grp をクリア。カード＋タブは Protocol の Panel を PanelStack で描画する。
- * タブは 7 カテゴリ（乗降・人口・所得・地価・バス・事業所・従業者）。半径依存タブは集計半径セレクタを表示。
+ * タブは 8 カテゴリ（乗降・人口・所得・売上・地価・バス・事業所・従業者）。半径依存タブは集計半径セレクタを表示。
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -25,6 +25,7 @@ import {
   landPricePanels,
   paxTrendPanel,
   populationPanels,
+  salesPanels,
   stationCardPanel,
 } from '@/domain/stations/panels'
 import { isRadiusDependentCategory } from '@/domain/metrics'
@@ -36,14 +37,20 @@ import { PanelRenderer, PanelStack } from '@/components/panels/PanelRenderer'
 import { cn } from '@/lib/utils'
 
 /**
- * 詳細タブ（表示順）。所得は「そこに住む人の稼ぎ」なので人口の直後に置く（`CATEGORY_ORDER` と同順）。
- * ⚠ 7 タブでタブ帯は 460px になり、パネル幅 420px を超えて**横スライドが要る**
- * （`tests/panel-layout.test.ts`・`docs/260805_research_add_dataset_economy.md` §16.3 で了承済み）。
+ * 詳細タブ（表示順）。所得は「そこに住む人の稼ぎ」、売上は「そこで落ちるお金」なので、
+ * 人口 → 所得 → 売上 と並べる（`CATEGORY_ORDER` と同順）。
+ *
+ * ⚠ タブ帯は 7 タブで 460px、**8 タブ（売上）で 516px** になり、パネル幅 420px を超えて
+ * 横スライドが要る（パネルを広げると地図が狭くなるので広げない・
+ * `docs/260805_research_add_dataset_economy.md` §16.3）。7 タブまでは最後のタブが 26px 見えて
+ * 「続きがある」と分かったが、**8 タブでは最後のタブが完全に隠れる**ため、
+ * 帯の右端にフェードを出して示す（`docs/260816_sales.md` §7.4 案A・`tests/panel-layout.test.ts`）。
  */
 export const DETAIL_TABS: readonly Category[] = [
   'passenger',
   'population',
   'income',
+  'sales',
   'land_price',
   'bus',
   'establishment',
@@ -59,6 +66,8 @@ function tabPanels(detail: StationDetail, tab: Category, radiusM: number): Panel
       return populationPanels(detail, radiusM)
     case 'income':
       return incomePanels(detail, radiusM)
+    case 'sales':
+      return salesPanels(detail, radiusM)
     case 'land_price':
       return landPricePanels(detail, radiusM)
     case 'bus':
@@ -119,24 +128,56 @@ function CloseButton({ onClick }: { onClick: () => void }) {
   )
 }
 
+/**
+ * タブ帯の右端フェードの幅（px）。**いちばん狭いタブ（52px）より狭く**して、
+ * タブ名そのものを覆い隠さないようにする（`tests/panel-layout.test.ts` が守る）。
+ */
+export const TAB_FADE_WIDTH_PX = 32
+
 function DetailTabs({ value, onChange }: { value: Category; onChange: (tab: Category) => void }) {
+  const stripRef = useRef<HTMLDivElement>(null)
+  const [atEnd, setAtEnd] = useState(false)
+
+  // 8 タブで帯は 516px になり、420px のパネルからはみ出して最後のタブが完全に隠れる。
+  // 右端にフェードを出して「まだ続く」ことを示し、**右端まで送ったら消す**（無い続きを示唆しない）。
+  const syncFade = useCallback(() => {
+    const strip = stripRef.current
+    if (strip === null) return
+    setAtEnd(strip.scrollLeft + strip.clientWidth >= strip.scrollWidth - 1)
+  }, [])
+
+  useEffect(() => {
+    syncFade() // 初期表示と、画面幅が変わって可視幅が変わったとき
+    window.addEventListener('resize', syncFade)
+    return () => window.removeEventListener('resize', syncFade)
+  }, [syncFade])
+
   return (
-    <div className="flex gap-1 overflow-x-auto border-b border-slate-100 px-2">
-      {DETAIL_TABS.map((category) => (
-        <button
-          key={category}
-          type="button"
-          onClick={() => onChange(category)}
-          className={cn(
-            'shrink-0 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors',
-            value === category
-              ? 'border-indigo-600 text-indigo-700'
-              : 'border-transparent text-slate-500 hover:text-slate-700',
-          )}
-        >
-          {CATEGORY_LABELS_JA[category]}
-        </button>
-      ))}
+    <div className="relative border-b border-slate-100">
+      <div ref={stripRef} onScroll={syncFade} className="flex gap-1 overflow-x-auto px-2">
+        {DETAIL_TABS.map((category) => (
+          <button
+            key={category}
+            type="button"
+            onClick={() => onChange(category)}
+            className={cn(
+              'shrink-0 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors',
+              value === category
+                ? 'border-indigo-600 text-indigo-700'
+                : 'border-transparent text-slate-500 hover:text-slate-700',
+            )}
+          >
+            {CATEGORY_LABELS_JA[category]}
+          </button>
+        ))}
+      </div>
+      {!atEnd && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 right-0 bg-gradient-to-l from-white to-transparent"
+          style={{ width: TAB_FADE_WIDTH_PX }}
+        />
+      )}
     </div>
   )
 }

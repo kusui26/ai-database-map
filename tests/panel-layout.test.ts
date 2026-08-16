@@ -5,22 +5,26 @@ import {
   PANEL_WIDTH_CSS,
   PANEL_WIDTH_PX,
 } from '@/shared/constants'
-import { DETAIL_TABS } from '@/components/detail/StationDetailPanel'
+import { DETAIL_TABS, TAB_FADE_WIDTH_PX } from '@/components/detail/StationDetailPanel'
 
 /**
- * 駅詳細のカテゴリのタブ帯（1440px 実測・2026-08-04／所得タブ追加 2026-08-13）。
+ * 駅詳細のカテゴリのタブ帯（1440px 実測・2026-08-04／所得 2026-08-13／売上 2026-08-17）。
  *
- * 6 タブ時代は帯 404px < パネル 420px で**既定でスライドしなかった**が、所得タブを足した
- * 7 タブでは帯が 460px になり、**横スライドが要る**（docs/260805_research_add_dataset_economy.md
- * §16.3 で了承済み。パネルをさらに広げると地図が狭くなるため広げない）。
+ * 6 タブ時代は帯 404px < パネル 420px で**既定でスライドしなかった**。所得で 7 タブ・460px に
+ * なって横スライドが要るようになり、**売上で 8 タブ・516px** になった
+ * （docs/260805_research_add_dataset_economy.md §16.3。パネルを広げると地図が狭くなるため広げない）。
  *
- * そこで守る不変条件を「スライドしない」から「**スライドすると分かる**」に置き換える。
- * 最後のタブが完全に隠れると、そこにタブがあること自体に気づけないため。
+ * 守る不変条件はここで一段変わる。
+ *   6 タブ: 「スライドしない」
+ *   7 タブ: 「スライドしても最後のタブが 26px 見える＝続きがあると分かる」
+ *   8 タブ: **最後のタブは完全に隠れる**ので、その代わりに**右端のフェードで示す**
+ *           （docs/260816_sales.md §7.4 の案A）。フェードはタブ名を覆い隠さない幅にする。
  */
 const TAB_WIDTHS_PX: Readonly<Record<string, number>> = {
   乗降客数: 80,
   人口: 52,
   所得: 52,
+  売上: 52,
   地価: 52,
   バス: 52,
   事業所: 66,
@@ -28,10 +32,7 @@ const TAB_WIDTHS_PX: Readonly<Record<string, number>> = {
 }
 const TAB_GAP_PX = 4
 const STRIP_PADDING_PX = 16
-const TAB_STRIP_WIDTH_PX = 460
-
-/** 最後のタブがこれだけ見えていれば「まだ続く」と分かる（実測 26px）。 */
-const MIN_VISIBLE_LAST_TAB_PX = 20
+const TAB_STRIP_WIDTH_PX = 516
 
 /**
  * statTable の行幅（1440px・Chromium 実測 2026-08-16／docs/260816_stat_table_layout.md）。
@@ -54,7 +55,7 @@ const tabWidths = Object.values(TAB_WIDTHS_PX)
 const contentWidth = tabWidths.reduce((sum, w) => sum + w, 0) + TAB_GAP_PX * (tabWidths.length - 1)
 
 describe('併設パネルの幅（260804・所得タブ追加 260813）', () => {
-  it('タブ帯の実測内訳が 460px になる（幅を判断した根拠）', () => {
+  it('タブ帯の実測内訳が 516px になる（幅を判断した根拠）', () => {
     expect(contentWidth + STRIP_PADDING_PX).toBe(TAB_STRIP_WIDTH_PX)
   })
 
@@ -62,13 +63,20 @@ describe('併設パネルの幅（260804・所得タブ追加 260813）', () => 
     expect(TAB_STRIP_WIDTH_PX).toBeGreaterThan(PANEL_WIDTH_PX)
   })
 
-  it('スライドしても最後のタブの一部が見える＝続きがあると分かる', () => {
+  it('8 タブでは最後のタブが完全に隠れる＝フェードで示すしかない（案A を選んだ理由）', () => {
     // 帯の可視幅はパネル幅から左右パディングを引いたぶん。そこからはみ出す量が隠れる。
     const visibleStripWidth = PANEL_WIDTH_PX - STRIP_PADDING_PX
     const hidden = contentWidth - visibleStripWidth
     const lastTabWidth = tabWidths[tabWidths.length - 1] ?? 0
-    expect(hidden).toBeGreaterThan(0) // 上のテストと整合（隠れる＝スライドする）
-    expect(lastTabWidth - hidden).toBeGreaterThanOrEqual(MIN_VISIBLE_LAST_TAB_PX)
+    expect(hidden).toBeGreaterThan(0) // スライドする
+    // 7 タブまでは「最後のタブが 20px 以上見える」で気づけたが、8 タブでは隠れ量が幅を超える。
+    expect(lastTabWidth - hidden).toBeLessThan(0)
+  })
+
+  it('右端のフェードはタブ名を覆い隠さない幅（いちばん狭いタブより狭い）', () => {
+    // 覆いすぎると「隠れているのはフェードのせい」に見え、タブの存在が余計に分からなくなる。
+    expect(TAB_FADE_WIDTH_PX).toBeLessThan(Math.min(...tabWidths))
+    expect(TAB_FADE_WIDTH_PX).toBeGreaterThan(0)
   })
 
   it('タブに使うカテゴリのラベルが実測時から変わっていない', () => {

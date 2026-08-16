@@ -600,15 +600,25 @@ function spanLabel(series: MetricSeries | undefined): string {
   return point === undefined ? '' : `${point.yearBase ?? '?'}→${point.year ?? '?'}年`
 }
 
-/** 売上タブの注意（コロナの効き方は常に・低分母は該当するときだけ）。 */
-function salesFlags(dest: MetricSeries): ReliabilityFlag[] {
-  const lowDenominator: ReliabilityFlag[] = dest.points.some((point) => point.flagged)
-    ? [{ label: '半径内の対象従業者が少なく推計は参考値', level: 'warn' }]
-    : []
-  return [
-    ...lowDenominator,
-    { label: '2021年調査の売上は2020年（コロナ1年目）の1年間', level: 'info' },
-  ]
+/**
+ * 売上タブの注意（コロナの効き方は常に・低分母と増減率の信頼性は該当するときだけ）。
+ *
+ * 増減率のフラグは「低分母」と「娯楽の集計定義が年で揃わない」の OR（`sales_gr_unrel`）。
+ * どちらかは値からは区別できないので、両方を含む 1 文にする（docs/sales.md §5.3・§12-9）。
+ */
+function salesFlags(dest: MetricSeries, growth: MetricSeries | undefined): ReliabilityFlag[] {
+  const flags: ReliabilityFlag[] = []
+  if (dest.points.some((point) => point.flagged)) {
+    flags.push({ label: '半径内の対象従業者が少なく推計は参考値', level: 'warn' })
+  }
+  if (growth?.points.some((point) => point.flagged) === true) {
+    flags.push({
+      label: '増減率は参考値（分母が小さい、または娯楽の集計定義が年で揃わない）',
+      level: 'warn',
+    })
+  }
+  flags.push({ label: '2021年調査の売上は2020年（コロナ1年目）の1年間', level: 'info' })
+  return flags
 }
 
 /** 売上の要約（最新調査の合計 → 前回調査比）。マス→変化の順に読ませる（§13）。 */
@@ -645,6 +655,7 @@ export function salesPanels(
   const panels: Panel[] = []
   const radius = radiusLabel(radiusM)
   const dest = seriesAt(detail, 'sales_dest', radiusM)
+  const destGrowth = seriesAt(detail, 'sales_dest_gr', radiusM)
 
   if (dest !== undefined && dest.points.some((point) => point.value !== null)) {
     panels.push({
@@ -654,13 +665,13 @@ export function salesPanels(
       format: dest.format,
       category: 'sales',
       stacked: true, // 2 時点 × 3 業種の積み上げ縦棒（合計と内訳を 1 枚で読む）
-      flags: salesFlags(dest),
+      flags: salesFlags(dest, destGrowth),
       series: SALES_BREAKDOWN.map(({ baseMetric, label, color }) => ({
         label,
         points: toXY(seriesAt(detail, baseMetric, radiusM)),
         color,
       })),
-      stats: salesStats(dest, seriesAt(detail, 'sales_dest_gr', radiusM)),
+      stats: salesStats(dest, destGrowth),
       size,
     })
   }

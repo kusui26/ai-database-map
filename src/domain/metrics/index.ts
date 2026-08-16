@@ -57,6 +57,8 @@ const BASE_LABELS: Readonly<Record<string, string>> = {
   sales_leisure: '生活関連・娯楽の売上',
   sales_dest_gr: '目的地としての売上 増減率',
   sales_lown: '売上 低分母フラグ',
+  sales_asym: '売上 娯楽の集計定義 非対称フラグ',
+  sales_gr_unrel: '売上 増減率 信頼性フラグ',
   emp_trade_n: '卸売・小売の従業者数',
   emp_food_n: '宿泊・飲食の従業者数',
   emp_life_n: '生活関連・娯楽の従業者数',

@@ -314,7 +314,7 @@ def build_entry(col: str) -> CatalogEntry:
                      f"目的地としての売上 増減率"
                      f"（{old}→{new}年調査＝{SALES_YEAR[old]}→{SALES_YEAR[new]}年の売上・{r}圏）",
                      "%", "percent1", radiusM=RADIUS_M[r], year=new, yearBase=old,
-                     flag=f"sales_lown_{old}_{r}")
+                     flag=f"sales_gr_unrel_{r}")
     m = re.fullmatch(rf"sales_(dest|retail|food|leisure)_(\d{{4}})_({RT})", col)
     if m:
         kind, y, r = m[1], int(m[2]), m[3]
@@ -329,6 +329,22 @@ def build_entry(col: str) -> CatalogEntry:
         return _make(col, "sales_lown", "flag", "sales",
                      f"売上 低分母フラグ（{y}年調査・{r}圏／半径内の対象従業者<50人）", None, None,
                      radiusM=RADIUS_M[r], year=y, rankable=False)
+    # 娯楽の「総数 − 本所」は**本所が秘匿の年は引けない**ため、両年で秘匿の状態が違う団体
+    # （152/1,894）では 2016↔2021 が同じ定義にならない（docs/sales.md §12-9）。
+    # 水準は各年で最善の値を保ち、**増減率だけ**フラグで守る。
+    m = re.fullmatch(rf"sales_asym_({RT})", col)
+    if m:
+        r = m[1]
+        return _make(col, "sales_asym", "flag", "sales",
+                     f"売上 娯楽の集計定義 非対称フラグ（{r}圏／娯楽を両年とも総数に揃えると"
+                     f"増減率が5ポイント以上動く）", None, None,
+                     radiusM=RADIUS_M[r], rankable=False)
+    m = re.fullmatch(rf"sales_gr_unrel_({RT})", col)
+    if m:
+        r = m[1]
+        return _make(col, "sales_gr_unrel", "flag", "sales",
+                     f"売上 増減率 信頼性フラグ（{r}圏／低分母 または 娯楽の集計定義が年で揃わない）",
+                     None, None, radiusM=RADIUS_M[r], rankable=False)
 
     # --- 将来推計人口（population_forecast） ---
     m = re.fullmatch(rf"pop_pred_2024_(\d{{4}})_({RT})", col)

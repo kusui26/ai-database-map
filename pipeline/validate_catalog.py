@@ -23,15 +23,15 @@ EXPECTED_CATEGORY_COUNTS = {
     "passenger": 19,  # pax 14 + rate 2 + flag 3（flag_yoy/flag_covid/flag_covid_lown）
     "population": 132,  # 実績42 + 増減率54 + lowbase36
     "income": 72,  # inc_pc18 + inc_total18 + inc_gr12 + inc_lown18 + inc_city_only6
-    "sales": 66,  # sales_{dest,retail,food,leisure}48 + sales_dest_gr6 + sales_lown12
+    "sales": 78,  # sales_{dest,retail,food,leisure}48 + sales_dest_gr6 + sales_lown12 + asym6 + gr_unrel6
     "population_forecast": 180,  # 推計114 + 推計増減率60 + 誤差6
     "land_price": 153,  # lp_med(年次20×5=100) + lp_n5 + lp_lown5 + lp_gr20 + lp_gr_lown20 + lp_near3
     "bus": 36,
     "establishment": 36,  # estab_n18 + estab_gr12 + estab_gr_lown6
     "employee": 90,  # emp_n18 + emp_gr12 ＋ 産業別 emp_{trade,food,life}_n36 + _gr18 + emp_dest_gr6
 }
-EXPECTED_ENTRY_TOTAL = 784
-EXPECTED_COLUMN_TOTAL = 794
+EXPECTED_ENTRY_TOTAL = 796
+EXPECTED_COLUMN_TOTAL = 806
 IDENTITY = {
     "grp", "station_name", "label", "search_label", "prefecture",
     "lon", "lat", "n_op", "operators", "level_complete",

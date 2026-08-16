@@ -24,7 +24,8 @@
      （カタログは CSV の列順で採番するので、**新しい列を末尾に足す限り** 既存 id は動かない）
   ② stations の並びが CSV と一致することを確認（station_id は CSV の行順＝1..N）
   ③ 既存フラグ列の値 0 を削除して VACUUM（先に空きを作る）
-  ④ 新しい列の metric_columns と station_values だけを追記（チャンクごとに commit）
+  ④ **既存列の meta を catalog に同期**（ラベルや参照フラグの変更を DB に反映）
+  ⑤ 新しい列の metric_columns と station_values だけを追記（チャンクごとに commit）
 
 の順で、ピークを「増える分＋WAL」に抑える。
 """
@@ -323,6 +324,25 @@ def assert_stations_match(cur: psycopg.Cursor, df: pd.DataFrame) -> None:
         raise SystemExit(f"stations の並びが CSV と違います（例 {bad[:3]}）。追記は使えません")
 
 
+def sync_existing_meta(conn: psycopg.Connection, entries: list[dict[str, object]], existing: int) -> int:
+    """既存 metric_columns の `meta` を catalog に合わせる（id と key は動かさない）。
+
+    追記モードは行を足すだけなので、**既存列のラベルや参照フラグを変えたときに DB が古いまま**になる。
+    RPC は `meta ->> 'reliabilityFlagKey'` を見てランキングの除外を決めるため、ここがずれると
+    フラグを付け替えても本番に効かない（260817 に `sales_dest_gr` の参照先を変えて気づいた）。
+    """
+    with conn.cursor() as cur:
+        cur.execute("select id, meta from public.metric_columns where id <= %s order by id", (existing,))
+        current = dict(cur.fetchall())
+        changed = [(i, entry) for i, entry in enumerate(entries[:existing], start=1)
+                   if current.get(i) != entry]
+        for i, entry in changed:
+            cur.execute("update public.metric_columns set meta = %s::jsonb where id = %s",
+                        (json.dumps(entry, ensure_ascii=False), i))
+    conn.commit()
+    return len(changed)
+
+
 def purge_flag_zeros(conn: psycopg.Connection) -> int:
     """既存フラグ列の値 0 を消す（行が無い＝0）。列ごとに小さく区切って commit する。
 
@@ -354,6 +374,8 @@ def append() -> int:
         new_entries = entries[existing:]
         new_keys = numeric_value_keys(df, [str(e["key"]) for e in new_entries])
         print(f"既存 {existing} 列 ＋ 追記 {len(new_entries)} 列（numeric {len(new_keys)}）")
+        updated = sync_existing_meta(conn, entries, existing)
+        print(f"  既存列の meta を同期: {updated} 件更新")
         if not new_entries:
             print("追記する列がありません（DB はカタログと同じ）")
             return 0

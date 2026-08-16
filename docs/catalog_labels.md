@@ -1,6 +1,6 @@
 # メトリクス・カタログ ラベル一覧（自動生成）
 
-`pipeline/build_catalog.py` が `station_dataset.csv`（794列）から生成。 値列 784 エントリ ＋ 駅属性 10。
+`pipeline/build_catalog.py` が `station_dataset.csv`（806列）から生成。 値列 796 エントリ ＋ 駅属性 10。
 
 凡例: `key` — ラベル 〔単位・format・rankable・⚠→信頼性フラグ〕
 
@@ -236,7 +236,7 @@
 - `inc_city_only_10km` — 所得 政令市フラグ（10km圏／納税義務者の過半が政令市由来＝市全体の平均） 〔—・—・not-rankable〕
 - `inc_city_only_20km` — 所得 政令市フラグ（20km圏／納税義務者の過半が政令市由来＝市全体の平均） 〔—・—・not-rankable〕
 
-## 売上（sales）— 66件
+## 売上（sales）— 78件
 
 - `sales_retail_2016_500m` — 小売の売上（推計・卸売を除く・2016年調査＝2015年の売上・500m圏） 〔億円・decimal1・rankable・⚠→sales_lown_2016_500m〕
 - `sales_retail_2016_1km` — 小売の売上（推計・卸売を除く・2016年調査＝2015年の売上・1km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2016_1km〕
@@ -298,12 +298,24 @@
 - `sales_lown_2021_10km` — 売上 低分母フラグ（2021年調査・10km圏／半径内の対象従業者<50人） 〔—・—・not-rankable〕
 - `sales_dest_2021_20km` — 目的地としての売上（推計・小売＋飲食宿泊＋娯楽・2021年調査＝2020年の売上・20km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2021_20km〕
 - `sales_lown_2021_20km` — 売上 低分母フラグ（2021年調査・20km圏／半径内の対象従業者<50人） 〔—・—・not-rankable〕
-- `sales_dest_gr_2021_2016_500m` — 目的地としての売上 増減率（2016→2021年調査＝2015→2020年の売上・500m圏） 〔%・percent1・rankable・⚠→sales_lown_2016_500m〕
-- `sales_dest_gr_2021_2016_1km` — 目的地としての売上 増減率（2016→2021年調査＝2015→2020年の売上・1km圏） 〔%・percent1・rankable・⚠→sales_lown_2016_1km〕
-- `sales_dest_gr_2021_2016_2km` — 目的地としての売上 増減率（2016→2021年調査＝2015→2020年の売上・2km圏） 〔%・percent1・rankable・⚠→sales_lown_2016_2km〕
-- `sales_dest_gr_2021_2016_5km` — 目的地としての売上 増減率（2016→2021年調査＝2015→2020年の売上・5km圏） 〔%・percent1・rankable・⚠→sales_lown_2016_5km〕
-- `sales_dest_gr_2021_2016_10km` — 目的地としての売上 増減率（2016→2021年調査＝2015→2020年の売上・10km圏） 〔%・percent1・rankable・⚠→sales_lown_2016_10km〕
-- `sales_dest_gr_2021_2016_20km` — 目的地としての売上 増減率（2016→2021年調査＝2015→2020年の売上・20km圏） 〔%・percent1・rankable・⚠→sales_lown_2016_20km〕
+- `sales_dest_gr_2021_2016_500m` — 目的地としての売上 増減率（2016→2021年調査＝2015→2020年の売上・500m圏） 〔%・percent1・rankable・⚠→sales_gr_unrel_500m〕
+- `sales_dest_gr_2021_2016_1km` — 目的地としての売上 増減率（2016→2021年調査＝2015→2020年の売上・1km圏） 〔%・percent1・rankable・⚠→sales_gr_unrel_1km〕
+- `sales_dest_gr_2021_2016_2km` — 目的地としての売上 増減率（2016→2021年調査＝2015→2020年の売上・2km圏） 〔%・percent1・rankable・⚠→sales_gr_unrel_2km〕
+- `sales_dest_gr_2021_2016_5km` — 目的地としての売上 増減率（2016→2021年調査＝2015→2020年の売上・5km圏） 〔%・percent1・rankable・⚠→sales_gr_unrel_5km〕
+- `sales_dest_gr_2021_2016_10km` — 目的地としての売上 増減率（2016→2021年調査＝2015→2020年の売上・10km圏） 〔%・percent1・rankable・⚠→sales_gr_unrel_10km〕
+- `sales_dest_gr_2021_2016_20km` — 目的地としての売上 増減率（2016→2021年調査＝2015→2020年の売上・20km圏） 〔%・percent1・rankable・⚠→sales_gr_unrel_20km〕
+- `sales_asym_500m` — 売上 娯楽の集計定義 非対称フラグ（500m圏／娯楽を両年とも総数に揃えると増減率が5ポイント以上動く） 〔—・—・not-rankable〕
+- `sales_gr_unrel_500m` — 売上 増減率 信頼性フラグ（500m圏／低分母 または 娯楽の集計定義が年で揃わない） 〔—・—・not-rankable〕
+- `sales_asym_1km` — 売上 娯楽の集計定義 非対称フラグ（1km圏／娯楽を両年とも総数に揃えると増減率が5ポイント以上動く） 〔—・—・not-rankable〕
+- `sales_gr_unrel_1km` — 売上 増減率 信頼性フラグ（1km圏／低分母 または 娯楽の集計定義が年で揃わない） 〔—・—・not-rankable〕
+- `sales_asym_2km` — 売上 娯楽の集計定義 非対称フラグ（2km圏／娯楽を両年とも総数に揃えると増減率が5ポイント以上動く） 〔—・—・not-rankable〕
+- `sales_gr_unrel_2km` — 売上 増減率 信頼性フラグ（2km圏／低分母 または 娯楽の集計定義が年で揃わない） 〔—・—・not-rankable〕
+- `sales_asym_5km` — 売上 娯楽の集計定義 非対称フラグ（5km圏／娯楽を両年とも総数に揃えると増減率が5ポイント以上動く） 〔—・—・not-rankable〕
+- `sales_gr_unrel_5km` — 売上 増減率 信頼性フラグ（5km圏／低分母 または 娯楽の集計定義が年で揃わない） 〔—・—・not-rankable〕
+- `sales_asym_10km` — 売上 娯楽の集計定義 非対称フラグ（10km圏／娯楽を両年とも総数に揃えると増減率が5ポイント以上動く） 〔—・—・not-rankable〕
+- `sales_gr_unrel_10km` — 売上 増減率 信頼性フラグ（10km圏／低分母 または 娯楽の集計定義が年で揃わない） 〔—・—・not-rankable〕
+- `sales_asym_20km` — 売上 娯楽の集計定義 非対称フラグ（20km圏／娯楽を両年とも総数に揃えると増減率が5ポイント以上動く） 〔—・—・not-rankable〕
+- `sales_gr_unrel_20km` — 売上 増減率 信頼性フラグ（20km圏／低分母 または 娯楽の集計定義が年で揃わない） 〔—・—・not-rankable〕
 
 ## 将来推計人口（population_forecast）— 180件
 

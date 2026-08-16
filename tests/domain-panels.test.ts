@@ -539,6 +539,33 @@ describe('salesPanels（売上タブ）', () => {
     expect(table.note).toContain('2021年の小売は個人経営分')
   })
 
+  it('増減率だけが信頼できない駅（娯楽の集計定義が年で揃わない）にも警告が出る', () => {
+    // 水準は動かさず、増減率だけ sales_gr_unrel で守る（docs/sales.md §12-9）。
+    // ユニバーサルシティのように「水準は妥当だが 2 年が同じ定義で比べられない」駅が該当する。
+    const asymmetric = buildStationDetail(
+      station,
+      new Map<string, number>([
+        ['sales_dest_2016_1km', 330.7],
+        ['sales_dest_2021_1km', 1667.2],
+        ['sales_leisure_2021_1km', 1463.5],
+        ['sales_dest_gr_2021_2016_1km', 404.1],
+        ['sales_lown_2016_1km', 0],
+        ['sales_lown_2021_1km', 0],
+        ['sales_asym_1km', 1],
+        ['sales_gr_unrel_1km', 1],
+      ]),
+    )
+    const chart = salesPanels(asymmetric, 1000)[0]
+    if (chart?.type !== 'trendChart') throw new Error('trendChart ではない')
+    // 水準の警告は出ない（低分母ではない）／増減率の警告だけが出る
+    expect(chart.flags[0]).toEqual({
+      label: '増減率は参考値（分母が小さい、または娯楽の集計定義が年で揃わない）',
+      level: 'warn',
+    })
+    expect(chart.stats?.[0]?.flagged).toBe(false) // 合計（水準）は無印
+    expect(chart.stats?.[1]?.flagged).toBe(true) // 増減率に ⚠
+  })
+
   it('低分母：対象従業者が 50 人未満の駅は警告と ⚠ が付く（値は消さない）', () => {
     const tiny = buildStationDetail(
       station,
@@ -549,13 +576,14 @@ describe('salesPanels（売上タブ）', () => {
         ['sales_dest_gr_2021_2016_1km', 255.6],
         ['sales_lown_2016_1km', 1],
         ['sales_lown_2021_1km', 1],
+        ['sales_gr_unrel_1km', 1], // 低分母は合成フラグにも入る
       ]),
     )
     const chart = salesPanels(tiny, 1000)[0]
     if (chart?.type !== 'trendChart') throw new Error('trendChart ではない')
     expect(chart.flags[0]).toEqual({ label: '半径内の対象従業者が少なく推計は参考値', level: 'warn' })
     expect(chart.stats?.[0]?.flagged).toBe(true)
-    expect(chart.stats?.[1]?.flagged).toBe(true) // 増減率も旧年フラグで ⚠
+    expect(chart.stats?.[1]?.flagged).toBe(true) // 増減率も合成フラグで ⚠
   })
 
   it('データが無い駅では空配列（タブは「データがありません」を出す）', () => {

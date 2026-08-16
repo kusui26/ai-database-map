@@ -12,9 +12,9 @@ import {
 import { CATEGORIES, RADII_M } from '@/shared/constants'
 
 describe('catalog（Zod ロード）', () => {
-  it('784 エントリ・10 属性・カウント整合', () => {
-    expect(catalog.entryCount).toBe(784)
-    expect(entries.length).toBe(784)
+  it('796 エントリ・10 属性・カウント整合', () => {
+    expect(catalog.entryCount).toBe(796)
+    expect(entries.length).toBe(796)
     expect(catalog.stationAttributes.length).toBe(10)
     expect(catalog.entryCount + catalog.stationAttributeCount).toBe(catalog.columnCount)
   })
@@ -34,9 +34,9 @@ describe('catalog（Zod ロード）', () => {
     expect(() => requireEntry('___missing___')).toThrow()
   })
 
-  it('カテゴリ別エントリ数の合計が 784', () => {
+  it('カテゴリ別エントリ数の合計が 796', () => {
     const total = CATEGORIES.reduce((sum, cat) => sum + entriesForCategory(cat).length, 0)
-    expect(total).toBe(784)
+    expect(total).toBe(796)
   })
 
   it('rankable は flag / hidden_ratio を含まない', () => {
@@ -111,7 +111,7 @@ describe('catalog（Zod ロード）', () => {
 
   it('売上：フラグ以外はすべてランキング・散布図に出す（相対比較がこのアプリの価値・§14）', () => {
     const sales = entries.filter((entry) => entry.category === 'sales')
-    expect(sales).toHaveLength(66) // 水準48 + 増減率6 + フラグ12
+    expect(sales).toHaveLength(78) // 水準48 + 増減率6 + フラグ24
     for (const entry of sales) {
       expect(entry.rankable, entry.key).toBe(entry.kind !== 'flag')
     }
@@ -121,9 +121,10 @@ describe('catalog（Zod ロード）', () => {
     for (const entry of entries.filter((e) => e.category === 'sales' && e.kind === 'level')) {
       expect(entry.reliabilityFlagKey).toBe(`sales_lown_${entry.year}_${radiusToken(entry.key)}`)
     }
+    // 増減率は「低分母 or 娯楽の集計定義が非対称」の合成フラグを見る（260817）。
     for (const entry of entries.filter((e) => e.category === 'sales' && e.kind === 'growth')) {
       expect(entry.yearBase).not.toBeNull()
-      expect(entry.reliabilityFlagKey).toBe(`sales_lown_${entry.yearBase}_${radiusToken(entry.key)}`)
+      expect(entry.reliabilityFlagKey).toBe(`sales_gr_unrel_${radiusToken(entry.key)}`)
     }
   })
 
@@ -138,6 +139,26 @@ describe('catalog（Zod ロード）', () => {
     expect(requireEntry('sales_retail_2016_1km').labelJa).toContain('2016年調査＝2015年の売上')
     expect(requireEntry('sales_retail_2021_1km').labelJa).toContain('卸売を除く')
     expect(requireEntry('sales_leisure_2021_1km').labelJa).toContain('本社一括計上を除く')
+  })
+
+  it('売上：増減率の除外は「低分母 or 娯楽の定義が非対称」の合成フラグ（260817）', () => {
+    // 娯楽の「総数 − 本所」は本所が秘匿の年は引けず、両年で秘匿の状態が違う 152 団体では
+    // 2016↔2021 が同じ定義にならない（docs/sales.md §12-9）。水準は各年の最善値を保ち、
+    // 増減率だけ `sales_gr_unrel`（低分母 OR 非対称）で相対比較から外す。
+    for (const radius of ['500m', '1km', '2km', '5km', '10km', '20km']) {
+      const asym = requireEntry(`sales_asym_${radius}`)
+      expect(asym.kind).toBe('flag')
+      expect(asym.rankable).toBe(false)
+      expect(asym.labelJa).toContain('娯楽')
+      const unrel = requireEntry(`sales_gr_unrel_${radius}`)
+      expect(unrel.kind).toBe('flag')
+      expect(unrel.rankable).toBe(false)
+      expect(unrel.labelJa).toContain('低分母')
+    }
+    // 水準は従来どおり低分母だけを見る（定義の非対称は水準を壊さない）
+    for (const entry of entries.filter((e) => e.category === 'sales' && e.kind === 'level')) {
+      expect(entry.reliabilityFlagKey).toBe(`sales_lown_${entry.year}_${radiusToken(entry.key)}`)
+    }
   })
 
   it('産業別の従業者数は実測 → 従業者カテゴリ・除外フラグなし（emp_n と同じ扱い）', () => {

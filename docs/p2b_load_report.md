@@ -5,16 +5,16 @@
 ## 実測値
 
 - stations: **9,273** 行
-- station_values: **6,020,472** 行（フラグの 0 は格納しない規約で 866,141 行を省略）
-- DB サイズ: **417 MB**（うち 3テーブル 397 MB）
+- station_values: **6,025,473** 行（フラグの 0 は格納しない規約で 972,416 行を省略）
+- DB サイズ: **417 MB**（うち 3テーブル 398 MB）
 - `station_values.value` の型: **real**（期待値も float4 に丸めて厳密比較）
 
 ## チェック結果
 
-- [PASS] metric_columns 件数 = CSV 値列数 = 784
+- [PASS] metric_columns 件数 = CSV 値列数 = 796
 - [PASS] stations 件数 = CSV 行数 = 9273
-- [PASS] (a) station_values 件数 = CSV 非NaN セル数 − フラグの 0（783列）
-- [PASS] (b) 列ごとの件数一致（783列）
+- [PASS] (a) station_values 件数 = CSV 非NaN セル数 − フラグの 0（795列）
+- [PASS] (b) 列ごとの件数一致（795列）
 - [PASS] (c) 無作為 300 セルの値一致
 - [PASS] (d) 全国計（sum）一致：9列
 - [PASS] lp_near_use（stations）非null件数一致

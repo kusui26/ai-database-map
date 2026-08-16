@@ -139,7 +139,9 @@ function LineTrend({ panel, labels }: { panel: TrendChartPanel; labels: number[]
       interaction: { mode: 'index', intersect: false },
       scales: buildScales(compact, isPercent, false),
       plugins: {
-        legend: { display: panel.series.length > 1 },
+        // 折れ線は**凡例を出さない**（Legend プラグインが未登録だった時代からの見た目を保つ）。
+        // 実線/破線と色で区別でき、系列名はツールチップに出る。出すかどうかは別途決める。
+        legend: { display: false },
         tooltip: {
           callbacks: {
             title: (items) => (items[0] === undefined ? '' : `${items[0].label}年`),
@@ -182,7 +184,12 @@ function StackedTrend({ panel, labels }: { panel: TrendChartPanel; labels: numbe
       interaction: { mode: 'index', intersect: false },
       scales: buildScales(compact, isPercent, true),
       plugins: {
-        legend: { display: panel.series.length > 1 },
+        // 積み上げは色だけでは内訳が読めないので凡例を出す（下・小さめ・箱は正方形）。
+        legend: {
+          display: panel.series.length > 1,
+          position: 'bottom',
+          labels: { boxWidth: 10, boxHeight: 10, padding: 12, font: { size: 11 } },
+        },
         tooltip: {
           callbacks: {
             title: (items) => (items[0] === undefined ? '' : `${items[0].label}年`),

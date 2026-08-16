@@ -569,6 +569,150 @@ function incomeNote(cityOnly: boolean): string {
   return notes.join('')
 }
 
+// --- 売上（docs/sales.md §7・260816） ------------------------------------
+
+/** 積み上げの内訳（下から小売・飲食宿泊・娯楽）。同系色の濃淡で「1 つの全体の部分」に見せる。 */
+const SALES_BREAKDOWN: readonly { baseMetric: string; label: string; color: string }[] = [
+  { baseMetric: 'sales_retail', label: '小売', color: CATEGORY_COLORS.sales },
+  { baseMetric: 'sales_food', label: '飲食・宿泊', color: '#fb923c' }, // orange-400
+  { baseMetric: 'sales_leisure', label: '娯楽ほか', color: '#fdba74' }, // orange-300
+]
+
+/** 産業別の従業者数 増減率（マス→内訳の順）。売上は推計なので、変化の裏取りは実測のこちら。 */
+const SALES_EMPLOYEE_GROWTH: readonly { baseMetric: string; label: string }[] = [
+  { baseMetric: 'emp_dest_gr', label: '3業種計' },
+  { baseMetric: 'emp_trade_gr', label: '卸売・小売' },
+  { baseMetric: 'emp_food_gr', label: '宿泊・飲食' },
+  { baseMetric: 'emp_life_gr', label: '生活関連・娯楽' },
+]
+
+/** 売上タブの注記（推計であること・業種の定義・対象期間・母集団の揃え方）。 */
+const SALES_NOTE = [
+  '売上は推計値です（500mメッシュの産業別従業者数 × その市区町村の従業者1人当たり売上）。従業者数は実測。',
+  '小売は卸売を含まず、娯楽は本社の一括計上を除いています（卸売・製造業は含みません）。',
+  '対象期間は2016年調査＝2015年、2021年調査＝2020年（コロナ1年目）の各1年間です。',
+  '2021年の小売は個人経営分を推計で足して2016年と母集団を揃えています。',
+].join('')
+
+/** 増減率系列の期間ラベル（`2016→2021年`）。年はカタログ由来で、表示に直書きしない。 */
+function spanLabel(series: MetricSeries | undefined): string {
+  const point = series?.points.at(-1)
+  return point === undefined ? '' : `${point.yearBase ?? '?'}→${point.year ?? '?'}年`
+}
+
+/** 売上タブの注意（コロナの効き方は常に・低分母は該当するときだけ）。 */
+function salesFlags(dest: MetricSeries): ReliabilityFlag[] {
+  const lowDenominator: ReliabilityFlag[] = dest.points.some((point) => point.flagged)
+    ? [{ label: '半径内の対象従業者が少なく推計は参考値', level: 'warn' }]
+    : []
+  return [
+    ...lowDenominator,
+    { label: '2021年調査の売上は2020年（コロナ1年目）の1年間', level: 'info' },
+  ]
+}
+
+/** 売上の要約（最新調査の合計 → 前回調査比）。マス→変化の順に読ませる（§13）。 */
+function salesStats(dest: MetricSeries, growth: MetricSeries | undefined): PanelStat[] {
+  const latest = dest.points.at(-1)
+  if (latest === undefined || latest.value === null) return []
+  const change = growth?.points.at(-1)
+  const changeStat: PanelStat[] =
+    change === undefined || change.value === null
+      ? []
+      : [{ label: `${change.yearBase ?? '?'}年調査比`, value: change.formatted, flagged: change.flagged }]
+  return [
+    {
+      label: `${latest.year ?? '?'}年調査 合計`,
+      value: formatWithUnit(latest.value, dest.format, dest.unit),
+      flagged: latest.flagged,
+    },
+    ...changeStat,
+  ]
+}
+
+/**
+ * 売上タブ：目的地としての売上の積み上げ（2 時点）→ 半径別 → 産業別従業者の増減率。
+ *
+ * 読む順は**マス（合計と増減率）→ 内訳（業種）→ 空間（半径）→ 実測（従業者）**。
+ * 売上は市区町村値をメッシュの従業者数で按分した**推計**なので、変化の裏取りに使える
+ * **実測の従業者数**を同じタブに置く（docs/sales.md §11 の限界 1）。
+ */
+export function salesPanels(
+  detail: StationDetail,
+  radiusM: number,
+  size: PanelSize = 'full',
+): Panel[] {
+  const panels: Panel[] = []
+  const radius = radiusLabel(radiusM)
+  const dest = seriesAt(detail, 'sales_dest', radiusM)
+
+  if (dest !== undefined && dest.points.some((point) => point.value !== null)) {
+    panels.push({
+      type: 'trendChart',
+      title: `目的地としての売上（${radius}圏）`,
+      unit: dest.unit,
+      format: dest.format,
+      category: 'sales',
+      stacked: true, // 2 時点 × 3 業種の積み上げ縦棒（合計と内訳を 1 枚で読む）
+      flags: salesFlags(dest),
+      series: SALES_BREAKDOWN.map(({ baseMetric, label, color }) => ({
+        label,
+        points: toXY(seriesAt(detail, baseMetric, radiusM)),
+        color,
+      })),
+      stats: salesStats(dest, seriesAt(detail, 'sales_dest_gr', radiusM)),
+      size,
+    })
+  }
+
+  // 半径別（最新調査）：半径を広げたときの伸び方＝商圏の広がり。
+  const destBars: Bar[] = RADII_M.flatMap((candidate) => {
+    const point = seriesAt(detail, 'sales_dest', candidate)?.points.at(-1)
+    if (point === undefined || point.value === null) return []
+    return [
+      {
+        label: radiusLabel(candidate),
+        value: point.value,
+        formatted: point.formatted,
+        flagged: point.flagged,
+        emphasis: candidate === radiusM,
+      },
+    ]
+  })
+  if (destBars.length > 0) {
+    const latestYear = dest?.points.at(-1)?.year
+    panels.push({
+      type: 'barChart',
+      title: `目的地としての売上（半径別${latestYear === undefined ? '' : `・${latestYear}年調査`}）`,
+      unit: dest?.unit ?? '億円',
+      format: dest?.format ?? 'decimal1',
+      category: 'sales',
+      bars: destBars,
+      flags: [],
+      note: '半径を広げたときの伸び方が商圏の広がり。近傍で頭打ちなら、お金は駅の足元に集まっている。',
+      size,
+    })
+  }
+
+  const employeeRows: PanelStat[] = SALES_EMPLOYEE_GROWTH.flatMap(({ baseMetric, label }) => {
+    const point = seriesAt(detail, baseMetric, radiusM)?.points.at(-1)
+    if (point === undefined || point.value === null) return []
+    return [{ label, value: point.formatted, flagged: point.flagged }]
+  })
+  if (employeeRows.length > 0) {
+    const span = spanLabel(seriesAt(detail, 'emp_dest_gr', radiusM))
+    panels.push({
+      type: 'statTable',
+      title: `産業別の従業者数 増減率（実測${span === '' ? '' : `・${span}`}・${radius}圏）`,
+      rows: employeeRows,
+      note: SALES_NOTE,
+      size,
+    })
+  }
+
+  return panels
+}
+
 /** 乗降タブ 1 枚分の Panel[]（駅カード → 推移チャート）。UI/AI が同一配列を描画する。 */
 export function passengerPanels(detail: StationDetail, size: PanelSize = 'full'): Panel[] {
   return [stationCardPanel(detail, size), paxTrendPanel(detail, size)]

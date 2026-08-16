@@ -11,6 +11,7 @@ import {
   passengerPanels,
   paxTrendPanel,
   populationPanels,
+  salesPanels,
   stationCardPanel,
 } from '@/domain/stations/panels'
 import { panelSchema } from '@/shared/protocol'
@@ -451,14 +452,126 @@ describe('incomePanels（所得タブ）', () => {
   })
 })
 
+// --- 売上（260816・PR3 でカタログ／ドメインに載せた） ----------------------
+// 値は `data/derived/station_dataset.csv` の吉祥寺（1km／500m／2km）実測。
+
+const salesKichijoji = buildStationDetail(
+  station,
+  new Map<string, number>([
+    ['sales_dest_2016_1km', 2591.9],
+    ['sales_dest_2021_1km', 1902.3],
+    ['sales_retail_2016_1km', 1762.6],
+    ['sales_retail_2021_1km', 1469.2],
+    ['sales_food_2016_1km', 423.3],
+    ['sales_food_2021_1km', 263.3],
+    ['sales_leisure_2016_1km', 406.0],
+    ['sales_leisure_2021_1km', 169.9],
+    ['sales_dest_gr_2021_2016_1km', -26.6],
+    ['sales_lown_2016_1km', 0],
+    ['sales_lown_2021_1km', 0],
+    ['emp_dest_gr_2021_2016_1km', -11.2],
+    ['emp_trade_gr_2021_2016_1km', -2.2],
+    ['emp_food_gr_2021_2016_1km', -22.4],
+    ['emp_life_gr_2021_2016_1km', -7.4],
+    ['sales_dest_2021_500m', 1323.4],
+    ['sales_lown_2021_500m', 0],
+    ['sales_dest_2021_2km', 3450.3],
+    ['sales_lown_2021_2km', 0],
+  ]),
+)
+
+describe('salesPanels（売上タブ）', () => {
+  it('積み上げ推移 → 半径別バー → 産業別従業者の増減率の順で返す（UI/AI 同一配列）', () => {
+    expect(salesPanels(salesKichijoji, 1000).map((panel) => panel.type)).toEqual([
+      'trendChart',
+      'barChart',
+      'statTable',
+    ])
+  })
+
+  it('推移：3 業種の積み上げ（stacked）＋「合計」「前回調査比」の KPI', () => {
+    const chart = salesPanels(salesKichijoji, 1000)[0]
+    if (chart?.type !== 'trendChart') throw new Error('trendChart ではない')
+    expect(chart.title).toBe('目的地としての売上（1km圏）')
+    expect(chart.unit).toBe('億円')
+    expect(chart.category).toBe('sales')
+    expect(chart.stacked).toBe(true)
+    expect(chart.series.map((series) => series.label)).toEqual(['小売', '飲食・宿泊', '娯楽ほか'])
+    expect(chart.series[0]?.color).toBe(CATEGORY_COLORS.sales)
+    expect(chart.series[0]?.points).toEqual([
+      { x: 2016, y: 1762.6 },
+      { x: 2021, y: 1469.2 },
+    ])
+    // 合計は積み上げの高さと一致する（1,469.2 + 263.3 + 169.9 = 1,902.4 ≒ 丸め前の 1,902.3）
+    expect(chart.stats).toEqual([
+      { label: '2021年調査 合計', value: '1,902.3 億円', flagged: false },
+      { label: '2016年調査比', value: '-26.6%', flagged: false },
+    ])
+    // コロナの効き方は誰にでも効く注意なので常に出す
+    expect(chart.flags).toEqual([
+      { label: '2021年調査の売上は2020年（コロナ1年目）の1年間', level: 'info' },
+    ])
+  })
+
+  it('半径別バー：最新調査・選択半径を強調（商圏の広がり）', () => {
+    const bar = salesPanels(salesKichijoji, 1000)[1]
+    if (bar?.type !== 'barChart') throw new Error('barChart ではない')
+    expect(bar.title).toBe('目的地としての売上（半径別・2021年調査）')
+    expect(bar.bars).toEqual([
+      { label: '500m', value: 1323.4, formatted: '1,323.4', flagged: false, emphasis: false },
+      { label: '1km', value: 1902.3, formatted: '1,902.3', flagged: false, emphasis: true },
+      { label: '2km', value: 3450.3, formatted: '3,450.3', flagged: false, emphasis: false },
+    ])
+  })
+
+  it('従業者の増減率：マス（3業種計）→ 内訳の順・実測なので推計の注記と区別する', () => {
+    const table = salesPanels(salesKichijoji, 1000)[2]
+    if (table?.type !== 'statTable') throw new Error('statTable ではない')
+    expect(table.title).toBe('産業別の従業者数 増減率（実測・2016→2021年・1km圏）')
+    expect(table.rows).toEqual([
+      { label: '3業種計', value: '-11.2%', flagged: false },
+      { label: '卸売・小売', value: '-2.2%', flagged: false },
+      { label: '宿泊・飲食', value: '-22.4%', flagged: false },
+      { label: '生活関連・娯楽', value: '-7.4%', flagged: false },
+    ])
+    expect(table.note).toContain('売上は推計値')
+    expect(table.note).toContain('卸売を含まず')
+    expect(table.note).toContain('2021年の小売は個人経営分')
+  })
+
+  it('低分母：対象従業者が 50 人未満の駅は警告と ⚠ が付く（値は消さない）', () => {
+    const tiny = buildStationDetail(
+      station,
+      new Map<string, number>([
+        ['sales_dest_2016_1km', 0.9],
+        ['sales_dest_2021_1km', 3.2],
+        ['sales_retail_2021_1km', 2.6],
+        ['sales_dest_gr_2021_2016_1km', 255.6],
+        ['sales_lown_2016_1km', 1],
+        ['sales_lown_2021_1km', 1],
+      ]),
+    )
+    const chart = salesPanels(tiny, 1000)[0]
+    if (chart?.type !== 'trendChart') throw new Error('trendChart ではない')
+    expect(chart.flags[0]).toEqual({ label: '半径内の対象従業者が少なく推計は参考値', level: 'warn' })
+    expect(chart.stats?.[0]?.flagged).toBe(true)
+    expect(chart.stats?.[1]?.flagged).toBe(true) // 増減率も旧年フラグで ⚠
+  })
+
+  it('データが無い駅では空配列（タブは「データがありません」を出す）', () => {
+    expect(salesPanels(detail, 1000)).toEqual([])
+  })
+})
+
 describe('P5c/P5e パネルは Protocol スキーマに合致', () => {
-  it('地価・バス・事業所・従業者・所得すべて parse できる', () => {
+  it('地価・バス・事業所・従業者・所得・売上すべて parse できる', () => {
     const all = [
       ...landPricePanels(p5cDetail, 1000),
       ...busPanels(p5cDetail, 1000),
       ...establishmentPanels(p5cDetail, 1000),
       ...employeePanels(p5cDetail, 1000),
       ...incomePanels(incomeTokyo, 1000),
+      ...salesPanels(salesKichijoji, 1000),
     ]
     for (const panel of all) expect(() => panelSchema.parse(panel)).not.toThrow()
   })

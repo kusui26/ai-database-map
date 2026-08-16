@@ -17,6 +17,7 @@ import {
   landPricePanels,
   paxTrendPanel,
   populationPanels,
+  salesPanels,
   stationCardPanel,
 } from '@/domain/stations/panels'
 import { rankingPanel } from '@/domain/ranking/panel'
@@ -49,6 +50,8 @@ function categoryPanels(effect: StationDetailEffect): Panel[] {
       return populationPanels(detail, radiusM, 'compact')
     case 'income':
       return incomePanels(detail, radiusM, 'compact')
+    case 'sales':
+      return salesPanels(detail, radiusM, 'compact')
     case 'land_price':
       return landPricePanels(detail, radiusM, 'compact')
     case 'bus':

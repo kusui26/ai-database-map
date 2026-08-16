@@ -113,6 +113,30 @@ def main() -> int:
         check(res and res[0]["flag_value"] is not None, "rank(inc_pc) が低分母フラグ値を同梱",
               f"flag_value={res[0]['flag_value'] if res else None}")
 
+        # 9c) 売上（260816 追加）：新カテゴリが RPC まで通ること ＋ **フラグの 0 を格納しない**
+        #     規約（対策A）が消費側で従来どおり効くこと（行が無い＝0）を 4 本で押さえる。
+        check(close(bundle.get("sales_dest_2021_1km"), tokyo["sales_dest_2021_1km"]),
+              "station_bundle(東京) の sales_dest_2021_1km = CSV値",
+              f"db={bundle.get('sales_dest_2021_1km')} csv={tokyo['sales_dest_2021_1km']}")
+        # 東京の低分母フラグは 0 ＝ 行が無い（bundle に現れない）。UI は「無い＝0」と読む。
+        check(float(tokyo["sales_lown_2021_1km"]) == 0 and "sales_lown_2021_1km" not in bundle,
+              "フラグ 0 の駅は station_bundle に行が無い（対策A）",
+              f"csv={tokyo['sales_lown_2021_1km']} bundle={'有' if 'sales_lown_2021_1km' in bundle else '無'}")
+        expsales = df.loc[df["sales_dest_2021_1km"].idxmax()]
+        res = call("select * from public.rank_by_column(%s,%s,%s,%s)", ("sales_dest_2021_1km", None, "desc", 1))
+        check(res and res[0]["grp"] == expsales["grp"] and close(res[0]["value"], expsales["sales_dest_2021_1km"]),
+              "rank sales_dest_2021_1km desc Top1 = CSV argmax",
+              f"db={res[0]['grp'] if res else None}/{res[0]['value'] if res else None}"
+              f" csv={expsales['grp']}/{expsales['sales_dest_2021_1km']}")
+        # 低分母を除外しても上位は変わらない（フラグ駅は小さい駅だけ）＋ 除外で件数が減る
+        lown = df[df["sales_lown_2021_1km"] == 1]
+        res = call("select * from public.rank_by_column(%s,%s,%s,%s,%s,%s)",
+                   ("sales_dest_2021_1km", None, "desc", 1, 0, True))
+        check(res and res[0]["grp"] == expsales["grp"]
+              and res[0]["total"] == len(df) - len(lown),
+              "rank sales（低分母を除外）＝ 上位は不変・件数はフラグ駅ぶん減る",
+              f"db_total={res[0]['total'] if res else None} csv={len(df) - len(lown)}")
+
         # 10) 散布（千葉県）の値が CSV と一致（260804：values_for_columns → scatter_points）
         res = call("select * from public.scatter_points(%s,%s,%s,%s,%s)",
                    ("pop_2020_1km", "pax_2024", None, None, ["千葉県"]))

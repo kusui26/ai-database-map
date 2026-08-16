@@ -37,6 +37,7 @@ export type Category =
   | 'passenger'
   | 'population'
   | 'income'
+  | 'sales'
   | 'population_forecast'
   | 'land_price'
   | 'bus'
@@ -48,6 +49,7 @@ export const CATEGORIES: readonly Category[] = [
   'passenger',
   'population',
   'income',
+  'sales',
   'population_forecast',
   'land_price',
   'bus',
@@ -60,6 +62,7 @@ export const CATEGORY_LABELS_JA: Readonly<Record<Category, string>> = {
   passenger: '乗降客数',
   population: '人口',
   income: '所得',
+  sales: '売上',
   population_forecast: '将来推計人口',
   land_price: '地価',
   bus: 'バス',
@@ -84,6 +87,7 @@ export const CATEGORY_COLORS: Readonly<Record<Category, string>> = {
   passenger: '#1e293b', // slate-800
   population: '#2563eb', // blue-600
   income: '#0d9488', // teal-600
+  sales: '#ea580c', // orange-600（お金の暖色。地価 amber-600 とは色相・彩度で分かれる）
   population_forecast: '#93c5fd', // blue-300
   land_price: '#d97706', // amber-600
   bus: '#059669', // emerald-600

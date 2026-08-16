@@ -40,9 +40,9 @@ describe('checkRateLimit（固定窓・now 注入で純粋）', () => {
 })
 
 describe('catalog-digest（カタログ駆動）', () => {
-  it('categoryDigests は 8 カテゴリを網羅し、各 baseMetric に例キーがある', () => {
+  it('categoryDigests は 9 カテゴリを網羅し、各 baseMetric に例キーがある', () => {
     const digests = categoryDigests()
-    expect(digests).toHaveLength(8)
+    expect(digests).toHaveLength(9)
     const population = digests.find((digest) => digest.category === 'population')
     expect(population?.labelJa).toBe('人口')
     for (const base of population?.baseMetrics ?? []) {

@@ -1,9 +1,11 @@
 /**
  * Chart.js の必要コンポーネントだけを一度登録する（tree-shaking 構成）。
- * 折れ線＋塗り＋散布＋ツールチップ。チャート系コンポーネントの import 時に呼ぶ。
+ * 折れ線＋塗り＋棒＋散布＋ツールチップ。チャート系コンポーネントの import 時に呼ぶ。
  */
 
 import {
+  BarController,
+  BarElement,
   CategoryScale,
   Chart,
   Filler,
@@ -23,6 +25,8 @@ export function ensureChartRegistered(): void {
   Chart.register(
     LineController,
     LineElement,
+    BarController, // 積み上げ縦棒（trendChart の stacked・260816）
+    BarElement,
     PointElement,
     ScatterController,
     LinearScale,

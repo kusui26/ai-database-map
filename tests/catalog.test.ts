@@ -12,9 +12,9 @@ import {
 import { CATEGORIES, RADII_M } from '@/shared/constants'
 
 describe('catalog（Zod ロード）', () => {
-  it('658 エントリ・10 属性・カウント整合', () => {
-    expect(catalog.entryCount).toBe(658)
-    expect(entries.length).toBe(658)
+  it('784 エントリ・10 属性・カウント整合', () => {
+    expect(catalog.entryCount).toBe(784)
+    expect(entries.length).toBe(784)
     expect(catalog.stationAttributes.length).toBe(10)
     expect(catalog.entryCount + catalog.stationAttributeCount).toBe(catalog.columnCount)
   })
@@ -34,9 +34,9 @@ describe('catalog（Zod ロード）', () => {
     expect(() => requireEntry('___missing___')).toThrow()
   })
 
-  it('カテゴリ別エントリ数の合計が 658', () => {
+  it('カテゴリ別エントリ数の合計が 784', () => {
     const total = CATEGORIES.reduce((sum, cat) => sum + entriesForCategory(cat).length, 0)
-    expect(total).toBe(658)
+    expect(total).toBe(784)
   })
 
   it('rankable は flag / hidden_ratio を含まない', () => {
@@ -106,6 +106,59 @@ describe('catalog（Zod ロード）', () => {
     for (const entry of entries.filter((e) => e.baseMetric === 'inc_pc')) {
       expect(entry.reliabilityFlagKey).toBe(`inc_lown_${entry.year}_${radiusToken(entry.key)}`)
       expect(entry.noticeFlagKey).toBe(entry.reliabilityFlagKey)
+    }
+  })
+
+  it('売上：フラグ以外はすべてランキング・散布図に出す（相対比較がこのアプリの価値・§14）', () => {
+    const sales = entries.filter((entry) => entry.category === 'sales')
+    expect(sales).toHaveLength(66) // 水準48 + 増減率6 + フラグ12
+    for (const entry of sales) {
+      expect(entry.rankable, entry.key).toBe(entry.kind !== 'flag')
+    }
+  })
+
+  it('売上：水準は同年・増減率は「分母年」の低分母フラグを見る（inc_gr と同じ規則）', () => {
+    for (const entry of entries.filter((e) => e.category === 'sales' && e.kind === 'level')) {
+      expect(entry.reliabilityFlagKey).toBe(`sales_lown_${entry.year}_${radiusToken(entry.key)}`)
+    }
+    for (const entry of entries.filter((e) => e.category === 'sales' && e.kind === 'growth')) {
+      expect(entry.yearBase).not.toBeNull()
+      expect(entry.reliabilityFlagKey).toBe(`sales_lown_${entry.yearBase}_${radiusToken(entry.key)}`)
+    }
+  })
+
+  it('売上：ラベルに「推計」と「調査年＝売上年」を必ず書く（誠実さ・docs/sales.md §11）', () => {
+    // 値は市区町村の売上をメッシュの従業者数で按分した推計で、しかも「前年 1 年間」の売上。
+    // どちらもラベルから落とすと、読み手が実測・調査年と取り違える。
+    const dest = requireEntry('sales_dest_2021_1km')
+    expect(dest.labelJa).toContain('推計')
+    expect(dest.labelJa).toContain('2021年調査＝2020年の売上')
+    expect(dest.unit).toBe('億円')
+    expect(dest.format).toBe('decimal1')
+    expect(requireEntry('sales_retail_2016_1km').labelJa).toContain('2016年調査＝2015年の売上')
+    expect(requireEntry('sales_retail_2021_1km').labelJa).toContain('卸売を除く')
+    expect(requireEntry('sales_leisure_2021_1km').labelJa).toContain('本社一括計上を除く')
+  })
+
+  it('産業別の従業者数は実測 → 従業者カテゴリ・除外フラグなし（emp_n と同じ扱い）', () => {
+    for (const base of ['emp_trade_n', 'emp_food_n', 'emp_life_n']) {
+      const list = entries.filter((entry) => entry.baseMetric === base)
+      expect(list, base).toHaveLength(12) // 2 年 × 6 半径
+      for (const entry of list) {
+        expect(entry.category).toBe('employee')
+        expect(entry.unit).toBe('人')
+        expect(entry.reliabilityFlagKey, entry.key).toBeNull()
+        expect(entry.labelJa).not.toContain('推計')
+      }
+    }
+    // 増減率だけは分母が小さいと暴れるので、売上と同じ低分母フラグ（旧年）で除外する。
+    for (const base of ['emp_trade_gr', 'emp_food_gr', 'emp_life_gr', 'emp_dest_gr']) {
+      const list = entries.filter((entry) => entry.baseMetric === base)
+      expect(list, base).toHaveLength(6)
+      for (const entry of list) {
+        expect(entry.category).toBe('employee')
+        expect(entry.reliabilityFlagKey).toBe(`sales_lown_${entry.yearBase}_${radiusToken(entry.key)}`)
+      }
     }
   })
 })

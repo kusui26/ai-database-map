@@ -1,6 +1,6 @@
 # メトリクス・カタログ ラベル一覧（自動生成）
 
-`pipeline/build_catalog.py` が `station_dataset.csv`（668列）から生成。 値列 658 エントリ ＋ 駅属性 10。
+`pipeline/build_catalog.py` が `station_dataset.csv`（794列）から生成。 値列 784 エントリ ＋ 駅属性 10。
 
 凡例: `key` — ラベル 〔単位・format・rankable・⚠→信頼性フラグ〕
 
@@ -235,6 +235,75 @@
 - `inc_city_only_5km` — 所得 政令市フラグ（5km圏／納税義務者の過半が政令市由来＝市全体の平均） 〔—・—・not-rankable〕
 - `inc_city_only_10km` — 所得 政令市フラグ（10km圏／納税義務者の過半が政令市由来＝市全体の平均） 〔—・—・not-rankable〕
 - `inc_city_only_20km` — 所得 政令市フラグ（20km圏／納税義務者の過半が政令市由来＝市全体の平均） 〔—・—・not-rankable〕
+
+## 売上（sales）— 66件
+
+- `sales_retail_2016_500m` — 小売の売上（推計・卸売を除く・2016年調査＝2015年の売上・500m圏） 〔億円・decimal1・rankable・⚠→sales_lown_2016_500m〕
+- `sales_retail_2016_1km` — 小売の売上（推計・卸売を除く・2016年調査＝2015年の売上・1km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2016_1km〕
+- `sales_retail_2016_2km` — 小売の売上（推計・卸売を除く・2016年調査＝2015年の売上・2km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2016_2km〕
+- `sales_retail_2016_5km` — 小売の売上（推計・卸売を除く・2016年調査＝2015年の売上・5km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2016_5km〕
+- `sales_retail_2016_10km` — 小売の売上（推計・卸売を除く・2016年調査＝2015年の売上・10km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2016_10km〕
+- `sales_retail_2016_20km` — 小売の売上（推計・卸売を除く・2016年調査＝2015年の売上・20km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2016_20km〕
+- `sales_food_2016_500m` — 飲食・宿泊の売上（推計・2016年調査＝2015年の売上・500m圏） 〔億円・decimal1・rankable・⚠→sales_lown_2016_500m〕
+- `sales_food_2016_1km` — 飲食・宿泊の売上（推計・2016年調査＝2015年の売上・1km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2016_1km〕
+- `sales_food_2016_2km` — 飲食・宿泊の売上（推計・2016年調査＝2015年の売上・2km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2016_2km〕
+- `sales_food_2016_5km` — 飲食・宿泊の売上（推計・2016年調査＝2015年の売上・5km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2016_5km〕
+- `sales_food_2016_10km` — 飲食・宿泊の売上（推計・2016年調査＝2015年の売上・10km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2016_10km〕
+- `sales_food_2016_20km` — 飲食・宿泊の売上（推計・2016年調査＝2015年の売上・20km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2016_20km〕
+- `sales_leisure_2016_500m` — 生活関連・娯楽の売上（推計・本社一括計上を除く・2016年調査＝2015年の売上・500m圏） 〔億円・decimal1・rankable・⚠→sales_lown_2016_500m〕
+- `sales_leisure_2016_1km` — 生活関連・娯楽の売上（推計・本社一括計上を除く・2016年調査＝2015年の売上・1km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2016_1km〕
+- `sales_leisure_2016_2km` — 生活関連・娯楽の売上（推計・本社一括計上を除く・2016年調査＝2015年の売上・2km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2016_2km〕
+- `sales_leisure_2016_5km` — 生活関連・娯楽の売上（推計・本社一括計上を除く・2016年調査＝2015年の売上・5km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2016_5km〕
+- `sales_leisure_2016_10km` — 生活関連・娯楽の売上（推計・本社一括計上を除く・2016年調査＝2015年の売上・10km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2016_10km〕
+- `sales_leisure_2016_20km` — 生活関連・娯楽の売上（推計・本社一括計上を除く・2016年調査＝2015年の売上・20km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2016_20km〕
+- `sales_dest_2016_500m` — 目的地としての売上（推計・小売＋飲食宿泊＋娯楽・2016年調査＝2015年の売上・500m圏） 〔億円・decimal1・rankable・⚠→sales_lown_2016_500m〕
+- `sales_lown_2016_500m` — 売上 低分母フラグ（2016年調査・500m圏／半径内の対象従業者<50人） 〔—・—・not-rankable〕
+- `sales_dest_2016_1km` — 目的地としての売上（推計・小売＋飲食宿泊＋娯楽・2016年調査＝2015年の売上・1km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2016_1km〕
+- `sales_lown_2016_1km` — 売上 低分母フラグ（2016年調査・1km圏／半径内の対象従業者<50人） 〔—・—・not-rankable〕
+- `sales_dest_2016_2km` — 目的地としての売上（推計・小売＋飲食宿泊＋娯楽・2016年調査＝2015年の売上・2km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2016_2km〕
+- `sales_lown_2016_2km` — 売上 低分母フラグ（2016年調査・2km圏／半径内の対象従業者<50人） 〔—・—・not-rankable〕
+- `sales_dest_2016_5km` — 目的地としての売上（推計・小売＋飲食宿泊＋娯楽・2016年調査＝2015年の売上・5km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2016_5km〕
+- `sales_lown_2016_5km` — 売上 低分母フラグ（2016年調査・5km圏／半径内の対象従業者<50人） 〔—・—・not-rankable〕
+- `sales_dest_2016_10km` — 目的地としての売上（推計・小売＋飲食宿泊＋娯楽・2016年調査＝2015年の売上・10km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2016_10km〕
+- `sales_lown_2016_10km` — 売上 低分母フラグ（2016年調査・10km圏／半径内の対象従業者<50人） 〔—・—・not-rankable〕
+- `sales_dest_2016_20km` — 目的地としての売上（推計・小売＋飲食宿泊＋娯楽・2016年調査＝2015年の売上・20km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2016_20km〕
+- `sales_lown_2016_20km` — 売上 低分母フラグ（2016年調査・20km圏／半径内の対象従業者<50人） 〔—・—・not-rankable〕
+- `sales_retail_2021_500m` — 小売の売上（推計・卸売を除く・2021年調査＝2020年の売上・500m圏） 〔億円・decimal1・rankable・⚠→sales_lown_2021_500m〕
+- `sales_retail_2021_1km` — 小売の売上（推計・卸売を除く・2021年調査＝2020年の売上・1km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2021_1km〕
+- `sales_retail_2021_2km` — 小売の売上（推計・卸売を除く・2021年調査＝2020年の売上・2km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2021_2km〕
+- `sales_retail_2021_5km` — 小売の売上（推計・卸売を除く・2021年調査＝2020年の売上・5km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2021_5km〕
+- `sales_retail_2021_10km` — 小売の売上（推計・卸売を除く・2021年調査＝2020年の売上・10km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2021_10km〕
+- `sales_retail_2021_20km` — 小売の売上（推計・卸売を除く・2021年調査＝2020年の売上・20km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2021_20km〕
+- `sales_food_2021_500m` — 飲食・宿泊の売上（推計・2021年調査＝2020年の売上・500m圏） 〔億円・decimal1・rankable・⚠→sales_lown_2021_500m〕
+- `sales_food_2021_1km` — 飲食・宿泊の売上（推計・2021年調査＝2020年の売上・1km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2021_1km〕
+- `sales_food_2021_2km` — 飲食・宿泊の売上（推計・2021年調査＝2020年の売上・2km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2021_2km〕
+- `sales_food_2021_5km` — 飲食・宿泊の売上（推計・2021年調査＝2020年の売上・5km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2021_5km〕
+- `sales_food_2021_10km` — 飲食・宿泊の売上（推計・2021年調査＝2020年の売上・10km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2021_10km〕
+- `sales_food_2021_20km` — 飲食・宿泊の売上（推計・2021年調査＝2020年の売上・20km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2021_20km〕
+- `sales_leisure_2021_500m` — 生活関連・娯楽の売上（推計・本社一括計上を除く・2021年調査＝2020年の売上・500m圏） 〔億円・decimal1・rankable・⚠→sales_lown_2021_500m〕
+- `sales_leisure_2021_1km` — 生活関連・娯楽の売上（推計・本社一括計上を除く・2021年調査＝2020年の売上・1km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2021_1km〕
+- `sales_leisure_2021_2km` — 生活関連・娯楽の売上（推計・本社一括計上を除く・2021年調査＝2020年の売上・2km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2021_2km〕
+- `sales_leisure_2021_5km` — 生活関連・娯楽の売上（推計・本社一括計上を除く・2021年調査＝2020年の売上・5km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2021_5km〕
+- `sales_leisure_2021_10km` — 生活関連・娯楽の売上（推計・本社一括計上を除く・2021年調査＝2020年の売上・10km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2021_10km〕
+- `sales_leisure_2021_20km` — 生活関連・娯楽の売上（推計・本社一括計上を除く・2021年調査＝2020年の売上・20km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2021_20km〕
+- `sales_dest_2021_500m` — 目的地としての売上（推計・小売＋飲食宿泊＋娯楽・2021年調査＝2020年の売上・500m圏） 〔億円・decimal1・rankable・⚠→sales_lown_2021_500m〕
+- `sales_lown_2021_500m` — 売上 低分母フラグ（2021年調査・500m圏／半径内の対象従業者<50人） 〔—・—・not-rankable〕
+- `sales_dest_2021_1km` — 目的地としての売上（推計・小売＋飲食宿泊＋娯楽・2021年調査＝2020年の売上・1km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2021_1km〕
+- `sales_lown_2021_1km` — 売上 低分母フラグ（2021年調査・1km圏／半径内の対象従業者<50人） 〔—・—・not-rankable〕
+- `sales_dest_2021_2km` — 目的地としての売上（推計・小売＋飲食宿泊＋娯楽・2021年調査＝2020年の売上・2km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2021_2km〕
+- `sales_lown_2021_2km` — 売上 低分母フラグ（2021年調査・2km圏／半径内の対象従業者<50人） 〔—・—・not-rankable〕
+- `sales_dest_2021_5km` — 目的地としての売上（推計・小売＋飲食宿泊＋娯楽・2021年調査＝2020年の売上・5km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2021_5km〕
+- `sales_lown_2021_5km` — 売上 低分母フラグ（2021年調査・5km圏／半径内の対象従業者<50人） 〔—・—・not-rankable〕
+- `sales_dest_2021_10km` — 目的地としての売上（推計・小売＋飲食宿泊＋娯楽・2021年調査＝2020年の売上・10km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2021_10km〕
+- `sales_lown_2021_10km` — 売上 低分母フラグ（2021年調査・10km圏／半径内の対象従業者<50人） 〔—・—・not-rankable〕
+- `sales_dest_2021_20km` — 目的地としての売上（推計・小売＋飲食宿泊＋娯楽・2021年調査＝2020年の売上・20km圏） 〔億円・decimal1・rankable・⚠→sales_lown_2021_20km〕
+- `sales_lown_2021_20km` — 売上 低分母フラグ（2021年調査・20km圏／半径内の対象従業者<50人） 〔—・—・not-rankable〕
+- `sales_dest_gr_2021_2016_500m` — 目的地としての売上 増減率（2016→2021年調査＝2015→2020年の売上・500m圏） 〔%・percent1・rankable・⚠→sales_lown_2016_500m〕
+- `sales_dest_gr_2021_2016_1km` — 目的地としての売上 増減率（2016→2021年調査＝2015→2020年の売上・1km圏） 〔%・percent1・rankable・⚠→sales_lown_2016_1km〕
+- `sales_dest_gr_2021_2016_2km` — 目的地としての売上 増減率（2016→2021年調査＝2015→2020年の売上・2km圏） 〔%・percent1・rankable・⚠→sales_lown_2016_2km〕
+- `sales_dest_gr_2021_2016_5km` — 目的地としての売上 増減率（2016→2021年調査＝2015→2020年の売上・5km圏） 〔%・percent1・rankable・⚠→sales_lown_2016_5km〕
+- `sales_dest_gr_2021_2016_10km` — 目的地としての売上 増減率（2016→2021年調査＝2015→2020年の売上・10km圏） 〔%・percent1・rankable・⚠→sales_lown_2016_10km〕
+- `sales_dest_gr_2021_2016_20km` — 目的地としての売上 増減率（2016→2021年調査＝2015→2020年の売上・20km圏） 〔%・percent1・rankable・⚠→sales_lown_2016_20km〕
 
 ## 将来推計人口（population_forecast）— 180件
 
@@ -653,7 +722,7 @@
 - `estab_gr_lown_10km` — 事業所・従業者 増減率 低分母フラグ（10km圏／2012年事業所数<5） 〔—・—・not-rankable〕
 - `estab_gr_lown_20km` — 事業所・従業者 増減率 低分母フラグ（20km圏／2012年事業所数<5） 〔—・—・not-rankable〕
 
-## 従業者（employee）— 30件
+## 従業者（employee）— 90件
 
 - `emp_n_2021_500m` — 従業者数（2021年・500m圏） 〔人・int・rankable〕
 - `emp_n_2021_1km` — 従業者数（2021年・1km圏） 〔人・int・rankable〕
@@ -685,6 +754,66 @@
 - `emp_gr_2021_2016_5km` — 従業者数増減率（2016→2021年・5km圏） 〔%・percent1・rankable・⚠→estab_gr_lown_5km〕
 - `emp_gr_2021_2016_10km` — 従業者数増減率（2016→2021年・10km圏） 〔%・percent1・rankable・⚠→estab_gr_lown_10km〕
 - `emp_gr_2021_2016_20km` — 従業者数増減率（2016→2021年・20km圏） 〔%・percent1・rankable・⚠→estab_gr_lown_20km〕
+- `emp_trade_n_2016_500m` — 卸売・小売の従業者数（2016年・500m圏） 〔人・int・rankable〕
+- `emp_trade_n_2016_1km` — 卸売・小売の従業者数（2016年・1km圏） 〔人・int・rankable〕
+- `emp_trade_n_2016_2km` — 卸売・小売の従業者数（2016年・2km圏） 〔人・int・rankable〕
+- `emp_trade_n_2016_5km` — 卸売・小売の従業者数（2016年・5km圏） 〔人・int・rankable〕
+- `emp_trade_n_2016_10km` — 卸売・小売の従業者数（2016年・10km圏） 〔人・int・rankable〕
+- `emp_trade_n_2016_20km` — 卸売・小売の従業者数（2016年・20km圏） 〔人・int・rankable〕
+- `emp_food_n_2016_500m` — 宿泊・飲食の従業者数（2016年・500m圏） 〔人・int・rankable〕
+- `emp_food_n_2016_1km` — 宿泊・飲食の従業者数（2016年・1km圏） 〔人・int・rankable〕
+- `emp_food_n_2016_2km` — 宿泊・飲食の従業者数（2016年・2km圏） 〔人・int・rankable〕
+- `emp_food_n_2016_5km` — 宿泊・飲食の従業者数（2016年・5km圏） 〔人・int・rankable〕
+- `emp_food_n_2016_10km` — 宿泊・飲食の従業者数（2016年・10km圏） 〔人・int・rankable〕
+- `emp_food_n_2016_20km` — 宿泊・飲食の従業者数（2016年・20km圏） 〔人・int・rankable〕
+- `emp_life_n_2016_500m` — 生活関連・娯楽の従業者数（2016年・500m圏） 〔人・int・rankable〕
+- `emp_life_n_2016_1km` — 生活関連・娯楽の従業者数（2016年・1km圏） 〔人・int・rankable〕
+- `emp_life_n_2016_2km` — 生活関連・娯楽の従業者数（2016年・2km圏） 〔人・int・rankable〕
+- `emp_life_n_2016_5km` — 生活関連・娯楽の従業者数（2016年・5km圏） 〔人・int・rankable〕
+- `emp_life_n_2016_10km` — 生活関連・娯楽の従業者数（2016年・10km圏） 〔人・int・rankable〕
+- `emp_life_n_2016_20km` — 生活関連・娯楽の従業者数（2016年・20km圏） 〔人・int・rankable〕
+- `emp_trade_n_2021_500m` — 卸売・小売の従業者数（2021年・500m圏） 〔人・int・rankable〕
+- `emp_trade_n_2021_1km` — 卸売・小売の従業者数（2021年・1km圏） 〔人・int・rankable〕
+- `emp_trade_n_2021_2km` — 卸売・小売の従業者数（2021年・2km圏） 〔人・int・rankable〕
+- `emp_trade_n_2021_5km` — 卸売・小売の従業者数（2021年・5km圏） 〔人・int・rankable〕
+- `emp_trade_n_2021_10km` — 卸売・小売の従業者数（2021年・10km圏） 〔人・int・rankable〕
+- `emp_trade_n_2021_20km` — 卸売・小売の従業者数（2021年・20km圏） 〔人・int・rankable〕
+- `emp_food_n_2021_500m` — 宿泊・飲食の従業者数（2021年・500m圏） 〔人・int・rankable〕
+- `emp_food_n_2021_1km` — 宿泊・飲食の従業者数（2021年・1km圏） 〔人・int・rankable〕
+- `emp_food_n_2021_2km` — 宿泊・飲食の従業者数（2021年・2km圏） 〔人・int・rankable〕
+- `emp_food_n_2021_5km` — 宿泊・飲食の従業者数（2021年・5km圏） 〔人・int・rankable〕
+- `emp_food_n_2021_10km` — 宿泊・飲食の従業者数（2021年・10km圏） 〔人・int・rankable〕
+- `emp_food_n_2021_20km` — 宿泊・飲食の従業者数（2021年・20km圏） 〔人・int・rankable〕
+- `emp_life_n_2021_500m` — 生活関連・娯楽の従業者数（2021年・500m圏） 〔人・int・rankable〕
+- `emp_life_n_2021_1km` — 生活関連・娯楽の従業者数（2021年・1km圏） 〔人・int・rankable〕
+- `emp_life_n_2021_2km` — 生活関連・娯楽の従業者数（2021年・2km圏） 〔人・int・rankable〕
+- `emp_life_n_2021_5km` — 生活関連・娯楽の従業者数（2021年・5km圏） 〔人・int・rankable〕
+- `emp_life_n_2021_10km` — 生活関連・娯楽の従業者数（2021年・10km圏） 〔人・int・rankable〕
+- `emp_life_n_2021_20km` — 生活関連・娯楽の従業者数（2021年・20km圏） 〔人・int・rankable〕
+- `emp_dest_gr_2021_2016_500m` — 売上対象3業種の従業者数増減率（2016→2021年・500m圏） 〔%・percent1・rankable・⚠→sales_lown_2016_500m〕
+- `emp_dest_gr_2021_2016_1km` — 売上対象3業種の従業者数増減率（2016→2021年・1km圏） 〔%・percent1・rankable・⚠→sales_lown_2016_1km〕
+- `emp_dest_gr_2021_2016_2km` — 売上対象3業種の従業者数増減率（2016→2021年・2km圏） 〔%・percent1・rankable・⚠→sales_lown_2016_2km〕
+- `emp_dest_gr_2021_2016_5km` — 売上対象3業種の従業者数増減率（2016→2021年・5km圏） 〔%・percent1・rankable・⚠→sales_lown_2016_5km〕
+- `emp_dest_gr_2021_2016_10km` — 売上対象3業種の従業者数増減率（2016→2021年・10km圏） 〔%・percent1・rankable・⚠→sales_lown_2016_10km〕
+- `emp_dest_gr_2021_2016_20km` — 売上対象3業種の従業者数増減率（2016→2021年・20km圏） 〔%・percent1・rankable・⚠→sales_lown_2016_20km〕
+- `emp_trade_gr_2021_2016_500m` — 卸売・小売の従業者数増減率（2016→2021年・500m圏） 〔%・percent1・rankable・⚠→sales_lown_2016_500m〕
+- `emp_trade_gr_2021_2016_1km` — 卸売・小売の従業者数増減率（2016→2021年・1km圏） 〔%・percent1・rankable・⚠→sales_lown_2016_1km〕
+- `emp_trade_gr_2021_2016_2km` — 卸売・小売の従業者数増減率（2016→2021年・2km圏） 〔%・percent1・rankable・⚠→sales_lown_2016_2km〕
+- `emp_trade_gr_2021_2016_5km` — 卸売・小売の従業者数増減率（2016→2021年・5km圏） 〔%・percent1・rankable・⚠→sales_lown_2016_5km〕
+- `emp_trade_gr_2021_2016_10km` — 卸売・小売の従業者数増減率（2016→2021年・10km圏） 〔%・percent1・rankable・⚠→sales_lown_2016_10km〕
+- `emp_trade_gr_2021_2016_20km` — 卸売・小売の従業者数増減率（2016→2021年・20km圏） 〔%・percent1・rankable・⚠→sales_lown_2016_20km〕
+- `emp_food_gr_2021_2016_500m` — 宿泊・飲食の従業者数増減率（2016→2021年・500m圏） 〔%・percent1・rankable・⚠→sales_lown_2016_500m〕
+- `emp_food_gr_2021_2016_1km` — 宿泊・飲食の従業者数増減率（2016→2021年・1km圏） 〔%・percent1・rankable・⚠→sales_lown_2016_1km〕
+- `emp_food_gr_2021_2016_2km` — 宿泊・飲食の従業者数増減率（2016→2021年・2km圏） 〔%・percent1・rankable・⚠→sales_lown_2016_2km〕
+- `emp_food_gr_2021_2016_5km` — 宿泊・飲食の従業者数増減率（2016→2021年・5km圏） 〔%・percent1・rankable・⚠→sales_lown_2016_5km〕
+- `emp_food_gr_2021_2016_10km` — 宿泊・飲食の従業者数増減率（2016→2021年・10km圏） 〔%・percent1・rankable・⚠→sales_lown_2016_10km〕
+- `emp_food_gr_2021_2016_20km` — 宿泊・飲食の従業者数増減率（2016→2021年・20km圏） 〔%・percent1・rankable・⚠→sales_lown_2016_20km〕
+- `emp_life_gr_2021_2016_500m` — 生活関連・娯楽の従業者数増減率（2016→2021年・500m圏） 〔%・percent1・rankable・⚠→sales_lown_2016_500m〕
+- `emp_life_gr_2021_2016_1km` — 生活関連・娯楽の従業者数増減率（2016→2021年・1km圏） 〔%・percent1・rankable・⚠→sales_lown_2016_1km〕
+- `emp_life_gr_2021_2016_2km` — 生活関連・娯楽の従業者数増減率（2016→2021年・2km圏） 〔%・percent1・rankable・⚠→sales_lown_2016_2km〕
+- `emp_life_gr_2021_2016_5km` — 生活関連・娯楽の従業者数増減率（2016→2021年・5km圏） 〔%・percent1・rankable・⚠→sales_lown_2016_5km〕
+- `emp_life_gr_2021_2016_10km` — 生活関連・娯楽の従業者数増減率（2016→2021年・10km圏） 〔%・percent1・rankable・⚠→sales_lown_2016_10km〕
+- `emp_life_gr_2021_2016_20km` — 生活関連・娯楽の従業者数増減率（2016→2021年・20km圏） 〔%・percent1・rankable・⚠→sales_lown_2016_20km〕
 
 ## 駅属性（識別・非指標）
 

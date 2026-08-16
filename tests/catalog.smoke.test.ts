@@ -7,9 +7,9 @@ import catalog from '@/shared/catalog/catalog.json'
  * catalog.json の破損を CI で検知する軽量ガード（本格的な Zod 検証は P3a）。
  */
 describe('metrics catalog (catalog.json)', () => {
-  it('列数の整合（値列658 ＋ 駅属性10 ＝ 668）', () => {
-    expect(catalog.columnCount).toBe(668)
-    expect(catalog.entryCount).toBe(658)
+  it('列数の整合（値列784 ＋ 駅属性10 ＝ 794）', () => {
+    expect(catalog.columnCount).toBe(794)
+    expect(catalog.entryCount).toBe(784)
     expect(catalog.entries.length).toBe(catalog.entryCount)
     expect(catalog.stationAttributes.length).toBe(10)
     expect(catalog.entries.length + catalog.stationAttributes.length).toBe(catalog.columnCount)

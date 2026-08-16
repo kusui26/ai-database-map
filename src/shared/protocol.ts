@@ -117,6 +117,11 @@ export const panelSchema = z.discriminatedUnion('type', [
     unit: z.string().nullable(),
     format: formatSchema, // 値の整形指定（tooltip / 軸ラベル：カタログ駆動）
     category: categorySchema.optional(),
+    /**
+     * 積み上げ縦棒で描くか（既定＝折れ線）。**内訳の合計そのものが指標**のとき
+     * （売上＝小売＋飲食宿泊＋娯楽）だけ true にする。指定しないパネルの描画は変わらない。
+     */
+    stacked: z.boolean().optional(),
     flags: z.array(reliabilityFlagSchema),
     series: z.array(trendSeriesSchema),
     stats: z.array(panelStatSchema).optional(), // 折れ線に添える要約 KPI（前年比・コロナ比等）

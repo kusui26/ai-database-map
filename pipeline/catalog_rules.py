@@ -31,6 +31,7 @@ CATEGORY_ORDER: list[str] = [
     "passenger",
     "population",
     "income",
+    "sales",
     "population_forecast",
     "land_price",
     "bus",
@@ -41,6 +42,7 @@ CATEGORY_LABELS: dict[str, str] = {
     "passenger": "乗降客数",
     "population": "人口",
     "income": "所得",
+    "sales": "売上",
     "population_forecast": "将来推計人口",
     "land_price": "地価",
     "bus": "バス",
@@ -63,6 +65,13 @@ SRC: dict[str, tuple[str, str]] = {
         # （SSDS は 2024 年度まで）。どちらも同じ原表＝『市町村税課税状況等の調』第11表。
         "総務省『市町村税課税状況等の調』（e-Stat 社会・人口統計体系／2025年度は総務省 xlsx）",
         "CC BY 4.0（政府統計・出典明記で商用可）",
+    ),
+    "sales": (
+        # 売上は市区町村までしか公表されないため、500m メッシュの産業別従業者数を重みに
+        # 按分した**推計値**。実測なのは産業別従業者数の方（category=employee・docs/sales.md §1）。
+        "経済センサス‑活動調査（総務省・経済産業省／e-Stat）"
+        "※市区町村の売上を 500m メッシュの産業別従業者数で按分した推計値",
+        "CC BY 4.0 相当（e-Stat 利用規約・出典明記で商用可）",
     ),
     "population_forecast": (
         "国土数値情報 将来推計人口メッシュ（国土交通省 国土政策局・R6/H30推計）",
@@ -111,9 +120,27 @@ IDENTITY_COLUMNS: list[dict[str, str]] = [
 ]
 
 # 型・語彙（validate と共有する参照。値の妥当性検証に使う）
-UNITS = {"人", "人/日", "円/㎡", "%", "箇所", "事業所", "m", "万円/人", "百万円", None}
+UNITS = {"人", "人/日", "円/㎡", "%", "箇所", "事業所", "m", "万円/人", "百万円", "億円", None}
 FORMATS = {"int", "decimal1", "percent1", "ratio1", "yen", None}
 KINDS = {"level", "growth", "flag", "error", "ratio"}
+
+# --- 売上の語彙（docs/sales.md §6） --------------------------------------
+# 年は**調査年**で、値は**前年 1 年間の売上**。ラベルに両方を書いて取り違えを防ぐ
+# （所得の「年度」と同じ趣旨）。2021年調査＝2020年＝コロナ 1 年目の売上。
+SALES_YEAR: dict[int, int] = {2016: 2015, 2021: 2020}
+#: 業種 → (指標名, 推計に添える但し書き)。但し書きは「誠実さ」のために必ずラベルへ入れる。
+SALES_KINDS: dict[str, tuple[str, str]] = {
+    "dest": ("目的地としての売上", "小売＋飲食宿泊＋娯楽"),
+    "retail": ("小売の売上", "卸売を除く"),
+    "food": ("飲食・宿泊の売上", ""),
+    "leisure": ("生活関連・娯楽の売上", "本社一括計上を除く"),
+}
+#: 産業別従業者数（メッシュの**実測**。売上と違い「推計」と書かない）。
+SALES_INDUSTRY: dict[str, str] = {
+    "trade": "卸売・小売",
+    "food": "宿泊・飲食",
+    "life": "生活関連・娯楽",
+}
 
 
 @dataclass(frozen=True)
@@ -277,6 +304,32 @@ def build_entry(col: str) -> CatalogEntry:
                      f"所得 政令市フラグ（{r}圏／納税義務者の過半が政令市由来＝市全体の平均）",
                      None, None, radiusM=RADIUS_M[r], year=2025, rankable=False)
 
+    # --- 売上（sales・docs/sales.md §6） ---
+    # 半径内の対象従業者（Ｉ＋Ｍ＋Ｎ）が 50 人未満だと推計が不安定になるので、
+    # 水準・増減率とも `sales_lown` で除外する。率の分母は**旧年**（inc_gr と同じ規則）。
+    m = re.fullmatch(rf"sales_dest_gr_(\d{{4}})_(\d{{4}})_({RT})", col)
+    if m:
+        new, old, r = int(m[1]), int(m[2]), m[3]
+        return _make(col, "sales_dest_gr", "growth", "sales",
+                     f"目的地としての売上 増減率"
+                     f"（{old}→{new}年調査＝{SALES_YEAR[old]}→{SALES_YEAR[new]}年の売上・{r}圏）",
+                     "%", "percent1", radiusM=RADIUS_M[r], year=new, yearBase=old,
+                     flag=f"sales_lown_{old}_{r}")
+    m = re.fullmatch(rf"sales_(dest|retail|food|leisure)_(\d{{4}})_({RT})", col)
+    if m:
+        kind, y, r = m[1], int(m[2]), m[3]
+        name, caveat = SALES_KINDS[kind]
+        note = "推計" if caveat == "" else f"推計・{caveat}"
+        return _make(col, f"sales_{kind}", "level", "sales",
+                     f"{name}（{note}・{y}年調査＝{SALES_YEAR[y]}年の売上・{r}圏）", "億円", "decimal1",
+                     radiusM=RADIUS_M[r], year=y, flag=f"sales_lown_{y}_{r}")
+    m = re.fullmatch(rf"sales_lown_(\d{{4}})_({RT})", col)
+    if m:
+        y, r = int(m[1]), m[2]
+        return _make(col, "sales_lown", "flag", "sales",
+                     f"売上 低分母フラグ（{y}年調査・{r}圏／半径内の対象従業者<50人）", None, None,
+                     radiusM=RADIUS_M[r], year=y, rankable=False)
+
     # --- 将来推計人口（population_forecast） ---
     m = re.fullmatch(rf"pop_pred_2024_(\d{{4}})_({RT})", col)
     if m:
@@ -406,6 +459,27 @@ def build_entry(col: str) -> CatalogEntry:
         return _make(col, "estab_gr_lown", "flag", "establishment",
                      f"事業所・従業者 増減率 低分母フラグ（{r}圏／2012年事業所数<5）", None, None,
                      radiusM=RADIUS_M[r], rankable=False)
+
+    # 産業別の従業者数（売上と同じ 2 時点・docs/sales.md §6）。**実測**なので category は
+    # employee（決定事項 4）。増減率だけは売上と同じ低分母フラグ（旧年）で除外する。
+    m = re.fullmatch(rf"emp_(trade|food|life)_n_(\d{{4}})_({RT})", col)
+    if m:
+        ind, y, r = m[1], int(m[2]), m[3]
+        return _make(col, f"emp_{ind}_n", "level", "employee",
+                     f"{SALES_INDUSTRY[ind]}の従業者数（{y}年・{r}圏）", "人", "int",
+                     radiusM=RADIUS_M[r], year=y)
+    m = re.fullmatch(rf"emp_(trade|food|life)_gr_(\d{{4}})_(\d{{4}})_({RT})", col)
+    if m:
+        ind, new, old, r = m[1], int(m[2]), int(m[3]), m[4]
+        return _make(col, f"emp_{ind}_gr", "growth", "employee",
+                     f"{SALES_INDUSTRY[ind]}の従業者数増減率（{old}→{new}年・{r}圏）", "%", "percent1",
+                     radiusM=RADIUS_M[r], year=new, yearBase=old, flag=f"sales_lown_{old}_{r}")
+    m = re.fullmatch(rf"emp_dest_gr_(\d{{4}})_(\d{{4}})_({RT})", col)
+    if m:
+        new, old, r = int(m[1]), int(m[2]), m[3]
+        return _make(col, "emp_dest_gr", "growth", "employee",
+                     f"売上対象3業種の従業者数増減率（{old}→{new}年・{r}圏）", "%", "percent1",
+                     radiusM=RADIUS_M[r], year=new, yearBase=old, flag=f"sales_lown_{old}_{r}")
 
     raise ValueError(f"未分類の列: {col!r}")
 

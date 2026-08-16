@@ -42,8 +42,8 @@ describe('RADII_M', () => {
 })
 
 describe('CATEGORIES', () => {
-  it('8 カテゴリを重複なく保持する', () => {
-    expect(CATEGORIES).toHaveLength(8)
+  it('9 カテゴリを重複なく保持する', () => {
+    expect(CATEGORIES).toHaveLength(9)
     expect(new Set(CATEGORIES).size).toBe(CATEGORIES.length)
   })
 
@@ -52,6 +52,11 @@ describe('CATEGORIES', () => {
       expect(CATEGORY_LABELS_JA[category].length).toBeGreaterThan(0)
       expect(CATEGORY_COLORS[category]).toMatch(HEX_COLOR)
     }
+  })
+
+  it('カテゴリ配色は互いに重複しない（凡例なしでも系列を区別できる）', () => {
+    const colors = CATEGORIES.map((category) => CATEGORY_COLORS[category])
+    expect(new Set(colors).size).toBe(colors.length)
   })
 })
 

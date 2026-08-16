@@ -1,11 +1,12 @@
 """P2b — 投入の全数検証（独立照合・監査レポート生成）。
 
 CSV を独立に読み、DB（Supabase）の投入結果と照合する：
-  (a) station_values 件数 = CSV 非NaN セル数（数値列）
+  (a) station_values 件数 = CSV 非NaN セル数（数値列）− フラグ列の 0
   (b) 列ごとの件数一致（列数は CSV から導出）
   (c) 無作為 300 セルの値一致
   (d) 全国計（sum）一致：代表列
   (e) DB サイズ実測（無料枠 500MB に対する残余ゲート）
+  (f) フラグ列に値 0 の行が無い（「行が無い＝0」の規約・260816 の容量対策）
   ＋ stations/metric_columns 件数・lp_near_use・pax_latest の健全性
 
     python3 pipeline/validate_load.py   # 全 PASS で exit 0、docs/p2b_load_report.md を出力
@@ -13,6 +14,7 @@ CSV を独立に読み、DB（Supabase）の投入結果と照合する：
 
 from __future__ import annotations
 
+import json
 import math
 import random
 import sys
@@ -26,6 +28,7 @@ from load_to_supabase import CSV_PATH, PAX_DESC, db_params  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 REPORT = ROOT / "docs" / "p2b_load_report.md"
+CATALOG_PATH = ROOT / "src" / "shared" / "catalog" / "catalog.json"
 SAMPLE_N = 300
 SEED = 42
 #: Supabase 無料枠の DB 容量（MB）。ゲートはこの 95% に置く。
@@ -39,7 +42,14 @@ IDENTITY_COLUMNS = {
 SPOT_COLUMNS = [
     "pax_2024", "pop_2020_1km", "pop_gr_2020_2015_2km",
     "lp_med_1km", "bus_n_1km", "estab_n_2021_1km", "emp_n_2021_1km",
+    "inc_total_2025_1km", "sales_dest_2021_1km",
 ]
+
+
+def flag_keys() -> set[str]:
+    """信頼性フラグの列（kind='flag'）。**0 は格納しない**ので期待行数から差し引く。"""
+    entries = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))["entries"]
+    return {e["key"] for e in entries if e["kind"] == "flag"}
 
 
 def main() -> int:
@@ -69,21 +79,30 @@ def main() -> int:
         facts["stations"] = f"{db_stations:,}"
         check(db_stations == n == 9273, "stations 件数 = CSV 行数 = 9273", f"db={db_stations} csv={n}")
 
-        # (a) 総件数 = CSV 非NaN セル数
+        # (a) 総件数 = CSV 非NaN セル数 − フラグ列の 0（「行が無い＝0」の規約）
+        flags = flag_keys()
+
+        def want_rows(key: str) -> int:
+            n = int(df[key].notna().sum())
+            return n - int((df[key] == 0).sum()) if key in flags else n
+
         csv_cells = int(df[numeric_keys].notna().to_numpy().sum())
+        csv_rows = sum(want_rows(k) for k in numeric_keys)
+        facts["flag_zeros"] = f"{csv_cells - csv_rows:,}"
         cur.execute("select count(*) from public.station_values")
         db_values = cur.fetchone()[0]
         facts["station_values"] = f"{db_values:,}"
-        check(db_values == csv_cells, f"(a) station_values 件数 = CSV 非NaN セル数（{len(numeric_keys)}列）",
-              f"db={db_values:,} csv={csv_cells:,}")
+        check(db_values == csv_rows,
+              f"(a) station_values 件数 = CSV 非NaN セル数 − フラグの 0（{len(numeric_keys)}列）",
+              f"db={db_values:,} csv={csv_rows:,}（非NaN {csv_cells:,} − フラグの0 {csv_cells - csv_rows:,}）")
 
         # (b) 列ごとの件数一致
         cur.execute("select column_id, count(*) from public.station_values group by column_id")
         db_percol = {cid: c for cid, c in cur.fetchall()}
         col_mismatch = [
-            (k, int(df[k].notna().sum()), db_percol.get(colid[k], 0))
+            (k, want_rows(k), db_percol.get(colid[k], 0))
             for k in numeric_keys
-            if int(df[k].notna().sum()) != db_percol.get(colid[k], 0)
+            if want_rows(k) != db_percol.get(colid[k], 0)
         ]
         check(not col_mismatch, f"(b) 列ごとの件数一致（{len(numeric_keys)}列）", f"{col_mismatch[:3]}")
 
@@ -94,7 +113,8 @@ def main() -> int:
             ri = rng.randrange(n)
             k = numeric_keys[rng.randrange(len(numeric_keys))]
             val = df.iat[ri, df.columns.get_loc(k)]
-            if pd.notna(val):
+            # 格納しないフラグの 0 は標本から外す（(f) で「無いこと」を別に検証する）。
+            if pd.notna(val) and not (k in flags and float(val) == 0):
                 samples.append((colid[k], ri + 1, float(val), k))
         cids = [s[0] for s in samples]
         sids = [s[1] for s in samples]
@@ -156,11 +176,20 @@ def main() -> int:
         facts["tables_size"] = f"{tables_bytes / 1024 / 1024:.0f} MB"
         # Supabase 無料枠の DB 容量は 500MB。ゲートはその 95%（＝475MB）に置く。
         # 400MB だった当初のしきい値は「当時の実測 348MB ＋ 余裕」で、仕様ではなく目安。
-        # 所得 72 列（+666,232 行）を足して 435MB になり、残余は約 65MB。
-        # 削減余地：フラグ列 100 本のうち **値=0 の 764,678 行（全体の 13.4%・約 55MB）** は
-        # 「無ければ 0」の規約に変えれば落とせる（RPC 側の coalesce が要るので別 PR で判断する）。
+        # 260816：売上 126 列（+約 111 万行）を足すと対策なしでは 514MB で**超過**した。
+        # フラグ列の 0 を格納しない対策（`drop_flag_zeros`・約 87 万行 ≒ 62MB）で収める
+        # （docs/260816_sales.md §12.4・docs/sales.md §10）。
         check(db_mb < FREE_TIER_LIMIT_MB * 0.95, f"(e) DB サイズ < {FREE_TIER_LIMIT_MB * 0.95:.0f}MB"
               f"（無料枠 {FREE_TIER_LIMIT_MB}MB の 95%）", f"{db_mb:.0f} MB")
+
+        # (f) フラグ列に値 0 の行が無い（対策 A が効いていること・意味は「行が無い＝0」）
+        cur.execute(
+            "select count(*) from public.station_values sv "
+            "join public.metric_columns mc on mc.id = sv.column_id "
+            "where mc.meta ->> 'kind' = 'flag' and sv.value = 0"
+        )
+        zero_rows = cur.fetchone()[0]
+        check(zero_rows == 0, "(f) フラグ列に値 0 の行が無い（行が無い＝0 の規約）", f"{zero_rows:,} 行")
 
     passed = sum(1 for ok, _, _ in checks if ok)
     all_ok = passed == len(checks)
@@ -174,7 +203,8 @@ def main() -> int:
         "## 実測値",
         "",
         f"- stations: **{facts['stations']}** 行",
-        f"- station_values: **{facts['station_values']}** 行",
+        f"- station_values: **{facts['station_values']}** 行"
+        f"（フラグの 0 は格納しない規約で {facts['flag_zeros']} 行を省略）",
         f"- DB サイズ: **{facts['db_size']}**（うち 3テーブル {facts['tables_size']}）",
         "",
         "## チェック結果",

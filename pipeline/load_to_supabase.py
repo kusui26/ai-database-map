@@ -74,7 +74,34 @@ def db_params() -> dict[str, object]:
         "password": password,
         "dbname": dbname.split("?")[0],
         "sslmode": "require",
+        # ⚠ Supabase のセッション既定は extra_float_digits=0。この設定だと `real` の**テキスト表現**が
+        # 有効数字 6 桁に丸められ（3683268 → "3.68327e+06" → 3683270.0）、psycopg で受けた値が
+        # 保存値とずれる。**格納値は正しく、PostgREST も完全精度で返す**（260816 に実測）ので、
+        # ずれるのは psycopg のテキスト受信だけ。検証を厳密にするため 3 桁ぶん増やして受け取る。
+        "options": "-c extra_float_digits=3",
     }
+
+
+def value_column_type(cur: psycopg.Cursor) -> str:
+    """`station_values.value` の型（`real` / `double precision`）。検証の期待値を保存精度に合わせる。"""
+    cur.execute(
+        "select format_type(atttypid, atttypmod) from pg_attribute "
+        "where attrelid = 'public.station_values'::regclass and attname = 'value' and attnum > 0"
+    )
+    row = cur.fetchone()
+    if row is None:
+        raise SystemExit("public.station_values.value が見つかりません（migrations 未適用？）")
+    return str(row[0])
+
+
+def round_to_stored(df: pd.DataFrame, keys: list[str], value_type: str) -> None:
+    """value 列が `real` なら、CSV 側（期待値）も float4 に丸める（**破壊的**・列を上書きする）。
+
+    許容誤差を緩めるのではなく**期待値を保存精度に合わせる**。こうすると
+    「float4 の丸めが正しく行われたこと」まで厳密比較で検証できる（260816）。
+    """
+    if value_type == "real":
+        df[keys] = df[keys].astype("float32").astype("float64")
 
 
 def _int_or_none(value: object) -> int | None:
@@ -150,6 +177,18 @@ def copy_values(cur: psycopg.Cursor, long: pd.DataFrame) -> None:
             buf = io.StringIO()
             long.iloc[start : start + COPY_CHUNK].to_csv(buf, index=False, header=False)
             cp.write(buf.getvalue())
+
+
+def analyze_tables(conn: psycopg.Connection) -> None:
+    """投入直後はプランナ統計が空でランキングの初回が遅いので、ANALYZE を打つ。"""
+    conn.commit()              # 開いているトランザクションを閉じてから autocommit へ
+    conn.autocommit = True
+    t0 = time.time()
+    with conn.cursor() as cur:
+        for table in ("public.station_values", "public.stations", "public.station_routes"):
+            cur.execute(f"analyze {table}")
+    conn.autocommit = False
+    print(f"  ANALYZE（3 テーブル）in {time.time() - t0:.1f}s")
 
 
 def main() -> int:
@@ -248,6 +287,7 @@ def main() -> int:
             print(f"  FK 再付与・一括検証 in {time.time() - t0:.1f}s")
 
         conn.commit()
+        analyze_tables(conn)
 
     print("✓ load complete（commit 済み）")
     return 0
@@ -345,6 +385,7 @@ def append() -> int:
             conn.commit()
             print(f"    {min(start + COPY_CHUNK, len(long)):,}/{len(long):,} 行 ({time.time() - t0:.0f}s)")
 
+        analyze_tables(conn)
         with conn.cursor() as cur:
             cur.execute("select count(*), pg_size_pretty(pg_database_size(current_database())) "
                         "from public.station_values")

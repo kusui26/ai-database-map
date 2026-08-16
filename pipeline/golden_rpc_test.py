@@ -3,6 +3,9 @@
 psycopg で各 RPC を SELECT 呼び出しし、CSV から独立に導いた期待値と一致するか検証する。
 anon 実行可否は別途 REST（run スクリプト側の curl）で確認する。
 
+`station_values.value` が `real`（float4）の DB では、比較の前に**期待値（CSV）を float4 に
+丸める**（許容誤差は緩めない・260816）。
+
     python3 pipeline/golden_rpc_test.py   # 全 PASS で exit 0
 """
 
@@ -14,10 +17,15 @@ from pathlib import Path
 
 import pandas as pd
 import psycopg
-from psycopg.rows import dict_row
+from psycopg.rows import dict_row, tuple_row
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from load_to_supabase import CSV_PATH, db_params  # noqa: E402
+from load_to_supabase import (  # noqa: E402
+    CSV_PATH,
+    db_params,
+    round_to_stored,
+    value_column_type,
+)
 
 
 def close(a: object, b: object) -> bool:
@@ -37,11 +45,21 @@ def main() -> int:
         sub = df[df["station_name"] == name].sort_values("pax_2024", ascending=False)
         return None if sub.empty else sub.iloc[0]
 
-    tokyo = station_row("東京")
-    chiba = df[df["prefecture"] == "千葉県"]
-
     with psycopg.connect(**db_params(), row_factory=dict_row) as conn, conn.cursor() as cur:
         cur.execute("set statement_timeout = '60s'")
+
+        # 期待値を DB の保存精度（float8 / float4）に合わせてから比較する。
+        # 行を取り出す前に丸めること（取り出した Series は df の変更を追わないため）。
+        with conn.cursor(row_factory=tuple_row) as tcur:
+            vtype = value_column_type(tcur)
+            tcur.execute("select key from public.metric_columns")
+            metric_keys = [k for (k,) in tcur.fetchall() if k in df.columns and k != "lp_near_use"]
+        round_to_stored(df, metric_keys, vtype)
+        print(f"station_values.value = {vtype}"
+              + ("（期待値も float4 に丸めて比較）\n" if vtype == "real" else "\n"))
+
+        tokyo = station_row("東京")
+        chiba = df[df["prefecture"] == "千葉県"]
 
         def call(sql: str, params: tuple) -> list[dict]:
             cur.execute(sql, params)
@@ -90,8 +108,6 @@ def main() -> int:
         check(res and res[0]["grp"] == expc["grp"] and close(res[0]["value"], expc["pop_gr_2020_2015_1km"]),
               "rank 千葉県 pop_gr_2020_2015_1km desc Top1 = CSV",
               f"db={res[0]['grp'] if res else None}/{res[0]['value'] if res else None} csv={expc['grp']}/{expc['pop_gr_2020_2015_1km']}")
-        check(res and res[0]["flag_value"] is not None, "rank(growth) が信頼性フラグ値を同梱",
-              f"flag_value={res[0]['flag_value'] if res else None}")
 
         # 9) 駅詳細：東京 5km 人口2020 = CSV値
         res = call("select * from public.station_bundle(%s)", (tokyo["grp"],))
@@ -110,8 +126,25 @@ def main() -> int:
         check(res and close(res[0]["value"], expinc["inc_pc_2025_1km"]),
               "rank inc_pc_2025_1km desc Top1 = CSV argmax",
               f"db={res[0]['value'] if res else None} csv={expinc['inc_pc_2025_1km']}")
-        check(res and res[0]["flag_value"] is not None, "rank(inc_pc) が低分母フラグ値を同梱",
-              f"flag_value={res[0]['flag_value'] if res else None}")
+
+        # 9b-2) 信頼性フラグの同梱（260816 に規約変更）：**フラグの 0 は格納しない**ので、
+        #       立っている駅は flag_value=1、立っていない駅は行が無く NULL で返るのが正。
+        #       1 県ぶんを全数照合して「1 と NULL の付き方が CSV と完全に一致する」ことを見る。
+        def flag_join(metric: str, flag_col: str) -> tuple[int, int, int]:
+            pref = df[df[flag_col] == 1].iloc[0]["prefecture"]
+            sub = df[(df["prefecture"] == pref) & df[metric].notna()]
+            want = {row.grp: (1.0 if getattr(row, flag_col) == 1 else None) for row in sub.itertuples()}
+            rows = call("select * from public.rank_by_column(%s,%s,%s,%s)", (metric, [pref], "desc", 9999))
+            bad = [r["grp"] for r in rows if want.get(r["grp"], "?") != r["flag_value"]]
+            return len(rows), sum(1 for v in want.values() if v == 1), len(bad)
+
+        for metric, flag_col in (("pop_gr_2020_2015_1km", "pop_lowbase_2015_1km"),
+                                 ("inc_pc_2025_1km", "inc_lown_2025_1km")):
+            n_rows, n_flagged, n_bad = flag_join(metric, flag_col)
+            check(n_rows > 0 and n_flagged > 0 and n_bad == 0,
+                  f"rank({metric}) の flag_value が CSV と全数一致"
+                  f"（{n_rows}駅中フラグ{n_flagged}件・0 は行が無く NULL）",
+                  f"不一致 {n_bad} 件")
 
         # 9c) 売上（260816 追加）：新カテゴリが RPC まで通ること ＋ **フラグの 0 を格納しない**
         #     規約（対策A）が消費側で従来どおり効くこと（行が無い＝0）を 4 本で押さえる。

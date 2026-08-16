@@ -21,6 +21,9 @@
 | `*_init_schema.sql`         | postgis/pg_trgm、`stations`（geom generated）・`metric_columns`・`station_values`、GiST/trgm index、RLS ＋ anon SELECT ポリシー ＋ GRANT |
 | `*_seed_metric_columns.sql` | `catalog.json` → `metric_columns` 488行（`pipeline/build_seed.py` が生成）                                                               |
 | `*_tighten_anon_grants.sql` | anon/authenticated を SELECT のみに厳格化（TRUNCATE/REFERENCES/TRIGGER を剥奪）                                                          |
+| `*_station_values_float4.sql` | `station_values.value` を `double precision` → `real`（容量 −46MB・260816）。⚠ **空の DB に適用すること**（データが入っているとテーブルを書き換え、ディスクのピークが 2 倍になる）|
+
+上表は代表的なものだけ。実際に適用されるのは `supabase/migrations/` の全ファイル（タイムスタンプ順）。
 
 ## 適用（クラウド）
 

@@ -1,0 +1,21 @@
+-- 260816 — station_values.value を double precision → real（float4）に縮める。
+--
+-- 動機：無料枠 500MB に対し、売上 126 列を足した状態で 456MB（91%）まで来た。
+-- 1 行あたりの本体は 44.3 → 36.3 バイトになり、6,020,472 行で **約 46MB** 減る
+-- （DB 合計 約 456MB → 約 410MB＝82%）。索引（column_id, station_id）は value を含まないので不変。
+--
+-- 精度：float4 の有効数字は 7 桁。data/derived/station_dataset.csv の **全 6,886,613 セル**を
+-- float32 に丸めて実測したところ、**カタログの format で丸めた後の表示が変わるのは 1,542 セル
+-- （0.022%）**だけだった。内訳は課税対象所得の総額（inc_total_*_10km/20km）の末尾 1〜2 百万円
+-- （例 36,230,734 → 36,230,736 百万円・相対 6×10⁻⁸）と、秘匿割合の 0.1 ポイント。
+-- 売上・人口・地価・乗降客数・増減率は **1 件も変わらない**（docs/260816_supabase_restart.md §7）。
+--
+-- 互換性：RPC は戻り値を double precision と宣言しているが、real → double precision は暗黙の
+-- 拡張キャストなので関数の再定義は要らない。アプリ側も数値としてそのまま扱う。
+-- ⚠ 検証スクリプトは「期待値を float4 に丸めてから厳密比較」する（許容誤差は緩めない）。
+--   pipeline/validate_load.py・pipeline/golden_rpc_test.py が value 列の型を見て自動で切り替える。
+--
+-- ⚠⚠ **空の DB に適用すること。** 既にデータが入った DB では ALTER がテーブルを書き換えるため、
+--    ディスクのピークが一時的に 2 倍になる（2026-08-16 に無料枠のディスクを使い切った原因と同じ）。
+
+alter table public.station_values alter column value type real;

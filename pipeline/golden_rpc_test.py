@@ -3,6 +3,9 @@
 psycopg で各 RPC を SELECT 呼び出しし、CSV から独立に導いた期待値と一致するか検証する。
 anon 実行可否は別途 REST（run スクリプト側の curl）で確認する。
 
+`station_values.value` が `real`（float4）の DB では、比較の前に**期待値（CSV）を float4 に
+丸める**（許容誤差は緩めない・260816）。
+
     python3 pipeline/golden_rpc_test.py   # 全 PASS で exit 0
 """
 
@@ -14,10 +17,15 @@ from pathlib import Path
 
 import pandas as pd
 import psycopg
-from psycopg.rows import dict_row
+from psycopg.rows import dict_row, tuple_row
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from load_to_supabase import CSV_PATH, db_params  # noqa: E402
+from load_to_supabase import (  # noqa: E402
+    CSV_PATH,
+    db_params,
+    round_to_stored,
+    value_column_type,
+)
 
 
 def close(a: object, b: object) -> bool:
@@ -37,11 +45,21 @@ def main() -> int:
         sub = df[df["station_name"] == name].sort_values("pax_2024", ascending=False)
         return None if sub.empty else sub.iloc[0]
 
-    tokyo = station_row("東京")
-    chiba = df[df["prefecture"] == "千葉県"]
-
     with psycopg.connect(**db_params(), row_factory=dict_row) as conn, conn.cursor() as cur:
         cur.execute("set statement_timeout = '60s'")
+
+        # 期待値を DB の保存精度（float8 / float4）に合わせてから比較する。
+        # 行を取り出す前に丸めること（取り出した Series は df の変更を追わないため）。
+        with conn.cursor(row_factory=tuple_row) as tcur:
+            vtype = value_column_type(tcur)
+            tcur.execute("select key from public.metric_columns")
+            metric_keys = [k for (k,) in tcur.fetchall() if k in df.columns and k != "lp_near_use"]
+        round_to_stored(df, metric_keys, vtype)
+        print(f"station_values.value = {vtype}"
+              + ("（期待値も float4 に丸めて比較）\n" if vtype == "real" else "\n"))
+
+        tokyo = station_row("東京")
+        chiba = df[df["prefecture"] == "千葉県"]
 
         def call(sql: str, params: tuple) -> list[dict]:
             cur.execute(sql, params)

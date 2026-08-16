@@ -9,6 +9,9 @@ CSV を独立に読み、DB（Supabase）の投入結果と照合する：
   (f) フラグ列に値 0 の行が無い（「行が無い＝0」の規約・260816 の容量対策）
   ＋ stations/metric_columns 件数・lp_near_use・pax_latest の健全性
 
+`station_values.value` が `real`（float4）の DB では、**期待値の側を float4 に丸めてから
+厳密比較する**（許容誤差は緩めない）。こうすると「丸めが正しく行われたこと」まで検証できる。
+
     python3 pipeline/validate_load.py   # 全 PASS で exit 0、docs/p2b_load_report.md を出力
 """
 
@@ -24,7 +27,13 @@ import pandas as pd
 import psycopg
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from load_to_supabase import CSV_PATH, PAX_DESC, db_params  # noqa: E402
+from load_to_supabase import (  # noqa: E402
+    CSV_PATH,
+    PAX_DESC,
+    db_params,
+    round_to_stored,
+    value_column_type,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 REPORT = ROOT / "docs" / "p2b_load_report.md"
@@ -66,6 +75,11 @@ def main() -> int:
         colid: dict[str, int] = dict(cur.fetchall())
         value_keys = [k for k in df.columns if k in colid]
         numeric_keys = [k for k in value_keys if k != "lp_near_use"]
+
+        # 期待値を DB の保存精度（float8 / float4）に合わせる。以降の (a)〜(d) はそのまま厳密比較。
+        vtype = value_column_type(cur)
+        round_to_stored(df, numeric_keys, vtype)
+        facts["value_type"] = vtype
 
         # metric_columns / stations 件数
         cur.execute("select count(*) from public.metric_columns")
@@ -138,7 +152,9 @@ def main() -> int:
             if k not in colid:
                 continue
             csv_sum = float(df[k].sum())
-            cur.execute("select sum(value) from public.station_values where column_id=%s", (colid[k],))
+            # sum(real) は real を返し 9,273 行の加算で誤差が積もるため、float8 にしてから足す。
+            cur.execute("select sum(value::double precision) from public.station_values "
+                        "where column_id=%s", (colid[k],))
             db_sum = float(cur.fetchone()[0])
             if not math.isclose(db_sum, csv_sum, rel_tol=1e-6):
                 sum_bad.append((k, csv_sum, db_sum))
@@ -206,6 +222,8 @@ def main() -> int:
         f"- station_values: **{facts['station_values']}** 行"
         f"（フラグの 0 は格納しない規約で {facts['flag_zeros']} 行を省略）",
         f"- DB サイズ: **{facts['db_size']}**（うち 3テーブル {facts['tables_size']}）",
+        f"- `station_values.value` の型: **{facts['value_type']}**"
+        + ("（期待値も float4 に丸めて厳密比較）" if facts["value_type"] == "real" else ""),
         "",
         "## チェック結果",
         "",

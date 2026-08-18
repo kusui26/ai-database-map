@@ -239,12 +239,14 @@ describe('landPricePanels', () => {
     ])
   })
 
-  it('中央値バー：選択半径を emphasis', () => {
+  it('中央値バー：選択半径を emphasis（読み方の注記は置かない）', () => {
     const bar = landPricePanels(p5cDetail, 1000).find((p) => p.type === 'barChart')
     const bars = bar?.type === 'barChart' ? bar.bars : []
     expect(bars.map((b) => b.label)).toEqual(['500m', '1km', '2km'])
     expect(bars.find((b) => b.label === '1km')?.emphasis).toBe(true)
     expect(bars.find((b) => b.label === '500m')?.emphasis).toBe(false)
+    // 「半径が大きいほど郊外を含み〜」の説明文は 260818 に削除した（値そのものを読ませる）
+    expect(bar?.type === 'barChart' ? bar.note : undefined).toBeNull()
   })
 
   it('lp_med は年次系列：現在値バーは最新年（2026）を使う', () => {
@@ -379,6 +381,8 @@ describe('incomePanels（所得タブ）', () => {
       { label: '1km', value: 921.3, formatted: '921.3', flagged: false, emphasis: true },
       { label: '2km', value: 963.9, formatted: '963.9', flagged: false, emphasis: false },
     ])
+    // 「半径が大きいほど周辺の市区町村が混ざり〜」の説明文は 260818 に削除した
+    expect(bar.note).toBeNull()
   })
 
   // 総額（規模）と 1 人当たりの増減率は主語が違うので表を分け、主語は表題・行は年次にする（260816）。
@@ -502,21 +506,26 @@ describe('salesPanels（売上タブ）', () => {
       { x: 2016, y: 1762.6 },
       { x: 2021, y: 1469.2 },
     ])
-    // 合計は積み上げの高さと一致する（1,469.2 + 263.3 + 169.9 = 1,902.4 ≒ 丸め前の 1,902.3）
+    // 棒の上に描く合計は「内訳の丸め和」ではなく目的地計そのもの。
+    // 1,469.2 + 263.3 + 169.9 = 1,902.4 だが、正しい合計は 1,902.3（docs/sales.md §4.5）。
+    expect(chart.totals).toEqual([
+      { x: 2016, y: 2591.9 },
+      { x: 2021, y: 1902.3 },
+    ])
     expect(chart.stats).toEqual([
       { label: '2021年調査 合計', value: '1,902.3 億円', flagged: false },
       { label: '2016年調査比', value: '-26.6%', flagged: false },
     ])
-    // コロナの効き方は誰にでも効く注意なので常に出す
-    expect(chart.flags).toEqual([
-      { label: '2021年調査の売上は2020年（コロナ1年目）の1年間', level: 'info' },
-    ])
+    // 注意書きは「該当するときだけ」出す。この駅はどのフラグも立たないので空
+    // （売上の対象期間の注記は、タブ末尾の statTable の note に残している・260818）。
+    expect(chart.flags).toEqual([])
   })
 
-  it('半径別バー：最新調査・選択半径を強調（商圏の広がり）', () => {
+  it('半径別バー：最新調査・選択半径を強調（注記は置かない）', () => {
     const bar = salesPanels(salesKichijoji, 1000)[1]
     if (bar?.type !== 'barChart') throw new Error('barChart ではない')
     expect(bar.title).toBe('目的地としての売上（半径別・2021年調査）')
+    expect(bar.note).toBeNull()
     expect(bar.bars).toEqual([
       { label: '500m', value: 1323.4, formatted: '1,323.4', flagged: false, emphasis: false },
       { label: '1km', value: 1902.3, formatted: '1,902.3', flagged: false, emphasis: true },
@@ -558,6 +567,7 @@ describe('salesPanels（売上タブ）', () => {
     const chart = salesPanels(asymmetric, 1000)[0]
     if (chart?.type !== 'trendChart') throw new Error('trendChart ではない')
     // 水準の警告は出ない（低分母ではない）／増減率の警告だけが出る
+    expect(chart.flags).toHaveLength(1)
     expect(chart.flags[0]).toEqual({
       label: '増減率は参考値（分母が小さい、または娯楽の集計定義が年で揃わない）',
       level: 'warn',

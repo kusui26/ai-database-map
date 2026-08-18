@@ -9,7 +9,7 @@
 
 import { useMemo } from 'react'
 import { Bar, Line } from 'react-chartjs-2'
-import { type ChartData, type ChartOptions } from 'chart.js'
+import { Chart, type ChartData, type ChartOptions, type Plugin } from 'chart.js'
 import { type TrendChartPanel } from '@/shared/protocol'
 import { ACCENT_COLOR } from '@/shared/constants'
 import { formatCompact, formatNumber, formatWithUnit } from '@/shared/format'
@@ -21,6 +21,10 @@ ensureChartRegistered()
 const HEIGHT_PX: Record<'compact' | 'full', number> = { compact: 148, full: 216 }
 const GRID_COLOR = '#f1f5f9'
 const AXIS_COLOR = '#94a3b8'
+/** 積み上げの合計ラベル（slate-600）。軸ラベルより濃く、見出しより薄い。 */
+const TOTAL_LABEL_COLOR = '#475569'
+/** 合計ラベルと棒の間隔（px）。 */
+const TOTAL_LABEL_GAP_PX = 6
 
 /** ツールチップ 1 項目のうち、折れ線・棒で共通して使うぶんだけ。 */
 type TooltipLike = { dataset: { label?: string }; parsed: { y: number | null } }
@@ -156,6 +160,52 @@ function LineTrend({ panel, labels }: { panel: TrendChartPanel; labels: number[]
   return <Line data={data} options={options} />
 }
 
+/**
+ * 積み上げ棒の上に**合計**を描くプラグイン。Chart.js は値ラベルを描かないので自前で描く
+ * （このためだけに datalabels プラグインを足さない）。
+ *
+ * 描く値は 2 通りに分ける。
+ * - **全系列が見えているとき**：`panel.totals`（ドメインが渡す正しい合計）。内訳は表示のために
+ *   丸めてあるので、単純に足すと合計が 0.1 ずれ、KPI の数字と食い違う（docs/sales.md §4.5）。
+ * - **凡例で系列を隠したとき**：表示中の系列の和。見えている棒と数字を一致させるため。
+ */
+function stackTotalPlugin(panel: TrendChartPanel, compact: boolean): Plugin<'bar'> {
+  const authoritative = new Map((panel.totals ?? []).map((point) => [point.x, point.y]))
+  return {
+    id: 'stackTotal',
+    afterDatasetsDraw(chart) {
+      const { ctx } = chart
+      ctx.save()
+      ctx.font = `600 ${compact ? 10 : 11}px ${Chart.defaults.font.family}`
+      ctx.fillStyle = TOTAL_LABEL_COLOR
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'bottom'
+      const allVisible = chart.data.datasets.every((_, order) => chart.isDatasetVisible(order))
+      const count = chart.data.labels?.length ?? 0
+      for (let index = 0; index < count; index += 1) {
+        let sum = 0
+        let top: number | null = null
+        let x = 0
+        chart.data.datasets.forEach((dataset, order) => {
+          if (!chart.isDatasetVisible(order)) return
+          const value = dataset.data[index]
+          const element = chart.getDatasetMeta(order).data[index]
+          if (typeof value !== 'number' || element === undefined) return
+          sum += value
+          x = element.x
+          top = top === null ? element.y : Math.min(top, element.y)
+        })
+        const label = Number(chart.data.labels?.[index])
+        const exact = allVisible ? authoritative.get(label) : undefined
+        const total = exact ?? sum
+        if (top === null || total === null || total === 0) continue
+        ctx.fillText(formatNumber(total, panel.format), x, top - TOTAL_LABEL_GAP_PX)
+      }
+      ctx.restore()
+    },
+  }
+}
+
 /** 積み上げ縦棒（`stacked`＝内訳の合計そのものが指標のとき）。 */
 function StackedTrend({ panel, labels }: { panel: TrendChartPanel; labels: number[] }) {
   const compact = panel.size === 'compact'
@@ -182,6 +232,8 @@ function StackedTrend({ panel, labels }: { panel: TrendChartPanel; labels: numbe
       maintainAspectRatio: false,
       animation: false,
       interaction: { mode: 'index', intersect: false },
+      // 棒の上に合計を描くので、その分の余白を上に取る（描画域の外に出て切れないように）。
+      layout: { padding: { top: compact ? 14 : 18 } },
       scales: buildScales(compact, isPercent, true),
       plugins: {
         // 積み上げは色だけでは内訳が読めないので凡例を出す（下・小さめ・箱は正方形）。
@@ -202,7 +254,9 @@ function StackedTrend({ panel, labels }: { panel: TrendChartPanel; labels: numbe
     [compact, isPercent, panel],
   )
 
-  return <Bar data={data} options={options} />
+  const plugins = useMemo(() => [stackTotalPlugin(panel, compact)], [panel, compact])
+
+  return <Bar data={data} options={options} plugins={plugins} />
 }
 
 export function TrendChart({ panel }: { panel: TrendChartPanel }) {

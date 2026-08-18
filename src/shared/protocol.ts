@@ -122,6 +122,13 @@ export const panelSchema = z.discriminatedUnion('type', [
      * （売上＝小売＋飲食宿泊＋娯楽）だけ true にする。指定しないパネルの描画は変わらない。
      */
     stacked: z.boolean().optional(),
+    /**
+     * 積み上げの**合計**（`stacked` のときだけ意味を持つ）。棒の上に描く値で、
+     * **内訳の丸め和ではなく、丸める前から作った正しい合計**を渡す
+     * （売上は `sales_dest` が正。1,469.2+263.3+169.9=1,902.4 だが正解は 1,902.3・docs/sales.md §4.5）。
+     * 省略時は表示中の系列を足した値を描く。
+     */
+    totals: z.array(seriesPointSchema).optional(),
     flags: z.array(reliabilityFlagSchema),
     series: z.array(trendSeriesSchema),
     stats: z.array(panelStatSchema).optional(), // 折れ線に添える要約 KPI（前年比・コロナ比等）

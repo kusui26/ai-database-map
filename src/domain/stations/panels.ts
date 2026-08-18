@@ -270,7 +270,7 @@ export function landPricePanels(
       category: 'land_price',
       bars: medBars,
       flags: [],
-      note: '半径が大きいほど郊外を含み、中央値は下がる傾向（空間比較の補助）。',
+      note: null,
       size,
     })
   }
@@ -473,7 +473,7 @@ export function incomePanels(
       category: 'income',
       bars: perCapitaBars,
       flags: [],
-      note: '半径が大きいほど周辺の市区町村が混ざり、水準はならされる（空間比較の補助）。',
+      note: null,
       size,
     })
   }
@@ -601,7 +601,7 @@ function spanLabel(series: MetricSeries | undefined): string {
 }
 
 /**
- * 売上タブの注意（コロナの効き方は常に・低分母と増減率の信頼性は該当するときだけ）。
+ * 売上タブの注意（低分母と増減率の信頼性は、該当するときだけ出す）。
  *
  * 増減率のフラグは「低分母」と「娯楽の集計定義が年で揃わない」の OR（`sales_gr_unrel`）。
  * どちらかは値からは区別できないので、両方を含む 1 文にする（docs/sales.md §5.3・§12-9）。
@@ -617,7 +617,6 @@ function salesFlags(dest: MetricSeries, growth: MetricSeries | undefined): Relia
       level: 'warn',
     })
   }
-  flags.push({ label: '2021年調査の売上は2020年（コロナ1年目）の1年間', level: 'info' })
   return flags
 }
 
@@ -665,6 +664,8 @@ export function salesPanels(
       format: dest.format,
       category: 'sales',
       stacked: true, // 2 時点 × 3 業種の積み上げ縦棒（合計と内訳を 1 枚で読む）
+      // 棒の上に出す合計は、内訳の丸め和ではなく目的地計そのもの（KPI と 0.1 もズレないように）
+      totals: toXY(dest),
       flags: salesFlags(dest, destGrowth),
       series: SALES_BREAKDOWN.map(({ baseMetric, label, color }) => ({
         label,
@@ -700,7 +701,7 @@ export function salesPanels(
       category: 'sales',
       bars: destBars,
       flags: [],
-      note: '半径を広げたときの伸び方が商圏の広がり。近傍で頭打ちなら、お金は駅の足元に集まっている。',
+      note: null,
       size,
     })
   }

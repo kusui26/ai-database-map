@@ -68,6 +68,13 @@ export function MapShell() {
     if (promotion !== null) setPromotionSeen(true)
   }, [promotion])
 
+  // 重なり順（この main の直下は同じ重なり文脈にいるので、ここで一覧にしておく）:
+  //   z-10  地図の付随物（FAB・ホバーツールチップ）
+  //   z-20  浮遊パネル（AI チャット・駅詳細・キャンバス）
+  //   z-30  ヘッダと通信断バナー ← 駅名検索の候補がパネルの前に出る必要がある
+  //   z-40  モーダルのオーバーレイ／z-50 モーダル本体（Radix・Vaul の portal）
+  // ヘッダは `z-30` で重なり文脈を作るため、中の候補リストは何を指定してもヘッダより
+  // 前には出られない。したがって「候補を前に出す」＝ヘッダ自体をパネルより上げる、が正解。
   return (
     <main className="relative h-dvh w-screen overflow-hidden bg-slate-50">
       <MapView />

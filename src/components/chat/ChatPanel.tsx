@@ -259,7 +259,8 @@ export function ChatPanel() {
         // 幅は駅詳細ドロワーと共通の定数から（260804・両パネルを同じ幅に揃える）。
         style={{ width: PANEL_WIDTH_CSS }}
         className={cn(
-          'absolute top-20 bottom-3 left-3 z-30 flex flex-col overflow-hidden rounded-2xl bg-white/95 shadow-2xl ring-1 ring-slate-200 backdrop-blur transition-[transform,opacity] duration-300 ease-out',
+          // z-20＝浮遊パネルの段。ヘッダ（z-30）の駅名検索の候補が前に出る（`MapShell.tsx`）。
+          'absolute top-20 bottom-3 left-3 z-20 flex flex-col overflow-hidden rounded-2xl bg-white/95 shadow-2xl ring-1 ring-slate-200 backdrop-blur transition-[transform,opacity] duration-300 ease-out',
           open ? 'translate-x-0 opacity-100' : 'pointer-events-none -translate-x-[120%] opacity-0',
         )}
       >
@@ -279,7 +280,9 @@ export function ChatPanel() {
     >
       <Drawer.Portal>
         {/* snapPoints はコンテンツ高の割合。上スナップ=1 で全コンテンツ（入力まで）を表示、高さ 85dvh で上に地図が覗く。 */}
-        <Drawer.Content className="fixed inset-x-0 bottom-0 z-30 flex h-[85dvh] flex-col rounded-t-2xl bg-white outline-none">
+        {/* z-20＝浮遊パネルの段。`modal={false}` で上の地図・ヘッダを触れるので、
+            駅名検索の候補（ヘッダ＝z-30）がこのシートの前に出る（`MapShell.tsx`）。 */}
+        <Drawer.Content className="fixed inset-x-0 bottom-0 z-20 flex h-[85dvh] flex-col rounded-t-2xl bg-white outline-none">
           <div className="mx-auto mt-3 mb-1 h-1.5 w-10 shrink-0 rounded-full bg-slate-300" />
           <Drawer.Title className="sr-only">AI チャット</Drawer.Title>
           <ChatBody />

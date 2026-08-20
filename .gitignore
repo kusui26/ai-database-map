@@ -4,6 +4,8 @@ slide/
 # ハッカソンの参照資料（週報・キックオフ資料）。社内へ説明した内容を含み、
 # キックオフ資料は 11MB あるため、公開リポジトリには入れない（entry.md だけを管理する）。
 tokyo_hackathon/references/
+# 応募フォームに貼るスクリーンショット（1枚 1MB 前後）。提出時にしか使わないので追跡しない。
+tokyo_hackathon/images/
 
 # --- macOS ---
 .DS_Store

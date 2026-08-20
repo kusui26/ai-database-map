@@ -43,10 +43,8 @@ AIネイティブなアプリにするため、画面操作とAIチャットを�
 市町村税課税状況等の調（課税対象所得・納税義務者数・2015／2020／2025年度）,https://www.soumu.go.jp/main_sosiki/jichi_zeisei/czaisei/czaisei_seido/ichiran09.html
 国土数値情報 行政区域データ（N03）,https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N03-2026.html
 
-国土地理院最適化ベクトルタイル（地図の背景）,https://gsi-cyberjapan.github.io/optimal_bvmap/
-
 ※ 10件の枠に収まらなかった利用データ（必要なら上記と差し替え）
-国土数値情報 行政区域データ（N03・都道府県と市区町村の判定に使用）,https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N03-2026.html
+国土地理院最適化ベクトルタイル（地図の背景）,https://gsi-cyberjapan.github.io/optimal_bvmap/
 国土数値情報 500mメッシュ別将来推計人口データ（H30国政局推計）,https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-mesh500h30.html
 ※ 所得の2015／2020年度は e-Stat「社会・人口統計体系」から取得 → https://www.e-stat.go.jp/stat-search/database?statdisp_id=0000020103
 

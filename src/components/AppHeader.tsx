@@ -82,7 +82,9 @@ export function AppHeader() {
   const [aboutOpen, setAboutOpen] = useState(false)
   const [aboutSeen, setAboutSeen] = useState(false)
   return (
-    <header className="pointer-events-none absolute inset-x-0 top-0 z-20 p-3">
+    // z-30＝浮遊パネル（z-20）より前。駅名検索の候補がチャット/駅詳細に隠れないようにする
+    // （重なり順の一覧は `MapShell.tsx`）。
+    <header className="pointer-events-none absolute inset-x-0 top-0 z-30 p-3">
       <div className="pointer-events-auto flex flex-col gap-2 sm:flex-row sm:items-start">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <div className="flex shrink-0 items-center gap-2 rounded-xl bg-white/90 px-3 py-2.5 shadow-lg ring-1 ring-slate-200 backdrop-blur">

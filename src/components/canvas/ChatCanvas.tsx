@@ -62,7 +62,8 @@ export function ChatCanvas() {
         right: grp === null ? RIGHT_PX : RIGHT_WITH_DETAIL_PX,
         maxWidth: MAX_WIDTH_PX,
       }}
-      className="absolute top-20 bottom-3 z-30 flex flex-col overflow-hidden rounded-2xl bg-white/95 shadow-2xl ring-1 ring-slate-200 backdrop-blur transition-[left,right] duration-300 ease-out"
+      // z-20＝浮遊パネルの段。ヘッダ（z-30）の駅名検索の候補が前に出る（`MapShell.tsx`）。
+      className="absolute top-20 bottom-3 z-20 flex flex-col overflow-hidden rounded-2xl bg-white/95 shadow-2xl ring-1 ring-slate-200 backdrop-blur transition-[left,right] duration-300 ease-out"
     >
       <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
         <h2 className="font-semibold text-slate-900">{title}</h2>

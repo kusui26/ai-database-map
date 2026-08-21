@@ -6,6 +6,10 @@ slide/
 tokyo_hackathon/references/
 # 応募フォームに貼るスクリーンショット（1枚 1MB 前後）。提出時にしか使わないので追跡しない。
 tokyo_hackathon/images/
+# 提出するプレゼン資料の本体（PowerPoint・PDF）。Google Drive で管理していて
+# pptx は 8MB あるため、リポジトリには構成案（presentation.md）だけを置く。
+tokyo_hackathon/*.pptx
+tokyo_hackathon/*.pdf
 
 # --- macOS ---
 .DS_Store

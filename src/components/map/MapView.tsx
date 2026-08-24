@@ -17,7 +17,9 @@ import { type HoverInfo, useMapStore } from '@/stores/mapStore'
 import { useChatStore } from '@/stores/chatStore'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { HoverTooltip } from './HoverTooltip'
+import { syncHazardLayers } from './hazardSource'
 import { loadStations } from './stationsSource'
+import { useHazardUrlState } from './useHazardUrlState'
 import { useMapUrlState } from './useMapUrlState'
 
 const STYLE_URL = process.env.NEXT_PUBLIC_MAP_STYLE_URL ?? '/map/gsi-pale-style.json'
@@ -239,6 +241,7 @@ export function MapView() {
   const setReady = useMapStore((state) => state.setReady)
 
   const { grp, setGrp, radiusM } = useMapUrlState()
+  const { layerKeys: hazardLayerKeys, opacity: hazardOpacity } = useHazardUrlState()
   const setHovered = useMapStore((state) => state.setHovered)
   const highlightedGrps = useMapStore((state) => state.highlightedGrps)
   const flyToReq = useMapStore((state) => state.flyTo)
@@ -369,6 +372,14 @@ export function MapView() {
       padding: paddingRef.current,
     })
   }, [ready, flyToReq])
+
+  // ハザードレイヤ：?hz / ?hzop に追随してラスタを差し替える。
+  // 出典は source の attribution に載せてあるので、MapLibre の出典表示が自動で追随する。
+  useEffect(() => {
+    const map = mapRef.current
+    if (!ready || map === null) return
+    syncHazardLayers(map, hazardLayerKeys, hazardOpacity)
+  }, [ready, hazardLayerKeys, hazardOpacity])
 
   // 半径サークル：選択駅＋半径で再描画
   useEffect(() => {

@@ -147,6 +147,10 @@ class HazardLayer:
     group: str
     labelJa: str
     summaryJa: str  # 1〜2 文。AI がそのまま説明に使える
+    # 重ね方。'base'＝面をベタ塗りするので**同じグループで同時に 1 つだけ**（重ねると濁って読めない）。
+    # 'overlay'＝細い区域や点在する区域なので、base の上に何枚でも重ねてよい。
+    # これは見た目の都合ではなく「そのレイヤが面か点在か」という意味なので、カタログが持つ。
+    display: str  # 'base' | 'overlay'
     rankUnit: str | None  # 'm' | 'hour'（階級が量でないレイヤは None）
     ranks: list[HazardRank]
     tile: HazardTile | None
@@ -279,6 +283,7 @@ _MESH_PLANNED = HazardMesh(available=False, pathTemplate="hazard/{layer}/{primar
 def _flood_layers() -> list[HazardLayer]:
     common = {
         "group": "flood",
+        "display": "base",
         "rankUnit": "m",
         "vintage": 2025,
         "updateCadence": "annual",
@@ -353,7 +358,7 @@ def _flood_layers() -> list[HazardLayer]:
             mesh=_MESH_PLANNED,
             coverageNoteJa="公表されていない河川があります。白い場所は「倒壊しない」という意味ではありません。",
             fallbackLayersJa=[],
-            **{**common, "rankUnit": None},
+            **{**common, "rankUnit": None, "display": "overlay"},
         ),
         HazardLayer(
             key="flood_kaoku_kagan",
@@ -376,7 +381,7 @@ def _flood_layers() -> list[HazardLayer]:
             mesh=_MESH_PLANNED,
             coverageNoteJa="公表されていない河川があります。白い場所は「倒壊しない」という意味ではありません。",
             fallbackLayersJa=[],
-            **{**common, "rankUnit": None},
+            **{**common, "rankUnit": None, "display": "overlay"},
         ),
     ]
 
@@ -385,6 +390,7 @@ def _other_hazard_layers() -> list[HazardLayer]:
     return [
         HazardLayer(
             key="naisui",
+            display="base",
             group="inland_flood",
             labelJa="雨水出水（内水）浸水想定区域",
             summaryJa=(
@@ -413,6 +419,7 @@ def _other_hazard_layers() -> list[HazardLayer]:
         ),
         HazardLayer(
             key="hightide_l2",
+            display="base",
             group="storm_surge",
             labelJa="高潮浸水想定区域",
             summaryJa=(
@@ -436,6 +443,7 @@ def _other_hazard_layers() -> list[HazardLayer]:
         ),
         HazardLayer(
             key="tsunami_shinsui",
+            display="base",
             group="tsunami",
             labelJa="津波浸水想定",
             summaryJa=(
@@ -461,6 +469,7 @@ def _other_hazard_layers() -> list[HazardLayer]:
 def _landslide_layers() -> list[HazardLayer]:
     common = {
         "group": "landslide",
+        "display": "overlay",
         "rankUnit": None,
         "tile": None,
         "mesh": None,
@@ -507,6 +516,7 @@ def _terrain_layers() -> list[HazardLayer]:
     """
     common = {
         "group": "terrain",
+        "display": "base",
         "rankUnit": None,
         "mesh": None,
         "vintage": None,

@@ -73,7 +73,7 @@ def render_labels(layers: list[HazardLayer]) -> str:
         f"`pipeline/build_hazard_catalog.py` が `pipeline/hazard_rules.py` から生成。全 {len(layers)} レイヤ。",
         "設計の正は [`260824_flood.md`](./260824_flood.md) §3・§5.4。**このファイルは手で編集しない。**",
         "",
-        "凡例: `key` — ラベル 〔グループ・年度・更新頻度〕 ／ 階級は `order` ラベル — 意味〔色・配色根拠・危険度〕",
+        "凡例: `key` — ラベル 〔グループ・重ね方・年度・更新頻度〕 ／ 階級は `order` ラベル — 意味〔色・配色根拠・危険度〕",
         "",
     ]
     by_group = {group: [layer for layer in layers if layer.group == group] for group in GROUP_ORDER}
@@ -87,7 +87,9 @@ def render_labels(layers: list[HazardLayer]) -> str:
             continue
         for layer in group_layers:
             vintage = f"{layer.vintage}年度" if layer.vintage else "年度なし"
-            lines.append(f"### `{layer.key}` — {layer.labelJa} 〔{group}・{vintage}・{layer.updateCadence}〕")
+            lines.append(
+                f"### `{layer.key}` — {layer.labelJa} 〔{group}・{layer.display}・{vintage}・{layer.updateCadence}〕"
+            )
             lines.append("")
             lines.append(layer.summaryJa)
             lines.append("")

@@ -12,10 +12,11 @@ import { type Panel } from '@/shared/protocol'
 import { type GroupPromotion, type PanelGroup } from './panelGroups'
 import { usePromote } from './usePromote'
 
-/** チップに出す見出し。図はタイトルを、駅詳細は駅名を使う。 */
+/** チップに出す見出し。図はタイトルを、駅詳細は駅名を、地点のハザードは地点名を使う。 */
 export function chipLabel(panels: readonly Panel[]): string {
   for (const panel of panels) {
     if (panel.type === 'stationCard') return `${panel.label} の詳細`
+    if (panel.type === 'hazardCard') return `${panel.placeJa} の災害リスク`
     if (panel.type !== 'markdown') return panel.title
   }
   return '結果'

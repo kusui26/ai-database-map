@@ -212,6 +212,12 @@ function summarizePanel(panel: Panel): string {
     }
     case 'scatter':
       return `${panel.title}: ${panel.points.length}駅・${panel.clusterCount}クラスタ（${panel.xLabel}×${panel.yLabel}）`
+    case 'hazardCard': {
+      // 危険度・結論・行動はサーバが決めた文字列をそのまま渡す（LLM に判断させない）。
+      const items = panel.items.map((item) => `${item.labelJa} ${item.valueJa}`).join('・')
+      const evacuation = panel.evacuation === null ? '' : `／${panel.evacuation}`
+      return `${panel.placeJa}: ${panel.headlineJa}（${panel.level}${evacuation}）${items}`
+    }
     case 'markdown':
       return panel.body
   }

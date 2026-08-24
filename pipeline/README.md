@@ -24,6 +24,30 @@ python3 pipeline/validate_catalog.py   # CSV・dataset.md §2 と全数照合（
 データ更新やデータセット拡張（`dataset.md` §3 の定石）でCSV列が増減したら、`build` → `validate`
 を再実行してカタログを更新する。列名から機械生成するため **指標追加＝列追加**でUI/API/AIが自動追従する。
 
+## ハザード・レイヤカタログ（260825・水害 Phase 0）
+
+水害レイヤの**意味**（ラベル・階級・色・何 m か・どうすべきか・網羅性の注記・出典）を
+`src/shared/hazard/hazard-catalog.json` に生成する。メトリクス・カタログと違って**CSV を読まない**
+——原典が「タイル配信＋公表資料」なので、`hazard_rules.py` が知識そのものの単一定義元になる。
+凡例 UI と Gemini はこの 1 ファイルを読む（フロントに凡例を直書きしない・`docs/260824_flood.md` §5.4）。
+
+```bash
+python3 pipeline/build_hazard_catalog.py           # hazard-catalog.json + docs/hazard_layers.md を生成
+python3 pipeline/build_hazard_catalog.py --check   # 生成物が rules と一致するか検査（差分があれば exit 1）
+```
+
+| ファイル | 役割 |
+|---|---|
+| `hazard_rules.py` | レイヤ定義（15 レイヤ・55 階級）と配色の根拠。**手で編集するのはここだけ** |
+| `build_hazard_catalog.py` | JSON と日本語一覧を出力。`--check` は「JSON を手で書き換えた」事故を落とすゲート |
+
+**配色は `colorSource` で確からしさを型に残す**：`official`＝国交省『洪水浸水想定区域図作成マニュアル
+（第 4 版）』表-7.2／表-7.4 の RGB（配信タイルの画素実測とも一致を確認済み）、`measured`＝公式仕様を
+確認できず実測で得た色（土砂災害の 3 レイヤ）、`null`＝未確定。凡例 UI は `measured` に注記を出す。
+
+年度更新（A31a は毎年 5 月）でタイルの中身が変わったら、`hazard_rules.py` の `vintage` を上げて
+`build` を実行し、`tests/hazard-catalog.test.ts` を通す。
+
 ## 所得データの取得（260812）
 
 駅×半径の「1 人当たり課税対象所得（＝平均年収）」を作るための素データを取る

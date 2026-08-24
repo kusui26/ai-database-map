@@ -8,6 +8,7 @@
 
 import { type Panel } from '@/shared/protocol'
 import { cn } from '@/lib/utils'
+import { HazardCard } from './HazardCard'
 import { StationCard } from './StationCard'
 import { TrendChart } from './TrendChart'
 import { StatTable } from './StatTable'
@@ -38,6 +39,8 @@ export function PanelRenderer({
       return <RankingTable panel={panel} onSelect={onSelect} />
     case 'scatter':
       return <ScatterChart panel={panel} onSelect={onSelect} />
+    case 'hazardCard':
+      return <HazardCard panel={panel} />
     default: {
       const exhaustive: never = panel
       return exhaustive

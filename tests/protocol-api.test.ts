@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { mapResponseSchema, panelSchema } from '@/shared/protocol'
-import { errorEnvelopeSchema, growthQuerySchema, rankingQuerySchema } from '@/shared/api'
+import { mapActionSchema, mapResponseSchema, panelSchema } from '@/shared/protocol'
+import {
+  errorEnvelopeSchema,
+  growthQuerySchema,
+  hazardCatalogQuerySchema,
+  hazardCatalogResponseSchema,
+  rankingQuerySchema,
+} from '@/shared/api'
+import { hazardCatalog, hazardLayers } from '@/shared/hazard'
+import { hazardGroupViews, hazardLevelViews } from '@/domain/hazard/catalog'
 
 describe('GUI Chat Protocol', () => {
   it('MapResponse をパース（flyTo / clearOverlays / markdown）', () => {
@@ -91,5 +99,115 @@ describe('API クエリ入力', () => {
     expect(
       errorEnvelopeSchema.parse({ error: { code: 'BAD_METRIC', message: 'm' } }).error.code,
     ).toBe('BAD_METRIC')
+  })
+})
+
+describe('GUI Chat Protocol: ハザード拡張（260824_flood §6.4）', () => {
+  it('setHazardLayers / showPoint をパース（既存の mapAction は無改変）', () => {
+    const parsed = mapResponseSchema.parse({
+      messages: [],
+      mapActions: [
+        { type: 'setHazardLayers', layers: ['flood_l2', 'naisui'], opacity: 0.6 },
+        { type: 'setHazardLayers', layers: [] }, // 空＝すべて消す
+        { type: 'showPoint', lon: 139.847, lat: 35.7645, labelJa: '現在地' },
+        { type: 'flyTo', lon: 139.767, lat: 35.681 },
+      ],
+      panels: [],
+    })
+    expect(parsed.mapActions).toHaveLength(4)
+    expect(parsed.mapActions[0]?.type).toBe('setHazardLayers')
+    expect(parsed.mapActions[2]?.type).toBe('showPoint')
+  })
+
+  it('showPoint の labelJa は省略可・未知の mapAction は拒否', () => {
+    expect(mapActionSchema.parse({ type: 'showPoint', lon: 139, lat: 35 }).type).toBe('showPoint')
+    expect(() => mapActionSchema.parse({ type: 'setHazardLayer', layers: [] })).toThrow()
+  })
+
+  it('hazardCard パネルをパース（レベル・行動・注記・免責）', () => {
+    const panel = panelSchema.parse({
+      type: 'hazardCard',
+      placeJa: '亀有駅',
+      level: 'critical',
+      headlineJa: 'この場所は、家屋倒壊等氾濫想定区域（氾濫流）に入っています。',
+      evacuation: 'takeaway',
+      items: [
+        {
+          layerKey: 'flood_l2',
+          labelJa: '洪水浸水想定区域（想定最大規模）',
+          valueJa: '3〜5m 未満',
+          meaningJa: '2 階部分が浸水する高さ',
+          level: 'danger',
+          color: '#FFB7B7',
+        },
+      ],
+      reasonsJa: ['家屋倒壊等氾濫想定区域（氾濫流）内のため、建物の上階に留まるのは危険です'],
+      coverageNotesJa: ['白い場所は「浸水しない」という意味ではありません。'],
+      sources: [
+        { labelJa: '国土数値情報 洪水浸水想定区域（2025年度）', url: null, license: 'CC BY 4.0' },
+      ],
+      disclaimerJa: '実際の避難は、市町村が発表する避難情報に従ってください。',
+    })
+    expect(panel.type).toBe('hazardCard')
+    if (panel.type === 'hazardCard') {
+      expect(panel.evacuation).toBe('takeaway')
+      expect(panel.items[0]?.color).toBe('#FFB7B7')
+    }
+  })
+
+  it('hazardCard の evacuation は null 可（判定できないときは断定しない）', () => {
+    const panel = panelSchema.parse({
+      type: 'hazardCard',
+      placeJa: '地点',
+      level: 'none',
+      headlineJa: '該当するハザードはありませんでした。',
+      evacuation: null,
+      items: [],
+      reasonsJa: [],
+      coverageNotesJa: [],
+      sources: [],
+      disclaimerJa: '実際の避難は、市町村が発表する避難情報に従ってください。',
+    })
+    expect(panel.type).toBe('hazardCard')
+    if (panel.type === 'hazardCard') expect(panel.evacuation).toBeNull()
+  })
+
+  it('未知の危険度レベルを拒否（safe は語彙に無い）', () => {
+    expect(() =>
+      panelSchema.parse({
+        type: 'hazardCard',
+        placeJa: '地点',
+        level: 'safe',
+        headlineJa: '',
+        evacuation: null,
+        items: [],
+        reasonsJa: [],
+        coverageNotesJa: [],
+        sources: [],
+        disclaimerJa: '',
+      }),
+    ).toThrow()
+  })
+})
+
+describe('API: ハザード・カタログ', () => {
+  it('group クエリは既知のグループのみ・省略可', () => {
+    expect(hazardCatalogQuerySchema.parse({}).group).toBeUndefined()
+    expect(hazardCatalogQuerySchema.parse({ group: 'flood' }).group).toBe('flood')
+    expect(() => hazardCatalogQuerySchema.parse({ group: 'unknown' })).toThrow()
+  })
+
+  it('応答が自己記述的（グループ・レベルのラベルと色つき）でスキーマに適合する', () => {
+    const response = hazardCatalogResponseSchema.parse({
+      version: hazardCatalog.version,
+      groups: hazardGroupViews(),
+      levels: hazardLevelViews(),
+      disclaimerJa: hazardCatalog.disclaimerJa,
+      layers: hazardLayers,
+    })
+    expect(response.layers.length).toBe(hazardCatalog.layerCount)
+    expect(response.groups.length).toBeGreaterThan(0)
+    expect(response.levels.length).toBe(hazardCatalog.levels.length)
+    expect(response.disclaimerJa.length).toBeGreaterThan(0)
   })
 })

@@ -47,6 +47,13 @@ export const colorSourceSchema = z.enum(['official', 'measured']).nullable()
  */
 export const evacuationActionSchema = z.enum(['takeaway', 'vertical', 'stay'])
 
+/**
+ * 重ね方。`base`＝面をベタ塗りするので**同じグループで同時に 1 つだけ**（重ねると濁って読めない）。
+ * `overlay`＝細い区域や点在する区域なので、base の上に何枚でも重ねてよい。
+ * 「そのレイヤが面か点在か」という意味なので、見た目の都合ではなくカタログが持つ。
+ */
+export const hazardDisplaySchema = z.enum(['base', 'overlay'])
+
 /** 階級の単位（量でない区分は null）。 */
 export const rankUnitSchema = z.enum(['m', 'hour']).nullable()
 
@@ -103,6 +110,7 @@ export const hazardLayerSchema = z.object({
   labelJa: z.string(),
   /** 1〜2 文の説明。AI がそのまま回答に使える粒度で書く。 */
   summaryJa: z.string(),
+  display: hazardDisplaySchema,
   rankUnit: rankUnitSchema,
   ranks: z.array(hazardRankSchema),
   tile: hazardTileSchema.nullable(),

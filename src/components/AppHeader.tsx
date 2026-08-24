@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { cn } from '@/lib/utils'
 import { useChatStore } from '@/stores/chatStore'
+import { HazardControl } from './hazard/HazardControl'
 import { RadiusControl } from './RadiusControl'
 import { StationSearch } from './StationSearch'
 
@@ -77,7 +78,7 @@ function ChatToggle() {
   )
 }
 
-/** 浮遊ヘッダ：ロゴ・About・駅名検索・半径セグメント。モバイルは縦積み（375px でも崩れない）。 */
+/** 浮遊ヘッダ：ロゴ・About・駅名検索・半径セグメント・災害レイヤ・AI。モバイルは縦積み（375px でも崩れない）。 */
 export function AppHeader() {
   const [aboutOpen, setAboutOpen] = useState(false)
   const [aboutSeen, setAboutSeen] = useState(false)
@@ -113,6 +114,9 @@ export function AppHeader() {
           <div className="overflow-x-auto">
             <RadiusControl />
           </div>
+          {/* 災害レイヤ。ドロワーは header（position: absolute）の直下に開くので、
+              ボタンがここにある限りブレークポイントごとの位置指定が要らない。 */}
+          <HazardControl />
           <ChatToggle />
         </div>
       </div>

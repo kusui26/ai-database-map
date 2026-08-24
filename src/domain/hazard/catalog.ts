@@ -16,11 +16,13 @@ import {
   type HazardRank,
 } from '@/shared/hazard'
 import {
+  clampHazardOpacity,
   HAZARD_GROUPS,
   HAZARD_GROUP_LABELS_JA,
   HAZARD_LEVELS,
   HAZARD_LEVEL_COLORS,
   HAZARD_LEVEL_LABELS_JA,
+  HAZARD_TERRAIN_OPACITY_SCALE,
   hazardLevelWeight,
   type HazardGroup,
   type HazardLevel,
@@ -86,6 +88,45 @@ export function hazardLegend(layer: HazardLayer): readonly HazardLegendRow[] {
   return [...layer.ranks].sort((a, b) => a.order - b.order).map(legendRow)
 }
 
+/** 凡例の 1 まとまり（1 レイヤぶん）。UI はこれを上から描くだけでよい。 */
+export type HazardLegendSection = {
+  readonly layerKey: string
+  readonly labelJa: string
+  readonly summaryJa: string
+  /** 「2025年度」など。年度が無いレイヤは null。 */
+  readonly vintageJa: string | null
+  readonly sourceJa: string
+  readonly coverageNoteJa: string | null
+  readonly legendUrl: string | null
+  readonly rows: readonly HazardLegendRow[]
+  /** 地形グループか（ハザードと視覚的に分けるための印・§3.7）。 */
+  readonly isTerrain: boolean
+}
+
+/**
+ * 表示中レイヤの凡例（**描画順と同じ並び**＝地図で上に載っているものが下に来る）。
+ * 年度・出典・網羅性の注記まで 1 まとまりにするので、UI がどれかを出し忘れられない（§7.5）。
+ */
+export function hazardLegendSections(layerKeys: readonly string[]): readonly HazardLegendSection[] {
+  return hazardDrawOrder(layerKeys).flatMap((key) => {
+    const layer = getHazardLayer(key)
+    if (layer === undefined) return []
+    return [
+      {
+        layerKey: layer.key,
+        labelJa: layer.labelJa,
+        summaryJa: layer.summaryJa,
+        vintageJa: layer.vintage === null ? null : `${layer.vintage}年度`,
+        sourceJa: layer.source,
+        coverageNoteJa: layer.coverageNoteJa,
+        legendUrl: layer.legendUrl,
+        rows: hazardLegend(layer),
+        isTerrain: layer.group === 'terrain',
+      },
+    ]
+  })
+}
+
 /**
  * 入力のレイヤ key 列を、**実在するものだけ・重複なし・カタログ順**に正規化する。
  * `?hz=` の復元と API のホワイトリストで共用する（生 key のパススルーを禁止）。
@@ -116,6 +157,47 @@ export function heaviestHazardLevel(levels: readonly HazardLevel[]): HazardLevel
     (worst, level) => (hazardLevelWeight(level) > hazardLevelWeight(worst) ? level : worst),
     'none',
   )
+}
+
+/**
+ * レイヤの ON/OFF を 1 つ切り替えた結果を返す（純関数・UI もチャットもこれを通す）。
+ *
+ * 不変条件：**同じグループで `base` は同時に 1 つだけ**。面をベタ塗りするレイヤを重ねると
+ * 色が混ざって読めなくなる（想定最大規模と計画規模を同時に出しても、どちらの色か分からない）。
+ * `overlay`（家屋倒壊・土砂）は base の上に何枚でも載せてよい。
+ */
+export function toggleHazardLayer(current: readonly string[], key: string): readonly string[] {
+  const target = getHazardLayer(key)
+  if (target === undefined) return resolveHazardLayerKeys(current)
+  if (current.includes(key)) return resolveHazardLayerKeys(current.filter((each) => each !== key))
+  const kept = current.filter((each) => {
+    if (target.display === 'overlay') return true
+    const layer = getHazardLayer(each)
+    return layer === undefined || layer.group !== target.group || layer.display !== 'base'
+  })
+  return resolveHazardLayerKeys([...kept, key])
+}
+
+/**
+ * 描画順に並べ替える（`base` を先、`overlay` を後）。
+ * 細い赤（家屋倒壊）や土砂の区域が、浸水深のベタ塗りに隠れないようにする。
+ */
+export function hazardDrawOrder(layerKeys: readonly string[]): readonly string[] {
+  const resolved = resolveHazardLayerKeys(layerKeys)
+  const isBase = (key: string): boolean => getHazardLayer(key)?.display === 'base'
+  return [...resolved.filter(isBase), ...resolved.filter((key) => !isBase(key))]
+}
+
+/**
+ * そのレイヤに適用する不透明度。
+ * 「参考：地形」は**ハザードではない**ので一段薄くして、背景の参考情報として読ませる（§3.7）。
+ * 未知の key は素通し（描画側が無視するため、ここで例外にしない）。
+ */
+export function hazardOpacityFor(layerKey: string, opacity: number): number {
+  const clamped = clampHazardOpacity(opacity)
+  return getHazardLayer(layerKey)?.group === 'terrain'
+    ? clamped * HAZARD_TERRAIN_OPACITY_SCALE
+    : clamped
 }
 
 /**

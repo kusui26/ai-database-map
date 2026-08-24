@@ -392,3 +392,16 @@ export const EVACUATION_LABELS_JA: Readonly<Record<EvacuationAction, string>> = 
 export const HAZARD_OPACITY_DEFAULT = 0.6
 export const HAZARD_OPACITY_MIN = 0.3
 export const HAZARD_OPACITY_MAX = 0.9
+
+/**
+ * 「参考：地形」グループにかける不透明度の倍率。
+ * 地形は**ハザードではない**（浸水想定ではない）ので、同じ濃さで塗るとハザードと見分けがつかない。
+ * 一段薄くして「背景の参考情報」として読ませる（docs/260824_flood.md §3.7・§7.1）。
+ */
+export const HAZARD_TERRAIN_OPACITY_SCALE = 0.7
+
+/** 不透明度を有効範囲（0.3–0.9）に丸める。URL 直打ちの異常値もここで吸収する。 */
+export function clampHazardOpacity(value: number): number {
+  if (!Number.isFinite(value)) return HAZARD_OPACITY_DEFAULT
+  return Math.min(HAZARD_OPACITY_MAX, Math.max(HAZARD_OPACITY_MIN, value))
+}

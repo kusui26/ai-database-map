@@ -1,15 +1,27 @@
 import { describe, expect, it } from 'vitest'
 import {
   hazardAttributions,
+  hazardDrawOrder,
   hazardGroupViews,
   hazardLegend,
+  hazardLegendSections,
   hazardLevelViews,
+  hazardOpacityFor,
   heaviestHazardLevel,
   layersNeedingCoverageNote,
   resolveHazardLayerKeys,
+  toggleHazardLayer,
 } from '@/domain/hazard/catalog'
 import { hazardLayers, requireHazardLayer } from '@/shared/hazard'
-import { HAZARD_GROUPS, HAZARD_LEVELS } from '@/shared/constants'
+import {
+  clampHazardOpacity,
+  HAZARD_GROUPS,
+  HAZARD_LEVELS,
+  HAZARD_OPACITY_DEFAULT,
+  HAZARD_OPACITY_MAX,
+  HAZARD_OPACITY_MIN,
+  HAZARD_TERRAIN_OPACITY_SCALE,
+} from '@/shared/constants'
 
 describe('domain/hazard: グループ・レベルのビュー', () => {
   it('レイヤを持つグループだけを表示順で返す（realtime は 0 件なので出さない）', () => {
@@ -113,5 +125,102 @@ describe('domain/hazard: 危険度の合成', () => {
   it('順番によらず同じ結果（可換）', () => {
     const levels = [...HAZARD_LEVELS]
     expect(heaviestHazardLevel(levels)).toBe(heaviestHazardLevel([...levels].reverse()))
+  })
+})
+
+describe('domain/hazard: レイヤの ON/OFF（Phase 1a）', () => {
+  it('同じグループの base は 1 つだけ（面を重ねると濁って読めない）', () => {
+    const afterL2 = toggleHazardLayer([], 'flood_l2')
+    expect(afterL2).toEqual(['flood_l2'])
+    const afterL1 = toggleHazardLayer(afterL2, 'flood_l1')
+    expect(afterL1).toEqual(['flood_l1'])
+    expect(toggleHazardLayer(afterL1, 'flood_duration')).toEqual(['flood_duration'])
+  })
+
+  it('overlay は base と重ねられ、base を切り替えても残る', () => {
+    const withOverlay = toggleHazardLayer(['flood_l2'], 'flood_kaoku_hanran')
+    expect(withOverlay).toEqual(['flood_l2', 'flood_kaoku_hanran'])
+    // base だけ差し替わり、overlay は生き残る（UI 実測でも同じ挙動）
+    expect(toggleHazardLayer(withOverlay, 'flood_l1')).toEqual(['flood_l1', 'flood_kaoku_hanran'])
+  })
+
+  it('overlay どうしは何枚でも重なる（土砂 3 種）', () => {
+    const one = toggleHazardLayer([], 'dosekiryu')
+    const two = toggleHazardLayer(one, 'kyukeisha')
+    const three = toggleHazardLayer(two, 'jisuberi')
+    expect(three).toEqual(['dosekiryu', 'kyukeisha', 'jisuberi'])
+  })
+
+  it('グループが違えば base どうしも重なる（洪水と地形を同時に見る）', () => {
+    expect(toggleHazardLayer(['flood_l2'], 'chisui_chikei')).toEqual(['flood_l2', 'chisui_chikei'])
+    expect(toggleHazardLayer(['flood_l2'], 'naisui')).toEqual(['flood_l2', 'naisui'])
+  })
+
+  it('もう一度押すと消える／未知の key は無視される', () => {
+    expect(toggleHazardLayer(['flood_l2', 'naisui'], 'flood_l2')).toEqual(['naisui'])
+    expect(toggleHazardLayer(['flood_l2'], '___missing___')).toEqual(['flood_l2'])
+  })
+
+  it('描画順は base が先・overlay が後（細い赤がベタ塗りに隠れない）', () => {
+    expect(hazardDrawOrder(['flood_kaoku_hanran', 'flood_l2'])).toEqual([
+      'flood_l2',
+      'flood_kaoku_hanran',
+    ])
+    expect(hazardDrawOrder(['dosekiryu', 'chisui_chikei'])).toEqual(['chisui_chikei', 'dosekiryu'])
+  })
+
+  it('全レイヤに display があり、地形と内水/高潮/津波は base・家屋倒壊と土砂は overlay', () => {
+    expect(
+      hazardLayers.every((layer) => layer.display === 'base' || layer.display === 'overlay'),
+    ).toBe(true)
+    const displayOf = (key: string) => requireHazardLayer(key).display
+    expect(displayOf('flood_l2')).toBe('base')
+    expect(displayOf('flood_kaoku_hanran')).toBe('overlay')
+    expect(displayOf('naisui')).toBe('base')
+    expect(displayOf('dosekiryu')).toBe('overlay')
+    expect(displayOf('relief')).toBe('base')
+  })
+})
+
+describe('domain/hazard: 凡例セクションと不透明度', () => {
+  it('凡例は描画順と同じ並びで、年度・出典・注記が揃う', () => {
+    const sections = hazardLegendSections(['flood_kaoku_hanran', 'flood_l2'])
+    expect(sections.map((section) => section.layerKey)).toEqual(['flood_l2', 'flood_kaoku_hanran'])
+    const first = sections[0]
+    expect(first?.vintageJa).toBe('2025年度')
+    expect(first?.sourceJa.length).toBeGreaterThan(0)
+    expect(first?.coverageNoteJa).not.toBeNull()
+    expect(first?.rows.length).toBe(8)
+    expect(first?.isTerrain).toBe(false)
+  })
+
+  it('地形は isTerrain=true・階級なし・公式凡例へのリンクを持つ', () => {
+    const section = hazardLegendSections(['relief'])[0]
+    expect(section?.isTerrain).toBe(true)
+    expect(section?.rows).toEqual([])
+    expect(section?.legendUrl).not.toBeNull()
+  })
+
+  it('実在しない key は凡例に出ない', () => {
+    expect(hazardLegendSections(['___missing___'])).toEqual([])
+  })
+
+  it('不透明度は 0.3–0.9 に丸まり、異常値は既定に戻る', () => {
+    expect(clampHazardOpacity(0.6)).toBe(0.6)
+    expect(clampHazardOpacity(0)).toBe(HAZARD_OPACITY_MIN)
+    expect(clampHazardOpacity(99)).toBe(HAZARD_OPACITY_MAX)
+    expect(clampHazardOpacity(Number.NaN)).toBe(HAZARD_OPACITY_DEFAULT)
+  })
+
+  it('地形だけ一段薄くなる（ハザードと見分けがつくように）', () => {
+    expect(hazardOpacityFor('flood_l2', 0.6)).toBe(0.6)
+    expect(hazardOpacityFor('chisui_chikei', 0.6)).toBeCloseTo(
+      0.6 * HAZARD_TERRAIN_OPACITY_SCALE,
+      6,
+    )
+    // 未知の key は素通し（描画側が無視する）
+    expect(hazardOpacityFor('___missing___', 0.6)).toBe(0.6)
+    // 範囲外の入力もここで丸まる
+    expect(hazardOpacityFor('flood_l2', 99)).toBe(HAZARD_OPACITY_MAX)
   })
 })

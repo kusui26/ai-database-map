@@ -278,3 +278,117 @@ export function routeFilterLabel(routes: readonly string[], routeTypes: readonly
 export function routeOptionLabel(route: string, operators: readonly string[]): string {
   return operators.length <= 1 ? route : `${route}（${operators.length}社）`
 }
+
+// --- ハザード（水害・docs/260824_flood.md §5.4） --------------------------
+// 水害レイヤは「駅×半径の指標」ではなく**地図のレイヤ**という別の軸なので、
+// `Category` とは混ぜず、ここに独立した語彙を置く（metric_catalog に水害を混ぜない）。
+
+/** ハザードレイヤのグループ（表示の束ね方）。`hazard-catalog.json` の `groups` と一致する。 */
+export type HazardGroup =
+  'flood' | 'inland_flood' | 'storm_surge' | 'tsunami' | 'landslide' | 'terrain' | 'realtime'
+
+/** 表示順を保持したハザードグループ一覧。 */
+export const HAZARD_GROUPS: readonly HazardGroup[] = [
+  'flood',
+  'inland_flood',
+  'storm_surge',
+  'tsunami',
+  'landslide',
+  'terrain',
+  'realtime',
+]
+
+/**
+ * グループの日本語ラベル。
+ * ⚠ `terrain` は「参考：地形」と明示する。地形は**ハザード（浸水想定）ではない**ので、
+ * 同じ見え方にすると根拠の質が違うものを混ぜてしまう（docs/260824_flood.md §3.7）。
+ */
+export const HAZARD_GROUP_LABELS_JA: Readonly<Record<HazardGroup, string>> = {
+  flood: '洪水',
+  inland_flood: '内水（雨水出水）',
+  storm_surge: '高潮',
+  tsunami: '津波',
+  landslide: '土砂災害',
+  terrain: '参考：地形',
+  realtime: '今の危険度（リアルタイム）',
+}
+
+/**
+ * 危険度レベル（軽い順）。
+ *
+ * ⚠ 最も軽い段階を `safe`（安全）と呼ばない。**白＝「想定区域が指定されていない」であって
+ * 「安全」ではない**——これがこの機能でいちばん大事な不変条件だから（docs/260824_flood.md §7.5-1）。
+ * 型の名前からしてそう読めるようにしておく。
+ */
+export type HazardLevel = 'none' | 'caution' | 'warning' | 'danger' | 'critical'
+
+/** 軽い順に並べたハザード危険度。比較（重い方を採る）はこの順に依る。 */
+export const HAZARD_LEVELS: readonly HazardLevel[] = [
+  'none',
+  'caution',
+  'warning',
+  'danger',
+  'critical',
+]
+
+/** 危険度の日本語ラベル。`none` は「安全」ではなく「想定区域外」。 */
+export const HAZARD_LEVEL_LABELS_JA: Readonly<Record<HazardLevel, string>> = {
+  none: '想定区域外',
+  caution: '注意',
+  warning: '警戒',
+  danger: '危険',
+  critical: '極めて危険',
+}
+
+/**
+ * 危険度バッジの配色（**公式タイルの配色とは別物**）。
+ * タイルの色は原典の凡例に従うしかないので、こちらは「地点カードのバッジ」用の重症度ランプ。
+ * ⚠ 色だけで危険度を伝えない（色＋アイコン＋テキストの 3 重・同 §7.6）。
+ */
+export const HAZARD_LEVEL_COLORS: Readonly<Record<HazardLevel, string>> = {
+  none: '#94a3b8', // slate-400
+  caution: '#eab308', // yellow-500
+  warning: '#f97316', // orange-500
+  danger: '#dc2626', // red-600
+  critical: '#7f1d1d', // red-900
+}
+
+/**
+ * 危険度の記号。**色だけで危険度を伝えない**ための 3 要素（色・記号・テキスト）のうちの 1 つ
+ * （1 型・2 型色覚への配慮・docs/260824_flood.md §7.6）。絵文字ではなく、どの環境でも出る記号を使う。
+ */
+export const HAZARD_LEVEL_ICONS: Readonly<Record<HazardLevel, string>> = {
+  none: '—',
+  caution: '△',
+  warning: '⚠',
+  danger: '❗',
+  critical: '⛔',
+}
+
+/** レベルの重さ（大きいほど重い）。未知の値は最も軽い扱いにする（安全側に倒さない＝誇張しない）。 */
+export function hazardLevelWeight(level: HazardLevel): number {
+  const index = HAZARD_LEVELS.indexOf(level)
+  return index < 0 ? 0 : index
+}
+
+/**
+ * 避難行動の種別（`docs/260824_flood.md` §6.2 の判定が返す 3 択）。
+ * ⚠ 「避難しなくてよい」とは言わない。`stay` は「その場に留まる」であって「安全」ではない。
+ */
+export type EvacuationAction = 'takeaway' | 'vertical' | 'stay'
+
+/** 避難行動の日本語ラベル（断定しない文言で統一・同 §7.5-5）。 */
+export const EVACUATION_LABELS_JA: Readonly<Record<EvacuationAction, string>> = {
+  takeaway: '立退き避難が基本',
+  vertical: '垂直避難も選択肢',
+  stay: 'その場に留まる',
+}
+
+/**
+ * ハザードレイヤの既定不透明度。
+ * 背景地図の地名が読めなくなると避難に使えないため、UI では 0.3–0.9 で変えられるようにする
+ * （docs/260824_flood.md §7.6）。
+ */
+export const HAZARD_OPACITY_DEFAULT = 0.6
+export const HAZARD_OPACITY_MIN = 0.3
+export const HAZARD_OPACITY_MAX = 0.9

@@ -1,0 +1,1073 @@
+{
+  "version": 1,
+  "generatedFrom": "pipeline/hazard_rules.py",
+  "layerCount": 15,
+  "groups": [
+    "flood",
+    "inland_flood",
+    "storm_surge",
+    "tsunami",
+    "landslide",
+    "terrain",
+    "realtime"
+  ],
+  "levels": [
+    "none",
+    "caution",
+    "warning",
+    "danger",
+    "critical"
+  ],
+  "disclaimerJa": "この地図は災害リスクの目安を示すものです。実際の避難は、お住まいの市町村が発表する避難情報に従ってください。",
+  "layers": [
+    {
+      "key": "flood_l2",
+      "group": "flood",
+      "labelJa": "洪水浸水想定区域（想定最大規模）",
+      "summaryJa": "想定し得る最大規模の降雨で河川が氾濫した場合に、浸水が想定される区域と深さです。1000 年に一度あるかどうかの規模で、全国の人口のおよそ 4 割がこの区域に住んでいます。",
+      "rankUnit": "m",
+      "ranks": [
+        {
+          "order": 1,
+          "labelJa": "0〜0.3m 未満",
+          "meaningJa": "一般的な住宅で床下程度の浸水",
+          "actionJa": "浸水想定区域内です。避難の要否は市町村の情報で確認してください。",
+          "level": "caution",
+          "color": "#FFFFB3",
+          "colorSource": "official",
+          "min": 0.0,
+          "max": 0.3,
+          "sourceCode": 1
+        },
+        {
+          "order": 2,
+          "labelJa": "0.3〜0.5m 未満",
+          "meaningJa": "一般的な住宅で床下程度の浸水",
+          "actionJa": "浸水想定区域内です。避難の要否は市町村の情報で確認してください。",
+          "level": "caution",
+          "color": "#F7F5A9",
+          "colorSource": "official",
+          "min": 0.3,
+          "max": 0.5,
+          "sourceCode": 1
+        },
+        {
+          "order": 3,
+          "labelJa": "0.5〜1m 未満",
+          "meaningJa": "床上が浸水する高さ",
+          "actionJa": "床上まで浸水する想定です。上階への垂直避難、または早めの立退き避難が基本です。",
+          "level": "warning",
+          "color": "#F8E1A6",
+          "colorSource": "official",
+          "min": 0.5,
+          "max": 1.0,
+          "sourceCode": 2
+        },
+        {
+          "order": 4,
+          "labelJa": "1〜3m 未満",
+          "meaningJa": "1 階が水没する高さ",
+          "actionJa": "床上まで浸水する想定です。上階への垂直避難、または早めの立退き避難が基本です。",
+          "level": "warning",
+          "color": "#FFD8C0",
+          "colorSource": "official",
+          "min": 1.0,
+          "max": 3.0,
+          "sourceCode": 2
+        },
+        {
+          "order": 5,
+          "labelJa": "3〜5m 未満",
+          "meaningJa": "2 階部分が浸水する高さ",
+          "actionJa": "2 階まで浸水する想定です。立退き避難が基本です。",
+          "level": "danger",
+          "color": "#FFB7B7",
+          "colorSource": "official",
+          "min": 3.0,
+          "max": 5.0,
+          "sourceCode": 3
+        },
+        {
+          "order": 6,
+          "labelJa": "5〜10m 未満",
+          "meaningJa": "2 階部分が水没する高さ",
+          "actionJa": "2 階まで浸水する想定です。立退き避難が基本です。",
+          "level": "danger",
+          "color": "#FF9191",
+          "colorSource": "official",
+          "min": 5.0,
+          "max": 10.0,
+          "sourceCode": 4
+        },
+        {
+          "order": 7,
+          "labelJa": "10〜20m 未満",
+          "meaningJa": "3 階建てでも水没しうる高さ",
+          "actionJa": "建物の上階でも安全とは言えない高さです。立退き避難が基本です。",
+          "level": "critical",
+          "color": "#F285C9",
+          "colorSource": "official",
+          "min": 10.0,
+          "max": 20.0,
+          "sourceCode": 5
+        },
+        {
+          "order": 8,
+          "labelJa": "20m 以上",
+          "meaningJa": "建物が完全に水没する高さ",
+          "actionJa": "建物の上階でも安全とは言えない高さです。立退き避難が基本です。",
+          "level": "critical",
+          "color": "#DC7ADC",
+          "colorSource": "official",
+          "min": 20.0,
+          "max": null,
+          "sourceCode": 6
+        }
+      ],
+      "tile": {
+        "url": "https://disaportaldata.gsi.go.jp/raster/01_flood_l2_shinsuishin_data/{z}/{x}/{y}.png",
+        "minZoom": 2,
+        "maxZoom": 17,
+        "format": "png"
+      },
+      "mesh": {
+        "available": false,
+        "pathTemplate": "hazard/{layer}/{primary}.bin"
+      },
+      "legendUrl": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A31a-2025.html",
+      "vintage": 2025,
+      "updateCadence": "annual",
+      "source": "国土交通省 各地方整備局等・都道府県（重ねるハザードマップ／国土数値情報 A31a）",
+      "license": "商用・非商用を問わず利用可（ハザードマップポータルサイト オープンデータ配信）",
+      "attribution": "出典：ハザードマップポータルサイト（国土交通省）",
+      "coverageNoteJa": "白い場所は「浸水想定が指定されていない」という意味で、「浸水しない」という意味ではありません。実際の浸水域が想定区域より広がることがあります。",
+      "fallbackLayersJa": []
+    },
+    {
+      "key": "flood_l1",
+      "group": "flood",
+      "labelJa": "洪水浸水想定区域（計画規模）",
+      "summaryJa": "河川の整備計画が前提とする規模の降雨で氾濫した場合に、浸水が想定される区域と深さです。想定最大規模より狭く、より起こりやすい規模を示します。",
+      "rankUnit": "m",
+      "ranks": [
+        {
+          "order": 1,
+          "labelJa": "0〜0.3m 未満",
+          "meaningJa": "一般的な住宅で床下程度の浸水",
+          "actionJa": "浸水想定区域内です。避難の要否は市町村の情報で確認してください。",
+          "level": "caution",
+          "color": "#FFFFB3",
+          "colorSource": "official",
+          "min": 0.0,
+          "max": 0.3,
+          "sourceCode": 1
+        },
+        {
+          "order": 2,
+          "labelJa": "0.3〜0.5m 未満",
+          "meaningJa": "一般的な住宅で床下程度の浸水",
+          "actionJa": "浸水想定区域内です。避難の要否は市町村の情報で確認してください。",
+          "level": "caution",
+          "color": "#F7F5A9",
+          "colorSource": "official",
+          "min": 0.3,
+          "max": 0.5,
+          "sourceCode": 1
+        },
+        {
+          "order": 3,
+          "labelJa": "0.5〜1m 未満",
+          "meaningJa": "床上が浸水する高さ",
+          "actionJa": "床上まで浸水する想定です。上階への垂直避難、または早めの立退き避難が基本です。",
+          "level": "warning",
+          "color": "#F8E1A6",
+          "colorSource": "official",
+          "min": 0.5,
+          "max": 1.0,
+          "sourceCode": 2
+        },
+        {
+          "order": 4,
+          "labelJa": "1〜3m 未満",
+          "meaningJa": "1 階が水没する高さ",
+          "actionJa": "床上まで浸水する想定です。上階への垂直避難、または早めの立退き避難が基本です。",
+          "level": "warning",
+          "color": "#FFD8C0",
+          "colorSource": "official",
+          "min": 1.0,
+          "max": 3.0,
+          "sourceCode": 2
+        },
+        {
+          "order": 5,
+          "labelJa": "3〜5m 未満",
+          "meaningJa": "2 階部分が浸水する高さ",
+          "actionJa": "2 階まで浸水する想定です。立退き避難が基本です。",
+          "level": "danger",
+          "color": "#FFB7B7",
+          "colorSource": "official",
+          "min": 3.0,
+          "max": 5.0,
+          "sourceCode": 3
+        },
+        {
+          "order": 6,
+          "labelJa": "5〜10m 未満",
+          "meaningJa": "2 階部分が水没する高さ",
+          "actionJa": "2 階まで浸水する想定です。立退き避難が基本です。",
+          "level": "danger",
+          "color": "#FF9191",
+          "colorSource": "official",
+          "min": 5.0,
+          "max": 10.0,
+          "sourceCode": 4
+        },
+        {
+          "order": 7,
+          "labelJa": "10〜20m 未満",
+          "meaningJa": "3 階建てでも水没しうる高さ",
+          "actionJa": "建物の上階でも安全とは言えない高さです。立退き避難が基本です。",
+          "level": "critical",
+          "color": "#F285C9",
+          "colorSource": "official",
+          "min": 10.0,
+          "max": 20.0,
+          "sourceCode": 5
+        },
+        {
+          "order": 8,
+          "labelJa": "20m 以上",
+          "meaningJa": "建物が完全に水没する高さ",
+          "actionJa": "建物の上階でも安全とは言えない高さです。立退き避難が基本です。",
+          "level": "critical",
+          "color": "#DC7ADC",
+          "colorSource": "official",
+          "min": 20.0,
+          "max": null,
+          "sourceCode": 6
+        }
+      ],
+      "tile": {
+        "url": "https://disaportaldata.gsi.go.jp/raster/01_flood_l1_shinsuishin_newlegend_data/{z}/{x}/{y}.png",
+        "minZoom": 2,
+        "maxZoom": 17,
+        "format": "png"
+      },
+      "mesh": {
+        "available": false,
+        "pathTemplate": "hazard/{layer}/{primary}.bin"
+      },
+      "legendUrl": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A31a-2025.html",
+      "vintage": 2025,
+      "updateCadence": "annual",
+      "source": "国土交通省 各地方整備局等・都道府県（重ねるハザードマップ／国土数値情報 A31a）",
+      "license": "商用・非商用を問わず利用可（ハザードマップポータルサイト オープンデータ配信）",
+      "attribution": "出典：ハザードマップポータルサイト（国土交通省）",
+      "coverageNoteJa": "白い場所は「浸水想定が指定されていない」という意味で、「浸水しない」という意味ではありません。実際の浸水域が想定区域より広がることがあります。",
+      "fallbackLayersJa": []
+    },
+    {
+      "key": "flood_duration",
+      "group": "flood",
+      "labelJa": "浸水継続時間（想定最大規模）",
+      "summaryJa": "想定最大規模の洪水で浸水したあと、水が引くまでにかかる時間の想定です。長いほど在宅避難では孤立しやすく、立退き避難の判断材料になります。",
+      "rankUnit": "hour",
+      "ranks": [
+        {
+          "order": 1,
+          "labelJa": "0〜12時間",
+          "meaningJa": "半日未満で水が引く想定",
+          "actionJa": "在宅避難を選ぶ場合は、水・食料・トイレ・電源の備えを確認してください。",
+          "level": "caution",
+          "color": "#A0D2FF",
+          "colorSource": "official",
+          "min": 0,
+          "max": 12,
+          "sourceCode": 1
+        },
+        {
+          "order": 2,
+          "labelJa": "12〜24時間",
+          "meaningJa": "1 日近く浸水が続く想定",
+          "actionJa": "在宅避難を選ぶ場合は、水・食料・トイレ・電源の備えを確認してください。",
+          "level": "caution",
+          "color": "#0041FF",
+          "colorSource": "official",
+          "min": 12,
+          "max": 24,
+          "sourceCode": 2
+        },
+        {
+          "order": 3,
+          "labelJa": "24〜72時間",
+          "meaningJa": "1〜3 日浸水が続く想定",
+          "actionJa": "在宅避難を選ぶ場合は、水・食料・トイレ・電源の備えを確認してください。",
+          "level": "warning",
+          "color": "#FAF500",
+          "colorSource": "official",
+          "min": 24,
+          "max": 72,
+          "sourceCode": 3
+        },
+        {
+          "order": 4,
+          "labelJa": "72〜168時間",
+          "meaningJa": "3 日〜1 週間浸水が続く想定",
+          "actionJa": "浸水が長く続くため、水が引くまで孤立するおそれがあります。浸水域外への立退き避難が基本です。",
+          "level": "danger",
+          "color": "#FF9900",
+          "colorSource": "official",
+          "min": 72,
+          "max": 168,
+          "sourceCode": 4
+        },
+        {
+          "order": 5,
+          "labelJa": "168〜336時間",
+          "meaningJa": "1〜2 週間浸水が続く想定",
+          "actionJa": "浸水が長く続くため、水が引くまで孤立するおそれがあります。浸水域外への立退き避難が基本です。",
+          "level": "danger",
+          "color": "#FF2800",
+          "colorSource": "official",
+          "min": 168,
+          "max": 336,
+          "sourceCode": 5
+        },
+        {
+          "order": 6,
+          "labelJa": "336〜672時間",
+          "meaningJa": "2〜4 週間浸水が続く想定",
+          "actionJa": "浸水が長く続くため、水が引くまで孤立するおそれがあります。浸水域外への立退き避難が基本です。",
+          "level": "critical",
+          "color": "#B40068",
+          "colorSource": "official",
+          "min": 336,
+          "max": 672,
+          "sourceCode": 6
+        },
+        {
+          "order": 7,
+          "labelJa": "672時間以上",
+          "meaningJa": "4 週間以上浸水が続く想定",
+          "actionJa": "浸水が長く続くため、水が引くまで孤立するおそれがあります。浸水域外への立退き避難が基本です。",
+          "level": "critical",
+          "color": "#600060",
+          "colorSource": "official",
+          "min": 672,
+          "max": null,
+          "sourceCode": 7
+        }
+      ],
+      "tile": {
+        "url": "https://disaportaldata.gsi.go.jp/raster/01_flood_l2_keizoku_data/{z}/{x}/{y}.png",
+        "minZoom": 2,
+        "maxZoom": 17,
+        "format": "png"
+      },
+      "mesh": {
+        "available": false,
+        "pathTemplate": "hazard/{layer}/{primary}.bin"
+      },
+      "legendUrl": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A31a-2025.html",
+      "vintage": 2025,
+      "updateCadence": "annual",
+      "source": "国土交通省 各地方整備局等・都道府県（重ねるハザードマップ／国土数値情報 A31a）",
+      "license": "商用・非商用を問わず利用可（ハザードマップポータルサイト オープンデータ配信）",
+      "attribution": "出典：ハザードマップポータルサイト（国土交通省）",
+      "coverageNoteJa": "継続時間が公表されていない河川があります。白い場所は「浸水しない」という意味ではありません。",
+      "fallbackLayersJa": []
+    },
+    {
+      "key": "flood_kaoku_hanran",
+      "group": "flood",
+      "labelJa": "家屋倒壊等氾濫想定区域（氾濫流）",
+      "summaryJa": "氾濫した水の流れの力で、木造家屋が倒壊するおそれがある区域です。建物の上階に留まる垂直避難では命を守れないため、立退き避難が必要になります。",
+      "rankUnit": null,
+      "ranks": [
+        {
+          "order": 1,
+          "labelJa": "氾濫流により家屋が倒壊するおそれ",
+          "meaningJa": "水の流れの力で木造家屋が倒壊しうる区域",
+          "actionJa": "建物の上階に留まるのは危険です。区域の外への立退き避難が基本です。",
+          "level": "critical",
+          "color": "#FF0000",
+          "colorSource": "measured",
+          "min": null,
+          "max": null,
+          "sourceCode": 1
+        }
+      ],
+      "tile": {
+        "url": "https://disaportaldata.gsi.go.jp/raster/01_flood_l2_kaokutoukai_hanran_data/{z}/{x}/{y}.png",
+        "minZoom": 4,
+        "maxZoom": 17,
+        "format": "png"
+      },
+      "mesh": {
+        "available": false,
+        "pathTemplate": "hazard/{layer}/{primary}.bin"
+      },
+      "legendUrl": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A31a-2025.html",
+      "vintage": 2025,
+      "updateCadence": "annual",
+      "source": "国土交通省 各地方整備局等・都道府県（重ねるハザードマップ／国土数値情報 A31a）",
+      "license": "商用・非商用を問わず利用可（ハザードマップポータルサイト オープンデータ配信）",
+      "attribution": "出典：ハザードマップポータルサイト（国土交通省）",
+      "coverageNoteJa": "公表されていない河川があります。白い場所は「倒壊しない」という意味ではありません。",
+      "fallbackLayersJa": []
+    },
+    {
+      "key": "flood_kaoku_kagan",
+      "group": "flood",
+      "labelJa": "家屋倒壊等氾濫想定区域（河岸侵食）",
+      "summaryJa": "河岸が削られることで、家屋が倒壊・流失するおそれがある区域です。氾濫流と同じく、建物の上階では命を守れません。",
+      "rankUnit": null,
+      "ranks": [
+        {
+          "order": 1,
+          "labelJa": "河岸侵食により家屋が倒壊・流失するおそれ",
+          "meaningJa": "河岸が削られて家屋が倒壊・流失しうる区域",
+          "actionJa": "建物の上階に留まるのは危険です。区域の外への立退き避難が基本です。",
+          "level": "critical",
+          "color": "#FF0000",
+          "colorSource": "measured",
+          "min": null,
+          "max": null,
+          "sourceCode": 2
+        }
+      ],
+      "tile": {
+        "url": "https://disaportaldata.gsi.go.jp/raster/01_flood_l2_kaokutoukai_kagan_data/{z}/{x}/{y}.png",
+        "minZoom": 4,
+        "maxZoom": 17,
+        "format": "png"
+      },
+      "mesh": {
+        "available": false,
+        "pathTemplate": "hazard/{layer}/{primary}.bin"
+      },
+      "legendUrl": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A31a-2025.html",
+      "vintage": 2025,
+      "updateCadence": "annual",
+      "source": "国土交通省 各地方整備局等・都道府県（重ねるハザードマップ／国土数値情報 A31a）",
+      "license": "商用・非商用を問わず利用可（ハザードマップポータルサイト オープンデータ配信）",
+      "attribution": "出典：ハザードマップポータルサイト（国土交通省）",
+      "coverageNoteJa": "公表されていない河川があります。白い場所は「倒壊しない」という意味ではありません。",
+      "fallbackLayersJa": []
+    },
+    {
+      "key": "naisui",
+      "group": "inland_flood",
+      "labelJa": "雨水出水（内水）浸水想定区域",
+      "summaryJa": "川が溢れる前に、降った雨が下水道や排水路の能力を超えて街に溜まる浸水の想定です。近年のゲリラ豪雨で都市部の被害の中心になっており、過去 10 年の水害被害額のおよそ 4 割が内水によるものです（東京都ではおよそ 7 割）。",
+      "rankUnit": "m",
+      "ranks": [
+        {
+          "order": 1,
+          "labelJa": "0〜0.3m 未満",
+          "meaningJa": "一般的な住宅で床下程度の浸水",
+          "actionJa": "浸水想定区域内です。避難の要否は市町村の情報で確認してください。",
+          "level": "caution",
+          "color": "#FFFFB3",
+          "colorSource": "official",
+          "min": 0.0,
+          "max": 0.3,
+          "sourceCode": 1
+        },
+        {
+          "order": 2,
+          "labelJa": "0.3〜0.5m 未満",
+          "meaningJa": "一般的な住宅で床下程度の浸水",
+          "actionJa": "浸水想定区域内です。避難の要否は市町村の情報で確認してください。",
+          "level": "caution",
+          "color": "#F7F5A9",
+          "colorSource": "official",
+          "min": 0.3,
+          "max": 0.5,
+          "sourceCode": 1
+        },
+        {
+          "order": 3,
+          "labelJa": "0.5〜1m 未満",
+          "meaningJa": "床上が浸水する高さ",
+          "actionJa": "床上まで浸水する想定です。上階への垂直避難、または早めの立退き避難が基本です。",
+          "level": "warning",
+          "color": "#F8E1A6",
+          "colorSource": "official",
+          "min": 0.5,
+          "max": 1.0,
+          "sourceCode": 2
+        },
+        {
+          "order": 4,
+          "labelJa": "1〜3m 未満",
+          "meaningJa": "1 階が水没する高さ",
+          "actionJa": "床上まで浸水する想定です。上階への垂直避難、または早めの立退き避難が基本です。",
+          "level": "warning",
+          "color": "#FFD8C0",
+          "colorSource": "official",
+          "min": 1.0,
+          "max": 3.0,
+          "sourceCode": 2
+        },
+        {
+          "order": 5,
+          "labelJa": "3〜5m 未満",
+          "meaningJa": "2 階部分が浸水する高さ",
+          "actionJa": "2 階まで浸水する想定です。立退き避難が基本です。",
+          "level": "danger",
+          "color": "#FFB7B7",
+          "colorSource": "official",
+          "min": 3.0,
+          "max": 5.0,
+          "sourceCode": 3
+        },
+        {
+          "order": 6,
+          "labelJa": "5〜10m 未満",
+          "meaningJa": "2 階部分が水没する高さ",
+          "actionJa": "2 階まで浸水する想定です。立退き避難が基本です。",
+          "level": "danger",
+          "color": "#FF9191",
+          "colorSource": "official",
+          "min": 5.0,
+          "max": 10.0,
+          "sourceCode": 4
+        },
+        {
+          "order": 7,
+          "labelJa": "10〜20m 未満",
+          "meaningJa": "3 階建てでも水没しうる高さ",
+          "actionJa": "建物の上階でも安全とは言えない高さです。立退き避難が基本です。",
+          "level": "critical",
+          "color": "#F285C9",
+          "colorSource": "official",
+          "min": 10.0,
+          "max": 20.0,
+          "sourceCode": 5
+        },
+        {
+          "order": 8,
+          "labelJa": "20m 以上",
+          "meaningJa": "建物が完全に水没する高さ",
+          "actionJa": "建物の上階でも安全とは言えない高さです。立退き避難が基本です。",
+          "level": "critical",
+          "color": "#DC7ADC",
+          "colorSource": "official",
+          "min": 20.0,
+          "max": null,
+          "sourceCode": 6
+        }
+      ],
+      "tile": {
+        "url": "https://disaportaldata.gsi.go.jp/raster/02_naisui_data/{z}/{x}/{y}.png",
+        "minZoom": 2,
+        "maxZoom": 17,
+        "format": "png"
+      },
+      "mesh": {
+        "available": false,
+        "pathTemplate": "hazard/{layer}/{primary}.bin"
+      },
+      "legendUrl": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A51-2025.html",
+      "vintage": 2025,
+      "updateCadence": "annual",
+      "source": "市町村（流域下水道・一部事務組合を含む／重ねるハザードマップ・国土数値情報 A51）",
+      "license": "商用・非商用を問わず利用可（ハザードマップポータルサイト オープンデータ配信）",
+      "attribution": "出典：ハザードマップポータルサイト（国土交通省）",
+      "coverageNoteJa": "⚠ この地図は 47 都道府県のうち 22 でしか整備されていません（大阪府・京都府などは全域が対象外です）。指定するのは市町村で、下水道の管路モデルが必要なため整備が進んでいません。**白いことは「内水が起きない」という意味ではありません。**国土数値情報も「実際の浸水区域はこれより広い場合があります」と注記しています。",
+      "fallbackLayersJa": [
+        "治水地形分類図",
+        "色別標高図",
+        "傾斜量図",
+        "土地条件図"
+      ]
+    },
+    {
+      "key": "hightide_l2",
+      "group": "storm_surge",
+      "labelJa": "高潮浸水想定区域",
+      "summaryJa": "想定し得る最大規模の台風による高潮で、浸水が想定される区域と深さです。面積は狭いものの人口の多い沿岸都市に集中しており、曝露人口が大きいのが特徴です。",
+      "rankUnit": "m",
+      "ranks": [
+        {
+          "order": 1,
+          "labelJa": "0〜0.3m 未満",
+          "meaningJa": "一般的な住宅で床下程度の浸水",
+          "actionJa": "浸水想定区域内です。避難の要否は市町村の情報で確認してください。",
+          "level": "caution",
+          "color": "#FFFFB3",
+          "colorSource": "official",
+          "min": 0.0,
+          "max": 0.3,
+          "sourceCode": 1
+        },
+        {
+          "order": 2,
+          "labelJa": "0.3〜0.5m 未満",
+          "meaningJa": "一般的な住宅で床下程度の浸水",
+          "actionJa": "浸水想定区域内です。避難の要否は市町村の情報で確認してください。",
+          "level": "caution",
+          "color": "#F7F5A9",
+          "colorSource": "official",
+          "min": 0.3,
+          "max": 0.5,
+          "sourceCode": 1
+        },
+        {
+          "order": 3,
+          "labelJa": "0.5〜1m 未満",
+          "meaningJa": "床上が浸水する高さ",
+          "actionJa": "床上まで浸水する想定です。上階への垂直避難、または早めの立退き避難が基本です。",
+          "level": "warning",
+          "color": "#F8E1A6",
+          "colorSource": "official",
+          "min": 0.5,
+          "max": 1.0,
+          "sourceCode": 2
+        },
+        {
+          "order": 4,
+          "labelJa": "1〜3m 未満",
+          "meaningJa": "1 階が水没する高さ",
+          "actionJa": "床上まで浸水する想定です。上階への垂直避難、または早めの立退き避難が基本です。",
+          "level": "warning",
+          "color": "#FFD8C0",
+          "colorSource": "official",
+          "min": 1.0,
+          "max": 3.0,
+          "sourceCode": 2
+        },
+        {
+          "order": 5,
+          "labelJa": "3〜5m 未満",
+          "meaningJa": "2 階部分が浸水する高さ",
+          "actionJa": "2 階まで浸水する想定です。立退き避難が基本です。",
+          "level": "danger",
+          "color": "#FFB7B7",
+          "colorSource": "official",
+          "min": 3.0,
+          "max": 5.0,
+          "sourceCode": 3
+        },
+        {
+          "order": 6,
+          "labelJa": "5〜10m 未満",
+          "meaningJa": "2 階部分が水没する高さ",
+          "actionJa": "2 階まで浸水する想定です。立退き避難が基本です。",
+          "level": "danger",
+          "color": "#FF9191",
+          "colorSource": "official",
+          "min": 5.0,
+          "max": 10.0,
+          "sourceCode": 4
+        },
+        {
+          "order": 7,
+          "labelJa": "10〜20m 未満",
+          "meaningJa": "3 階建てでも水没しうる高さ",
+          "actionJa": "建物の上階でも安全とは言えない高さです。立退き避難が基本です。",
+          "level": "critical",
+          "color": "#F285C9",
+          "colorSource": "official",
+          "min": 10.0,
+          "max": 20.0,
+          "sourceCode": 5
+        },
+        {
+          "order": 8,
+          "labelJa": "20m 以上",
+          "meaningJa": "建物が完全に水没する高さ",
+          "actionJa": "建物の上階でも安全とは言えない高さです。立退き避難が基本です。",
+          "level": "critical",
+          "color": "#DC7ADC",
+          "colorSource": "official",
+          "min": 20.0,
+          "max": null,
+          "sourceCode": 6
+        }
+      ],
+      "tile": {
+        "url": "https://disaportaldata.gsi.go.jp/raster/03_hightide_l2_shinsuishin_data/{z}/{x}/{y}.png",
+        "minZoom": 2,
+        "maxZoom": 17,
+        "format": "png"
+      },
+      "mesh": null,
+      "legendUrl": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A49-2024.html",
+      "vintage": 2024,
+      "updateCadence": "annual",
+      "source": "都道府県（重ねるハザードマップ／国土数値情報 A49）",
+      "license": "商用・非商用を問わず利用可（ハザードマップポータルサイト オープンデータ配信）",
+      "attribution": "出典：ハザードマップポータルサイト（国土交通省）",
+      "coverageNoteJa": "公表していない都道府県があります。白い場所は「浸水しない」という意味ではありません。",
+      "fallbackLayersJa": [
+        "色別標高図"
+      ]
+    },
+    {
+      "key": "tsunami_shinsui",
+      "group": "tsunami",
+      "labelJa": "津波浸水想定",
+      "summaryJa": "最大クラスの津波が悪条件下で発生した場合に、浸水が想定される区域と深さです。津波は浸水深にかかわらず、揺れを感じたらすぐ高台へ避難するのが基本です。",
+      "rankUnit": "m",
+      "ranks": [
+        {
+          "order": 1,
+          "labelJa": "0〜0.3m 未満",
+          "meaningJa": "一般的な住宅で床下程度の浸水",
+          "actionJa": "浸水想定区域内です。避難の要否は市町村の情報で確認してください。",
+          "level": "caution",
+          "color": "#FFFFB3",
+          "colorSource": "official",
+          "min": 0.0,
+          "max": 0.3,
+          "sourceCode": 1
+        },
+        {
+          "order": 2,
+          "labelJa": "0.3〜0.5m 未満",
+          "meaningJa": "一般的な住宅で床下程度の浸水",
+          "actionJa": "浸水想定区域内です。避難の要否は市町村の情報で確認してください。",
+          "level": "caution",
+          "color": "#F7F5A9",
+          "colorSource": "official",
+          "min": 0.3,
+          "max": 0.5,
+          "sourceCode": 1
+        },
+        {
+          "order": 3,
+          "labelJa": "0.5〜1m 未満",
+          "meaningJa": "床上が浸水する高さ",
+          "actionJa": "床上まで浸水する想定です。上階への垂直避難、または早めの立退き避難が基本です。",
+          "level": "warning",
+          "color": "#F8E1A6",
+          "colorSource": "official",
+          "min": 0.5,
+          "max": 1.0,
+          "sourceCode": 2
+        },
+        {
+          "order": 4,
+          "labelJa": "1〜3m 未満",
+          "meaningJa": "1 階が水没する高さ",
+          "actionJa": "床上まで浸水する想定です。上階への垂直避難、または早めの立退き避難が基本です。",
+          "level": "warning",
+          "color": "#FFD8C0",
+          "colorSource": "official",
+          "min": 1.0,
+          "max": 3.0,
+          "sourceCode": 2
+        },
+        {
+          "order": 5,
+          "labelJa": "3〜5m 未満",
+          "meaningJa": "2 階部分が浸水する高さ",
+          "actionJa": "2 階まで浸水する想定です。立退き避難が基本です。",
+          "level": "danger",
+          "color": "#FFB7B7",
+          "colorSource": "official",
+          "min": 3.0,
+          "max": 5.0,
+          "sourceCode": 3
+        },
+        {
+          "order": 6,
+          "labelJa": "5〜10m 未満",
+          "meaningJa": "2 階部分が水没する高さ",
+          "actionJa": "2 階まで浸水する想定です。立退き避難が基本です。",
+          "level": "danger",
+          "color": "#FF9191",
+          "colorSource": "official",
+          "min": 5.0,
+          "max": 10.0,
+          "sourceCode": 4
+        },
+        {
+          "order": 7,
+          "labelJa": "10〜20m 未満",
+          "meaningJa": "3 階建てでも水没しうる高さ",
+          "actionJa": "建物の上階でも安全とは言えない高さです。立退き避難が基本です。",
+          "level": "critical",
+          "color": "#F285C9",
+          "colorSource": "official",
+          "min": 10.0,
+          "max": 20.0,
+          "sourceCode": 5
+        },
+        {
+          "order": 8,
+          "labelJa": "20m 以上",
+          "meaningJa": "建物が完全に水没する高さ",
+          "actionJa": "建物の上階でも安全とは言えない高さです。立退き避難が基本です。",
+          "level": "critical",
+          "color": "#DC7ADC",
+          "colorSource": "official",
+          "min": 20.0,
+          "max": null,
+          "sourceCode": 6
+        }
+      ],
+      "tile": {
+        "url": "https://disaportaldata.gsi.go.jp/raster/04_tsunami_newlegend_data/{z}/{x}/{y}.png",
+        "minZoom": 2,
+        "maxZoom": 17,
+        "format": "png"
+      },
+      "mesh": null,
+      "legendUrl": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A40-2024.html",
+      "vintage": 2024,
+      "updateCadence": "annual",
+      "source": "都道府県（重ねるハザードマップ／国土数値情報 A40）",
+      "license": "商用・非商用を問わず利用可（ハザードマップポータルサイト オープンデータ配信）",
+      "attribution": "出典：ハザードマップポータルサイト（国土交通省）",
+      "coverageNoteJa": "公表していない都道府県があります。白い場所は「浸水しない」という意味ではありません。",
+      "fallbackLayersJa": [
+        "色別標高図"
+      ]
+    },
+    {
+      "key": "dosekiryu",
+      "group": "landslide",
+      "labelJa": "土砂災害警戒区域（土石流）",
+      "summaryJa": "山や谷から土砂と水が一気に流れ下る「土石流」のおそれがある区域です。",
+      "rankUnit": null,
+      "ranks": [
+        {
+          "order": 1,
+          "labelJa": "土砂災害警戒区域（イエローゾーン）",
+          "meaningJa": "土砂災害のおそれがあるとして指定された区域",
+          "actionJa": "土砂災害警戒情報が出たら、区域の外へ立退き避難するのが基本です。",
+          "level": "danger",
+          "color": "#E6C832",
+          "colorSource": "measured",
+          "min": null,
+          "max": null,
+          "sourceCode": 1
+        },
+        {
+          "order": 2,
+          "labelJa": "土砂災害特別警戒区域（レッドゾーン）",
+          "meaningJa": "建築物が破壊され、住民の生命・身体に著しい危害が生じるおそれがある区域",
+          "actionJa": "建物の中に留まるのは危険です。立退き避難が基本です。",
+          "level": "critical",
+          "color": "#A50021",
+          "colorSource": "measured",
+          "min": null,
+          "max": null,
+          "sourceCode": 2
+        }
+      ],
+      "tile": {
+        "url": "https://disaportaldata.gsi.go.jp/raster/05_dosekiryukeikaikuiki/{z}/{x}/{y}.png",
+        "minZoom": 2,
+        "maxZoom": 17,
+        "format": "png"
+      },
+      "mesh": null,
+      "legendUrl": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A33-2025.html",
+      "vintage": 2025,
+      "updateCadence": "annual",
+      "source": "国土数値情報（土砂災害警戒区域 A33・令和 7 年度）を国土地理院が加工",
+      "license": "商用・非商用を問わず利用可（ハザードマップポータルサイト オープンデータ配信）",
+      "attribution": "出典：ハザードマップポータルサイト（国土交通省）",
+      "coverageNoteJa": "都道府県が調査を終えた区域のみが表示されます。特別警戒区域（レッドゾーン）の調査が済んでいない区域もあります。",
+      "fallbackLayersJa": [
+        "傾斜量図"
+      ]
+    },
+    {
+      "key": "kyukeisha",
+      "group": "landslide",
+      "labelJa": "土砂災害警戒区域（急傾斜地の崩壊）",
+      "summaryJa": "急な斜面が崩れ落ちる「がけ崩れ」のおそれがある区域です。",
+      "rankUnit": null,
+      "ranks": [
+        {
+          "order": 1,
+          "labelJa": "土砂災害警戒区域（イエローゾーン）",
+          "meaningJa": "土砂災害のおそれがあるとして指定された区域",
+          "actionJa": "土砂災害警戒情報が出たら、区域の外へ立退き避難するのが基本です。",
+          "level": "danger",
+          "color": "#FAE600",
+          "colorSource": "measured",
+          "min": null,
+          "max": null,
+          "sourceCode": 1
+        },
+        {
+          "order": 2,
+          "labelJa": "土砂災害特別警戒区域（レッドゾーン）",
+          "meaningJa": "建築物が破壊され、住民の生命・身体に著しい危害が生じるおそれがある区域",
+          "actionJa": "建物の中に留まるのは危険です。立退き避難が基本です。",
+          "level": "critical",
+          "color": "#FA2800",
+          "colorSource": "measured",
+          "min": null,
+          "max": null,
+          "sourceCode": 2
+        }
+      ],
+      "tile": {
+        "url": "https://disaportaldata.gsi.go.jp/raster/05_kyukeishakeikaikuiki/{z}/{x}/{y}.png",
+        "minZoom": 2,
+        "maxZoom": 17,
+        "format": "png"
+      },
+      "mesh": null,
+      "legendUrl": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A33-2025.html",
+      "vintage": 2025,
+      "updateCadence": "annual",
+      "source": "国土数値情報（土砂災害警戒区域 A33・令和 7 年度）を国土地理院が加工",
+      "license": "商用・非商用を問わず利用可（ハザードマップポータルサイト オープンデータ配信）",
+      "attribution": "出典：ハザードマップポータルサイト（国土交通省）",
+      "coverageNoteJa": "都道府県が調査を終えた区域のみが表示されます。特別警戒区域（レッドゾーン）の調査が済んでいない区域もあります。",
+      "fallbackLayersJa": [
+        "傾斜量図"
+      ]
+    },
+    {
+      "key": "jisuberi",
+      "group": "landslide",
+      "labelJa": "土砂災害警戒区域（地すべり）",
+      "summaryJa": "斜面の広い範囲がゆっくり滑り出す「地すべり」のおそれがある区域です。",
+      "rankUnit": null,
+      "ranks": [
+        {
+          "order": 1,
+          "labelJa": "土砂災害警戒区域（イエローゾーン）",
+          "meaningJa": "土砂災害のおそれがあるとして指定された区域",
+          "actionJa": "土砂災害警戒情報が出たら、区域の外へ立退き避難するのが基本です。",
+          "level": "danger",
+          "color": "#FF9900",
+          "colorSource": "measured",
+          "min": null,
+          "max": null,
+          "sourceCode": 1
+        },
+        {
+          "order": 2,
+          "labelJa": "土砂災害特別警戒区域（レッドゾーン）",
+          "meaningJa": "建築物が破壊され、住民の生命・身体に著しい危害が生じるおそれがある区域",
+          "actionJa": "建物の中に留まるのは危険です。立退き避難が基本です。",
+          "level": "critical",
+          "color": null,
+          "colorSource": null,
+          "min": null,
+          "max": null,
+          "sourceCode": 2
+        }
+      ],
+      "tile": {
+        "url": "https://disaportaldata.gsi.go.jp/raster/05_jisuberikeikaikuiki/{z}/{x}/{y}.png",
+        "minZoom": 2,
+        "maxZoom": 17,
+        "format": "png"
+      },
+      "mesh": null,
+      "legendUrl": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A33-2025.html",
+      "vintage": 2025,
+      "updateCadence": "annual",
+      "source": "国土数値情報（土砂災害警戒区域 A33・令和 7 年度）を国土地理院が加工",
+      "license": "商用・非商用を問わず利用可（ハザードマップポータルサイト オープンデータ配信）",
+      "attribution": "出典：ハザードマップポータルサイト（国土交通省）",
+      "coverageNoteJa": "都道府県が調査を終えた区域のみが表示されます。特別警戒区域（レッドゾーン）の調査が済んでいない区域もあります。",
+      "fallbackLayersJa": [
+        "傾斜量図"
+      ]
+    },
+    {
+      "key": "chisui_chikei",
+      "group": "terrain",
+      "labelJa": "治水地形分類図",
+      "summaryJa": "旧河道・後背湿地・氾濫平野といった、水が集まってきた歴史がそのまま読める地形分類図です。内水の浸水想定が整備されていない地域で、水が集まりやすい場所を知る手がかりになります。",
+      "rankUnit": null,
+      "ranks": [],
+      "tile": {
+        "url": "https://cyberjapandata.gsi.go.jp/xyz/lcmfc2/{z}/{x}/{y}.png",
+        "minZoom": 2,
+        "maxZoom": 17,
+        "format": "png"
+      },
+      "mesh": null,
+      "legendUrl": "https://maps.gsi.go.jp/development/ichiran.html",
+      "vintage": null,
+      "updateCadence": "static",
+      "source": "国土地理院「治水地形分類図」",
+      "license": "国土地理院コンテンツ利用規約（ウェブサイト等でリアルタイムに読み込む場合は出典明示のみで申請不要）",
+      "attribution": "出典：地理院タイル（国土地理院）",
+      "coverageNoteJa": "これは浸水想定ではなく地形の分類・標高です。危険の有無を示すものではありません。",
+      "fallbackLayersJa": []
+    },
+    {
+      "key": "lcm25k",
+      "group": "terrain",
+      "labelJa": "土地条件図",
+      "summaryJa": "台地・低地・盛土・切土といった地形分類を示します。造成地や埋立地の位置が分かります。",
+      "rankUnit": null,
+      "ranks": [],
+      "tile": {
+        "url": "https://cyberjapandata.gsi.go.jp/xyz/lcm25k_2012/{z}/{x}/{y}.png",
+        "minZoom": 2,
+        "maxZoom": 17,
+        "format": "png"
+      },
+      "mesh": null,
+      "legendUrl": "https://maps.gsi.go.jp/development/ichiran.html",
+      "vintage": null,
+      "updateCadence": "static",
+      "source": "国土地理院「数値地図 25000（土地条件）」",
+      "license": "国土地理院コンテンツ利用規約（ウェブサイト等でリアルタイムに読み込む場合は出典明示のみで申請不要）",
+      "attribution": "出典：地理院タイル（国土地理院）",
+      "coverageNoteJa": "これは浸水想定ではなく地形の分類・標高です。危険の有無を示すものではありません。",
+      "fallbackLayersJa": []
+    },
+    {
+      "key": "relief",
+      "group": "terrain",
+      "labelJa": "色別標高図",
+      "summaryJa": "標高を色で塗り分けた地図です。周囲より低い土地が面で見えます。",
+      "rankUnit": null,
+      "ranks": [],
+      "tile": {
+        "url": "https://cyberjapandata.gsi.go.jp/xyz/relief/{z}/{x}/{y}.png",
+        "minZoom": 2,
+        "maxZoom": 17,
+        "format": "png"
+      },
+      "mesh": null,
+      "legendUrl": "https://maps.gsi.go.jp/development/ichiran.html",
+      "vintage": null,
+      "updateCadence": "static",
+      "source": "国土地理院「色別標高図」",
+      "license": "国土地理院コンテンツ利用規約（ウェブサイト等でリアルタイムに読み込む場合は出典明示のみで申請不要）",
+      "attribution": "出典：地理院タイル（国土地理院）",
+      "coverageNoteJa": "これは浸水想定ではなく地形の分類・標高です。危険の有無を示すものではありません。",
+      "fallbackLayersJa": []
+    },
+    {
+      "key": "slopemap",
+      "group": "terrain",
+      "labelJa": "傾斜量図",
+      "summaryJa": "斜面の急さを濃淡で示します。平坦で水が抜けにくい場所と、崩れやすい急斜面が分かります。",
+      "rankUnit": null,
+      "ranks": [],
+      "tile": {
+        "url": "https://cyberjapandata.gsi.go.jp/xyz/slopemap/{z}/{x}/{y}.png",
+        "minZoom": 2,
+        "maxZoom": 17,
+        "format": "png"
+      },
+      "mesh": null,
+      "legendUrl": "https://maps.gsi.go.jp/development/ichiran.html",
+      "vintage": null,
+      "updateCadence": "static",
+      "source": "国土地理院「傾斜量図」",
+      "license": "国土地理院コンテンツ利用規約（ウェブサイト等でリアルタイムに読み込む場合は出典明示のみで申請不要）",
+      "attribution": "出典：地理院タイル（国土地理院）",
+      "coverageNoteJa": "これは浸水想定ではなく地形の分類・標高です。危険の有無を示すものではありません。",
+      "fallbackLayersJa": []
+    }
+  ]
+}

@@ -5,6 +5,7 @@
 
 import { z } from 'zod'
 import { categorySchema, formatSchema, kindSchema, unitSchema } from './catalog'
+import { hazardGroupSchema, hazardLayerSchema, hazardLevelSchema } from './hazard'
 import { rankingRowSchema, scatterPointSchema } from './protocol'
 
 // --- エラー封筒 ---------------------------------------------------------
@@ -178,6 +179,40 @@ export const routesResponseSchema = z.object({
   routes: z.array(routeSchema), // 駅グループ数の多い順
 })
 export type RoutesResponse = z.infer<typeof routesResponseSchema>
+
+// --- ハザード・レイヤカタログ（GET /api/hazard/catalog・260824_flood §6） ---
+
+export const hazardCatalogQuerySchema = z.object({ group: hazardGroupSchema.optional() })
+
+/** レイヤ制御の見出し 1 つ（グループ）。レイヤが 0 件のグループは返さない。 */
+export const hazardGroupRefSchema = z.object({
+  group: hazardGroupSchema,
+  labelJa: z.string(),
+  layerKeys: z.array(z.string()),
+})
+export type HazardGroupRef = z.infer<typeof hazardGroupRefSchema>
+
+/** 危険度レベルの自己記述（消費側が constants を知らなくても描ける）。 */
+export const hazardLevelRefSchema = z.object({
+  level: hazardLevelSchema,
+  labelJa: z.string(),
+  color: z.string(),
+})
+export type HazardLevelRef = z.infer<typeof hazardLevelRefSchema>
+
+/**
+ * ハザード・カタログの応答。**自己記述的**にするため、レイヤ本体だけでなく
+ * グループ・危険度のラベルと色も返す（LLM がそのまま説明に使える・architecture.md §6）。
+ */
+export const hazardCatalogResponseSchema = z.object({
+  version: z.number(),
+  groups: z.array(hazardGroupRefSchema),
+  levels: z.array(hazardLevelRefSchema),
+  /** 全応答に添える免責（UI も AI もこの 1 文を使う）。 */
+  disclaimerJa: z.string(),
+  layers: z.array(hazardLayerSchema),
+})
+export type HazardCatalogResponse = z.infer<typeof hazardCatalogResponseSchema>
 
 export const healthResponseSchema = z.object({ ok: z.literal(true) })
 export type HealthResponse = z.infer<typeof healthResponseSchema>

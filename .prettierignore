@@ -9,6 +9,7 @@ pnpm-lock.yaml
 next-env.d.ts
 tsconfig.json
 src/shared/catalog/catalog.json
+src/shared/hazard/hazard-catalog.json
 
 # アプリ外のディレクトリ（データ・資料・パイプライン・設定文書は原文を保持）
 data

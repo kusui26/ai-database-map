@@ -8,6 +8,7 @@
 
 import { z } from 'zod'
 import { categorySchema, formatSchema } from './catalog'
+import { evacuationActionSchema, hazardLevelSchema } from './hazard'
 
 // --- メッセージ ---------------------------------------------------------
 export const messageSchema = z.object({
@@ -27,6 +28,26 @@ export const mapActionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('selectStation'), grp: z.string(), radiusM: z.number().optional() }),
   z.object({ type: z.literal('highlightStations'), grps: z.array(z.string()) }),
   z.object({ type: z.literal('clearOverlays') }),
+  /**
+   * ハザードレイヤの表示切替（260824_flood §6.4）。`layers` はハザード・カタログに実在する key で、
+   * **空配列＝すべて消す**。`opacity` は 0.3–0.9（`constants.HAZARD_OPACITY_*`）。
+   * 生の key をそのまま流さない（受け手が `resolveHazardLayerKeys` で正規化する）。
+   */
+  z.object({
+    type: z.literal('setHazardLayers'),
+    layers: z.array(z.string()),
+    opacity: z.number().optional(),
+  }),
+  /**
+   * 駅ではない**任意の地点**を指す（地図クリック・現在地・避難先）。
+   * 水害は「その一点の話」なので、駅選択とは別の操作系が要る（同 §7.1）。
+   */
+  z.object({
+    type: z.literal('showPoint'),
+    lon: z.number(),
+    lat: z.number(),
+    labelJa: z.string().optional(),
+  }),
 ])
 export type MapAction = z.infer<typeof mapActionSchema>
 
@@ -42,6 +63,29 @@ export const reliabilityFlagSchema = z.object({
   level: z.enum(['warn', 'info']),
 })
 export type ReliabilityFlag = z.infer<typeof reliabilityFlagSchema>
+
+/** 出典の参照（ハザードは「いつの・誰のデータか」を必ず添える・260824_flood §7.5-3）。 */
+export const sourceRefSchema = z.object({
+  labelJa: z.string(),
+  url: z.string().nullable(),
+  license: z.string(),
+})
+export type SourceRef = z.infer<typeof sourceRefSchema>
+
+/** 地点に該当したハザード 1 件（レイヤ名＋階級ラベル＋危険度）。 */
+export const hazardItemSchema = z.object({
+  layerKey: z.string(),
+  /** レイヤ名（例「洪水浸水想定区域（想定最大規模）」）。 */
+  labelJa: z.string(),
+  /** 階級のラベル（例「3.0〜5.0m 未満」）。 */
+  valueJa: z.string(),
+  /** その階級の意味（例「2 階部分が浸水する高さ」）。 */
+  meaningJa: z.string().nullable(),
+  level: hazardLevelSchema,
+  /** 公式凡例の色（未確定は null＝色見本を出さない）。 */
+  color: z.string().nullable(),
+})
+export type HazardItem = z.infer<typeof hazardItemSchema>
 
 /** 時系列の 1 点（y は欠損で null＝チャートのギャップ）。 */
 export const seriesPointSchema = z.object({ x: z.number(), y: z.number().nullable() })
@@ -177,6 +221,32 @@ export const panelSchema = z.discriminatedUnion('type', [
     size: sizeSchema,
   }),
   z.object({
+    /**
+     * 地点のハザード（260824_flood §6.4）。浸水深は「数値」ではなく**レベル**で、
+     * 色と行動が紐づく。汎用の `statTable` に流すと `level` が消えて UI は色を付けられず
+     * AI は行動を説明できないので、**意味を型に残す**（`trendChart.stacked` と同じ判断）。
+     */
+    type: z.literal('hazardCard'),
+    /** 地点の呼び名（駅名・住所・「現在地」など）。 */
+    placeJa: z.string(),
+    /** 総合的な危険度（該当した階級のうち最も重いもの・domain が決める）。 */
+    level: hazardLevelSchema,
+    /** 1 文の結論（例「この場所は家屋倒壊等氾濫想定区域（氾濫流）に入っています」）。 */
+    headlineJa: z.string(),
+    /** 立退き／垂直避難／その場に留まる。**判定できないときは null**（断定しない）。 */
+    evacuation: evacuationActionSchema.nullable(),
+    items: z.array(hazardItemSchema),
+    /** 結論の根拠。UI は箇条書きで出し、AI は同じ文字列で説明する。 */
+    reasonsJa: z.array(z.string()),
+    /** 網羅性の注記（「白＝安全ではない」）。該当レイヤぶんを並べる。 */
+    coverageNotesJa: z.array(z.string()),
+    sources: z.array(sourceRefSchema),
+    /** 免責（カタログの 1 文）。**必ず表示する。** */
+    disclaimerJa: z.string(),
+    placement: placementSchema,
+    size: sizeSchema,
+  }),
+  z.object({
     type: z.literal('markdown'),
     body: z.string(),
     placement: placementSchema,
@@ -197,6 +267,7 @@ export type BarChartPanel = PanelOf<'barChart'>
 export type RankingTablePanel = PanelOf<'rankingTable'>
 export type ScatterPanel = PanelOf<'scatter'>
 export type MarkdownPanel = PanelOf<'markdown'>
+export type HazardCardPanel = PanelOf<'hazardCard'>
 
 /** パネル表示バリアント（チャット内=compact／ドロワー・モーダル=full）。 */
 export type PanelSize = NonNullable<z.infer<typeof sizeSchema>>

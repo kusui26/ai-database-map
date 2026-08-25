@@ -5,27 +5,31 @@
  * 書き手（Python）と読み手（TypeScript）で規約がずれると静かに壊れるので、
  * 規約はここと `pipeline/mesh_grid.py` の 2 箇所だけに書き、テストで実物を突き合わせる。
  *
- * ## 規約（`public/hazard/index.json` の `encodingJa` と同じ）
+ * ## 規約（`public/hazard/index.json` の `encodingJa` と同じ・**フォーマット v2**）
  *
  * - 1 タイル ＝ 1 次メッシュ ＝ **320 × 320 セル**（1 セル 250m）
  * - 添字は **row 0 ＝ 南端・col 0 ＝ 西端**、行優先（`row * 320 + col`）
- * - 1 セル **4 ビット**。バイト i の**上位ニブルがセル 2i、下位ニブルがセル 2i+1**
- * - 値は**国土数値情報のコード値**（浸水深 1–6・継続時間 1–7・危険区域区分 1–2）。**0 ＝ 該当なし**
- * - 該当の判定は「250m セルの**代表点（中心）**が区域に入るか」。地図に描く公式タイルの表示と
- *   一致する（無作為 800 セルで 99.8%）。セルの端だけが区域にかかる場合は取りこぼすので、
- *   **利用側は隣接セルも見て補う**（セルを塗り潰すより「隣が危ない」と言えるほうが役に立つ）
+ * - 1 セル **1 バイト**。**上位ニブル＝最大ランク、下位ニブル＝被覆率 0–15**
  * - 標高は別ファイルで **int16 リトルエンディアンのデシメートル**、`-32768` が欠損
  * - ファイルは gzip（取得側で解いてから渡す。ブラウザは `DecompressionStream('gzip')`）
  *
- * 設計の正は `docs/260824_flood.md` §5.3・§5.8。
+ * ## セルは点ではなく「区間」である
  *
- * ## ⚠ フォーマット v2 への変更が決まっている（未実装・同 §5.9／§8.2b）
+ * 250m セルの **33% は区域と非区域が混在**している。だから 1 セルに 1 値を持たせると、
+ * 点で聞かれたときに必ず嘘をつく（代表点なら 7.7% を「区域外」と誤答した）。
+ * v2 は 1 セルを **区間**として表す。
  *
- * セル 1 個に 1 値だと、**点で聞かれたときに 7.7% 誤答する**（250m セルの 33% が
- * 区域と非区域の混在で、代表点はその片方しか表せないため）。v2 では 1 セルを
- * **1 バイト＝上位ニブル「セル内の最大ランク」＋下位ニブル「被覆率 0–15」**にして、
- * **両端（0＝一切かからない／15＝全域）だけを確定的な主張に使う**。
- * `index.json` の `version` で判別する（現行は 1）。
+ * | 読むもの | 意味 | 使いどころ |
+ * |---|---|---|
+ * | **最大ランク** | セル内のどこかにある**最悪**。真値は必ずこれ以下（**上界**）| 発災時。広めに見るのが正しい |
+ * | **被覆率** | セルのどれだけが区域か（8×8 の 64 サブセルで測定）| 平時の言い方・人口按分 |
+ *
+ * **厳密なのは両端だけ。** `certaintyAtCell` が `'outside'`（被覆率 0 ＝一切かからない）と
+ * `'inside'`（被覆率 15 ＝全域）を返したときだけ確定した主張ができる。`'partial'` は
+ * 「一部」としか言えないので、**点で確定させたいときは浸水ナビ API か公式タイルの画素に降りる**
+ * （優先順位は §6.3）。どの経路に降りても答えは必ず **(0, 最大ランク] の区間に入る**。
+ *
+ * 設計の正は `docs/260824_flood.md` §5.9・§8.2b。
  */
 
 import { z } from 'zod'
@@ -34,8 +38,14 @@ import { CELLS_PER_PRIMARY, isCellIndex, type MeshCell } from './mesh'
 /** 1 タイルのセル数（320 × 320）。 */
 export const CELLS_PER_TILE = CELLS_PER_PRIMARY * CELLS_PER_PRIMARY
 
-/** ハザードタイル 1 枚のバイト数（ニブル詰め）。 */
-export const HAZARD_TILE_BYTES = CELLS_PER_TILE / 2
+/** ハザードタイル 1 枚のバイト数（1 セル 1 バイト・v2）。 */
+export const HAZARD_TILE_BYTES = CELLS_PER_TILE
+
+/** 読み手が理解できる配布フォーマットの版（`index.json` の `version`）。 */
+export const MESH_FORMAT_VERSION = 2
+
+/** 被覆率の刻み。`0` と `COVERAGE_STEPS` だけが厳密で、間は約 6.7 ポイント刻みの近似。 */
+export const COVERAGE_STEPS = 15
 
 /** 標高タイル 1 枚のバイト数（int16）。 */
 export const ELEVATION_TILE_BYTES = CELLS_PER_TILE * 2
@@ -46,8 +56,8 @@ export const ELEVATION_MISSING_DM = -32768
 /** 標高の格納単位（デシメートル → メートル）。 */
 const DECIMETRES_PER_METRE = 10
 
-/** ニブルの上限（4 ビット）。 */
-const MAX_NIBBLE = 15
+/** 下位ニブルの取り出し。 */
+const LOW_NIBBLE = 0x0f
 
 // --- 型ガード -------------------------------------------------------------
 
@@ -78,22 +88,66 @@ export function offsetOfCell(cell: MeshCell): number {
   return cell.row * CELLS_PER_PRIMARY + cell.col
 }
 
+/** セルが区域とどう重なっているか。**確定した主張ができるのは両端だけ**。 */
+export type CellCertainty =
+  /** 区域が**一切かからない**（被覆率 0）。「区域ではない」と言い切れる。 */
+  | 'outside'
+  /** セルの**一部**が区域（被覆率 1–14）。「一部かかる」までしか言えない。 */
+  | 'partial'
+  /** セル**全域**が区域（被覆率 15）。「区域内」と言い切れる。 */
+  | 'inside'
+
+/** 1 セルの中身。`rank` は上界、`coverage` は 0–1 の割合。 */
+export type HazardCell = {
+  /** セル内の**最大**の原典コード値（0 ＝ 該当なし）。真値は必ずこれ以下。 */
+  readonly rank: number
+  /** セルのうち区域が占める割合（0–1）。1/15 刻みに量子化されている。 */
+  readonly coverage: number
+  readonly certainty: CellCertainty
+}
+
+function certaintyOf(steps: number): CellCertainty {
+  if (steps === 0) return 'outside'
+  return steps === COVERAGE_STEPS ? 'inside' : 'partial'
+}
+
 /**
- * ハザードタイルから 1 セルの**原典コード値**を読む（0 ＝ 該当なし）。
- * 意味（ラベル・危険度）はカタログの `ranks[].sourceCode` から引く。
+ * ハザードタイルから 1 セルを読む（添字指定）。
+ * `rank` の意味（ラベル・危険度）はカタログの `ranks[].sourceCode` から引く。
  */
-export function rankAtOffset(tile: Uint8Array, offset: number): number {
+export function cellAtOffset(tile: Uint8Array, offset: number): HazardCell {
   if (tile.byteLength !== HAZARD_TILE_BYTES) {
     throw new Error(`ハザードタイルは ${HAZARD_TILE_BYTES} バイト（受領: ${tile.byteLength}）`)
   }
   assertOffset(offset)
-  const byte = tile[offset >> 1] ?? 0
-  return offset % 2 === 0 ? byte >> 4 : byte & MAX_NIBBLE
+  const byte = tile[offset] ?? 0
+  const steps = byte & LOW_NIBBLE
+  return { rank: byte >> 4, coverage: steps / COVERAGE_STEPS, certainty: certaintyOf(steps) }
 }
 
-/** ハザードタイルから 1 セルの原典コード値を読む（セル位置指定）。 */
+/** ハザードタイルから 1 セルを読む（セル位置指定）。 */
+export function cellAt(tile: Uint8Array, cell: MeshCell): HazardCell {
+  return cellAtOffset(tile, offsetOfCell(cell))
+}
+
+/** セル内の**最大**の原典コード値（0 ＝ 該当なし）。真値は必ずこれ以下。 */
+export function rankAtOffset(tile: Uint8Array, offset: number): number {
+  return cellAtOffset(tile, offset).rank
+}
+
+/** セル内の最大の原典コード値（セル位置指定）。 */
 export function rankAtCell(tile: Uint8Array, cell: MeshCell): number {
-  return rankAtOffset(tile, offsetOfCell(cell))
+  return cellAt(tile, cell).rank
+}
+
+/** セルのうち区域が占める割合（0–1）。**0 と 1 だけが厳密**。 */
+export function coverageAtCell(tile: Uint8Array, cell: MeshCell): number {
+  return cellAt(tile, cell).coverage
+}
+
+/** そのセルについて確定した主張ができるか（`'partial'` なら「一部」としか言えない）。 */
+export function certaintyAtCell(tile: Uint8Array, cell: MeshCell): CellCertainty {
+  return cellAt(tile, cell).certainty
 }
 
 /**
@@ -129,8 +183,12 @@ export const hazardMeshIndexSchema = z.object({
   sourceJa: z.string(),
   cellsPerPrimary: z.number().int(),
   tileBytes: z.number().int(),
+  /** 被覆率の刻み数（15）。読み手の `COVERAGE_STEPS` と一致していること。 */
+  coverageSteps: z.number().int(),
+  /** 被覆率を測ったサブセル数（64）。「どれくらいの粒度で測ったか」の記録。 */
+  subcellsPerCell: z.number().int(),
   encodingJa: z.string(),
-  /** 該当判定の考え方（代表点であること・取りこぼしの補い方の明示）。 */
+  /** 該当判定の考え方（最大は上界であること・厳密なのは被覆率の両端だけであること）。 */
   matchJa: z.string(),
   elevation: z.object({
     path: z.string(),
@@ -149,6 +207,29 @@ export const hazardMeshIndexSchema = z.object({
   ),
 })
 export type HazardMeshIndex = z.infer<typeof hazardMeshIndexSchema>
+
+/**
+ * 索引を読み、**規約が読み手と一致していることまで**確かめる。
+ *
+ * 版やバイト数がずれたまま読むと、例外ではなく**静かに間違った答え**が出る
+ * （v1 のニブル詰めを v2 として読むと、隣のセルの値を返してしまう）。
+ * だからここで落とす。**素の `hazardMeshIndexSchema.parse` ではなくこちらを使う。**
+ */
+export function parseHazardMeshIndex(value: unknown): HazardMeshIndex {
+  const index = hazardMeshIndexSchema.parse(value)
+  if (index.version !== MESH_FORMAT_VERSION) {
+    throw new Error(
+      `ハザードメッシュの版が読み手と違う（索引: ${index.version} / 読み手: ${MESH_FORMAT_VERSION}）。` +
+        'pipeline/build_hazard_mesh.py を実行し直してください',
+    )
+  }
+  if (index.tileBytes !== HAZARD_TILE_BYTES || index.coverageSteps !== COVERAGE_STEPS) {
+    throw new Error(
+      `ハザードメッシュの規約が読み手と違う（${index.tileBytes} バイト / 被覆率 ${index.coverageSteps} 段）`,
+    )
+  }
+  return index
+}
 
 /** そのレイヤ・1 次メッシュのタイルが配布されているか（無ければ取りに行かない）。 */
 export function hasTile(index: HazardMeshIndex, layerKey: string, primary: string): boolean {

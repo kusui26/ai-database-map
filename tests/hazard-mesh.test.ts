@@ -4,9 +4,15 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   CELLS_PER_TILE,
+  COVERAGE_STEPS,
   ELEVATION_MISSING_DM,
   ELEVATION_TILE_BYTES,
   HAZARD_TILE_BYTES,
+  MESH_FORMAT_VERSION,
+  cellAt,
+  cellAtOffset,
+  certaintyAtCell,
+  coverageAtCell,
   elevationAtCell,
   elevationTilePath,
   hasTile,
@@ -14,6 +20,7 @@ import {
   isElevationTile,
   isHazardTile,
   offsetOfCell,
+  parseHazardMeshIndex,
   rankAtCell,
   rankAtOffset,
   tilePath,
@@ -25,7 +32,10 @@ import { hazardRankOfSourceCode } from '@/domain/hazard/catalog'
 /**
  * 配布アーティファクト（`public/hazard/**`）の**規約が読み手と書き手で一致している**ことを、
  * 実物を読んで確かめる。Python が書き、TypeScript が読む形式なので、
- * ここがズレると現在地判定が静かに間違う（`docs/260824_flood.md` §5.3・§10.2）。
+ * ここがズレると現在地判定が静かに間違う（`docs/260824_flood.md` §5.9・§10.2）。
+ *
+ * v2 の要点は **1 セル ＝ (最大ランク, 被覆率) の「区間」**であること。
+ * 「点の神託」として読んではいけない、というのがこの一連のテストの主張である。
  */
 
 const PUBLIC_HAZARD = path.join(process.cwd(), 'public', 'hazard')
@@ -34,24 +44,40 @@ function readTile(relative: string): Uint8Array {
   return new Uint8Array(gunzipSync(readFileSync(path.join(PUBLIC_HAZARD, relative))))
 }
 
-const index: HazardMeshIndex = hazardMeshIndexSchema.parse(
-  JSON.parse(readFileSync(path.join(PUBLIC_HAZARD, 'index.json'), 'utf-8')),
+const rawIndex: unknown = JSON.parse(
+  readFileSync(path.join(PUBLIC_HAZARD, 'index.json'), 'utf-8'),
 )
+const index: HazardMeshIndex = parseHazardMeshIndex(rawIndex)
 
 /** 東京・亀有駅（荒川・中川の氾濫域。浸水ナビでも最大 3.66m）。 */
 const KAMEARI = { lon: 139.847, lat: 35.7645 }
-/** 高尾山の山中（同じ 1 次メッシュ 5339 の高台）。 */
+/** 高尾山の山頂付近（同じ 1 次メッシュ 5339 の高台。谷の浸水域が 250m セルを掠める）。 */
 const TAKAO = { lon: 139.2438, lat: 35.6252 }
+/** 高尾山の南西の尾根（周囲 5×5 セルまで浸水域が一切かからない）。 */
+const RIDGE = { lon: 139.21094, lat: 35.61979 }
 
-describe('hazard-mesh: ニブル詰めのデコード（純関数）', () => {
-  it('上位ニブルが偶数番目・下位が奇数番目', () => {
+describe('hazard-mesh: 1 バイトの分解（純関数）', () => {
+  it('上位ニブルが最大ランク・下位ニブルが被覆率', () => {
     const tile = new Uint8Array(HAZARD_TILE_BYTES)
-    tile[0] = 0x36 // セル 0 → 3、セル 1 → 6
-    tile[1] = 0x0f // セル 2 → 0、セル 3 → 15
-    expect(rankAtOffset(tile, 0)).toBe(3)
-    expect(rankAtOffset(tile, 1)).toBe(6)
-    expect(rankAtOffset(tile, 2)).toBe(0)
-    expect(rankAtOffset(tile, 3)).toBe(15)
+    tile[0] = 0x3f // 最大 3・被覆率 15（全域）
+    tile[1] = 0x21 // 最大 2・被覆率 1（ごく一部）
+    tile[2] = 0x00 // 一切かからない
+    expect(cellAtOffset(tile, 0)).toEqual({ rank: 3, coverage: 1, certainty: 'inside' })
+    expect(cellAtOffset(tile, 1)).toEqual({
+      rank: 2,
+      coverage: 1 / COVERAGE_STEPS,
+      certainty: 'partial',
+    })
+    expect(cellAtOffset(tile, 2)).toEqual({ rank: 0, coverage: 0, certainty: 'outside' })
+  })
+
+  it('確定した主張ができるのは被覆率の両端だけ', () => {
+    const tile = new Uint8Array(HAZARD_TILE_BYTES)
+    const certainties = [0, 1, 7, 14, 15].map((steps, offset) => {
+      tile[offset] = (1 << 4) | steps
+      return cellAtOffset(tile, offset).certainty
+    })
+    expect(certainties).toEqual(['outside', 'partial', 'partial', 'partial', 'inside'])
   })
 
   it('セル位置 → 添字は行優先（row * 320 + col）', () => {
@@ -90,10 +116,24 @@ describe('hazard-mesh: ニブル詰めのデコード（純関数）', () => {
 
 describe('hazard-mesh: 索引（public/hazard/index.json）', () => {
   it('Zod で読め、規約が読み手の定数と一致する', () => {
+    expect(index.version).toBe(MESH_FORMAT_VERSION)
     expect(index.cellsPerPrimary).toBe(320)
     expect(index.tileBytes).toBe(HAZARD_TILE_BYTES)
+    expect(index.coverageSteps).toBe(COVERAGE_STEPS)
+    expect(index.subcellsPerCell).toBe(64)
     expect(index.generatedFrom).toBe('pipeline/build_hazard_mesh.py')
     expect(index.elevation.missing).toBe(ELEVATION_MISSING_DM)
+  })
+
+  it('版や規約がズレた索引は読まずに落とす（静かに間違うより落ちる）', () => {
+    const parsed = hazardMeshIndexSchema.parse(rawIndex)
+    expect(() => parseHazardMeshIndex({ ...parsed, version: 1 })).toThrow(/版が読み手と違う/)
+    expect(() => parseHazardMeshIndex({ ...parsed, tileBytes: 51200 })).toThrow(
+      /規約が読み手と違う/,
+    )
+    expect(() => parseHazardMeshIndex({ ...parsed, coverageSteps: 7 })).toThrow(
+      /規約が読み手と違う/,
+    )
   })
 
   it('メッシュ化したのは洪水 5 種＋内水（決定 4）', () => {
@@ -109,9 +149,10 @@ describe('hazard-mesh: 索引（public/hazard/index.json）', () => {
     )
   })
 
-  it('判定の考え方（代表点・取りこぼしは隣接セルで補う）を索引が明記している', () => {
-    expect(index.matchJa).toContain('代表点')
-    expect(index.matchJa).toContain('隣接セル')
+  it('セルが「点ではなく区間」であることを索引が明記している', () => {
+    expect(index.matchJa).toContain('区間')
+    expect(index.matchJa).toContain('上界')
+    expect(index.matchJa).toContain('被覆率')
     expect(index.sourceJa).toContain('国土数値情報')
   })
 
@@ -127,27 +168,49 @@ describe('hazard-mesh: 索引（public/hazard/index.json）', () => {
 })
 
 describe('hazard-mesh: 実物のタイルを読む', () => {
-  it('タイルは 51,200 バイト（gzip を解いた後）', () => {
-    const tile = readTile('flood_l2/5339.bin.gz')
-    expect(tile.byteLength).toBe(HAZARD_TILE_BYTES)
-    expect(isHazardTile(tile)).toBe(true)
+  const floodTokyo = readTile('flood_l2/5339.bin.gz')
+
+  it('タイルは 102,400 バイト（gzip を解いた後）', () => {
+    expect(floodTokyo.byteLength).toBe(HAZARD_TILE_BYTES)
+    expect(isHazardTile(floodTokyo)).toBe(true)
   })
 
-  it('亀有駅は想定最大規模の浸水域内で、床上以上（浸水ナビの 3.66m と整合）', () => {
+  it('亀有駅は想定最大規模の浸水域に全域が入り、床上以上（浸水ナビの 3.66m と整合）', () => {
     const cell = meshCellFromLonLat(KAMEARI.lon, KAMEARI.lat)
     expect(cell.primary).toBe('5339')
-    const code = rankAtCell(readTile('flood_l2/5339.bin.gz'), cell)
-    expect(code).toBeGreaterThanOrEqual(2) // 2 ＝ 0.5〜3.0m 未満 以上
-    const rank = hazardRankOfSourceCode('flood_l2', code)
+    const { rank, certainty } = cellAt(floodTokyo, cell)
+    expect(certainty).toBe('inside') // 東京東部低地。セルの端まで浸水域
+    expect(rank).toBeGreaterThanOrEqual(2) // 2 ＝ 0.5〜3.0m 未満 以上
+    const meaning = hazardRankOfSourceCode('flood_l2', rank)
     expect(
-      rank?.level === 'warning' || rank?.level === 'danger' || rank?.level === 'critical',
+      meaning?.level === 'warning' || meaning?.level === 'danger' || meaning?.level === 'critical',
     ).toBe(true)
   })
 
-  it('高尾山の山中は浸水域外（0・公式タイルの z16 画素とも一致）', () => {
+  it('高尾山の山頂は「一部」——谷の浸水域がセルを掠めるが、被覆率はごく僅か', () => {
     const cell = meshCellFromLonLat(TAKAO.lon, TAKAO.lat)
     expect(cell.primary).toBe('5339')
-    expect(rankAtCell(readTile('flood_l2/5339.bin.gz'), cell)).toBe(0)
+    const { rank, coverage, certainty } = cellAt(floodTokyo, cell)
+    // v1 は代表点で「0（浸水域外）」と言い切っていた。実際にはセルの端に浸水域があり、
+    // かといって「浸水想定区域内」と言うのも嘘。v2 はこれを「一部」と表せる。
+    expect(certainty).toBe('partial')
+    expect(rank).toBeGreaterThan(0)
+    expect(coverage).toBeGreaterThan(0)
+    expect(coverage).toBeLessThan(0.2)
+  })
+
+  it('尾根の上は「一切かからない」と言い切れる（被覆率 0）', () => {
+    const cell = meshCellFromLonLat(RIDGE.lon, RIDGE.lat)
+    expect(cellAt(floodTokyo, cell)).toEqual({ rank: 0, coverage: 0, certainty: 'outside' })
+  })
+
+  it('不変条件：最大 > 0 ⟺ 被覆率 > 0（タイル全数）', () => {
+    let mismatched = 0
+    for (let offset = 0; offset < CELLS_PER_TILE; offset += 1) {
+      const { rank, coverage } = cellAtOffset(floodTokyo, offset)
+      if (rank > 0 !== coverage > 0) mismatched += 1
+    }
+    expect(mismatched).toBe(0)
   })
 
   it('標高タイルが読め、亀有は低地・高尾山は山（大小関係が正しい）', () => {
@@ -161,27 +224,32 @@ describe('hazard-mesh: 実物のタイルを読む', () => {
     expect(mountain ?? 0).toBeGreaterThan(200) // 高尾山地
   })
 
-  it('値はすべて 0–15 のニブルに収まる（抜き取り 3 レイヤ）', () => {
+  it('値はすべてニブルに収まり、混在セルが実在する（抜き取り 3 レイヤ）', () => {
     for (const layer of ['flood_l2', 'flood_duration', 'flood_kaoku_hanran']) {
       const primary = index.layers[layer]?.primaries[0]
       expect(primary, layer).toBeDefined()
       const tile = readTile(`${layer}/${primary}.bin.gz`)
-      let max = 0
+      let maxRank = 0
+      let partial = 0
       for (let offset = 0; offset < CELLS_PER_TILE; offset += 1) {
-        max = Math.max(max, rankAtOffset(tile, offset))
+        const cell = cellAtOffset(tile, offset)
+        maxRank = Math.max(maxRank, cell.rank)
+        if (cell.certainty === 'partial') partial += 1
       }
-      expect(max, `${layer}/${primary}`).toBeGreaterThan(0)
-      expect(max, `${layer}/${primary}`).toBeLessThanOrEqual(15)
+      expect(maxRank, `${layer}/${primary}`).toBeGreaterThan(0)
+      expect(maxRank, `${layer}/${primary}`).toBeLessThanOrEqual(15)
+      // 混在セルが 0 なら、それは「区間で持つ意味が無い」＝焼き方が壊れている合図。
+      expect(partial, `${layer}/${primary}`).toBeGreaterThan(0)
     }
   })
 
   it('メッシュコード経由でも同じセルを引ける（mesh.ts との整合）', () => {
     const code = meshCodeFromLonLat(KAMEARI.lon, KAMEARI.lat)
     expect(primaryMeshOf(code)).toBe('5339')
-    const tile = readTile('flood_l2/5339.bin.gz')
-    const viaCell = rankAtCell(tile, meshCellFromLonLat(KAMEARI.lon, KAMEARI.lat))
-    const viaOffset = rankAtOffset(tile, offsetOfCell(meshCellFromLonLat(KAMEARI.lon, KAMEARI.lat)))
-    expect(viaCell).toBe(viaOffset)
+    const cell = meshCellFromLonLat(KAMEARI.lon, KAMEARI.lat)
+    expect(rankAtCell(floodTokyo, cell)).toBe(rankAtOffset(floodTokyo, offsetOfCell(cell)))
+    expect(coverageAtCell(floodTokyo, cell)).toBe(cellAt(floodTokyo, cell).coverage)
+    expect(certaintyAtCell(floodTokyo, cell)).toBe(cellAt(floodTokyo, cell).certainty)
   })
 })
 

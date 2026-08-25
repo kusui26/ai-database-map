@@ -46,6 +46,22 @@ export type HazardLegendRow = {
   readonly level: HazardLevel
 }
 
+/**
+ * 配布メッシュのセル 1 つを意味に変えた結果。
+ * `labelJa` は**原典の階級**（タイルの 8 階級ではなく 6 階級）で、
+ * 「この 250m メッシュのどこかで想定される最大」という読み方をする。
+ */
+export type HazardMeshRank = {
+  readonly layerKey: string
+  readonly sourceCode: number
+  readonly labelJa: string
+  readonly meaningJa: string
+  readonly actionJa: string | null
+  readonly level: HazardLevel
+  readonly min: number | null
+  readonly max: number | null
+}
+
 /** 危険度レベルの自己記述（API 応答・凡例バッジで共用）。 */
 export type HazardLevelView = {
   readonly level: HazardLevel
@@ -186,6 +202,43 @@ export function hazardDrawOrder(layerKeys: readonly string[]): readonly string[]
   const resolved = resolveHazardLayerKeys(layerKeys)
   const isBase = (key: string): boolean => getHazardLayer(key)?.display === 'base'
   return [...resolved.filter(isBase), ...resolved.filter((key) => !isBase(key))]
+}
+
+/**
+ * 配布メッシュに入っている**原典のコード値**（`sourceCode`）→ 意味。
+ *
+ * カタログの `ranks` は**タイルの凡例**（浸水深は詳細版 8 階級）を表すが、
+ * ベクタの原典は 6 階級で来る。両者の橋渡しが `ranks[].sourceCode` で、
+ * 同じコードを持つ階級を**束ねる**と、原典の階級そのもの（例 0.5〜3.0m 未満）に戻る。
+ * 深さは束ねた範囲、危険度は**その中で最も重いもの**を採る（安全側）。
+ */
+export function hazardRankOfSourceCode(
+  layerKey: string,
+  sourceCode: number,
+): HazardMeshRank | null {
+  const layer = getHazardLayer(layerKey)
+  if (layer === undefined || sourceCode <= 0) return null
+  const matched = layer.ranks.filter((rank) => rank.sourceCode === sourceCode)
+  const first = matched[0]
+  const last = matched[matched.length - 1]
+  if (first === undefined || last === undefined) return null
+  return {
+    layerKey: layer.key,
+    sourceCode,
+    labelJa: rangeLabel(first.min, last.max, layer.rankUnit) ?? last.labelJa,
+    meaningJa: last.meaningJa,
+    actionJa: last.actionJa,
+    level: heaviestHazardLevel(matched.map((rank) => rank.level)),
+    min: first.min,
+    max: last.max,
+  }
+}
+
+/** 束ねた階級の表示ラベル（単位が無いレイヤは null＝元のラベルを使う）。 */
+function rangeLabel(min: number | null, max: number | null, unit: string | null): string | null {
+  if (unit === null || min === null) return null
+  const suffix = unit === 'm' ? 'm' : '時間'
+  return max === null ? `${min}${suffix} 以上` : `${min}〜${max}${suffix} 未満`
 }
 
 /**

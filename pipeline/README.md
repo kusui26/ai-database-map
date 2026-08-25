@@ -48,6 +48,35 @@ python3 pipeline/build_hazard_catalog.py --check   # 生成物が rules と一�
 年度更新（A31a は毎年 5 月）でタイルの中身が変わったら、`hazard_rules.py` の `vintage` を上げて
 `build` を実行し、`tests/hazard-catalog.test.ts` を通す。
 
+## ハザードの 250m メッシュ化（260825・水害 Phase 1b）
+
+洪水・内水の想定区域を **1 次メッシュごとの 320 × 320 の 250m 格子**へ落とし、
+`public/hazard/**` に配布アーティファクトとして置く。ここだけが「原典 → メッシュ」の唯一の経路で、
+アプリ側（`src/shared/hazard-mesh.ts`）が同じ規約で読む。
+
+```bash
+python3 pipeline/fetch_hazard_mesh.py          # 原典を data/hazard_raw/ へ（約 4.9GB・再実行で続きから）
+python3 pipeline/fetch_hazard_mesh.py --list   # 落とさずに対象と総量だけ見る
+python3 pipeline/build_hazard_mesh.py          # メッシュ化 → public/hazard/** と data/derived/hazard_mesh.csv
+python3 pipeline/validate_hazard_mesh.py       # §4 の実測の再現・索引の整合（全 PASS で exit 0）
+python3 pipeline/validate_hazard_mesh.py --tiles 800   # 公式タイルとの画素照合も行う
+```
+
+| ファイル | 役割 |
+|---|---|
+| `mesh_grid.py` | 標準地域メッシュの格子演算（`src/shared/mesh.ts` の Python 版）。**規約の単一定義元** |
+| `fetch_hazard_mesh.py` | A31b（洪水・1次メッシュ単位）／A51（内水）／G04-d（標高）を取得 |
+| `build_hazard_mesh.py` | ラスタ化してタイル・索引・CSV を書き出す |
+| `validate_hazard_mesh.py` | 生成物を**国勢調査 250m メッシュ全数**と公式タイルに独立照合 |
+
+**格子の規約**（ここを外すと静かに壊れる）：1 次メッシュ ＝ 320 × 320、**row 0 は南端・col 0 は西端**、
+行優先（`row * 320 + col`）、1 セル 4 ビット（バイトの上位ニブルが偶数番目）、値は**国土数値情報のコード値**、
+0 は該当なし。該当判定は「**250m セルに少しでも重なれば該当**」＝ セル内の最大ランク（安全側）。
+
+**原典は A31b（1 次メッシュ単位）を使う。** プランは A31a（河川単位）を挙げていたが、A31b は
+A31a をオーバレイして 1 次メッシュで切ったもので中身は同じ。出力の単位とファイルの単位が一致するので、
+200MB 級のファイルでもメモリに載せずに済み、メッシュどうしを並列に処理できる。
+
 ## 所得データの取得（260812）
 
 駅×半径の「1 人当たり課税対象所得（＝平均年収）」を作るための素データを取る

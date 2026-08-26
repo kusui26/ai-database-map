@@ -117,19 +117,31 @@ fi
   ok "hazard/point：河川が返る（浸水ナビが届いている・$NRIVER 本）" ||
   ng "hazard point rivers（浸水ナビに届いていない）"
 
-# 13) hazard/point 異常系：座標が無い → 400
+# 13) hazard/alerts（いまの警戒状況）
+#     平時はほぼ全域が「発表なし」なので、**中身ではなく骨格**を見る：
+#     区域が解決できているか（＝逆ジオ＋対応表が動いているか）と、限界の 1 文が必ず入るか。
+get "$BASE/api/hazard/alerts" "lon=139.847" "lat=35.7645" "placeJa=亀有駅"
+{ [ "$HTTP" = 200 ] && [ "$(echo "$BODY" | jq -r '.area.municipalityJa')" = 葛飾区 ] &&
+  [ "$(echo "$BODY" | jq -r '.area.areas[0].code')" = 1312200 ]; } &&
+  ok "hazard/alerts（区域を解決できている）" || ng "hazard alerts area"
+
+{ [ "$(echo "$BODY" | jq -r '[.limitationsJa[] | select(contains("土砂災害警戒情報"))] | length')" -gt 0 ] &&
+  [ "$(echo "$BODY" | jq -r '.headlineJa | contains("安全")')" = false ]; } &&
+  ok "hazard/alerts（限界を明示・「安全」と言わない）" || ng "hazard alerts wording"
+
+# 14) hazard/point 異常系：座標が無い → 400
 get "$BASE/api/hazard/point" "lat=35.7645"
 [ "$HTTP" = 400 ] && ok "hazard/point：座標なし → 400" || ng "hazard point missing lon should 400"
 
-# 14) 異常系：不正 metric key → 400
+# 15) 異常系：不正 metric key → 400
 get "$BASE/api/ranking" "metric=__not_a_metric__"
 [ "$HTTP" = 400 ] && ok "不正 metric → 400" || ng "invalid metric should 400"
 
-# 15) 異常系：rankable でない key → 400
+# 16) 異常系：rankable でない key → 400
 get "$BASE/api/ranking" "metric=pop_lowbase_2020_1km"
 [ "$HTTP" = 400 ] && ok "rankable 外 metric → 400" || ng "non-rankable should 400"
 
-# 16) 異常系：存在しない駅 → 404
+# 17) 異常系：存在しない駅 → 404
 get "$BASE/api/stations/__nope__"
 [ "$HTTP" = 404 ] && ok "未存在の駅 → 404" || ng "missing station should 404"
 

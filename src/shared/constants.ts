@@ -388,9 +388,9 @@ export const EVACUATION_LABELS_JA: Readonly<Record<EvacuationAction, string>> = 
  * 地点の答えが**どこから来たか**（`docs/260824_flood.md` §6.3・良いものから順）。
  * `shared/hazard.hazardSourceSchema` と 1 対 1（不変条件はテストが守る）。
  */
-export type HazardSource = 'suibou-navi' | 'tile' | 'mesh'
+export type HazardSource = 'suibou-navi' | 'tile' | 'mesh' | 'jma'
 
-export const HAZARD_SOURCES: readonly HazardSource[] = ['suibou-navi', 'tile', 'mesh']
+export const HAZARD_SOURCES: readonly HazardSource[] = ['suibou-navi', 'tile', 'mesh', 'jma']
 
 /**
  * 出所のラベル。「どこから来た値か」を隠さないのは、**確からしさが情報源で違う**ため。
@@ -400,6 +400,7 @@ export const HAZARD_SOURCE_LABELS_JA: Readonly<Record<HazardSource, string>> = {
   'suibou-navi': '浸水ナビの実測',
   tile: '地図と同じ',
   mesh: '250m メッシュ',
+  jma: '気象庁の発表',
 }
 
 /**
@@ -415,6 +416,39 @@ export const HAZARD_CERTAINTY_LABELS_JA: Readonly<Record<HazardCertainty, string
   exact: 'この地点で確定',
   partial: '250m メッシュの範囲',
   unknown: 'オフライン（メッシュのみ）',
+}
+
+/**
+ * **警戒レベル相当**（内閣府ガイドライン・`docs/260824_flood.md` §3.3(d)）。
+ *
+ * ⚠ **市町村が出す「警戒レベル◯」そのものではない。** レベル 4「避難指示」を出すのは市町村で、
+ * こちらはそれを知り得ない。気象庁が出す「**レベル◯相当情報**」までしか言えないので、
+ * 型の名前も文言も「相当」で統一する（同 §7.4・§7.5）。`0` は該当なし。
+ */
+export const ALERT_LEVELS = [0, 1, 2, 3, 4, 5] as const
+export type AlertLevel = (typeof ALERT_LEVELS)[number]
+
+/** 警戒レベル相当のラベル。**必ず「相当」を付ける**（「避難指示が出ています」とは書かない）。 */
+export const ALERT_LEVEL_LABELS_JA: Readonly<Record<AlertLevel, string>> = {
+  0: '発表なし',
+  1: '警戒レベル1相当',
+  2: '警戒レベル2相当',
+  3: '警戒レベル3相当',
+  4: '警戒レベル4相当',
+  5: '警戒レベル5相当',
+}
+
+/**
+ * 警戒レベル相当 → 地図やカードで使う危険度（`HazardLevel`）。
+ * 平時の「もし起きたら」と発災時の「今」を**同じ色の語彙**で見せるための橋渡し。
+ */
+export const ALERT_LEVEL_TO_HAZARD: Readonly<Record<AlertLevel, HazardLevel>> = {
+  0: 'none',
+  1: 'caution',
+  2: 'caution',
+  3: 'warning',
+  4: 'danger',
+  5: 'critical',
 }
 
 /**

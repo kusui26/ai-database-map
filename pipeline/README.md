@@ -69,6 +69,7 @@ python3 pipeline/validate_hazard_mesh.py --centres 800 # 中心での照合（�
 | `fetch_hazard_mesh.py` | A31b（洪水・1次メッシュ単位）／A51（内水）／G04-d（標高）を取得 |
 | `build_hazard_mesh.py` | ラスタ化してタイル・索引・CSV を書き出す |
 | `validate_hazard_mesh.py` | 生成物を**国勢調査 250m メッシュ全数**と公式タイルに独立照合 |
+| `build_jma_areas.py` | 市区町村コード → **気象庁の発表区域**の対応表（Phase 3・アラートの区域解決） |
 
 **格子の規約**（ここを外すと静かに壊れる）：1 次メッシュ ＝ 320 × 320、**row 0 は南端・col 0 は西端**、
 行優先（`row * 320 + col`）、**1 セル 1 バイト**（**上位ニブル＝セル内の最大ランク**・**下位ニブル＝被覆率 0–15**）。
@@ -82,6 +83,19 @@ python3 pipeline/validate_hazard_mesh.py --centres 800 # 中心での照合（�
 >
 > 点で確定させたいときは**浸水ナビ API か公式タイルの画素に降りる**（優先順位は
 > `docs/260824_flood.md` §6.3）。どの経路に降りても、答えは必ず `(0, 最大ランク]` に入る。
+
+### 気象庁の発表区域の対応表（Phase 3）
+
+```bash
+python3 pipeline/build_jma_areas.py          # 生成 → src/shared/hazard/jma-areas.json
+python3 pipeline/build_jma_areas.py --check  # 生成せず、対応の網羅率だけ出す
+```
+
+警報は**気象庁の区域単位**で出るが、地点から分かるのは**市区町村コード**。その橋渡し。
+**正は `warning/map.json` が実際に使っている区域コード**で、区域定義（`area.json` の class20）とはズレる
+——`area.json` は横浜市を「北部／南部」に分けているのに、警報は「横浜市」で出る。
+政令市の区（大阪市北区など）はどの区域にも前方一致しないので、`muni.js` の
+「大阪市　北区」という表記から**市へ畳んでから**引く。詳しくは `docs/260824_flood.md` §8.4。
 
 **原典は A31b（1 次メッシュ単位）を使う。** プランは A31a（河川単位）を挙げていたが、A31b は
 A31a をオーバレイして 1 次メッシュで切ったもので中身は同じ。出力の単位とファイルの単位が一致するので、

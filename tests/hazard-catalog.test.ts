@@ -7,7 +7,9 @@ import {
   hazardGroupSchema,
   hazardLayers,
   hazardLayersForGroup,
+  hazardCertaintySchema,
   hazardLevelSchema,
+  hazardSourceSchema,
   isHazardLayerKey,
   isHazardLevel,
   rankOf,
@@ -16,7 +18,11 @@ import {
 import {
   EVACUATION_LABELS_JA,
   HAZARD_GROUPS,
+  HAZARD_CERTAINTIES,
+  HAZARD_CERTAINTY_LABELS_JA,
   HAZARD_LEVELS,
+  HAZARD_SOURCE_LABELS_JA,
+  HAZARD_SOURCES,
   HAZARD_LEVEL_COLORS,
   HAZARD_LEVEL_ICONS,
   HAZARD_LEVEL_LABELS_JA,
@@ -40,6 +46,13 @@ describe('hazard カタログ（Zod ロード）', () => {
   it('group enum が constants.HAZARD_GROUPS と一致（順序も）', () => {
     expect([...hazardGroupSchema.options]).toEqual([...HAZARD_GROUPS])
     expect(hazardCatalog.groups).toEqual([...HAZARD_GROUPS])
+  })
+
+  it('source / certainty enum が constants と一致（言い方の語彙は 1 か所）', () => {
+    expect([...hazardSourceSchema.options]).toEqual([...HAZARD_SOURCES])
+    expect([...hazardCertaintySchema.options]).toEqual([...HAZARD_CERTAINTIES])
+    expect(Object.keys(HAZARD_SOURCE_LABELS_JA).sort()).toEqual([...HAZARD_SOURCES].sort())
+    expect(Object.keys(HAZARD_CERTAINTY_LABELS_JA).sort()).toEqual([...HAZARD_CERTAINTIES].sort())
   })
 
   it('level enum が constants.HAZARD_LEVELS と一致（軽い順）', () => {

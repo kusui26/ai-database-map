@@ -385,6 +385,39 @@ export const EVACUATION_LABELS_JA: Readonly<Record<EvacuationAction, string>> = 
 }
 
 /**
+ * 地点の答えが**どこから来たか**（`docs/260824_flood.md` §6.3・良いものから順）。
+ * `shared/hazard.hazardSourceSchema` と 1 対 1（不変条件はテストが守る）。
+ */
+export type HazardSource = 'suibou-navi' | 'tile' | 'mesh'
+
+export const HAZARD_SOURCES: readonly HazardSource[] = ['suibou-navi', 'tile', 'mesh']
+
+/**
+ * 出所のラベル。「どこから来た値か」を隠さないのは、**確からしさが情報源で違う**ため。
+ * 公式タイル由来を「地図と同じ」と呼ぶのは、利用者にとってはそれが唯一意味のある説明だから。
+ */
+export const HAZARD_SOURCE_LABELS_JA: Readonly<Record<HazardSource, string>> = {
+  'suibou-navi': '浸水ナビの実測',
+  tile: '地図と同じ',
+  mesh: '250m メッシュ',
+}
+
+/**
+ * 答えの確からしさ（同 §5.9）。**`partial` を `exact` に丸めない**ためにある型。
+ * `shared/hazard.hazardCertaintySchema` と 1 対 1。
+ */
+export type HazardCertainty = 'exact' | 'partial' | 'unknown'
+
+export const HAZARD_CERTAINTIES: readonly HazardCertainty[] = ['exact', 'partial', 'unknown']
+
+/** 確からしさのラベル（UI のバッジ）。 */
+export const HAZARD_CERTAINTY_LABELS_JA: Readonly<Record<HazardCertainty, string>> = {
+  exact: 'この地点で確定',
+  partial: '250m メッシュの範囲',
+  unknown: 'オフライン（メッシュのみ）',
+}
+
+/**
  * ハザードレイヤの既定不透明度。
  * 背景地図の地名が読めなくなると避難に使えないため、UI では 0.3–0.9 で変えられるようにする
  * （docs/260824_flood.md §7.6）。

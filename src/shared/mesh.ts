@@ -299,3 +299,27 @@ export function primaryMeshOf(code: MeshCode): MeshCode {
   levelOf(code)
   return code.slice(0, CODE_LENGTH[1])
 }
+
+/** 1 次メッシュの高さ（緯度 40 分 ＝ 2/3 度）。 */
+const PRIMARY_LAT_SPAN_DEG = 1 / PRIMARY_LAT_FACTOR
+/** 1 次メッシュの幅（経度 1 度）。 */
+const PRIMARY_LON_SPAN_DEG = 1
+
+/**
+ * その地点を含む 1 次メッシュと、**周囲 8 枚**（3×3）のコード。
+ *
+ * オフライン用にタイルを先読みする範囲（`docs/260824_flood.md` §8.3）。
+ * 1 枚は約 80km 四方なので、9 枚あれば**歩いても車で移動しても当面は足りる**。
+ * 存在しないコード（海上・国外）も返るが、配布索引に無ければ取りに行かないので害はない。
+ */
+export function surroundingPrimaries(lon: number, lat: number): readonly MeshCode[] {
+  const steps = [-1, 0, 1]
+  const codes = steps.flatMap((dLat) =>
+    steps.map((dLon) =>
+      primaryMeshOf(
+        meshCodeFromLonLat(lon + dLon * PRIMARY_LON_SPAN_DEG, lat + dLat * PRIMARY_LAT_SPAN_DEG),
+      ),
+    ),
+  )
+  return [...new Set(codes)]
+}

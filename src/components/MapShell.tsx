@@ -3,6 +3,9 @@
 import { useEffect, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { useChatStore } from '@/stores/chatStore'
+import { useGeoStore } from '@/stores/geoStore'
+import { useCurrentPosition } from '@/hooks/useCurrentPosition'
+import { useOfflineHazardCache } from '@/hooks/useOfflineHazardCache'
 import { useMapUrlState } from './map/useMapUrlState'
 import { AppHeader } from './AppHeader'
 import { Fab } from './Fab'
@@ -20,6 +23,12 @@ const MapView = dynamic(() => import('./map/MapView').then((mod) => mod.MapView)
 // 駅詳細（PanelRenderer 経由で Chart.js を含む）は初期クリティカルバンドルから外す。
 const StationDetailPanel = dynamic(
   () => import('./detail/StationDetailPanel').then((mod) => mod.StationDetailPanel),
+  { ssr: false },
+)
+
+// 現在地（vaul のシートと地点の取得を含む）は、現在地ボタンを押すまで読み込まない。
+const CurrentPositionPanel = dynamic(
+  () => import('./hazard/CurrentPositionPanel').then((mod) => mod.CurrentPositionPanel),
   { ssr: false },
 )
 
@@ -49,6 +58,12 @@ export function MapShell() {
   // 一度出したら以後は保持する（閉じるアニメーションと内部状態を壊さない）。
   const [detailSeen, setDetailSeen] = useState(false)
   const [promotionSeen, setPromotionSeen] = useState(false)
+  // 現在地の監視は**アプリ全体で 1 本だけ**。ここで回し、地図もカードも geoStore から読む。
+  useCurrentPosition()
+  // オフラインで効かせるには**オフラインになる前に**落としておくしかない（§8.3）。
+  useOfflineHazardCache(useGeoStore((state) => state.position))
+  const geoActive = useGeoStore((state) => state.active)
+  const [geoSeen, setGeoSeen] = useState(false)
 
   // 初回ロード時、デスクトップ幅ならチャットを既定オープン（P8d 案B）。
   // モバイルは既定クローズ＝地図の初見を優先し、ChatPanel の遅延ロードを維持（mobile LCP に影響なし）。
@@ -68,6 +83,10 @@ export function MapShell() {
     if (promotion !== null) setPromotionSeen(true)
   }, [promotion])
 
+  useEffect(() => {
+    if (geoActive) setGeoSeen(true)
+  }, [geoActive])
+
   // 重なり順（この main の直下は同じ重なり文脈にいるので、ここで一覧にしておく）:
   //   z-10  地図の付随物（FAB・ホバーツールチップ）
   //   z-20  浮遊パネル（AI チャット・駅詳細・キャンバス）
@@ -81,6 +100,7 @@ export function MapShell() {
       <AppHeader />
       <OfflineBanner />
       <Fab />
+      {geoSeen && <CurrentPositionPanel />}
       {detailSeen && <StationDetailPanel />}
       {chatSeen && <ChatPanel />}
       {promotionSeen && <PromotionHost />}

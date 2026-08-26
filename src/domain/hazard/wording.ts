@@ -100,3 +100,49 @@ export function noHazardHeadlineJa(certainty: HazardCertainty): string {
     ? `${base}オフラインのため、250m メッシュだけで判断しています。`
     : base
 }
+
+// --- 浸水ナビの河川情報を 1 文にする（§6.1 の reasonsJa） -----------------
+
+const MINUTES_PER_HOUR = 60
+const HOURS_PER_DAY = 24
+
+/** 分 → 読める長さ（「約 30 分」「約 3 時間」「約 10 日間」）。 */
+export function durationPhraseJa(minutes: number): string {
+  if (minutes < MINUTES_PER_HOUR) return `約 ${Math.round(minutes)} 分`
+  const hours = minutes / MINUTES_PER_HOUR
+  if (hours < HOURS_PER_DAY) return `約 ${Math.round(hours)} 時間`
+  return `約 ${Math.round(hours / HOURS_PER_DAY)} 日間`
+}
+
+/** 数のうち最小・最大を持つ要素（無ければ null）。 */
+function extremeBy<T>(
+  items: readonly T[],
+  value: (item: T) => number | null,
+  largest: boolean,
+): T | null {
+  return items.reduce<T | null>((best, item) => {
+    const [mine, theirs] = [value(item), best === null ? null : value(best)]
+    if (mine === null) return best
+    if (theirs === null) return item
+    return (largest ? mine > theirs : mine < theirs) ? item : best
+  }, null)
+}
+
+/**
+ * 河川ごとの到達・継続を根拠の文にする。**いちばん早いものといちばん長いもの**だけを言う——
+ * 5 本ぶん並べても読まれないし、避難の判断に効くのはこの 2 つである。
+ */
+export function riverReasonsJa(
+  rivers: readonly { nameJa: string; arriveMin: number | null; continueMin: number | null }[],
+): readonly string[] {
+  const fastest = extremeBy(rivers, (river) => river.arriveMin, false)
+  const longest = extremeBy(rivers, (river) => river.continueMin, true)
+  return [
+    fastest === null || fastest.arriveMin === null
+      ? null
+      : `${fastest.nameJa}の氾濫では${durationPhraseJa(fastest.arriveMin)}で浸水が始まる想定です`,
+    longest === null || longest.continueMin === null
+      ? null
+      : `${longest.nameJa}の氾濫では最大${durationPhraseJa(longest.continueMin)}浸水が続く想定です`,
+  ].filter((reason): reason is string => reason !== null)
+}

@@ -3,12 +3,14 @@
 import { type ReactNode, useState } from 'react'
 import { PANEL_GAP_PX, PANEL_WIDTH_PX } from '@/shared/constants'
 import { useChatStore } from '@/stores/chatStore'
+import { useGeoStore } from '@/stores/geoStore'
 import { useMapStore } from '@/stores/mapStore'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { usePrefetchOnIdle } from '@/hooks/usePrefetchOnIdle'
 // 初期バンドルから外す：ダイアログ（散布は Chart.js を含む）は初回オープンまで読み込まない。
 // 遅延ロードの定義は共通モジュールに置く（Suspense 境界の付け忘れを 1 か所に閉じ込めるため）。
 import { DIALOG_LOADERS, RankingDialog, ScatterDialog } from './lazyDialogs'
+import { cn } from '@/lib/utils'
 
 /** FAB とチャットパネルのあいだの余白。 */
 const FAB_GAP_PX = 8
@@ -48,16 +50,33 @@ function ScatterIcon() {
   )
 }
 
+function LocationIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden className="size-4">
+      <circle cx="12" cy="12" r="3.2" fill="currentColor" />
+      <circle cx="12" cy="12" r="7" stroke="currentColor" strokeWidth="1.5" />
+      <path
+        d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
 function FabButton({
   icon,
   label,
   onClick,
   title,
+  active = false,
 }: {
   icon: ReactNode
   label: string
   onClick?: () => void
   title?: string
+  active?: boolean
 }) {
   return (
     <button
@@ -65,7 +84,13 @@ function FabButton({
       onClick={onClick}
       title={title}
       aria-label={label}
-      className="inline-flex items-center gap-2 rounded-xl bg-white/90 px-3 py-2 text-sm font-medium text-slate-700 shadow-lg ring-1 ring-slate-200 backdrop-blur transition hover:bg-white"
+      aria-pressed={active}
+      className={cn(
+        'inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium shadow-lg ring-1 backdrop-blur transition',
+        active
+          ? 'bg-blue-600 text-white ring-blue-500 hover:bg-blue-500'
+          : 'bg-white/90 text-slate-700 ring-slate-200 hover:bg-white',
+      )}
     >
       {icon}
       <span className="hidden sm:inline">{label}</span>
@@ -73,7 +98,10 @@ function FabButton({
   )
 }
 
-/** 左下 FAB（ランキング＝P6a／散布図＝P6b）。ダイアログは初回オープンで初めてマウント（遅延ロード）。 */
+/**
+ * 左下 FAB（現在地＝Phase 2／ランキング＝P6a／散布図＝P6b）。
+ * ダイアログは初回オープンで初めてマウント（遅延ロード）。
+ */
 export function Fab() {
   const [rankingOpen, setRankingOpen] = useState(false)
   const [scatterOpen, setScatterOpen] = useState(false)
@@ -88,12 +116,23 @@ export function Fab() {
   // 地図の準備完了を待つのは、早く始めると地図の取得と帯域を奪い合って LCP が悪化するため。
   const mapReady = useMapStore((state) => state.ready)
   usePrefetchOnIdle(DIALOG_LOADERS, mapReady)
+  // 現在地は「測位の ON/OFF ＝ パネルの開閉」。押すたびに切り替える（電池対策・§8.3）。
+  const geoActive = useGeoStore((state) => state.active)
+  const startGeo = useGeoStore((state) => state.start)
+  const stopGeo = useGeoStore((state) => state.stop)
   return (
     <>
       <div
         style={shifted ? { left: FAB_LEFT_WITH_CHAT_PX } : undefined}
         className="pointer-events-auto absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 gap-2 transition-[left] duration-300 sm:left-4 sm:translate-x-0"
       >
+        <FabButton
+          icon={<LocationIcon />}
+          label="現在地"
+          title="現在地の災害リスクを見る"
+          active={geoActive}
+          onClick={geoActive ? stopGeo : startGeo}
+        />
         <FabButton
           icon={<TrophyIcon />}
           label="ランキング"

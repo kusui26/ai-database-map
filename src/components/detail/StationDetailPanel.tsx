@@ -34,6 +34,7 @@ import { useChatStore } from '@/stores/chatStore'
 import { useStationDetail } from '@/components/detail/useStationDetail'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { PanelRenderer, PanelStack } from '@/components/panels/PanelRenderer'
+import { StationHazardBadge } from '@/components/hazard/StationHazardBadge'
 import { cn } from '@/lib/utils'
 
 /**
@@ -237,7 +238,15 @@ function DetailBody({
       <header className="flex items-start justify-between gap-2 border-b border-slate-100 px-4 pt-4 pb-3">
         <div className="min-w-0 flex-1">
           {detail !== undefined ? (
-            <PanelRenderer panel={stationCardPanel(detail)} />
+            <>
+              <PanelRenderer panel={stationCardPanel(detail)} />
+              {/* タブは増やさず、1 行のバッジで災害リスクへの入口を作る（§7.2）。 */}
+              <StationHazardBadge
+                lon={detail.station.lon}
+                lat={detail.station.lat}
+                stationName={detail.station.label}
+              />
+            </>
           ) : (
             <p className="py-2 text-sm text-slate-400">{isLoading ? '読み込み中…' : '駅を選択'}</p>
           )}

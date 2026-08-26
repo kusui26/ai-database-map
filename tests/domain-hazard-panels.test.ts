@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { hazardCardPanel } from '@/domain/hazard/panels'
 import { pointHazard } from '@/domain/hazard/point'
 import { durationPhraseJa, riverReasonsJa } from '@/domain/hazard/wording'
-import { hazardLayersWithPointAnswer } from '@/domain/hazard/catalog'
+import { hazardLayersToShow, hazardLayersWithPointAnswer } from '@/domain/hazard/catalog'
+import { hazardBadgeJa, STATION_HAZARD_CAVEAT_JA } from '@/domain/hazard/panels'
 import { panelSchema } from '@/shared/protocol'
 import { surroundingPrimaries } from '@/shared/mesh'
 
@@ -102,5 +103,73 @@ describe('mesh: オフライン用に先読みする範囲', () => {
     expect(primaries).toContain('5439') // 北
     expect(primaries).toContain('5238') // 南西
     expect(new Set(primaries).size).toBe(9)
+  })
+})
+
+describe('hazard/catalog: 地図に出すレイヤ（AI が根拠の面を見せる）', () => {
+  it('同じグループの base は 1 つだけ（重ねると色が濁って読めない）', () => {
+    const shown = hazardLayersToShow(['flood_l2', 'flood_l1', 'flood_kaoku_hanran'])
+    expect(shown).toContain('flood_l2')
+    expect(shown).not.toContain('flood_l1') // 同じ flood グループの base は 1 つ
+    expect(shown).toContain('flood_kaoku_hanran') // overlay は何枚でも載る
+  })
+
+  it('残すのは「危険度が重い方」ではなく「カタログ順」（実測で直した）', () => {
+    // 東京駅：浸水深 0〜0.3m（軽い）／浸水継続時間 24〜72時間（重い）。
+    // 危険度で選ぶと**肝心の浸水深の面が地図から消える**ので、カタログの並びで選ぶ。
+    expect(hazardLayersToShow(['flood_duration', 'flood_l2'])).toContain('flood_l2')
+    expect(hazardLayersToShow(['flood_duration', 'flood_l2'])).not.toContain('flood_duration')
+  })
+
+  it('入力の並びに依存しない', () => {
+    const forward = hazardLayersToShow(['flood_l2', 'flood_duration', 'hightide_l2'])
+    const reversed = hazardLayersToShow(['hightide_l2', 'flood_duration', 'flood_l2'])
+    expect(forward).toEqual(reversed)
+  })
+
+  it('グループが違えば base を並べてよい（洪水と高潮）', () => {
+    expect(hazardLayersToShow(['flood_l2', 'hightide_l2'])).toEqual(
+      expect.arrayContaining(['flood_l2', 'hightide_l2']),
+    )
+  })
+
+  it('未知の key は落とす（生 key のパススルー禁止）', () => {
+    expect(hazardLayersToShow(['___missing___', 'flood_l2'])).toEqual(['flood_l2'])
+    expect(hazardLayersToShow([])).toEqual([])
+  })
+})
+
+describe('hazard/panels: 駅バッジの 1 行（§7.2）', () => {
+  it('いちばん重いものをグループ名＋階級で言う', () => {
+    const point = pointHazard(
+      { ...BASE, tile: [{ layerKey: 'flood_l2', hex: '#FFB7B7' }] },
+      ALL_LAYERS,
+    )
+    expect(hazardBadgeJa(point)).toBe('洪水 3〜5m 未満')
+  })
+
+  it('複数のグループに当たったら「ほか N 種」を添える', () => {
+    const point = pointHazard(
+      {
+        ...BASE,
+        tile: [
+          { layerKey: 'flood_l2', hex: '#FFB7B7' },
+          { layerKey: 'hightide_l2', hex: '#FFFFB3' },
+        ],
+      },
+      ALL_LAYERS,
+    )
+    expect(hazardBadgeJa(point)).toBe('洪水 3〜5m 未満・ほか 1 種')
+  })
+
+  it('該当が無くても「安全」とは言わない', () => {
+    const badge = hazardBadgeJa(pointHazard(BASE, ALL_LAYERS))
+    expect(badge).toBe('指定区域の該当なし')
+    expect(badge).not.toContain('安全')
+  })
+
+  it('駅の代表点 1 点であるという限界を必ず添える', () => {
+    expect(STATION_HAZARD_CAVEAT_JA).toContain('代表点')
+    expect(STATION_HAZARD_CAVEAT_JA).toContain('異なる')
   })
 })

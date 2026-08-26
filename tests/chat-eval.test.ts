@@ -1,11 +1,12 @@
 /**
- * P8c 評価 runner：ゴールデン 24 問を実 /api/chat（SSE）に投げ、score.ts で採点する。
+ * 評価 runner：ゴールデン 30 問を実 /api/chat（SSE）に投げ、score.ts で採点する。
  *
  * 通常の `pnpm test` では **スキップ**（LLM/DB/課金に依存）。実行は：
  *   1) 別端末で dev サーバ起動：`pnpm dev`（.env に GEMINI_API_KEY・SUPABASE_* が必要）
  *   2) `EVAL=1 pnpm exec vitest run tests/chat-eval.test.ts`
  *      （ポート変更時は `CHAT_BASE_URL=http://localhost:PORT`／閾値は `EVAL_PASS`／間隔は `EVAL_THROTTLE_MS`）
- *      失敗問だけの再実行は `EVAL_ONLY=id1,id2`（モデル側の遅延で落ちた問を全 23 問流さず確認する）
+ *      失敗問だけの再実行は `EVAL_ONLY=id1,id2`（モデル側の遅延で落ちた問を全 30 問流さず確認する）
+ *      災害の 6 問だけなら `EVAL_ONLY=hazard-station-risk,hazard-is-safe,hazard-depth,hazard-arrive-time,hazard-evacuate-where,hazard-shows-layer`
  *
  * Gemini 無料枠は 5 req/分・1 問が多段ツールで数回モデルを呼ぶため、問間にスロットルを入れ、
  * quota で失敗した問は 1 度だけクールダウン再試行する。合格率と各問の内訳を出力する。
@@ -19,7 +20,7 @@ import { scoreCase, type EvalObserved } from '@/ai/eval/score'
 
 const ENABLED = process.env.EVAL === '1'
 const BASE_URL = process.env.CHAT_BASE_URL ?? 'http://localhost:3000'
-const PASS_THRESHOLD = Number(process.env.EVAL_PASS ?? '16')
+const PASS_THRESHOLD = Number(process.env.EVAL_PASS ?? '20')
 const THROTTLE_MS = Number(process.env.EVAL_THROTTLE_MS ?? '45000')
 const REQUEST_TIMEOUT_MS = 75_000
 const REPORT_PATH = process.env.EVAL_REPORT ?? ''
@@ -105,12 +106,12 @@ async function ask(query: string, selectedGrp?: string, radiusM?: number): Promi
   return { toolCalls, panelTypes, actionTypes, text, haystack, mapResponseValid, errored }
 }
 
-describe.skipIf(!ENABLED)('P8c eval — ゴールデン 24 問', () => {
+describe.skipIf(!ENABLED)('eval — ゴールデン 30 問', () => {
   it(
     '合格率を計測する',
     async () => {
       const cases = ONLY.length > 0 ? EVAL_CASES.filter((c) => ONLY.includes(c.id)) : EVAL_CASES
-      const lines: string[] = ['# P8c eval レポート', '', `対象: ${BASE_URL}`, '']
+      const lines: string[] = ['# eval レポート', '', `対象: ${BASE_URL}`, '']
       const rows: string[] = ['| # | id | 分野 | 合否 | 失敗チェック |', '|---|---|---|---|---|']
       let passed = 0
       let firstAsk = true

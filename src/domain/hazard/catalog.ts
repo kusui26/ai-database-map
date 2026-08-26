@@ -277,6 +277,30 @@ export function hazardRankOfDepth(layerKey: string, depthM: number): HazardPoint
   return matched === undefined ? null : toPointRank(layer.key, matched)
 }
 
+/**
+ * 地点で当たったレイヤ → **地図に出すレイヤ**（AI が答えるとき、根拠の面を同時に見せる）。
+ *
+ * 同じグループの `base` は面をベタ塗りするので**1 つだけ**を残す——想定最大規模と計画規模を
+ * 同時に塗ると、どちらの色か分からなくなる（`toggleHazardLayer` と同じ不変条件）。
+ *
+ * **どれを残すかは「危険度が重い方」ではなく「カタログの並び順」で決める。** 実測で分かった——
+ * 東京駅は浸水深が 0〜0.3m（軽い）で浸水継続時間が 24〜72時間（重い）なので、危険度で選ぶと
+ * **肝心の浸水深の面が地図から消えて、継続時間だけが残った**。カタログの並びは
+ * 「そのグループの主役から」書いてあるので、そちらが利用者の期待に合う。
+ */
+export function hazardLayersToShow(layerKeys: readonly string[]): readonly string[] {
+  const shownBaseGroups = new Set<HazardGroup>()
+  // 先にカタログ順へ正規化してから base を絞る（入力の並びに依存させない）。
+  return resolveHazardLayerKeys(layerKeys).filter((key) => {
+    const layer = getHazardLayer(key)
+    if (layer === undefined) return false
+    if (layer.display !== 'base') return true
+    if (shownBaseGroups.has(layer.group)) return false
+    shownBaseGroups.add(layer.group)
+    return true
+  })
+}
+
 /** 点の答えを持ちうるレイヤ（タイルがあり、色つきの階級を持つもの）。 */
 export function hazardLayersWithPointAnswer(): readonly string[] {
   return hazardLayers

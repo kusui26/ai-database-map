@@ -12,6 +12,7 @@ import { z } from 'zod'
 import { categorySchema, requireEntry } from '@/shared/catalog'
 import { PREFECTURES, RADII_M, type RadiusM, ROUTE_TYPES, routeTypeLabel } from '@/shared/constants'
 import { type MapResponse } from '@/shared/protocol'
+import { type HazardPointResponse } from '@/shared/api'
 import {
   rankByColumn,
   searchStations,
@@ -22,6 +23,7 @@ import {
 import { buildStationDetail } from '@/domain/stations/presenter'
 import { buildRanking } from '@/domain/ranking/presenter'
 import { buildGrowth } from '@/domain/growth/presenter'
+import { hazardPointAt } from '@/lib/hazard/point-source'
 import { type EffectCollector } from './types'
 import { panelsForStationDetail, summarizePanels } from './assemble'
 import { metricsCatalogDigest } from './catalog-digest'
@@ -33,6 +35,11 @@ const DEFAULT_RADIUS_M: RadiusM = 1000
 const DEFAULT_RANK_LIMIT = 20
 /** ランキング最大件数（チャット内は上位に絞る）。 */
 const MAX_RANK_LIMIT = 50
+
+/** LLM へ渡す河川の件数（浸水ナビ）。深い順に上位だけで、判断には十分。 */
+const MAX_RIVERS_FOR_LLM = 3
+/** LLM へ渡す根拠の文の数（§6.5）。 */
+const MAX_REASONS_FOR_LLM = 3
 
 /** 事業者種別コードの説明（ツール定義に埋め込む・表示名は constants の単一定義から生成）。 */
 const ROUTE_TYPE_HINT = ROUTE_TYPES.map((type) => `${type}:${routeTypeLabel(type)}`).join(' ')
@@ -96,11 +103,63 @@ function resolutionNote(...notes: readonly (string | null)[]): string | undefine
   return merged.length > 0 ? merged.join('・') : undefined
 }
 
+/** ハザードを調べる地点（駅 grp か緯度経度）。駅なら座標と呼び名を DB から解決する。 */
+async function resolveHazardTarget(input: {
+  grp?: string
+  lon?: number
+  lat?: number
+  placeJa?: string
+}): Promise<{ lon: number; lat: number; placeJa: string } | { error: string; hint: string }> {
+  if (input.grp !== undefined) {
+    const station = await stationByGrp(input.grp)
+    if (station === null)
+      return {
+        error: `駅が見つかりません: ${input.grp}`,
+        hint: 'searchStations で grp を取り直してください。',
+      }
+    return { lon: station.lon, lat: station.lat, placeJa: input.placeJa ?? station.label }
+  }
+  if (input.lon === undefined || input.lat === undefined) {
+    return {
+      error: '地点を特定できません',
+      hint: '駅なら grp を、任意地点なら lon と lat の両方を指定してください。',
+    }
+  }
+  return { lon: input.lon, lat: input.lat, placeJa: input.placeJa ?? 'この地点' }
+}
+
+/**
+ * 応答 → LLM 向けの要約。**パネルと同じ文字列だけを渡す**（本文とカードがズレない）。
+ * `coverageNotesJa` を削らないのは、「白＝安全ではない」を LLM に忘れさせないため（§7.5-2）。
+ */
+function hazardSummaryForLlm(point: HazardPointResponse) {
+  return {
+    placeJa: point.point.placeJa,
+    meshCode: point.mesh.code,
+    level: point.verdict.level,
+    headlineJa: point.verdict.headlineJa,
+    evacuation: point.verdict.evacuation,
+    certainty: point.certainty,
+    elevMeanM: point.terrain.elevMeanM,
+    hazards: point.hazards.map((item) => ({
+      labelJa: item.labelJa,
+      valueJa: item.valueJa,
+      level: item.level,
+      source: item.source,
+    })),
+    rivers: point.rivers.slice(0, MAX_RIVERS_FOR_LLM),
+    reasonsJa: point.verdict.reasonsJa.slice(0, MAX_REASONS_FOR_LLM),
+    coverageNotesJa: point.coverageNotesJa,
+    notesJa: point.notesJa,
+    disclaimerJa: point.disclaimerJa,
+  }
+}
+
 /**
  * リクエストごとにツール群を生成する（collector をクロージャで束ねる）。
  * ツール記述はカタログ由来のダイジェスト（system-prompt.ts）と合わせて LLM を誘導する。
  */
-export function createTools(collector: EffectCollector) {
+export function createTools(collector: EffectCollector, origin: string) {
   return {
     /** 駅名 → 候補駅（grp を得る起点）。 */
     searchStations: tool({
@@ -389,6 +448,40 @@ export function createTools(collector: EffectCollector) {
           }
         } catch (error) {
           return { error: error instanceof Error ? error.message : '散布の集計に失敗しました' }
+        }
+      },
+    }),
+
+    /**
+     * 地点（駅または緯度経度）の災害リスク。共通API（`/api/hazard/point`）と**同じ関数**を通る。
+     * 意味づけ・危険度・避難の目安はすべてサーバが決めた文字列で、LLM は説明するだけでよい。
+     */
+    getHazardAtPoint: tool({
+      description:
+        '地点の水害・土砂災害リスクを調べる。駅なら grp、任意地点なら lon/lat を渡す。' +
+        '洪水（想定最大規模・計画規模）・浸水継続時間・家屋倒壊等氾濫想定区域・内水・高潮・津波・土砂災害の該当と、' +
+        '立退き/垂直避難の目安、河川ごとの浸水深(m)・到達時間(分)・継続時間(分)を返す。' +
+        '「ここは安全か」「大丈夫か」「浸水するか」「何m浸かるか」「何分後に浸水するか」「水害のリスクは」に必ずこれを使う。',
+      inputSchema: z.object({
+        grp: z
+          .string()
+          .optional()
+          .describe('searchStations が返した駅 grp（駅について聞かれたとき）'),
+        lon: z.number().optional().describe('経度（grp を使わないとき）'),
+        lat: z.number().optional().describe('緯度（grp を使わないとき）'),
+        placeJa: z.string().optional().describe('地点の呼び名。例: 亀有駅、現在地'),
+      }),
+      execute: async ({ grp, lon, lat, placeJa }) => {
+        try {
+          const target = await resolveHazardTarget({ grp, lon, lat, placeJa })
+          if ('error' in target) return target
+          const { point } = await hazardPointAt({ ...target, baseUrl: origin, now: Date.now() })
+          collector.push({ kind: 'hazardPoint', point })
+          return hazardSummaryForLlm(point)
+        } catch (error) {
+          return {
+            error: error instanceof Error ? error.message : '災害リスクの取得に失敗しました',
+          }
         }
       },
     }),

@@ -22,8 +22,11 @@ import {
 } from '@/domain/stations/panels'
 import { rankingPanel } from '@/domain/ranking/panel'
 import { scatterPanel } from '@/domain/growth/panel'
+import { hazardCardPanel } from '@/domain/hazard/panels'
+import { hazardLayersToShow } from '@/domain/hazard/catalog'
 import {
   type GrowthEffect,
+  type HazardPointEffect,
   type RankingEffect,
   type StationDetailEffect,
   type ToolEffect,
@@ -78,6 +81,11 @@ export function panelsForGrowth(effect: GrowthEffect): Panel[] {
   return [inline(scatterPanel(effect.response, 'compact'))]
 }
 
+/** 地点ハザードツール → パネル（hazardCard・compact/inline）。 */
+export function panelsForHazardPoint(effect: HazardPointEffect): Panel[] {
+  return [inline(hazardCardPanel(effect.point, 'compact'))]
+}
+
 /** 副産物 → パネル。 */
 function panelsFor(effect: ToolEffect): Panel[] {
   switch (effect.kind) {
@@ -87,6 +95,8 @@ function panelsFor(effect: ToolEffect): Panel[] {
       return panelsForRanking(effect)
     case 'growth':
       return panelsForGrowth(effect)
+    case 'hazardPoint':
+      return panelsForHazardPoint(effect)
   }
 }
 
@@ -106,6 +116,23 @@ export function mapActionsForEffect(effect: ToolEffect): MapAction[] {
     }
     case 'growth':
       return []
+    case 'hazardPoint': {
+      // 地点を指したうえで、**当たったレイヤを地図に出す**——
+      // 文章とカードだけでは「どこがどう危ないか」が地図に現れない（§6.5）。
+      const { point } = effect
+      const layers = hazardLayersToShow(point.hazards.map((item) => item.layerKey))
+      return [
+        {
+          type: 'showPoint',
+          lon: point.point.lon,
+          lat: point.point.lat,
+          labelJa: point.point.placeJa,
+        },
+        // 出すものが無いときは**送らない**。空配列は「すべて消す」の意味なので（§6.4）、
+        // 該当ゼロの地点を聞いただけで、利用者が自分で点けたレイヤを消してしまう。
+        ...(layers.length > 0 ? [{ type: 'setHazardLayers' as const, layers: [...layers] }] : []),
+      ]
+    }
   }
 }
 

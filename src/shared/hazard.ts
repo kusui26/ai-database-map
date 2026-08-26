@@ -48,6 +48,27 @@ export const colorSourceSchema = z.enum(['official', 'measured']).nullable()
 export const evacuationActionSchema = z.enum(['takeaway', 'vertical', 'stay'])
 
 /**
+ * 地点の答えが**どこから来たか**（同 §6.3 の優先順位・良いものから順）。
+ * UI も AI もこれで言い方を変えるので、応答から落とさない。
+ *
+ * - `suibou-navi` … 浸水ナビ API の実測（洪水・m 単位）。いちばん精密
+ * - `tile`        … 公式ラスタタイルの画素。**地図に描いてある色と必ず一致する**
+ * - `mesh`        … 自前 250m メッシュ。点ではなく**区間**（オフラインでも答えられる）
+ */
+export const hazardSourceSchema = z.enum(['suibou-navi', 'tile', 'mesh'])
+export type HazardSource = z.infer<typeof hazardSourceSchema>
+
+/**
+ * 答えの確からしさ（同 §5.9）。**`exact` 以外を `exact` に丸めない**のがこの型の目的。
+ *
+ * - `exact`   … 点で確定（浸水ナビ／公式タイルの画素／被覆率 1 のセル）
+ * - `partial` … 250m の区間でしか言えない（被覆率が 0 と 1 の間）
+ * - `unknown` … オンラインの情報源に届かず、メッシュだけで答えた
+ */
+export const hazardCertaintySchema = z.enum(['exact', 'partial', 'unknown'])
+export type HazardCertainty = z.infer<typeof hazardCertaintySchema>
+
+/**
  * 重ね方。`base`＝面をベタ塗りするので**同じグループで同時に 1 つだけ**（重ねると濁って読めない）。
  * `overlay`＝細い区域や点在する区域なので、base の上に何枚でも重ねてよい。
  * 「そのレイヤが面か点在か」という意味なので、見た目の都合ではなくカタログが持つ。

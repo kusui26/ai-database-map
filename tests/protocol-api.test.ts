@@ -131,14 +131,18 @@ describe('GUI Chat Protocol: ハザード拡張（260824_flood §6.4）', () => 
       level: 'critical',
       headlineJa: 'この場所は、家屋倒壊等氾濫想定区域（氾濫流）に入っています。',
       evacuation: 'takeaway',
+      certainty: 'exact',
       items: [
         {
           layerKey: 'flood_l2',
           labelJa: '洪水浸水想定区域（想定最大規模）',
-          valueJa: '3〜5m 未満',
+          valueJa: '3.66m・3〜5m 未満',
           meaningJa: '2 階部分が浸水する高さ',
           level: 'danger',
           color: '#FFB7B7',
+          source: 'suibou-navi',
+          coverage: null,
+          certainty: 'exact',
         },
       ],
       reasonsJa: ['家屋倒壊等氾濫想定区域（氾濫流）内のため、建物の上階に留まるのは危険です'],
@@ -152,6 +156,9 @@ describe('GUI Chat Protocol: ハザード拡張（260824_flood §6.4）', () => 
     if (panel.type === 'hazardCard') {
       expect(panel.evacuation).toBe('takeaway')
       expect(panel.items[0]?.color).toBe('#FFB7B7')
+      // どこから得た値かは応答から落とさない（UI も AI もこれで言い方を変える・§6.3）。
+      expect(panel.items[0]?.source).toBe('suibou-navi')
+      expect(panel.certainty).toBe('exact')
     }
   })
 
@@ -162,6 +169,7 @@ describe('GUI Chat Protocol: ハザード拡張（260824_flood §6.4）', () => 
       level: 'none',
       headlineJa: '該当するハザードはありませんでした。',
       evacuation: null,
+      certainty: 'unknown',
       items: [],
       reasonsJa: [],
       coverageNotesJa: [],
@@ -180,6 +188,7 @@ describe('GUI Chat Protocol: ハザード拡張（260824_flood §6.4）', () => 
         level: 'safe',
         headlineJa: '',
         evacuation: null,
+        certainty: 'exact',
         items: [],
         reasonsJa: [],
         coverageNotesJa: [],

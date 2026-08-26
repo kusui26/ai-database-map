@@ -276,8 +276,10 @@ _A40_URL = "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A40-2024.html"
 _A33_URL = "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A33-2025.html"
 _GSI_TILE_LIST_URL = "https://maps.gsi.go.jp/development/ichiran.html"
 
-# Phase 1b でメッシュ化する対象（決定 4：洪水・内水のみ）。他は表示のみ。
-_MESH_PLANNED = HazardMesh(available=False, pathTemplate="hazard/{layer}/{primary}.bin")
+# メッシュ化した対象（決定 4：洪水・内水のみ）。他は表示（タイル）のみ。
+# Phase 1b で配布を開始し、PR-1（フォーマット v2）で 1 セル 1 バイトになった。
+# 実体は `public/hazard/{layer}/{primary}.bin.gz`（索引は `public/hazard/index.json`）。
+_MESH_AVAILABLE = HazardMesh(available=True, pathTemplate="hazard/{layer}/{primary}.bin.gz")
 
 
 def _flood_layers() -> list[HazardLayer]:
@@ -302,7 +304,7 @@ def _flood_layers() -> list[HazardLayer]:
             ),
             ranks=depth_ranks(),
             tile=HazardTile(DISAPORTAL_TILE.format(name="01_flood_l2_shinsuishin_data"), 2, 17, "png"),
-            mesh=_MESH_PLANNED,
+            mesh=_MESH_AVAILABLE,
             coverageNoteJa=DEPTH_COVERAGE_NOTE,
             fallbackLayersJa=[],
             **common,
@@ -318,7 +320,7 @@ def _flood_layers() -> list[HazardLayer]:
             tile=HazardTile(
                 DISAPORTAL_TILE.format(name="01_flood_l1_shinsuishin_newlegend_data"), 2, 17, "png"
             ),
-            mesh=_MESH_PLANNED,
+            mesh=_MESH_AVAILABLE,
             coverageNoteJa=DEPTH_COVERAGE_NOTE,
             fallbackLayersJa=[],
             **common,
@@ -332,7 +334,7 @@ def _flood_layers() -> list[HazardLayer]:
             ),
             ranks=duration_ranks(),
             tile=HazardTile(DISAPORTAL_TILE.format(name="01_flood_l2_keizoku_data"), 2, 17, "png"),
-            mesh=_MESH_PLANNED,
+            mesh=_MESH_AVAILABLE,
             coverageNoteJa="継続時間が公表されていない河川があります。白い場所は「浸水しない」という意味ではありません。",
             fallbackLayersJa=[],
             **{**common, "rankUnit": "hour"},
@@ -355,7 +357,7 @@ def _flood_layers() -> list[HazardLayer]:
             tile=HazardTile(
                 DISAPORTAL_TILE.format(name="01_flood_l2_kaokutoukai_hanran_data"), 4, 17, "png"
             ),
-            mesh=_MESH_PLANNED,
+            mesh=_MESH_AVAILABLE,
             coverageNoteJa="公表されていない河川があります。白い場所は「倒壊しない」という意味ではありません。",
             fallbackLayersJa=[],
             **{**common, "rankUnit": None, "display": "overlay"},
@@ -378,7 +380,7 @@ def _flood_layers() -> list[HazardLayer]:
             tile=HazardTile(
                 DISAPORTAL_TILE.format(name="01_flood_l2_kaokutoukai_kagan_data"), 4, 17, "png"
             ),
-            mesh=_MESH_PLANNED,
+            mesh=_MESH_AVAILABLE,
             coverageNoteJa="公表されていない河川があります。白い場所は「倒壊しない」という意味ではありません。",
             fallbackLayersJa=[],
             **{**common, "rankUnit": None, "display": "overlay"},
@@ -401,7 +403,7 @@ def _other_hazard_layers() -> list[HazardLayer]:
             rankUnit="m",
             ranks=depth_ranks(),
             tile=HazardTile(DISAPORTAL_TILE.format(name="02_naisui_data"), 2, 17, "png"),
-            mesh=_MESH_PLANNED,
+            mesh=_MESH_AVAILABLE,
             legendUrl=_A51_URL,
             vintage=2025,
             updateCadence="annual",

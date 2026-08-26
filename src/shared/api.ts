@@ -5,8 +5,14 @@
 
 import { z } from 'zod'
 import { categorySchema, formatSchema, kindSchema, unitSchema } from './catalog'
-import { hazardGroupSchema, hazardLayerSchema, hazardLevelSchema } from './hazard'
-import { rankingRowSchema, scatterPointSchema } from './protocol'
+import {
+  evacuationActionSchema,
+  hazardCertaintySchema,
+  hazardGroupSchema,
+  hazardLayerSchema,
+  hazardLevelSchema,
+} from './hazard'
+import { hazardItemSchema, rankingRowSchema, scatterPointSchema, sourceRefSchema } from './protocol'
 
 // --- エラー封筒 ---------------------------------------------------------
 export const errorEnvelopeSchema = z.object({
@@ -213,6 +219,75 @@ export const hazardCatalogResponseSchema = z.object({
   layers: z.array(hazardLayerSchema),
 })
 export type HazardCatalogResponse = z.infer<typeof hazardCatalogResponseSchema>
+
+// --- ハザード：地点（GET /api/hazard/point・260824_flood §6.1） ------------
+
+/** 緯度経度は必須。名前は「現在地」「亀有駅」など、呼び名を UI から渡せるようにする。 */
+export const hazardPointQuerySchema = z.object({
+  lon: z.coerce.number().min(-180).max(180),
+  lat: z.coerce.number().min(-90).max(90),
+  placeJa: z.string().min(1).max(60).optional(),
+})
+export type HazardPointQuery = z.infer<typeof hazardPointQuerySchema>
+
+/** 浸水ナビ（想定最大規模）の 1 河川。「どの川が・何 m・何分後に・何日続く」がここに揃う。 */
+export const hazardRiverSchema = z.object({
+  nameJa: z.string(),
+  /** 最大浸水深（m）。 */
+  maxDepthM: z.number().nullable(),
+  /** 最速到達時間（分）。 */
+  arriveMin: z.number().nullable(),
+  /** 最大継続時間（分）。 */
+  continueMin: z.number().nullable(),
+})
+export type HazardRiver = z.infer<typeof hazardRiverSchema>
+
+/** 隣接メッシュだけが区域のときの手掛かり（混在セルと GPS 誤差を補う・§8.3）。 */
+export const hazardNeighbourSchema = z.object({
+  layerKey: z.string(),
+  labelJa: z.string(),
+  level: hazardLevelSchema,
+})
+export type HazardNeighbour = z.infer<typeof hazardNeighbourSchema>
+
+/** 総合判定（**必ずサーバが決める**。ここをフロントに書くと AI が同じ判断をできなくなる）。 */
+export const hazardVerdictSchema = z.object({
+  level: hazardLevelSchema,
+  headlineJa: z.string(),
+  /** 立退き／垂直避難／その場に留まる。**情報が足りないときは null**（断定しない）。 */
+  evacuation: evacuationActionSchema.nullable(),
+  reasonsJa: z.array(z.string()),
+})
+export type HazardVerdict = z.infer<typeof hazardVerdictSchema>
+
+/**
+ * 地点のハザード（意味づけ済み）。UI も AI もこの 1 つの形を読む。
+ * **生の画素値・生のコード値は返さない**（architecture.md §6）。
+ */
+export const hazardPointResponseSchema = z.object({
+  point: z.object({ lon: z.number(), lat: z.number(), placeJa: z.string() }),
+  /** その地点を含む 250m メッシュ（コード・1 辺・中心）。 */
+  mesh: z.object({
+    code: z.string(),
+    sizeM: z.number().int(),
+    center: z.object({ lon: z.number(), lat: z.number() }),
+  }),
+  /** 平均標高（m）。配布しているのは平均のみで、無い区画は null。 */
+  terrain: z.object({ elevMeanM: z.number().nullable() }),
+  hazards: z.array(hazardItemSchema),
+  neighbours: z.array(hazardNeighbourSchema),
+  rivers: z.array(hazardRiverSchema),
+  verdict: hazardVerdictSchema,
+  /** 応答全体の確からしさ＝`hazards` のうち最も弱いもの。 */
+  certainty: hazardCertaintySchema,
+  /** 網羅性の注記（「白＝安全」と読ませない・§7.5-2）。 */
+  coverageNotesJa: z.array(z.string()),
+  sources: z.array(sourceRefSchema),
+  /** 取得できなかったものの説明。**部分応答であることを隠さない**（§6.3）。 */
+  notesJa: z.array(z.string()),
+  disclaimerJa: z.string(),
+})
+export type HazardPointResponse = z.infer<typeof hazardPointResponseSchema>
 
 export const healthResponseSchema = z.object({ ok: z.literal(true) })
 export type HealthResponse = z.infer<typeof healthResponseSchema>

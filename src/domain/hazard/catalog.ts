@@ -47,19 +47,22 @@ export type HazardLegendRow = {
 }
 
 /**
- * 配布メッシュのセル 1 つを意味に変えた結果。
- * `labelJa` は**原典の階級**（タイルの 8 階級ではなく 6 階級）で、
- * 「この 250m メッシュのどこかで想定される最大」という読み方をする。
+ * 地点で当たった階級（**メッシュの原典コード由来**でも**タイルの画素由来**でも同じ形）。
+ *
+ * `min` / `max` を実単位（m・時間）で持つのが要点。判定（§6.2）は「コード 3 以上」ではなく
+ * 「3m 以上」で書けるので、**情報源が変わっても同じルールで判断できる**——
+ * メッシュは原典の 6 階級、タイルは詳細版の 8 階級と、階級の刻みが違うため。
  */
-export type HazardMeshRank = {
+export type HazardPointRank = {
   readonly layerKey: string
-  readonly sourceCode: number
   readonly labelJa: string
   readonly meaningJa: string
   readonly actionJa: string | null
   readonly level: HazardLevel
   readonly min: number | null
   readonly max: number | null
+  /** 公式凡例の色（未確定は null）。 */
+  readonly color: string | null
 }
 
 /** 危険度レベルの自己記述（API 応答・凡例バッジで共用）。 */
@@ -215,7 +218,7 @@ export function hazardDrawOrder(layerKeys: readonly string[]): readonly string[]
 export function hazardRankOfSourceCode(
   layerKey: string,
   sourceCode: number,
-): HazardMeshRank | null {
+): HazardPointRank | null {
   const layer = getHazardLayer(layerKey)
   if (layer === undefined || sourceCode <= 0) return null
   const matched = layer.ranks.filter((rank) => rank.sourceCode === sourceCode)
@@ -224,14 +227,61 @@ export function hazardRankOfSourceCode(
   if (first === undefined || last === undefined) return null
   return {
     layerKey: layer.key,
-    sourceCode,
     labelJa: rangeLabel(first.min, last.max, layer.rankUnit) ?? last.labelJa,
     meaningJa: last.meaningJa,
     actionJa: last.actionJa,
     level: heaviestHazardLevel(matched.map((rank) => rank.level)),
     min: first.min,
     max: last.max,
+    color: last.color,
   }
+}
+
+/** 階級 1 つを地点の答えの形へ（タイルの画素・浸水ナビの実測から共用）。 */
+function toPointRank(layerKey: string, rank: HazardRank): HazardPointRank {
+  return {
+    layerKey,
+    labelJa: rank.labelJa,
+    meaningJa: rank.meaningJa,
+    actionJa: rank.actionJa,
+    level: rank.level,
+    min: rank.min,
+    max: rank.max,
+    color: rank.color,
+  }
+}
+
+/**
+ * **公式タイルの画素の色** → 階級（`docs/260824_flood.md` §6.3 の優先順位 ②）。
+ *
+ * 画面に描いてあるものと同じ答えになるので、「地図は白いのにカードは浸水域」が起きない。
+ * 色は**完全一致だけ**を採る——中間色（境界の描画）を近い階級に丸めると、
+ * 実測で 1 画素も無かった状況（§10.2 ③）を勝手に作ってしまう。
+ */
+export function hazardRankOfColor(layerKey: string, hex: string): HazardPointRank | null {
+  const layer = getHazardLayer(layerKey)
+  const matched = layer?.ranks.find((rank) => rank.color === hex)
+  return layer === undefined || matched === undefined ? null : toPointRank(layer.key, matched)
+}
+
+/**
+ * **浸水ナビの実測値（m）** → 階級（同 ①）。
+ * 深さそのものが分かっているので、その値を含む階級を選ぶ（上限は開区間）。
+ */
+export function hazardRankOfDepth(layerKey: string, depthM: number): HazardPointRank | null {
+  const layer = getHazardLayer(layerKey)
+  if (layer === undefined || layer.rankUnit !== 'm' || !(depthM > 0)) return null
+  const matched = layer.ranks.find(
+    (rank) => (rank.min ?? 0) <= depthM && (rank.max === null || depthM < rank.max),
+  )
+  return matched === undefined ? null : toPointRank(layer.key, matched)
+}
+
+/** 点の答えを持ちうるレイヤ（タイルがあり、色つきの階級を持つもの）。 */
+export function hazardLayersWithPointAnswer(): readonly string[] {
+  return hazardLayers
+    .filter((layer) => layer.tile !== null && layer.ranks.some((rank) => rank.color !== null))
+    .map((layer) => layer.key)
 }
 
 /** 束ねた階級の表示ラベル（単位が無いレイヤは null＝元のラベルを使う）。 */

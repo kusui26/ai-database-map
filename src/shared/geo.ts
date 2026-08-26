@@ -37,3 +37,39 @@ export function circlePolygon(
 
   return { type: 'Polygon', coordinates: [ring] }
 }
+
+// --- ウェブメルカトルのタイル座標（XYZ） ---------------------------------
+
+/** 1 タイルの画素数（XYZ タイルの標準）。 */
+export const TILE_PIXELS = 256
+
+/** タイル内の位置（タイル番号 ＋ タイル内の画素）。 */
+export type TilePixel = {
+  readonly x: number
+  readonly y: number
+  readonly px: number
+  readonly py: number
+}
+
+/**
+ * 経緯度 → XYZ タイル番号とタイル内の画素（ウェブメルカトル・EPSG:3857）。
+ *
+ * 公式ハザードタイルの**画素の色**を読むために使う（`docs/260824_flood.md` §6.3 の ②）。
+ * 検証スクリプト（`pipeline/validate_hazard_mesh.py` の `tile_xy`）と同じ式で、
+ * 両者がずれると「検証は通るのに本番だけ隣の画素を読む」が起きる。
+ */
+export function tilePixelOf(lon: number, lat: number, zoom: number): TilePixel {
+  if (!Number.isInteger(zoom) || zoom < 0 || zoom > 24) {
+    throw new Error(`ズームは 0–24 の整数（受領: ${zoom}）`)
+  }
+  const scale = 2 ** zoom * TILE_PIXELS
+  const worldX = ((lon + 180) / 360) * scale
+  const sin = Math.sin((lat * Math.PI) / 180)
+  const worldY = (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * scale
+  return {
+    x: Math.floor(worldX / TILE_PIXELS),
+    y: Math.floor(worldY / TILE_PIXELS),
+    px: Math.floor(worldX) % TILE_PIXELS,
+    py: Math.floor(worldY) % TILE_PIXELS,
+  }
+}

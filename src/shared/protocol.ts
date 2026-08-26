@@ -8,7 +8,12 @@
 
 import { z } from 'zod'
 import { categorySchema, formatSchema } from './catalog'
-import { evacuationActionSchema, hazardLevelSchema } from './hazard'
+import {
+  evacuationActionSchema,
+  hazardCertaintySchema,
+  hazardLevelSchema,
+  hazardSourceSchema,
+} from './hazard'
 
 // --- メッセージ ---------------------------------------------------------
 export const messageSchema = z.object({
@@ -84,6 +89,15 @@ export const hazardItemSchema = z.object({
   level: hazardLevelSchema,
   /** 公式凡例の色（未確定は null＝色見本を出さない）。 */
   color: z.string().nullable(),
+  /** どこから得た値か（浸水ナビ ＞ 公式タイル ＞ メッシュ・260824_flood §6.3）。 */
+  source: hazardSourceSchema,
+  /**
+   * メッシュ由来のときだけ意味を持つ。250m セルのうち区域が占める割合（0–1）。
+   * **0 と 1 だけが厳密**で、間は約 6.7 ポイント刻みの近似（同 §5.9）。
+   */
+  coverage: z.number().nullable(),
+  /** この 1 行の確からしさ。UI と AI はこれを見て言い方を変える。 */
+  certainty: hazardCertaintySchema,
 })
 export type HazardItem = z.infer<typeof hazardItemSchema>
 
@@ -235,6 +249,11 @@ export const panelSchema = z.discriminatedUnion('type', [
     headlineJa: z.string(),
     /** 立退き／垂直避難／その場に留まる。**判定できないときは null**（断定しない）。 */
     evacuation: evacuationActionSchema.nullable(),
+    /**
+     * カード全体の確からしさ＝**items のうち最も弱いもの**（同 §5.9）。
+     * 強い方に丸めると嘘になるので、必ず弱い方へ倒す。
+     */
+    certainty: hazardCertaintySchema,
     items: z.array(hazardItemSchema),
     /** 結論の根拠。UI は箇条書きで出し、AI は同じ文字列で説明する。 */
     reasonsJa: z.array(z.string()),

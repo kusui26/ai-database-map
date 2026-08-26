@@ -227,9 +227,9 @@ describe('hazard カタログ: レイヤの不変条件', () => {
     }
   })
 
-  it('メッシュ化予定は洪水 5 レイヤ＋内水のみ（決定 4）', () => {
-    const planned = hazardLayers.filter((layer) => layer.mesh !== null).map((layer) => layer.key)
-    expect(planned.sort()).toEqual(
+  it('メッシュ化したのは洪水 5 レイヤ＋内水のみ（決定 4）', () => {
+    const meshed = hazardLayers.filter((layer) => layer.mesh !== null).map((layer) => layer.key)
+    expect(meshed.sort()).toEqual(
       [
         'flood_duration',
         'flood_kaoku_hanran',
@@ -239,10 +239,12 @@ describe('hazard カタログ: レイヤの不変条件', () => {
         'naisui',
       ].sort(),
     )
-    // Phase 0 の時点では成果物はまだ無い
-    expect(
-      hazardLayers.every((layer) => layer.mesh === null || layer.mesh.available === false),
-    ).toBe(true)
+    // Phase 1b で配布開始・PR-1 で v2（1 セル 1 バイト）。実体は public/hazard/**。
+    for (const key of meshed) {
+      const mesh = hazardLayers.find((layer) => layer.key === key)?.mesh
+      expect(mesh?.available, key).toBe(true)
+      expect(mesh?.pathTemplate, key).toBe('hazard/{layer}/{primary}.bin.gz')
+    }
   })
 })
 

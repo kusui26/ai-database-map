@@ -4,6 +4,7 @@ import {
   errorEnvelopeSchema,
   growthQuerySchema,
   hazardCatalogQuerySchema,
+  hazardPointQuerySchema,
   hazardCatalogResponseSchema,
   rankingQuerySchema,
 } from '@/shared/api'
@@ -218,5 +219,46 @@ describe('API: ハザード・カタログ', () => {
     expect(response.groups.length).toBeGreaterThan(0)
     expect(response.levels.length).toBe(hazardCatalog.levels.length)
     expect(response.disclaimerJa.length).toBeGreaterThan(0)
+  })
+})
+
+describe('hazardPointQuery: 座標の欠落を 0 度にしない（§7.5）', () => {
+  it('文字列の座標を数値にする', () => {
+    expect(hazardPointQuerySchema.parse({ lon: '139.847', lat: '35.7645' })).toEqual({
+      lon: 139.847,
+      lat: 35.7645,
+    })
+  })
+
+  /**
+   * `z.coerce.number()` は `Number(null)` も `Number('')` も **0** にする。
+   * 素通しすると `?lat=35.7`（lon 欠落）が**経度 0 度**として通り、
+   * **別の場所について「指定区域に入っていません」と自信満々に答える**——
+   * 防災アプリでいちばん避けたい壊れ方なので、ここで弾く。
+   */
+  it('欠落・空文字は 0 にせず弾く', () => {
+    for (const query of [
+      { lon: null, lat: '35.7645' },
+      { lon: '', lat: '35.7645' },
+      { lon: '139.847', lat: null },
+      { lon: '139.847', lat: '' },
+      {},
+    ]) {
+      expect(() => hazardPointQuerySchema.parse(query), JSON.stringify(query)).toThrow()
+    }
+  })
+
+  it('範囲外の座標も弾く', () => {
+    expect(() => hazardPointQuerySchema.parse({ lon: '999', lat: '35' })).toThrow()
+    expect(() => hazardPointQuerySchema.parse({ lon: '139', lat: '95' })).toThrow()
+  })
+
+  it('呼び名は任意（長すぎるものは弾く）', () => {
+    expect(hazardPointQuerySchema.parse({ lon: '139', lat: '35', placeJa: '亀有駅' }).placeJa).toBe(
+      '亀有駅',
+    )
+    expect(() =>
+      hazardPointQuerySchema.parse({ lon: '139', lat: '35', placeJa: 'あ'.repeat(61) }),
+    ).toThrow()
   })
 })

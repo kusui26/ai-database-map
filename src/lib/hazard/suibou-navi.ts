@@ -19,6 +19,19 @@
  * 利用マニュアルに**分間 30 リクエスト以下**が明記されている。1 地点で 3 本叩くので、
  * ①**250m メッシュ単位でキャッシュ**し ②**分間 24 本**（余裕を持たせた上限）で頭打ちにする。
  * 上限に当たったら**黙って落とさず**、`rivers: []` と注記を返して②③の答えで組み立てる。
+ *
+ * ## ⚠ サーバレスでは「裏で取得を続ける」が成立しない（2026-08-27 に訂正）
+ *
+ * 以前は「3.5 秒で待つのをやめて返し、取得は裏で続けてキャッシュに載せる。次の呼び出しが拾う」
+ * という設計だった。**これは常駐サーバでしか成立しない。** サーバレスの関数は
+ * レスポンスを返した時点で凍結されるので継続は完走せず、次の呼び出しも別インスタンスへ行く。
+ * 実測（本番・未訪問の 6 地点）でも、待つのをやめた回は**ただ 3.5 秒払って何も得ずに**終わっていた。
+ * 自己修復して見えたのは背景継続ではなく、**欠けた応答を `s-maxage=30` で短く配って
+ * 再訪で取り直していた**ためである。
+ *
+ * いまは**締切を 1 つだけ**にした（`TIMEOUT_MS`）。待つなら結果が返るまで待ち、
+ * 超えたら諦めて注記を返す。**キャッシュに Promise を入れて同時取得を畳む**仕組みは、
+ * サーバレスでも同一インスタンスの同時リクエストに効くので残してある。
  */
 
 import https from 'node:https'
@@ -32,16 +45,16 @@ const BASE_URL = 'https://suiboumap.gsi.go.jp/shinsuimap/Api/Public'
 /** `CSVScale=0` ＝ 想定最大規模（`flood_l2` と同じ想定）。 */
 const LARGEST_SCALE = 0
 /**
- * 取得そのものの上限。**実測で 3 本並列が 3.5〜4.0 秒**、プロセス最初の 1 回だけ
- * TLS ハンドシェイクぶん 8 秒台まで伸びることがある（2026-08-26）。
- * プランの初期値 5 秒では冷えた 1 回目を落としてしまうので広げた。
+ * 取得そのものの上限（**待つならここまで待つ**）。
+ *
+ * 実測（2026-08-26／27）：1 本あたり **2.3〜2.7 秒**、3 本並列で **2.2〜3.0 秒**。
+ * TLS ハンドシェイクは 60〜100ms しかかからず、**接続の使い回しでは速くならない**——
+ * 遅いのは相手のサーバ側である。冷えた実行環境だと 3.5〜4.0 秒まで伸びる。
+ *
+ * 中央値 2.7 秒に対して 2 倍強の余裕を取って 6 秒。これを超えるなら相手が詰まっているので、
+ * それ以上待たずに②③（公式タイル・メッシュ）の答えで組み立てる。
  */
-const TIMEOUT_MS = 9_000
-/**
- * これを超えたら**待たずに返す**（取得は裏で続き、キャッシュに載る）。
- * 防災 UI は「9 秒沈黙」より「先にメッシュとタイルの答え、河川は次の呼び出しで」が正しい。
- */
-const SOFT_DEADLINE_MS = 3_500
+const TIMEOUT_MS = 6_000
 /** 分間の上限（明記は 30。3 本 × 8 地点ぶんの余裕を残す）。 */
 const RATE_LIMIT_PER_MINUTE = 24
 const RATE_WINDOW_MS = 60_000
@@ -152,19 +165,6 @@ export type SuibouNaviResult = {
 const FALLBACK_NOTE_JA =
   '河川別の浸水深・到達時間は取得できませんでした（浸水深は公式タイルまたは 250m メッシュの区分値です）'
 
-/** 締切までに返らなければ諦める。**取得自体は止めない**——次の呼び出しがキャッシュを拾う。 */
-function withSoftDeadline(
-  pending: Promise<readonly HazardRiver[]>,
-): Promise<readonly HazardRiver[] | null> {
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(null), SOFT_DEADLINE_MS)
-    void pending
-      .then((rivers) => resolve(rivers))
-      .catch(() => resolve(null))
-      .finally(() => clearTimeout(timer))
-  })
-}
-
 /**
  * その地点を含む **250m メッシュ**の河川情報。
  * 同じメッシュ内の問い合わせは 1 回に畳み、レート上限に当たったら空で返す。
@@ -178,13 +178,12 @@ export async function suibouNaviRivers(
   if (cache.get(key) === undefined && !takeSuibouNaviSlots(ENDPOINTS_PER_POINT, now)) {
     return { rivers: [], noteJa: FALLBACK_NOTE_JA }
   }
-  const rivers = await withSoftDeadline(
-    remember(cache, key, () => loadRivers(lon, lat)).catch((error: unknown) => {
-      console.error(`浸水ナビを取得できませんでした（${key}）`, error)
-      throw error
-    }),
-  )
-  return rivers === null ? { rivers: [], noteJa: FALLBACK_NOTE_JA } : { rivers, noteJa: null }
+  try {
+    return { rivers: await remember(cache, key, () => loadRivers(lon, lat)), noteJa: null }
+  } catch (error) {
+    console.error(`浸水ナビを取得できませんでした（${key}）`, error)
+    return { rivers: [], noteJa: FALLBACK_NOTE_JA }
+  }
 }
 
 /** テスト用：キャッシュとレート窓を空にする。 */

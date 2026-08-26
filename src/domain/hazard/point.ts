@@ -30,7 +30,7 @@ import {
   type HazardSource,
 } from '@/shared/hazard'
 import type { HazardItem, SourceRef } from '@/shared/protocol'
-import type { HazardNeighbour, HazardPointResponse, HazardRiver } from '@/shared/api'
+import type { HazardNeighbour, HazardPointResponse, HazardRiver, HazardVerdict } from '@/shared/api'
 import { MESH_SIZE_M, meshCenterOf, meshCodeFromLonLat } from '@/shared/mesh'
 import { HAZARD_GROUP_LABELS_JA, hazardLevelWeight, type HazardGroup } from '@/shared/constants'
 import {
@@ -43,6 +43,7 @@ import {
   certaintyOf,
   meshNoteJa,
   neighbourNoteJa,
+  riverReasonsJa,
   valuePhraseJa,
   weakestCertainty,
 } from './wording'
@@ -221,6 +222,15 @@ function meshNotesOf(
 }
 
 /**
+ * 判定の根拠に、浸水ナビの「何分後に・何日続く」を足す（§6.1）。
+ * 判定そのもの（§6.2 の表）は変えない——**表は閾値の合意記録**なので、河川情報で動かさない。
+ */
+function withRiverReasons(verdict: HazardVerdict, rivers: readonly HazardRiver[]): HazardVerdict {
+  const extra = riverReasonsJa(rivers)
+  return extra.length === 0 ? verdict : { ...verdict, reasonsJa: [...verdict.reasonsJa, ...extra] }
+}
+
+/**
  * 地点のハザードを組み立てる。**この関数だけが「何が危ないか」を決める。**
  *
  * @param layerKeys 参照したレイヤ（点の答えを持ちうるもの・網羅性の注記の対象にもなる）
@@ -249,9 +259,12 @@ export function pointHazard(
     hazards: [...items],
     neighbours: [...neighbours],
     rivers: [...input.rivers],
-    verdict: hazardVerdict(
-      resolved.map((each) => toVerdictItem(each.item, each.rank)),
-      certainty,
+    verdict: withRiverReasons(
+      hazardVerdict(
+        resolved.map((each) => toVerdictItem(each.item, each.rank)),
+        certainty,
+      ),
+      input.rivers,
     ),
     certainty,
     coverageNotesJa: [...coverageNotesOf(layerKeys), ...meshNotesOf(items, neighbours)],

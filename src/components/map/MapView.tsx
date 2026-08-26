@@ -15,8 +15,10 @@ import { ACCENT_COLOR, PANEL_WIDTH_PX } from '@/shared/constants'
 import { circlePolygon } from '@/shared/geo'
 import { type HoverInfo, useMapStore } from '@/stores/mapStore'
 import { useChatStore } from '@/stores/chatStore'
+import { useGeoStore } from '@/stores/geoStore'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { HoverTooltip } from './HoverTooltip'
+import { addCurrentPositionLayers, syncCurrentPosition } from './currentPositionSource'
 import { syncHazardLayers } from './hazardSource'
 import { loadStations } from './stationsSource'
 import { useHazardUrlState } from './useHazardUrlState'
@@ -181,6 +183,9 @@ function addLayers(map: maplibregl.Map): void {
     },
     paint: { 'text-color': '#334155', 'text-halo-color': '#ffffff', 'text-halo-width': 1.5 },
   })
+
+  // 現在地はいちばん上（ハザードの塗りにも駅名にも隠されない）。
+  addCurrentPositionLayers(map)
 }
 
 function addHandlers(
@@ -242,6 +247,7 @@ export function MapView() {
 
   const { grp, setGrp, radiusM } = useMapUrlState()
   const { layerKeys: hazardLayerKeys, opacity: hazardOpacity } = useHazardUrlState()
+  const currentPosition = useGeoStore((state) => state.position)
   const setHovered = useMapStore((state) => state.setHovered)
   const highlightedGrps = useMapStore((state) => state.highlightedGrps)
   const flyToReq = useMapStore((state) => state.flyTo)
@@ -380,6 +386,13 @@ export function MapView() {
     if (!ready || map === null) return
     syncHazardLayers(map, hazardLayerKeys, hazardOpacity)
   }, [ready, hazardLayerKeys, hazardOpacity])
+
+  // 現在地：ピンと精度円。**精度円を必ず出す**（点だけだと「ここにいる」と誤解させる・§7.6）。
+  useEffect(() => {
+    const map = mapRef.current
+    if (!ready || map === null) return
+    syncCurrentPosition(map, currentPosition)
+  }, [ready, currentPosition])
 
   // 半径サークル：選択駅＋半径で再描画
   useEffect(() => {

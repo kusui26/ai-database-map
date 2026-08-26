@@ -192,7 +192,7 @@ export async function POST(request: Request): Promise<Response> {
       const agent = new ToolLoopAgent({
         model: chatModel(),
         instructions: buildSystemPrompt() + mapContext,
-        tools: createTools(collector),
+        tools: createTools(collector, new URL(request.url).origin),
         stopWhen: stepCountIs(MAX_TOOL_STEPS),
         temperature: 0.2,
         // 対話は fail-fast 寄りに。既定 2 だと無料枠 429 の retry-after を待って長く固まる。

@@ -14,11 +14,15 @@ import {
   assemble,
   mapActionsForEffect,
   panelsForGrowth,
+  panelsForHazardPoint,
   panelsForRanking,
   panelsForStationDetail,
   summarizePanels,
   textOrFallback,
 } from '@/ai/assemble'
+import { pointHazard } from '@/domain/hazard/point'
+import { hazardLayersWithPointAnswer } from '@/domain/hazard/catalog'
+import { type HazardPointEffect } from '@/ai/types'
 import {
   createCollector,
   type GrowthEffect,
@@ -294,5 +298,85 @@ describe('createCollector（部分成果の通知フック）', () => {
     const collector = createCollector()
     collector.push(growthEffect)
     expect(collector.drain()).toHaveLength(1)
+  })
+})
+
+describe('assemble: 地点ハザード（Phase 4 前半・§6.5）', () => {
+  /** 亀有駅で洪水（想定最大規模・計画規模）と家屋倒壊に当たった状態。 */
+  function hazardEffect(): HazardPointEffect {
+    const point = pointHazard(
+      {
+        lon: 139.847,
+        lat: 35.7645,
+        placeJa: '亀有駅',
+        mesh: [],
+        tile: [
+          { layerKey: 'flood_l2', hex: '#FFB7B7' },
+          { layerKey: 'flood_l1', hex: '#FFD8C0' },
+          { layerKey: 'flood_kaoku_hanran', hex: '#FF0000' },
+        ],
+        rivers: [{ nameJa: '荒川', maxDepthM: 3.66, arriveMin: 162, continueMin: 5283 }],
+        elevationM: 0.2,
+        online: true,
+        notesJa: [],
+      },
+      hazardLayersWithPointAnswer(),
+    )
+    return { kind: 'hazardPoint', point }
+  }
+
+  it('hazardCard パネルを 1 枚出し、Zod を通る', () => {
+    const panels = panelsForHazardPoint(hazardEffect())
+    expect(panels).toHaveLength(1)
+    expect(panels[0]?.type).toBe('hazardCard')
+    expect(() => panelSchema.parse(panels[0])).not.toThrow()
+  })
+
+  it('地点を指し、当たったレイヤを地図に出す（カードだけでは面が見えない）', () => {
+    const actions = mapActionsForEffect(hazardEffect())
+    const point = actions.find((action) => action.type === 'showPoint')
+    expect(point).toMatchObject({ lon: 139.847, lat: 35.7645, labelJa: '亀有駅' })
+    const layers = actions.find((action) => action.type === 'setHazardLayers')
+    expect(layers?.type === 'setHazardLayers' && layers.layers).toEqual(
+      expect.arrayContaining(['flood_l2', 'flood_kaoku_hanran']),
+    )
+    // 同じグループの base は 1 つだけ（想定最大規模と計画規模を重ねない）。
+    expect(layers?.type === 'setHazardLayers' && layers.layers).not.toContain('flood_l1')
+  })
+
+  it('該当ゼロなら setHazardLayers を送らない（利用者のレイヤを勝手に消さない）', () => {
+    const empty: HazardPointEffect = {
+      kind: 'hazardPoint',
+      point: pointHazard(
+        {
+          lon: 139.2438,
+          lat: 35.6252,
+          placeJa: '高尾山',
+          mesh: [],
+          tile: [],
+          rivers: [],
+          elevationM: 556,
+          online: true,
+          notesJa: [],
+        },
+        hazardLayersWithPointAnswer(),
+      ),
+    }
+    const types = mapActionsForEffect(empty).map((action) => action.type)
+    expect(types).toEqual(['showPoint']) // 空配列は「すべて消す」の意味なので送らない
+  })
+
+  it('MapResponse として組み上がる（LLM は数値もパネルも作らない）', () => {
+    const response = assemble([hazardEffect()], 'この場所は浸水想定区域に入っています。')
+    expect(() => mapResponseSchema.parse(response)).not.toThrow()
+    expect(response.panels.map((panel) => panel.type)).toEqual(['hazardCard'])
+  })
+
+  it('LLM 向けの要約は、サーバが決めた結論と行動をそのまま運ぶ', () => {
+    const summary = summarizePanels(panelsForHazardPoint(hazardEffect()))
+    expect(summary).toContain('亀有駅')
+    expect(summary).toContain('critical') // 家屋倒壊等氾濫想定区域
+    expect(summary).toContain('takeaway') // 立退き避難
+    expect(summary).not.toContain('安全')
   })
 })

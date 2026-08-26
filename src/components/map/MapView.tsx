@@ -20,6 +20,7 @@ import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { HoverTooltip } from './HoverTooltip'
 import { addCurrentPositionLayers, syncCurrentPosition } from './currentPositionSource'
 import { syncHazardLayers } from './hazardSource'
+import { addPointMarkerLayers, syncPointMarker } from './pointMarkerSource'
 import { loadStations } from './stationsSource'
 import { useHazardUrlState } from './useHazardUrlState'
 import { useMapUrlState } from './useMapUrlState'
@@ -184,7 +185,8 @@ function addLayers(map: maplibregl.Map): void {
     paint: { 'text-color': '#334155', 'text-halo-color': '#ffffff', 'text-halo-width': 1.5 },
   })
 
-  // 現在地はいちばん上（ハザードの塗りにも駅名にも隠されない）。
+  // 指し示した地点と現在地はいちばん上（ハザードの塗りにも駅名にも隠されない）。
+  addPointMarkerLayers(map)
   addCurrentPositionLayers(map)
 }
 
@@ -248,6 +250,7 @@ export function MapView() {
   const { grp, setGrp, radiusM } = useMapUrlState()
   const { layerKeys: hazardLayerKeys, opacity: hazardOpacity } = useHazardUrlState()
   const currentPosition = useGeoStore((state) => state.position)
+  const markedPoint = useMapStore((state) => state.markedPoint)
   const setHovered = useMapStore((state) => state.setHovered)
   const highlightedGrps = useMapStore((state) => state.highlightedGrps)
   const flyToReq = useMapStore((state) => state.flyTo)
@@ -386,6 +389,13 @@ export function MapView() {
     if (!ready || map === null) return
     syncHazardLayers(map, hazardLayerKeys, hazardOpacity)
   }, [ready, hazardLayerKeys, hazardOpacity])
+
+  // チャットが指した地点（showPoint）。駅の選択とは別の操作系（§7.1）。
+  useEffect(() => {
+    const map = mapRef.current
+    if (!ready || map === null) return
+    syncPointMarker(map, markedPoint)
+  }, [ready, markedPoint])
 
   // 現在地：ピンと精度円。**精度円を必ず出す**（点だけだと「ここにいる」と誤解させる・§7.6）。
   useEffect(() => {

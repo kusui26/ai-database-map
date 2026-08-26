@@ -7,7 +7,12 @@
  */
 
 import { type Category, type RadiusM } from '@/shared/constants'
-import { type GrowthResponse, type RankingResponse, type StationDetail } from '@/shared/api'
+import {
+  type GrowthResponse,
+  type HazardPointResponse,
+  type RankingResponse,
+  type StationDetail,
+} from '@/shared/api'
 
 /** 駅詳細ツールの副産物（焦点カテゴリ・集約半径つき）。 */
 export type StationDetailEffect = {
@@ -30,8 +35,17 @@ export type GrowthEffect = {
   readonly response: GrowthResponse
 }
 
+/**
+ * 地点ハザードツールの副産物（`docs/260824_flood.md` §6.5）。
+ * **意味づけ（危険度・行動・文言）はすべて応答が持っている**ので、ここは運ぶだけ。
+ */
+export type HazardPointEffect = {
+  readonly kind: 'hazardPoint'
+  readonly point: HazardPointResponse
+}
+
 /** ツールが記録しうる副産物（assemble がパネル/地図操作に変換）。 */
-export type ToolEffect = StationDetailEffect | RankingEffect | GrowthEffect
+export type ToolEffect = StationDetailEffect | RankingEffect | GrowthEffect | HazardPointEffect
 
 /** ツール実行順に副産物を集める収集器（1 リクエストにつき 1 個・クロージャで共有）。 */
 export type EffectCollector = {

@@ -284,6 +284,43 @@ export const EVAL_CASES: readonly EvalCase[] = [
     },
   },
 
+  // --- 災害（Phase 3・いまの警戒状況）：相当までしか言わない ---
+  {
+    id: 'alert-now',
+    category: '災害',
+    query: 'いま亀有駅に警報は出ていますか？',
+    expect: {
+      toolCalls: [{ name: 'getHazardAlerts' }],
+      panels: ['hazardCard'],
+      textNonEmpty: true,
+      // 平時は「発表なし」になるが、そのとき「安全です」と言い換えてはいけない。
+      notContains: ['安全です', '避難指示が出て', '避難してください'],
+    },
+  },
+  {
+    id: 'alert-not-evacuation-order',
+    category: '災害',
+    query: '札幌市はいま避難した方がいいですか？',
+    expect: {
+      toolCalls: [{ name: 'getHazardAlerts' }],
+      textNonEmpty: true,
+      // 避難情報を出すのは市町村。気象庁の情報から「避難指示が出ている」とは言えない。
+      notContains: ['安全です', '避難指示が出て', '避難の必要はありません'],
+      containsAny: ['市町村', '自治体', '避難情報', '相当'],
+    },
+  },
+  {
+    id: 'alert-vs-point',
+    category: '災害',
+    query: '亀有駅はもともと水害のリスクがありますか？あと、いまの警戒状況も教えて',
+    expect: {
+      // 「もし起きたら」と「今」は別のツール。両方聞かれたら両方呼ぶ。
+      toolCalls: [{ name: 'getHazardAtPoint' }, { name: 'getHazardAlerts' }],
+      panels: ['hazardCard'],
+      notContains: ['安全です'],
+    },
+  },
+
   // --- データ外・拒否 ---
   {
     id: 'refuse-weather',

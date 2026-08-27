@@ -9,6 +9,7 @@
 import { type Category, type RadiusM } from '@/shared/constants'
 import {
   type GrowthResponse,
+  type HazardAlertsResponse,
   type HazardPointResponse,
   type RankingResponse,
   type StationDetail,
@@ -44,8 +45,18 @@ export type HazardPointEffect = {
   readonly point: HazardPointResponse
 }
 
+/**
+ * アラートツールの副産物（同 §8.4）。平時の `hazardPoint` とは**別の効果**にしてある——
+ * 「もし起きたら」と「今」を混ぜると、片方しか出ていないときに誤読される（§7.4）。
+ */
+export type HazardAlertsEffect = {
+  readonly kind: 'hazardAlerts'
+  readonly alerts: HazardAlertsResponse
+}
+
 /** ツールが記録しうる副産物（assemble がパネル/地図操作に変換）。 */
-export type ToolEffect = StationDetailEffect | RankingEffect | GrowthEffect | HazardPointEffect
+export type ToolEffect =
+  StationDetailEffect | RankingEffect | GrowthEffect | HazardPointEffect | HazardAlertsEffect
 
 /** ツール実行順に副産物を集める収集器（1 リクエストにつき 1 個・クロージャで共有）。 */
 export type EffectCollector = {

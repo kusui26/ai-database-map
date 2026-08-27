@@ -124,17 +124,25 @@ describe('shared/evacuation: 災害種別の対応表', () => {
     )
   })
 
-  it('洪水は l2 と家屋倒壊 2 種だけを見る（l1・継続時間は l2 の内側なので落とす）', () => {
+  it('洪水は l2・継続時間・家屋倒壊 2 種を見る（落とすのは計画規模だけ）', () => {
     expect(EVACUATION_AREA_LAYERS.flood).toEqual([
       'flood_l2',
+      'flood_duration',
       'flood_kaoku_hanran',
       'flood_kaoku_kagan',
     ])
-    // 落としたものが**同じグループに実在する**ことまで確かめる（意図的な省略だと分かる形）。
-    for (const omitted of ['flood_l1', 'flood_duration']) {
-      expect(getHazardLayer(omitted)?.group).toBe('flood')
-      expect(EVACUATION_AREA_LAYERS.flood).not.toContain(omitted)
-    }
+    // 計画規模は想定最大規模の内側（定義上）なので落とす。**同じグループに実在する**ことも確かめる。
+    expect(getHazardLayer('flood_l1')?.group).toBe('flood')
+    expect(EVACUATION_AREA_LAYERS.flood).not.toContain('flood_l1')
+  })
+
+  /**
+   * ⚠ 実測（2026-08-27・亀有駅の東 3.2km）で、`flood_l2` が 0 のセルで `flood_duration` が
+   * 「ごく一部」になった。別々に digitise されたデータなので、包含は定義されていない。
+   * 落とすと、地点カードが `caution` と言う場所を「区域にかからない」と答えてしまう。
+   */
+  it('浸水継続時間を落とさない（l2 の内側とは限らないと実測で分かった）', () => {
+    expect(EVACUATION_AREA_LAYERS.flood).toContain('flood_duration')
   })
 
   it('ハザード面を持たない災害（地震・火事・火山）は空', () => {

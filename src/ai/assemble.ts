@@ -23,6 +23,7 @@ import {
 import { rankingPanel } from '@/domain/ranking/panel'
 import { scatterPanel } from '@/domain/growth/panel'
 import {
+  escapeDirectionPanel,
   evacuationListPanel,
   hazardAlertCardPanel,
   hazardCardPanel,
@@ -30,6 +31,7 @@ import {
 import { hazardLayersToShow } from '@/domain/hazard/catalog'
 import { isWarningMode, warningModeLayers } from '@/domain/hazard/warning-mode'
 import {
+  type EscapeEffect,
   type EvacuationEffect,
   type GrowthEffect,
   type HazardAlertsEffect,
@@ -103,6 +105,11 @@ export function panelsForEvacuation(effect: EvacuationEffect): Panel[] {
   return [inline(evacuationListPanel(effect.evacuation, 'compact'))]
 }
 
+/** 脱出方向ツール → パネル（escapeDirection・compact/inline）。 */
+export function panelsForEscape(effect: EscapeEffect): Panel[] {
+  return [inline(escapeDirectionPanel(effect.escape, 'compact'))]
+}
+
 /** 副産物 → パネル。 */
 function panelsFor(effect: ToolEffect): Panel[] {
   switch (effect.kind) {
@@ -118,6 +125,8 @@ function panelsFor(effect: ToolEffect): Panel[] {
       return panelsForHazardAlerts(effect)
     case 'evacuation':
       return panelsForEvacuation(effect)
+    case 'escape':
+      return panelsForEscape(effect)
   }
 }
 
@@ -166,6 +175,28 @@ export function mapActionsForEffect(effect: ToolEffect): MapAction[] {
         { type: 'showPoint', lon: point.lon, lat: point.lat, labelJa: point.placeJa },
         // 空配列は「すべて消す」の意味なので、出すものが無いときは送らない（§6.4）。
         ...(layers.length > 0 ? [{ type: 'setHazardLayers' as const, layers: [...layers] }] : []),
+      ]
+    }
+    case 'escape': {
+      // 起点と、区域の外に出る目標のセルを置く。**線は引かない**——
+      // 経路ではないので、道順に見える表現をしない（§8.6）。
+      const { point, direction, forDisasterJa } = effect.escape
+      return [
+        { type: 'showPoint', lon: point.lon, lat: point.lat, labelJa: point.placeJa },
+        ...(direction === null
+          ? []
+          : [
+              {
+                type: 'highlightPoints' as const,
+                points: [
+                  {
+                    lon: direction.lon,
+                    lat: direction.lat,
+                    labelJa: `${forDisasterJa}の外（${direction.bearingJa}へ${direction.distanceJa}）`,
+                  },
+                ],
+              },
+            ]),
       ]
     }
     case 'evacuation': {
@@ -309,6 +340,15 @@ function summarizePanel(panel: Panel): string {
         )
         .join('、')
       return `${panel.placeJa}の${panel.siteKindJa}（${panel.forDisasterJa}）: ${panel.headlineJa} ${items}`
+    }
+    case 'escapeDirection': {
+      // 方向はサーバが決めている。**「移動してください」に言い換えさせない**ため、
+      // 見出しと限界をそのまま渡す（§8.6）。
+      const where =
+        panel.direction === null
+          ? '方向は出せませんでした'
+          : `${panel.direction.bearingJa}へ${panel.direction.distanceJa}`
+      return `${panel.placeJa}（${panel.forDisasterJa}の外へ）: ${where}。${panel.headlineJa}`
     }
     case 'markdown':
       return panel.body

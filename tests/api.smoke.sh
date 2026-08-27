@@ -209,6 +209,37 @@ get "$BASE/api/hazard/evacuation" "lon=136.99" "lat=36.85" "placeJa=氷見駅" "
 get "$BASE/api/hazard/evacuation" "lon=139.847" "lat=35.7645"
 [ "$HTTP" = 400 ] && ok "hazard/evacuation：災害種別なし → 400" || ng "evacuation missing for should 400"
 
+# 13f) hazard/escape（脱出方向・§8.6）。亀有は区域の中なので、必ず向きが返る。
+get "$BASE/api/hazard/escape" "lon=139.84756" "lat=35.76656" "placeJa=亀有駅" "for=flood"
+ESCAPE_LON=$(echo "$BODY" | jq -r '.direction.lon')
+ESCAPE_LAT=$(echo "$BODY" | jq -r '.direction.lat')
+{ [ "$HTTP" = 200 ] && [ "$(echo "$BODY" | jq -r '.inside')" = true ] &&
+  [ "$(echo "$BODY" | jq -r '.direction.bearingJa')" != null ] &&
+  [ "$(echo "$BODY" | jq -r '[.limitationsJa[] | select(contains("直線距離"))] | length')" -gt 0 ] &&
+  [ "$(echo "$BODY" | jq -r '.headlineJa | test("移動してください|避難してください")')" = false ]; } &&
+  ok "hazard/escape（$(echo "$BODY" | jq -r '.direction.bearingJa')へ$(echo "$BODY" | jq -r '.direction.distanceJa')・経路とは言わない）" ||
+  ng "hazard escape direction"
+
+# 13g) ⚠ **出口が本当に区域の外か**を、地点 API に投げて確かめる。
+#      メッシュは公式タイルより薄いことがある（§11 リスク 7c）ので、ここが食い違うと
+#      「地図は塗られているのに、そちらへ向かえ」と言うことになる。
+get "$BASE/api/hazard/point" "lon=$ESCAPE_LON" "lat=$ESCAPE_LAT" "placeJa=出口"
+{ [ "$HTTP" = 200 ] &&
+  [ "$(echo "$BODY" | jq '[.hazards[] | select(.layerKey | startswith("flood"))] | length')" -eq 0 ]; } &&
+  ok "hazard/escape：出口は地点 API でも洪水の該当ゼロ（地図と食い違わない）" ||
+  ng "hazard escape target disagrees with point"
+
+# 13h) メッシュを持たない災害は「出せません」と言う（**「区域の外」と言い換えない**）
+get "$BASE/api/hazard/escape" "lon=139.84756" "lat=35.76656" "for=landslide"
+{ [ "$HTTP" = 200 ] && [ "$(echo "$BODY" | jq -r '.direction')" = null ] &&
+  [ "$(echo "$BODY" | jq -r '.inside')" = null ] &&
+  [ "$(echo "$BODY" | jq -r '.headlineJa | contains("出せませんでした")')" = true ]; } &&
+  ok "hazard/escape：メッシュが無い災害は出せないと言う" || ng "hazard escape unavailable"
+
+# 13i) 異常系：災害種別が無い → 400
+get "$BASE/api/hazard/escape" "lon=139.84756" "lat=35.76656"
+[ "$HTTP" = 400 ] && ok "hazard/escape：災害種別なし → 400" || ng "escape missing for should 400"
+
 # 14) hazard/point 異常系：座標が無い → 400
 get "$BASE/api/hazard/point" "lat=35.7645"
 [ "$HTTP" = 400 ] && ok "hazard/point：座標なし → 400" || ng "hazard point missing lon should 400"

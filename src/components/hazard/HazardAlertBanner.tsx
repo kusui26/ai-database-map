@@ -24,6 +24,7 @@ import {
   HAZARD_LEVEL_ICONS,
 } from '@/shared/constants'
 import {
+  escapeDirectionPanel,
   evacuationListPanel,
   hazardAlertCardPanel,
   reportedAtJa,
@@ -35,6 +36,7 @@ import { useMapStore } from '@/stores/mapStore'
 import type { HazardAlertsResponse } from '@/shared/api'
 import { useAlertTarget, useHazardAlerts } from './useHazardAlerts'
 import { useEvacuationSites, type EvacuationTarget } from './useEvacuationSites'
+import { useEscapeDirection } from './useEscapeDirection'
 
 /** 開いている引き出し（避難先は押されるまで取りに行かない）。 */
 type Drawer = 'none' | 'detail' | 'evacuation'
@@ -65,6 +67,8 @@ export function HazardAlertBanner() {
         }
       : null
   const { evacuation, isLoading: evacuationLoading } = useEvacuationSites(evacuationTarget)
+  // 「どちらへ動けば区域を出られるか」も同じ場面で要る（§8.6）。押す回数は増やさない。
+  const { escape } = useEscapeDirection(evacuationTarget)
 
   // 一覧と地図の印を揃える（並びも番号も同じ）。閉じたら消す。
   const sites = evacuation?.sites
@@ -142,14 +146,24 @@ export function HazardAlertBanner() {
       {drawer !== 'none' && (
         <div className="max-h-[50vh] overflow-y-auto border-t border-slate-200 bg-slate-50 p-2">
           {drawer === 'detail' && <PanelRenderer panel={hazardAlertCardPanel(alerts, 'compact')} />}
-          {drawer === 'evacuation' &&
-            (evacuation === undefined ? (
-              <p className="p-2 text-xs text-slate-500">
-                {evacuationLoading ? '避難場所を探しています…' : '避難場所を取得できませんでした。'}
-              </p>
-            ) : (
-              <PanelRenderer panel={evacuationListPanel(evacuation, 'compact')} />
-            ))}
+          {drawer === 'evacuation' && (
+            <div className="space-y-2">
+              {/* 「どちらへ動けば区域を出られるか」を先に。**行き先が数 km 先のこともある**ので、
+                  向きだけでも先に分かる方が役に立つ（§8.6）。区域の外にいるときは出さない。 */}
+              {escape?.inside === true && (
+                <PanelRenderer panel={escapeDirectionPanel(escape, 'compact')} />
+              )}
+              {evacuation === undefined ? (
+                <p className="p-2 text-xs text-slate-500">
+                  {evacuationLoading
+                    ? '避難場所を探しています…'
+                    : '避難場所を取得できませんでした。'}
+                </p>
+              ) : (
+                <PanelRenderer panel={evacuationListPanel(evacuation, 'compact')} />
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

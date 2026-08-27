@@ -8,6 +8,7 @@
 
 import { type Panel } from '@/shared/protocol'
 import { cn } from '@/lib/utils'
+import { EscapeDirection } from './EscapeDirection'
 import { EvacuationList } from './EvacuationList'
 import { HazardCard } from './HazardCard'
 import { StationCard } from './StationCard'
@@ -44,6 +45,8 @@ export function PanelRenderer({
       return <HazardCard panel={panel} />
     case 'evacuationList':
       return <EvacuationList panel={panel} />
+    case 'escapeDirection':
+      return <EscapeDirection panel={panel} />
     default: {
       const exhaustive: never = panel
       return exhaustive

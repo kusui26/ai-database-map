@@ -9,11 +9,13 @@
 import type {
   HazardAlertsResponse,
   HazardAlertWarning,
+  HazardEscapeResponse,
   HazardEvacuationResponse,
   HazardFloodForecast,
   HazardPointResponse,
 } from '@/shared/api'
 import type {
+  EscapeDirectionPanel,
   EvacuationListPanel,
   HazardCardPanel,
   HazardItem,
@@ -181,6 +183,30 @@ export function evacuationListPanel(
     notesJa: evacuation.notesJa,
     sources: evacuation.sources,
     disclaimerJa: evacuation.disclaimerJa,
+    size,
+  }
+}
+
+/**
+ * 脱出方向 → `escapeDirection`。ここでも意味づけは足さない。
+ *
+ * **限界（`limitationsJa`）を畳まずに全部載せる**のがこのパネルの肝である。
+ * 方向と距離だけが独り歩きすると、**経路案内**だと読まれる（§0.4・§8.6）。
+ */
+export function escapeDirectionPanel(
+  escape: HazardEscapeResponse,
+  size?: PanelSize,
+): EscapeDirectionPanel {
+  return {
+    type: 'escapeDirection',
+    placeJa: escape.point.placeJa,
+    forDisasterJa: escape.forDisasterJa,
+    headlineJa: escape.headlineJa,
+    direction: escape.direction,
+    limitationsJa: escape.limitationsJa,
+    notesJa: escape.notesJa,
+    sources: escape.sources,
+    disclaimerJa: escape.disclaimerJa,
     size,
   }
 }

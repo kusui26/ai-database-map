@@ -459,5 +459,56 @@ export const hazardEvacuationResponseSchema = z.object({
 })
 export type HazardEvacuationResponse = z.infer<typeof hazardEvacuationResponseSchema>
 
+// --- ハザード：脱出方向（GET /api/hazard/escape・260824_flood §8.6） ------
+
+/** 災害種別は**必須**（避難先と同じ理由・§11 リスク 10）。 */
+export const hazardEscapeQuerySchema = z.object({
+  lon: queryNumber(-180, 180),
+  lat: queryNumber(-90, 90),
+  for: evacuationDisasterKeySchema,
+  placeJa: z.string().min(1).max(60).optional(),
+})
+export type HazardEscapeQuery = z.infer<typeof hazardEscapeQuerySchema>
+
+/** いちばん近い「区域の外」の向き。**経路ではなく方向と直線距離だけ**（§0.4）。 */
+export const hazardEscapeDirectionSchema = z.object({
+  /** 八方位（「北東」）。地図が見られない状況でも動ける情報にする。 */
+  bearingJa: z.string(),
+  distanceM: z.number().int(),
+  /** 「約620m」。UI と AI で言い方を割らないよう、サーバが作る。 */
+  distanceJa: z.string(),
+  /** 目標セルの中心（地図に印を出せる）。 */
+  lon: z.number(),
+  lat: z.number(),
+})
+export type HazardEscapeDirection = z.infer<typeof hazardEscapeDirectionSchema>
+
+/**
+ * 脱出方向（`/api/hazard/escape` と AI ツール `findEscapeDirection` が共有）。
+ *
+ * ⚠ **これは経路案内ではない。** `limitationsJa` を落とすと、方向と距離だけが独り歩きする。
+ */
+export const hazardEscapeResponseSchema = z.object({
+  point: z.object({ lon: z.number(), lat: z.number(), placeJa: z.string() }),
+  forDisaster: evacuationDisasterKeySchema,
+  /** 「洪水の想定区域」。見出しにも使う。 */
+  forDisasterJa: z.string(),
+  /**
+   * 起点がその区域の中にあったか（外なら方向は要らない）。
+   * **`null` は「判定できない」**——メッシュを持たない災害・読めなかった区画。
+   */
+  inside: z.boolean().nullable(),
+  /** 見つからなかったときは null（**「無い」という意味ではない**）。 */
+  direction: hazardEscapeDirectionSchema.nullable(),
+  searchRadiusM: z.number().int(),
+  headlineJa: z.string(),
+  /** **必ず全部表示する**（直線距離である・移動が安全とは限らない・250m の目安…）。 */
+  limitationsJa: z.array(z.string()),
+  notesJa: z.array(z.string()),
+  sources: z.array(sourceRefSchema),
+  disclaimerJa: z.string(),
+})
+export type HazardEscapeResponse = z.infer<typeof hazardEscapeResponseSchema>
+
 export const healthResponseSchema = z.object({ ok: z.literal(true) })
 export type HealthResponse = z.infer<typeof healthResponseSchema>

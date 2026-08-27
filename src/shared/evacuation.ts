@@ -127,15 +127,20 @@ export function disastersOfFeature(feature: EvacuationFeature): readonly Evacuat
  *
  * ## なぜ「そのグループの全レイヤ」ではないのか
  *
- * 洪水グループは 5 枚あるが、**計画規模（`flood_l1`）と浸水継続時間（`flood_duration`）は
- * 想定最大規模（`flood_l2`）の内側**なので、区域の内外を問うだけなら読む意味が無い。
+ * 洪水グループは 5 枚あるが、**計画規模（`flood_l1`）は想定最大規模（`flood_l2`）の内側**
+ * （定義上、計画規模の方が小さい）なので、区域の内外を問うだけなら読む意味が無い。
  * 一方**家屋倒壊等氾濫想定区域（河岸侵食）は浸水域の外に広がりうる**ので落とせない。
- * この包含関係はカタログには書いていない知識なので、ここに表として持ち、テストで固定する。
  *
+ * ⚠ **浸水継続時間（`flood_duration`）は落とせない。** 当初は「l2 の内側」と考えて外していたが、
+ * 実測（2026-08-27・亀有駅の東 3.2km）で、**`flood_l2` が 0 のセルで `flood_duration` が
+ * 「ごく一部」**になった。別々に digitise されたデータセットなので、包含は定義されていない。
+ * 外したままだと、地点カードが `caution` と言う場所を「区域にかからない」と答えてしまう。
+ *
+ * この包含関係はカタログには書いていない知識なので、ここに表として持ち、テストで固定する。
  * 地震・大規模な火事・火山現象は、対応するハザード面を当アプリが持っていないので空。
  */
 export const EVACUATION_AREA_LAYERS: Readonly<Record<EvacuationDisasterKey, readonly string[]>> = {
-  flood: ['flood_l2', 'flood_kaoku_hanran', 'flood_kaoku_kagan'],
+  flood: ['flood_l2', 'flood_duration', 'flood_kaoku_hanran', 'flood_kaoku_kagan'],
   inland_flood: ['naisui'],
   landslide: ['dosekiryu', 'kyukeisha', 'jisuberi'],
   storm_surge: ['hightide_l2'],

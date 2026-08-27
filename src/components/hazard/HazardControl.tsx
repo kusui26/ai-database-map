@@ -201,7 +201,7 @@ export function HazardControl() {
 
           {sections.length > 0 && (
             <div className="mt-3 border-t border-slate-200 pt-2">
-              <HazardLegend sections={sections} />
+              <HazardLegend sections={sections} onAddLayer={toggleLayer} />
             </div>
           )}
 

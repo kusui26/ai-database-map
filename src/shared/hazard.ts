@@ -156,8 +156,13 @@ export const hazardLayerSchema = z.object({
   attribution: z.string(),
   /** 網羅性の注記。**「白＝安全」と読ませない**ための本体（同 §7.5-2）。 */
   coverageNoteJa: z.string().nullable(),
-  /** 網羅性が低いレイヤで空白を埋める参考レイヤ（内水 → 地形・同 §3.7）。 */
-  fallbackLayersJa: z.array(z.string()),
+  /**
+   * 網羅性が低いレイヤで、白い場所を補える**参考レイヤの key**（内水 → 地形・同 §3.7）。
+   *
+   * ⚠ **表示名ではなくキーを持つ。** 日本語ラベルで持っていた頃は UI から押せず、
+   * カタログにあるのに**誰にも読まれていなかった**。名前は `labelJa` から引ける。
+   */
+  fallbackLayerKeys: z.array(z.string()),
 })
 export type HazardLayer = z.infer<typeof hazardLayerSchema>
 

@@ -3,12 +3,17 @@
 /**
  * サジェストチップ（plan_fable §2.4）。初回は代表的な 3 問、会話開始後は文脈追従の候補。
  * 駅選択中は「その駅」を掘り下げる候補を出す（駅名は不要な汎用表現でクリック→送信）。
+ *
+ * ⚠ **災害の問いを必ず 1 つ入れる。** AI は災害に答えられる（`getHazardAtPoint` ほか）のに、
+ * サジェストが人口・地価・バスだけだった頃は**そもそも聞かれなかった**。
+ * 「何が聞けるか」を示すのがこのチップの役目なので、答えられることは出す。
  */
 
 import { useMapUrlState } from '@/components/map/useMapUrlState'
 
 const INITIAL: readonly string[] = [
   '東京駅の人口推移を見せて',
+  '亀有駅は浸水しますか？',
   '神奈川県の乗降客の増加が大きい駅は？',
   '品川駅について教えて',
 ]
@@ -17,6 +22,8 @@ const INITIAL: readonly string[] = [
 const AFTER_STATION: readonly string[] = [
   'この駅の人口推移は？',
   'この駅の地価の推移は？',
+  'この駅の水害リスクは？',
+  'この駅の近くの避難場所は？',
   'この駅のバス停の数は？',
   'この駅の事業所数は？',
   'この駅の従業者数は？',
@@ -26,6 +33,7 @@ const AFTER_STATION: readonly string[] = [
 const AFTER_GENERAL: readonly string[] = [
   '全国で人口が増えた駅ランキング',
   '千葉県で地価が上がった駅は？',
+  'いま警報は出ていますか？',
 ]
 
 export function SuggestionChips({

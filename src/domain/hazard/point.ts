@@ -54,6 +54,7 @@ import {
   valuePhraseJa,
   weakestCertainty,
 } from './wording'
+import { SUIBOU_NAVI_SOURCE } from './sources'
 import { hazardVerdict, type VerdictItem } from './verdict'
 
 /** 自前メッシュから読んだ 1 レイヤぶん。 */
@@ -242,15 +243,7 @@ function sourcesOf(layerKeys: readonly string[], usedNavi: boolean): readonly So
     seen.add(layer.source)
     return [{ labelJa: layer.attribution, url: layer.legendUrl, license: layer.license }]
   })
-  if (!usedNavi) return refs
-  return [
-    ...refs,
-    {
-      labelJa: '国土地理院 地点別浸水シミュレーション検索システム（浸水ナビ）',
-      url: 'https://suiboumap.gsi.go.jp/',
-      license: '国土交通省 利用規約',
-    },
-  ]
+  return usedNavi ? [...refs, SUIBOU_NAVI_SOURCE] : refs
 }
 
 /** 判定に渡す形へ（レイヤ名と実単位の下限だけあればよい）。 */

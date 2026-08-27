@@ -2,11 +2,15 @@
 
 /**
  * About / データ出典ダイアログ（P7a）。アプリ説明＋出典表（catalog の source/license から
- * `dataSources()` で自動生成）＋地図クレジット。⚠ は商用制限のある出典。
+ * `dataSources()` で自動生成）＋**災害データの出典**＋地図クレジット。⚠ は商用制限のある出典。
+ *
+ * 災害データ（`hazardDataSources()`）も**手で書かない**——レイヤや API を足したら自動で増える。
+ * 出典の表示は利用条件なので、増えないと「使っているのに出典が無い」状態が生まれる。
  */
 
 import * as Dialog from '@radix-ui/react-dialog'
 import { dataSources } from '@/domain/sources'
+import { hazardDataSources } from '@/domain/hazard/sources'
 import { cn } from '@/lib/utils'
 
 export function AboutDialog({
@@ -17,6 +21,7 @@ export function AboutDialog({
   onOpenChange: (open: boolean) => void
 }) {
   const sources = dataSources()
+  const hazardSources = hazardDataSources()
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
@@ -52,6 +57,9 @@ export function AboutDialog({
                 は、公的オープンデータ（乗降客数・人口・地価・バス・事業所・従業者）を
                 <span className="font-medium">駅からの半径</span>
                 で集約し、地図とAIで誰でも扱えるようにする実験的な Web アプリです。
+                <span className="font-medium">洪水・内水・高潮・津波・土砂災害</span>
+                のハザードマップ、いまの警報、近くの
+                <span className="font-medium">指定緊急避難場所</span>も扱えます。
               </p>
               <p className="text-slate-500">
                 数値は各公的統計の二次加工であり、原典の定義・年次・集計単位に依存します。母数が小さい・一部の運営会社しかデータが無いなど、注意すべき値には
@@ -104,6 +112,39 @@ export function AboutDialog({
                     >
                       {s.license}
                     </p>
+                  </li>
+                ))}
+              </ul>
+            </section>
+
+            <section className="space-y-2">
+              <h3 className="font-semibold text-slate-900">災害データの出典</h3>
+              <p className="text-xs text-slate-500">
+                ハザード・カタログと、参照している API から自動生成しています。
+                <span className="font-medium">
+                  この地図は災害リスクの目安を示すもので、実際の避難は市町村が発表する避難情報に従ってください。
+                </span>
+              </p>
+              <ul className="space-y-2">
+                {hazardSources.map((s) => (
+                  <li
+                    key={`${s.source}-${s.license}`}
+                    className="rounded-xl border border-slate-200 bg-slate-50/60 p-3"
+                  >
+                    <span className="font-medium text-slate-900">{s.source}</span>
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {s.usedForJa.map((label) => (
+                        <span
+                          key={label}
+                          className="rounded-full bg-white px-2 py-0.5 text-xs text-slate-600 ring-1 ring-slate-200"
+                        >
+                          {label}
+                        </span>
+                      ))}
+                    </div>
+                    {s.license !== null && (
+                      <p className="mt-1.5 text-xs text-slate-500">{s.license}</p>
+                    )}
                   </li>
                 ))}
               </ul>

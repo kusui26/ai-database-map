@@ -35,6 +35,7 @@ import { getHazardLayer } from '@/shared/hazard'
 import { hazardRankOfColor } from '@/domain/hazard/catalog'
 import type { HazardEvacuationResponse } from '@/shared/api'
 import type { SourceRef } from '@/shared/protocol'
+import { EVACUATION_SITE_SOURCE } from '@/domain/hazard/sources'
 import {
   evacuationHeadlineJa,
   evacuationNotesJa,
@@ -98,13 +99,8 @@ const CHECKED_CANDIDATES = 300
 /** 呼び名の既定。 */
 export const DEFAULT_PLACE_JA = 'この地点'
 
-const SOURCES: readonly SourceRef[] = [
-  {
-    labelJa: `出典：国土地理院 ${EVACUATION_SITE_KIND_JA}データ`,
-    url: 'https://hinanmap.gsi.go.jp/hinanjocp/hinanbasho/koukaidate.html',
-    license: '国土地理院コンテンツ利用規約',
-  },
-]
+/** 出典は `domain/hazard/sources` が唯一の真実（About と同じものを読む）。 */
+const SOURCES: readonly SourceRef[] = [EVACUATION_SITE_SOURCE]
 
 export type HazardEvacuationRequest = {
   readonly lon: number

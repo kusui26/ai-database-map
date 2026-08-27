@@ -14,6 +14,7 @@ import { PREFECTURES, RADII_M, type RadiusM, ROUTE_TYPES, routeTypeLabel } from 
 import { type MapResponse } from '@/shared/protocol'
 import {
   type HazardAlertsResponse,
+  type HazardEscapeResponse,
   type HazardEvacuationResponse,
   type HazardPointResponse,
 } from '@/shared/api'
@@ -31,6 +32,7 @@ import { buildGrowth } from '@/domain/growth/presenter'
 import { hazardPointAt } from '@/lib/hazard/point-source'
 import { hazardAlertsAt } from '@/lib/hazard/alert-source'
 import { evacuationSitesAt } from '@/lib/hazard/evacuation-source'
+import { escapeDirectionAt } from '@/lib/hazard/escape-source'
 import { reportedAtJa } from '@/domain/hazard/panels'
 import { type EffectCollector } from './types'
 import { panelsForStationDetail, summarizePanels } from './assemble'
@@ -220,6 +222,31 @@ function evacuationSummaryForLlm(evacuation: HazardEvacuationResponse) {
     notesJa: evacuation.notesJa,
     limitationsJa: evacuation.limitationsJa,
     disclaimerJa: evacuation.disclaimerJa,
+  }
+}
+
+/**
+ * 脱出方向 → LLM 向けの要約（同 §8.6）。
+ *
+ * **`limitationsJa` を削らない**——直線距離であること・移動が安全とは限らないことが落ちると、
+ * 方向と距離だけが独り歩きして**経路案内**になる。方向も距離もサーバが作った文字列を渡す。
+ */
+function escapeSummaryForLlm(escape: HazardEscapeResponse) {
+  return {
+    placeJa: escape.point.placeJa,
+    forDisasterJa: escape.forDisasterJa,
+    inside: escape.inside,
+    headlineJa: escape.headlineJa,
+    direction:
+      escape.direction === null
+        ? null
+        : {
+            bearingJa: escape.direction.bearingJa,
+            distanceJa: escape.direction.distanceJa,
+          },
+    notesJa: escape.notesJa,
+    limitationsJa: escape.limitationsJa,
+    disclaimerJa: escape.disclaimerJa,
   }
 }
 
@@ -622,6 +649,42 @@ export function createTools(collector: EffectCollector, origin: string) {
         } catch (error) {
           return {
             error: error instanceof Error ? error.message : '避難場所の取得に失敗しました',
+          }
+        }
+      },
+    }),
+
+    /**
+     * **どちらへ動けば区域の外か**（`/api/hazard/escape` と同じ関数を通る）。
+     *
+     * 避難先の一覧（`findEvacuationSites`）とは**別の問い**である。あちらは点、こちらは向き。
+     */
+    findEscapeDirection: tool({
+      description:
+        'その地点から、いちばん近い「浸水想定区域の外」がどちらへ何 m かを調べる。' +
+        '駅なら grp、任意地点なら lon/lat を渡し、for に災害種別を指定する（洪水・内水のみ）。' +
+        '「どっちに逃げれば浸水域から出られる？」「区域の外はどこ？」に使う。' +
+        '⚠ **経路案内ではない**。返るのは方向と直線距離だけで、道路の冠水は見ていない。' +
+        '返り値の limitationsJa を必ず伝え、「そちらへ移動してください」とは書かないこと。',
+      inputSchema: z.object({
+        grp: z.string().optional().describe('searchStations が返した駅 grp'),
+        lon: z.number().optional().describe('経度（grp を使わないとき）'),
+        lat: z.number().optional().describe('緯度（grp を使わないとき）'),
+        placeJa: z.string().optional().describe('地点の呼び名。例: 亀有駅、現在地'),
+        for: evacuationDisasterKeySchema.describe(
+          '対応する災害種別。**方向を出せるのは flood（洪水）と inland_flood（内水氾濫）だけ**',
+        ),
+      }),
+      execute: async ({ grp, lon, lat, placeJa, for: disaster }) => {
+        try {
+          const target = await resolveHazardTarget({ grp, lon, lat, placeJa })
+          if ('error' in target) return target
+          const escape = await escapeDirectionAt({ ...target, disaster }, origin)
+          collector.push({ kind: 'escape', escape })
+          return escapeSummaryForLlm(escape)
+        } catch (error) {
+          return {
+            error: error instanceof Error ? error.message : '脱出方向の取得に失敗しました',
           }
         }
       },

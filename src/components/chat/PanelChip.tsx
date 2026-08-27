@@ -19,6 +19,8 @@ export function chipLabel(panels: readonly Panel[]): string {
     if (panel.type === 'hazardCard') return `${panel.placeJa} の災害リスク`
     if (panel.type === 'evacuationList')
       return `${panel.placeJa} の${panel.siteKindJa}（${panel.forDisasterJa}）`
+    if (panel.type === 'escapeDirection')
+      return `${panel.placeJa} から出る向き（${panel.forDisasterJa}）`
     if (panel.type !== 'markdown') return panel.title
   }
   return '結果'

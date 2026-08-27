@@ -294,6 +294,32 @@ export function meshCenterOf(code: MeshCode): LonLat {
   return { lon: (bounds.west + bounds.east) / 2, lat: (bounds.south + bounds.north) / 2 }
 }
 
+/**
+ * **全国を通した 250m 格子の座標**（1 次メッシュをまたいで連続する index）。
+ *
+ * 1 次メッシュの中の `row`/`col`（0–319）は 80km ごとに 0 に戻るので、
+ * 「隣のセル」を辿る計算では**またぎの処理が要る**。こちらは
+ * `latIndex = floor(緯度 × 480)` / `lonIndex = floor((経度 − 100) × 320)` で、
+ * **足し引きするだけで隣のセルになる**（`docs/260824_flood.md` §8.6 の脱出方向で使う）。
+ */
+export type MeshIndices = {
+  readonly latIndex: number
+  readonly lonIndex: number
+}
+
+/** 緯度経度 → 全国通しの格子座標。 */
+export function meshIndicesFromLonLat(lon: number, lat: number): MeshIndices {
+  return indicesOf(lon, lat)
+}
+
+/** 全国通しの格子座標 → そのセルの中心（代表点）。 */
+export function meshCenterOfIndices(indices: MeshIndices): LonLat {
+  return {
+    lon: (indices.lonIndex + 0.5) / CELLS_PER_DEG_LON + PRIMARY_LON_ORIGIN_DEG,
+    lat: (indices.latIndex + 0.5) / CELLS_PER_DEG_LAT,
+  }
+}
+
 /** メッシュコード → それを含む 1 次メッシュコード（4 桁）。 */
 export function primaryMeshOf(code: MeshCode): MeshCode {
   levelOf(code)

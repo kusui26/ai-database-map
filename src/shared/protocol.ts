@@ -332,6 +332,35 @@ export const panelSchema = z.discriminatedUnion('type', [
     size: sizeSchema,
   }),
   z.object({
+    /**
+     * 脱出方向（`docs/260824_flood.md` §8.6）。**避難先の一覧とは別の型**にしてある——
+     * あちらは「どこへ行くか（点）」、こちらは「どちらへ動けば区域を出られるか（向き）」で、
+     * 混ぜると**経路案内だと読まれる**。
+     */
+    type: z.literal('escapeDirection'),
+    placeJa: z.string(),
+    /** 「洪水の想定区域」。何の外を指しているかを必ず出す。 */
+    forDisasterJa: z.string(),
+    headlineJa: z.string(),
+    /** 見つからなかった・判定できなかったときは null。 */
+    direction: z
+      .object({
+        bearingJa: z.string(),
+        distanceM: z.number().int(),
+        distanceJa: z.string(),
+        lon: z.number(),
+        lat: z.number(),
+      })
+      .nullable(),
+    /** **必ず全部出す**（直線距離・移動が安全とは限らない・250m の目安…）。 */
+    limitationsJa: z.array(z.string()),
+    notesJa: z.array(z.string()),
+    sources: z.array(sourceRefSchema),
+    disclaimerJa: z.string(),
+    placement: placementSchema,
+    size: sizeSchema,
+  }),
+  z.object({
     type: z.literal('markdown'),
     body: z.string(),
     placement: placementSchema,
@@ -354,6 +383,7 @@ export type ScatterPanel = PanelOf<'scatter'>
 export type MarkdownPanel = PanelOf<'markdown'>
 export type HazardCardPanel = PanelOf<'hazardCard'>
 export type EvacuationListPanel = PanelOf<'evacuationList'>
+export type EscapeDirectionPanel = PanelOf<'escapeDirection'>
 
 /** パネル表示バリアント（チャット内=compact／ドロワー・モーダル=full）。 */
 export type PanelSize = NonNullable<z.infer<typeof sizeSchema>>

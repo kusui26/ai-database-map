@@ -10,6 +10,7 @@ import { type Category, type RadiusM } from '@/shared/constants'
 import {
   type GrowthResponse,
   type HazardAlertsResponse,
+  type HazardEscapeResponse,
   type HazardEvacuationResponse,
   type HazardPointResponse,
   type RankingResponse,
@@ -64,6 +65,15 @@ export type EvacuationEffect = {
   readonly evacuation: HazardEvacuationResponse
 }
 
+/**
+ * 脱出方向ツールの副産物（同 §8.6）。「どこへ行くか」（`evacuation`）とは別で、
+ * **どちらへ動けば区域を出られるか**の効果。混ぜると経路案内だと読まれる。
+ */
+export type EscapeEffect = {
+  readonly kind: 'escape'
+  readonly escape: HazardEscapeResponse
+}
+
 /** ツールが記録しうる副産物（assemble がパネル/地図操作に変換）。 */
 export type ToolEffect =
   | StationDetailEffect
@@ -72,6 +82,7 @@ export type ToolEffect =
   | HazardPointEffect
   | HazardAlertsEffect
   | EvacuationEffect
+  | EscapeEffect
 
 /** ツール実行順に副産物を集める収集器（1 リクエストにつき 1 個・クロージャで共有）。 */
 export type EffectCollector = {

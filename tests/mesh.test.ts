@@ -8,8 +8,10 @@ import {
   meshBoundsOf,
   meshCellFromLonLat,
   meshCenterOf,
+  meshCenterOfIndices,
   meshCodeFromCell,
   meshCodeFromLonLat,
+  meshIndicesFromLonLat,
   meshLevelOf,
   meshOffsetInPrimary,
   primaryMeshOf,
@@ -224,5 +226,47 @@ describe('mesh: 型ガードと異常系', () => {
     )
     expect(() => meshCodeFromCell({ primary: '5339', row: 320, col: 0 })).toThrow(/row\/col/)
     expect(() => meshOffsetInPrimary({ primary: '5339', row: 0, col: -1 })).toThrow(/row\/col/)
+  })
+})
+
+/**
+ * 全国通しの格子座標（§8.6 の脱出方向で使う）。
+ * 1 次メッシュ内の row/col は 80km ごとに 0 に戻るので、**またぎを気にせず隣を辿れる**座標が要る。
+ */
+describe('mesh: 全国通しの格子座標', () => {
+  it('往復して同じセルに戻る（中心 → 座標 → 中心）', () => {
+    for (const [lon, lat] of [
+      [139.767, 35.681],
+      [136.99, 36.85],
+      [127.68, 26.21],
+      [141.35, 43.06],
+    ]) {
+      const indices = meshIndicesFromLonLat(lon ?? 0, lat ?? 0)
+      const centre = meshCenterOfIndices(indices)
+      expect(meshIndicesFromLonLat(centre.lon, centre.lat)).toEqual(indices)
+      // 1 次メッシュ内の row/col とも整合する。
+      const cell = meshCellFromLonLat(lon ?? 0, lat ?? 0)
+      expect(meshCellFromLonLat(centre.lon, centre.lat)).toEqual(cell)
+    }
+  })
+
+  it('index を 1 足すと、隣のセルの中心になる（1 次メッシュをまたいでも）', () => {
+    // 1 次メッシュの東端（col=319）から 1 つ東へ。
+    const east = meshCenterOfIndices({ latIndex: 17136, lonIndex: 12799 })
+    const next = meshCenterOfIndices({ latIndex: 17136, lonIndex: 12800 })
+    const here = meshCellFromLonLat(east.lon, east.lat)
+    const there = meshCellFromLonLat(next.lon, next.lat)
+    expect(here.col).toBe(319)
+    expect(there.col).toBe(0)
+    // 1 次メッシュの番号が 1 つ進む（またいでいる）。
+    expect(Number(there.primary) - Number(here.primary)).toBe(1)
+  })
+
+  it('セルの中心は、そのセルの範囲の真ん中にある', () => {
+    const indices = meshIndicesFromLonLat(139.767, 35.681)
+    const centre = meshCenterOfIndices(indices)
+    const bounds = meshBoundsOf(meshCodeFromLonLat(centre.lon, centre.lat))
+    expect(centre.lat).toBeCloseTo((bounds.south + bounds.north) / 2, 10)
+    expect(centre.lon).toBeCloseTo((bounds.west + bounds.east) / 2, 10)
   })
 })

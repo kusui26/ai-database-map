@@ -73,3 +73,83 @@ export function tilePixelOf(lon: number, lat: number, zoom: number): TilePixel {
     py: Math.floor(worldY) % TILE_PIXELS,
   }
 }
+
+// --- 距離と範囲 -----------------------------------------------------------
+
+/** 地球の平均半径（メートル）。 */
+const EARTH_RADIUS_M = 6_371_008.8
+
+/**
+ * 2 点間の大円距離（メートル・ハバーサイン）。
+ *
+ * 避難先の「◯m」「◯km」はこの 1 本だけで出す。平面近似（緯度でスケールした直交距離）でも
+ * 数 km なら誤差は小さいが、**避難の話で「近い順」を作る計算に近似を混ぜたくない**
+ * ——順位が入れ替わる可能性を残すより、素直に球面で解く方が説明しやすい。
+ */
+export function distanceM(
+  fromLon: number,
+  fromLat: number,
+  toLon: number,
+  toLat: number,
+): number {
+  const toRad = (deg: number): number => (deg * Math.PI) / 180
+  const deltaLat = toRad(toLat - fromLat)
+  const deltaLon = toRad(toLon - fromLon)
+  const a =
+    Math.sin(deltaLat / 2) ** 2 +
+    Math.cos(toRad(fromLat)) * Math.cos(toRad(toLat)) * Math.sin(deltaLon / 2) ** 2
+  return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(a)))
+}
+
+/** 経緯度の矩形（west, south, east, north）。 */
+export type BoundingBox = {
+  readonly west: number
+  readonly south: number
+  readonly east: number
+  readonly north: number
+}
+
+/**
+ * 矩形に余裕を持たせる割合。
+ *
+ * `METERS_PER_DEG_LAT`（111,320）は赤道寄りの近似で、中緯度の子午線 1 度は
+ * これより**短い**（35 度で約 110,940m）。そのまま割ると矩形が半径より 0.1% ほど**内側**に来る
+ * ——実測 5,000m 指定で 4,994m だった。避難先を探す矩形でこれを放置すると、
+ * **端にある行き先を取りこぼす**。取りこぼすくらいならタイルを 1 枚多く取る方がよい。
+ */
+const BOX_MARGIN = 1.01
+
+/**
+ * 中心から半径 `radiusM` を**必ず含む**矩形。
+ * タイルを何枚取りに行くかを決めるのに使うので、**足りないより多い方**へ倒す（緯度の cos は端で取る）。
+ */
+export function boundingBoxAround(lon: number, lat: number, radiusM: number): BoundingBox {
+  const dLat = (radiusM * BOX_MARGIN) / METERS_PER_DEG_LAT
+  const widestLat = Math.min(89, Math.abs(lat) + dLat)
+  const dLon = (radiusM * BOX_MARGIN) / (METERS_PER_DEG_LAT * Math.cos((widestLat * Math.PI) / 180))
+  return { west: lon - dLon, south: lat - dLat, east: lon + dLon, north: lat + dLat }
+}
+
+/** XYZ のタイル番号 1 枚。 */
+export type TileIndex = {
+  readonly x: number
+  readonly y: number
+}
+
+/**
+ * 矩形に重なる XYZ タイルを列挙する（そのズームのタイル番号）。
+ * **枚数は呼び出し側が制限する**——ここでは矩形どおりに返す。
+ */
+export function tilesCovering(box: BoundingBox, zoom: number): readonly TileIndex[] {
+  const topLeft = tilePixelOf(box.west, box.north, zoom)
+  const bottomRight = tilePixelOf(box.east, box.south, zoom)
+  const limit = 2 ** zoom - 1
+  const clamp = (value: number): number => Math.min(limit, Math.max(0, value))
+  const tiles: TileIndex[] = []
+  for (let x = clamp(topLeft.x); x <= clamp(bottomRight.x); x += 1) {
+    for (let y = clamp(topLeft.y); y <= clamp(bottomRight.y); y += 1) {
+      tiles.push({ x, y })
+    }
+  }
+  return tiles
+}

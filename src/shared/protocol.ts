@@ -53,6 +53,18 @@ export const mapActionSchema = z.discriminatedUnion('type', [
     lat: z.number(),
     labelJa: z.string().optional(),
   }),
+  /**
+   * **複数の行き先**を地図に置く（避難先・§8.5）。`showPoint`（今いる・聞かれた 1 点）とは
+   * 役割が違うので別の操作にしてある——同じ印にすると「どこからどこへ」が読めなくなる。
+   * 並びは一覧と同じで、地図には**番号**が出る（一覧の何番かが分かる）。
+   * **空配列＝すべて消す。**
+   */
+  z.object({
+    type: z.literal('highlightPoints'),
+    points: z.array(
+      z.object({ lon: z.number(), lat: z.number(), labelJa: z.string() }),
+    ),
+  }),
 ])
 export type MapAction = z.infer<typeof mapActionSchema>
 
@@ -100,6 +112,34 @@ export const hazardItemSchema = z.object({
   certainty: hazardCertaintySchema,
 })
 export type HazardItem = z.infer<typeof hazardItemSchema>
+
+/**
+ * 避難先の候補 1 件（`docs/260824_flood.md` §6.4・§8.5）。
+ * **意味づけ済みの文字列だけ**を持つ——UI と AI が同じ言い方をするため、
+ * 距離も重なり方も「サーバが作った日本語」をそのまま出す。
+ */
+export const evacuationItemSchema = z.object({
+  nameJa: z.string(),
+  addressJa: z.string(),
+  lon: z.number(),
+  lat: z.number(),
+  /** 直線距離（メートル）。並び替えの根拠を数値でも残す。 */
+  distanceM: z.number().int(),
+  /** 「約1.2km」。 */
+  distanceJa: z.string(),
+  /** 八方位（「北東」）。地図が見られなくても動ける情報にする。 */
+  bearingJa: z.string(),
+  /** その場所が指定されている災害種別（表示名）。 */
+  disastersJa: z.array(z.string()),
+  /** 想定区域との重なり（`null`＝判定できない）。**真偽値にしない**（§5.9）。 */
+  hazardAreaCertainty: z.enum(['outside', 'partial', 'inside']).nullable(),
+  /** 上の日本語（「想定区域にかからない」など）。 */
+  hazardAreaJa: z.string(),
+  elevationM: z.number().nullable(),
+  /** 原典の備考（「洪水での避難は◯◯川を対象とする」など。**捨てない**）。 */
+  remarksJa: z.string().nullable(),
+})
+export type EvacuationItem = z.infer<typeof evacuationItemSchema>
 
 /** 時系列の 1 点（y は欠損で null＝チャートのギャップ）。 */
 export const seriesPointSchema = z.object({ x: z.number(), y: z.number().nullable() })
@@ -266,6 +306,28 @@ export const panelSchema = z.discriminatedUnion('type', [
     size: sizeSchema,
   }),
   z.object({
+    /**
+     * 避難先の候補（`docs/260824_flood.md` §6.4・§8.5）。**`hazardCard` とは別の型**にしてある——
+     * あちらは「その場所がどうか」、こちらは「どこへ行くか」で、混ぜると
+     * 「危ない場所の一覧」と読まれかねない。
+     */
+    type: z.literal('evacuationList'),
+    /** どの災害向けの一覧か（**必ず出す**。洪水用を土砂災害に使わせない・§11 リスク 10）。 */
+    forDisasterJa: z.string(),
+    /** 「指定緊急避難場所」。滞在する「指定避難所」と混同させないため、型に持たせる。 */
+    siteKindJa: z.string(),
+    placeJa: z.string(),
+    headlineJa: z.string(),
+    items: z.array(evacuationItemSchema),
+    /** **必ず全部出す**（開設状況は分からない・直線距離である・指定避難所ではない…）。 */
+    limitationsJa: z.array(z.string()),
+    notesJa: z.array(z.string()),
+    sources: z.array(sourceRefSchema),
+    disclaimerJa: z.string(),
+    placement: placementSchema,
+    size: sizeSchema,
+  }),
+  z.object({
     type: z.literal('markdown'),
     body: z.string(),
     placement: placementSchema,
@@ -287,6 +349,7 @@ export type RankingTablePanel = PanelOf<'rankingTable'>
 export type ScatterPanel = PanelOf<'scatter'>
 export type MarkdownPanel = PanelOf<'markdown'>
 export type HazardCardPanel = PanelOf<'hazardCard'>
+export type EvacuationListPanel = PanelOf<'evacuationList'>
 
 /** パネル表示バリアント（チャット内=compact／ドロワー・モーダル=full）。 */
 export type PanelSize = NonNullable<z.infer<typeof sizeSchema>>

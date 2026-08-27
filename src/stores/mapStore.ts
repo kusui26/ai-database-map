@@ -23,6 +23,17 @@ export type MarkedPoint = {
 }
 
 /**
+ * 地図に置く**行き先**（避難先・`docs/260824_flood.md` §8.5）。
+ * `markedPoint`（今いる・聞かれた 1 点）とは**別の印**にする——
+ * 同じ見た目にすると「どこからどこへ」が読めない。並びは一覧と同じで、番号が出る。
+ */
+export type HighlightedPoint = {
+  readonly lon: number
+  readonly lat: number
+  readonly labelJa: string
+}
+
+/**
  * いま見ている場所（地図の中心・**丸めてある**）。
  *
  * 警戒バナー（§7.4）が「この地域に何が出ているか」を引くのに使う。生の中心をそのまま持つと
@@ -69,6 +80,10 @@ type MapStore = {
   markedPoint: MarkedPoint | null
   setMarkedPoint: (point: MarkedPoint | null) => void
 
+  /** 行き先の印（空＝出さない）。 */
+  highlightedPoints: readonly HighlightedPoint[]
+  setHighlightedPoints: (points: readonly HighlightedPoint[]) => void
+
   /** 地図の中心（丸め済み・未初期化は null）。 */
   center: MapCenter | null
   /** 地図が止まったときに呼ぶ。**丸めて変化が無ければ何もしない**（無駄な再描画を作らない）。 */
@@ -98,6 +113,9 @@ export const useMapStore = create<MapStore>((set, get) => ({
 
   markedPoint: null,
   setMarkedPoint: (point) => set({ markedPoint: point }),
+
+  highlightedPoints: [],
+  setHighlightedPoints: (points) => set({ highlightedPoints: points }),
 
   center: null,
   setCenter: (center) => {

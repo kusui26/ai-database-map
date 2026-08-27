@@ -8,6 +8,7 @@
  * ハザードの 2 つ（`docs/260824_flood.md` §6.4）もここで受ける。
  * - `setHazardLayers` … **`?hz` に書く**＝レイヤ制御のトグルと同じ経路。共有リンクにも残る
  * - `showPoint` … 駅ではない地点の印。水害は「その一点の話」なので駅選択とは別系統（§7.1）
+ * - `highlightPoints` … **行き先**の印（避難先・§8.5）。起点（`showPoint`）とは別の印にする
  */
 
 import { useCallback } from 'react'
@@ -24,6 +25,7 @@ export function useApplyMapActions(): (response: MapResponse) => void {
   const { setLayerKeys, setOpacity } = useHazardUrlState()
   const setHighlightedGrps = useMapStore((state) => state.setHighlightedGrps)
   const setMarkedPoint = useMapStore((state) => state.setMarkedPoint)
+  const setHighlightedPoints = useMapStore((state) => state.setHighlightedPoints)
   const requestFlyTo = useMapStore((state) => state.requestFlyTo)
 
   return useCallback(
@@ -51,10 +53,14 @@ export function useApplyMapActions(): (response: MapResponse) => void {
             // 駅選択があるときはそちらの flyTo に任せる（二重のカメラ操作を避ける）。
             if (!hasSelect) requestFlyTo({ lon: action.lon, lat: action.lat, zoom: POINT_ZOOM })
             break
+          case 'highlightPoints':
+            setHighlightedPoints(action.points)
+            break
           case 'clearOverlays':
             void setGrp(null)
             setHighlightedGrps([])
             setMarkedPoint(null)
+            setHighlightedPoints([])
             break
         }
       }
@@ -66,6 +72,7 @@ export function useApplyMapActions(): (response: MapResponse) => void {
       setOpacity,
       setHighlightedGrps,
       setMarkedPoint,
+      setHighlightedPoints,
       requestFlyTo,
     ],
   )

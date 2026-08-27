@@ -8,6 +8,7 @@
 
 import { type Panel } from '@/shared/protocol'
 import { cn } from '@/lib/utils'
+import { EvacuationList } from './EvacuationList'
 import { HazardCard } from './HazardCard'
 import { StationCard } from './StationCard'
 import { TrendChart } from './TrendChart'
@@ -41,6 +42,8 @@ export function PanelRenderer({
       return <ScatterChart panel={panel} onSelect={onSelect} />
     case 'hazardCard':
       return <HazardCard panel={panel} />
+    case 'evacuationList':
+      return <EvacuationList panel={panel} />
     default: {
       const exhaustive: never = panel
       return exhaustive

@@ -9,10 +9,16 @@
 import type {
   HazardAlertsResponse,
   HazardAlertWarning,
+  HazardEvacuationResponse,
   HazardFloodForecast,
   HazardPointResponse,
 } from '@/shared/api'
-import type { HazardCardPanel, HazardItem, PanelSize } from '@/shared/protocol'
+import type {
+  EvacuationListPanel,
+  HazardCardPanel,
+  HazardItem,
+  PanelSize,
+} from '@/shared/protocol'
 import { ALERT_LEVEL_LABELS_JA, HAZARD_GROUP_LABELS_JA } from '@/shared/constants'
 import { getHazardLayer } from '@/shared/hazard'
 import { jstDateTimeJa, parseIso } from '@/shared/time'
@@ -146,6 +152,35 @@ export function hazardAlertCardPanel(
     ],
     sources: alerts.sources,
     disclaimerJa: alerts.disclaimerJa,
+    size,
+  }
+}
+
+// --- 避難先（どこへ行くか・Phase 4 後半） ---------------------------------
+
+/**
+ * 避難先の一覧 → `evacuationList`。**ここでも意味づけは足さない**——
+ * 距離も方角も「区域にかかるか」も、応答が日本語まで作って持っている。
+ *
+ * 限界（`limitationsJa`）を**畳まずに全部載せる**のがこのパネルの肝である。
+ * 「開設されているとは限らない」「直線距離である」「指定避難所ではない」の 3 つは、
+ * どれか 1 つ落ちるだけで誤解の余地が生まれる（§11 リスク 10）。
+ */
+export function evacuationListPanel(
+  evacuation: HazardEvacuationResponse,
+  size?: PanelSize,
+): EvacuationListPanel {
+  return {
+    type: 'evacuationList',
+    forDisasterJa: evacuation.forDisasterJa,
+    siteKindJa: evacuation.siteKindJa,
+    placeJa: evacuation.point.placeJa,
+    headlineJa: evacuation.headlineJa,
+    items: evacuation.sites,
+    limitationsJa: evacuation.limitationsJa,
+    notesJa: evacuation.notesJa,
+    sources: evacuation.sources,
+    disclaimerJa: evacuation.disclaimerJa,
     size,
   }
 }

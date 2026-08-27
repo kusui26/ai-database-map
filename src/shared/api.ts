@@ -222,10 +222,25 @@ export type HazardCatalogResponse = z.infer<typeof hazardCatalogResponseSchema>
 
 // --- ハザード：地点（GET /api/hazard/point・260824_flood §6.1） ------------
 
+/**
+ * クエリ文字列の数値。**欠落と空文字を 0 にしない。**
+ *
+ * `z.coerce.number()` は `Number(null)` も `Number('')` も **0** にするので、
+ * `?lat=35.7`（lon 欠落）が**経度 0 度**として通ってしまう。地点のハザードでは、
+ * これは「500 で落ちる」で済まず、**別の場所について自信満々に『指定区域に入っていません』と
+ * 答える**という最悪の壊れ方になりうる（§7.5）。だから欠落として扱い、400 で弾く。
+ */
+function queryNumber(min: number, max: number) {
+  return z.preprocess(
+    (value) => (value === '' || value === null ? undefined : value),
+    z.coerce.number({ error: '数値が必要です（未指定・空文字は不可）' }).min(min).max(max),
+  )
+}
+
 /** 緯度経度は必須。名前は「現在地」「亀有駅」など、呼び名を UI から渡せるようにする。 */
 export const hazardPointQuerySchema = z.object({
-  lon: z.coerce.number().min(-180).max(180),
-  lat: z.coerce.number().min(-90).max(90),
+  lon: queryNumber(-180, 180),
+  lat: queryNumber(-90, 90),
   placeJa: z.string().min(1).max(60).optional(),
 })
 export type HazardPointQuery = z.infer<typeof hazardPointQuerySchema>

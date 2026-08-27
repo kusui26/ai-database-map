@@ -11,9 +11,11 @@
  *  - 白は「想定なし」であって「安全」ではない（末尾に常設の注記）
  *  - レイヤごとの網羅性の注記を必ず出す
  *  - 年度と出典を常時表示する
+ *  - **白い場所を補える地形レイヤを、押せる形で出す**（§3.7・PR-4e）
  */
 
 import { type HazardLegendSection } from '@/domain/hazard/catalog'
+import { Emphasis } from '@/components/panels/Emphasis'
 
 /** 色見本（未確定の階級は枠だけ出して、色を主張しない）。 */
 function Swatch({ color }: { color: string | null }) {
@@ -26,7 +28,46 @@ function Swatch({ color }: { color: string | null }) {
   )
 }
 
-function LegendSection({ section }: { section: HazardLegendSection }) {
+/**
+ * 白い場所を補う導線（§3.7）。
+ *
+ * 内水は 47 都道府県中 22 でしか整備されていない。**「レイヤを OFF にしているのか、
+ * 地図が無いのか」が見分けられない**のがいちばん危ないので、注記のすぐ下に
+ * **押せる形**で地形レイヤを出す。カタログの `fallbackLayerKeys` が唯一の真実で、
+ * ここには 1 つも名前を書かない。
+ */
+function Fallbacks({
+  section,
+  onAdd,
+}: {
+  section: HazardLegendSection
+  onAdd: (layerKey: string) => void
+}) {
+  if (section.fallbacks.length === 0) return null
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-1">
+      <span className="text-[10px] text-slate-500">白い場所は地形で補えます:</span>
+      {section.fallbacks.map((fallback) => (
+        <button
+          key={fallback.key}
+          type="button"
+          onClick={() => onAdd(fallback.key)}
+          className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700 ring-1 ring-emerald-200 transition-colors hover:bg-emerald-100"
+        >
+          ＋{fallback.labelJa}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function LegendSection({
+  section,
+  onAdd,
+}: {
+  section: HazardLegendSection
+  onAdd: (layerKey: string) => void
+}) {
   return (
     <section className="border-t border-slate-100 pt-2 first:border-t-0 first:pt-0">
       <h4 className="text-xs font-semibold text-slate-700">
@@ -78,21 +119,29 @@ function LegendSection({ section }: { section: HazardLegendSection }) {
 
       {section.coverageNoteJa !== null && (
         <p className="mt-1 rounded-md bg-amber-50 px-1.5 py-1 text-[11px] leading-4 text-amber-800">
-          {section.coverageNoteJa}
+          <Emphasis text={section.coverageNoteJa} />
         </p>
       )}
+      <Fallbacks section={section} onAdd={onAdd} />
       <p className="mt-1 text-[10px] leading-4 text-slate-400">出典: {section.sourceJa}</p>
     </section>
   )
 }
 
-export function HazardLegend({ sections }: { sections: readonly HazardLegendSection[] }) {
+export function HazardLegend({
+  sections,
+  onAddLayer,
+}: {
+  sections: readonly HazardLegendSection[]
+  /** 参考レイヤを足す（レイヤ制御のトグルと同じ経路を通す）。 */
+  onAddLayer: (layerKey: string) => void
+}) {
   if (sections.length === 0) return null
   return (
     <div className="space-y-2">
       <h3 className="text-xs font-semibold text-slate-500">凡例</h3>
       {sections.map((section) => (
-        <LegendSection key={section.layerKey} section={section} />
+        <LegendSection key={section.layerKey} section={section} onAdd={onAddLayer} />
       ))}
       {/* §7.5-1：白は「想定なし」であって「安全」ではない。凡例の一番下に常設する。 */}
       <p className="rounded-md bg-slate-100 px-1.5 py-1 text-[11px] leading-4 text-slate-600">

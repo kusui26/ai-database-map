@@ -236,8 +236,29 @@ describe('hazard カタログ: レイヤの不変条件', () => {
     const layer = requireHazardLayer('naisui')
     expect(layer.coverageNoteJa).toContain('22')
     expect(layer.coverageNoteJa).toContain('意味ではありません')
-    expect(layer.fallbackLayersJa.length).toBeGreaterThan(0)
-    expect(layer.fallbackLayersJa).toContain('治水地形分類図')
+    expect(layer.fallbackLayerKeys.length).toBeGreaterThan(0)
+    expect(layer.fallbackLayerKeys).toContain('chisui_chikei')
+  })
+
+  /**
+   * 参考レイヤは**表示名ではなく key** で持つ（PR-4e）。ラベルで持っていた頃は
+   * UI から押せず、カタログにあるのに誰にも読まれていなかった。
+   */
+  it('参考レイヤの key は実在し、地形グループを指す', () => {
+    for (const layer of hazardLayers) {
+      for (const key of layer.fallbackLayerKeys) {
+        const fallback = getHazardLayer(key)
+        expect(fallback, `${layer.key} → ${key}`).toBeDefined()
+        expect(fallback?.group, `${layer.key} → ${key}`).toBe('terrain')
+      }
+    }
+  })
+
+  it('網羅性の注記を持つレイヤには、補える参考レイヤがある（内水・高潮・津波・土砂）', () => {
+    const needFallback = ['naisui', 'hightide_l2', 'tsunami_shinsui', 'dosekiryu']
+    for (const key of needFallback) {
+      expect(requireHazardLayer(key).fallbackLayerKeys.length, key).toBeGreaterThan(0)
+    }
   })
 
   it('地形レイヤはハザードではない：階級を持たず、注記でそう言い、公式凡例へリンクする', () => {

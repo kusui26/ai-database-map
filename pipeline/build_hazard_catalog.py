@@ -44,6 +44,24 @@ GROUP_LABELS: dict[str, str] = {
 CATALOG_VERSION = 1
 
 
+def check_fallback_keys(layers: list[HazardLayer]) -> None:
+    """参考レイヤの key が実在することを確かめる（**キーにした意味はここで守る**）。
+
+    日本語ラベルで持っていた頃は、綴りが違っても誰も気づかなかった（そもそも読まれていなかった）。
+    キーにした以上、**存在しないキーは生成時に落とす**。
+    """
+    known = {layer.key for layer in layers}
+    missing = [
+        (layer.key, key)
+        for layer in layers
+        for key in layer.fallbackLayerKeys
+        if key not in known
+    ]
+    if missing:
+        pairs = "、".join(f"{owner} → {key}" for owner, key in missing)
+        raise ValueError(f"参考レイヤに実在しない key があります: {pairs}")
+
+
 def build_catalog(layers: list[HazardLayer]) -> dict[str, object]:
     return {
         "version": CATALOG_VERSION,
@@ -76,6 +94,7 @@ def render_labels(layers: list[HazardLayer]) -> str:
         "凡例: `key` — ラベル 〔グループ・重ね方・年度・更新頻度〕 ／ 階級は `order` ラベル — 意味〔色・配色根拠・危険度〕",
         "",
     ]
+    by_key = {layer.key: layer for layer in layers}
     by_group = {group: [layer for layer in layers if layer.group == group] for group in GROUP_ORDER}
     for group in GROUP_ORDER:
         group_layers = by_group.get(group, [])
@@ -99,8 +118,9 @@ def render_labels(layers: list[HazardLayer]) -> str:
             lines.append(f"- ライセンス: {layer.license}")
             if layer.coverageNoteJa:
                 lines.append(f"- 網羅性: {layer.coverageNoteJa}")
-            if layer.fallbackLayersJa:
-                lines.append(f"- 空白を埋める参考レイヤ: {'・'.join(layer.fallbackLayersJa)}")
+            if layer.fallbackLayerKeys:
+                names = "・".join(f"{by_key[key].labelJa}（`{key}`）" for key in layer.fallbackLayerKeys)
+                lines.append(f"- 空白を埋める参考レイヤ: {names}")
             if layer.ranks:
                 lines.append(f"- 階級（{layer.rankUnit or '区分'}）:")
                 lines.extend(_rank_line(asdict(rank)) for rank in layer.ranks)
@@ -137,6 +157,7 @@ def main(argv: list[str]) -> int:
     keys = [layer.key for layer in layers]
     assert len(keys) == len(set(keys)), f"レイヤ key の重複: {keys}"
     assert all(layer.group in GROUP_ORDER for layer in layers), "未知のグループ"
+    check_fallback_keys(layers)
 
     json_text = render_json(build_catalog(layers))
     labels_text = render_labels(layers)

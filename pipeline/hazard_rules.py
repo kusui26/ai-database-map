@@ -165,7 +165,10 @@ class HazardLayer:
     license: str
     attribution: str
     coverageNoteJa: str | None
-    fallbackLayersJa: list[str] = field(default_factory=list)
+    #: 白い地域を補える**レイヤの key**（表示名ではない）。
+    #: ⚠ 日本語ラベルで持っていた頃は、UI から押せず**誰にも読まれなかった**（§3.7）。
+    #: 名前は `labelJa` から引けるので、機械可読なキーだけを持つ。
+    fallbackLayerKeys: list[str] = field(default_factory=list)
 
 
 # --- 階級の組み立て ------------------------------------------------------
@@ -309,7 +312,7 @@ def _flood_layers() -> list[HazardLayer]:
             tile=HazardTile(DISAPORTAL_TILE.format(name="01_flood_l2_shinsuishin_data"), 2, 17, "png"),
             mesh=_MESH_AVAILABLE,
             coverageNoteJa=DEPTH_COVERAGE_NOTE,
-            fallbackLayersJa=[],
+            fallbackLayerKeys=[],
             **common,
         ),
         HazardLayer(
@@ -325,7 +328,7 @@ def _flood_layers() -> list[HazardLayer]:
             ),
             mesh=_MESH_AVAILABLE,
             coverageNoteJa=DEPTH_COVERAGE_NOTE,
-            fallbackLayersJa=[],
+            fallbackLayerKeys=[],
             **common,
         ),
         HazardLayer(
@@ -339,7 +342,7 @@ def _flood_layers() -> list[HazardLayer]:
             tile=HazardTile(DISAPORTAL_TILE.format(name="01_flood_l2_keizoku_data"), 2, 17, "png"),
             mesh=_MESH_AVAILABLE,
             coverageNoteJa="継続時間が公表されていない河川があります。白い場所は「浸水しない」という意味ではありません。",
-            fallbackLayersJa=[],
+            fallbackLayerKeys=[],
             **{**common, "rankUnit": "hour"},
         ),
         HazardLayer(
@@ -362,7 +365,7 @@ def _flood_layers() -> list[HazardLayer]:
             ),
             mesh=_MESH_AVAILABLE,
             coverageNoteJa="公表されていない河川があります。白い場所は「倒壊しない」という意味ではありません。",
-            fallbackLayersJa=[],
+            fallbackLayerKeys=[],
             **{**common, "rankUnit": None, "display": "overlay"},
         ),
         HazardLayer(
@@ -385,7 +388,7 @@ def _flood_layers() -> list[HazardLayer]:
             ),
             mesh=_MESH_AVAILABLE,
             coverageNoteJa="公表されていない河川があります。白い場所は「倒壊しない」という意味ではありません。",
-            fallbackLayersJa=[],
+            fallbackLayerKeys=[],
             **{**common, "rankUnit": None, "display": "overlay"},
         ),
     ]
@@ -420,7 +423,7 @@ def _other_hazard_layers() -> list[HazardLayer]:
                 "**白いことは「内水が起きない」という意味ではありません。**"
                 "国土数値情報も「実際の浸水区域はこれより広い場合があります」と注記しています。"
             ),
-            fallbackLayersJa=["治水地形分類図", "色別標高図", "傾斜量図", "土地条件図"],
+            fallbackLayerKeys=["chisui_chikei", "relief", "slopemap", "lcm25k"],
         ),
         HazardLayer(
             key="hightide_l2",
@@ -444,7 +447,7 @@ def _other_hazard_layers() -> list[HazardLayer]:
             license=DISAPORTAL_LICENSE,
             attribution=DISAPORTAL_ATTRIBUTION,
             coverageNoteJa="公表していない都道府県があります。白い場所は「浸水しない」という意味ではありません。",
-            fallbackLayersJa=["色別標高図"],
+            fallbackLayerKeys=["relief"],
         ),
         HazardLayer(
             key="tsunami_shinsui",
@@ -466,7 +469,7 @@ def _other_hazard_layers() -> list[HazardLayer]:
             license=DISAPORTAL_LICENSE,
             attribution=DISAPORTAL_ATTRIBUTION,
             coverageNoteJa="公表していない都道府県があります。白い場所は「浸水しない」という意味ではありません。",
-            fallbackLayersJa=["色別標高図"],
+            fallbackLayerKeys=["relief"],
         ),
     ]
 
@@ -488,7 +491,7 @@ def _landslide_layers() -> list[HazardLayer]:
             "都道府県が調査を終えた区域のみが表示されます。"
             "特別警戒区域（レッドゾーン）の調査が済んでいない区域もあります。"
         ),
-        "fallbackLayersJa": ["傾斜量図"],
+        "fallbackLayerKeys": ["slopemap"],
     }
     specs = [
         ("dosekiryu", "土砂災害警戒区域（土石流）", "05_dosekiryukeikaikuiki", "#E6C832", "#A50021",
@@ -529,7 +532,7 @@ def _terrain_layers() -> list[HazardLayer]:
         "license": GSI_TILE_LICENSE,
         "attribution": GSI_TILE_ATTRIBUTION,
         "coverageNoteJa": "これは浸水想定ではなく地形の分類・標高です。危険の有無を示すものではありません。",
-        "fallbackLayersJa": [],
+        "fallbackLayerKeys": [],
     }
     specs = [
         (
@@ -635,7 +638,7 @@ def _realtime_layers() -> list[HazardLayer]:
             "その地域のキキクルは色なしだった）。"
             "**避難の判断は、お住まいの市町村が発表する避難情報に従ってください。**"
         ),
-        "fallbackLayersJa": [],
+        "fallbackLayerKeys": [],
     }
     specs = [
         ("kikikuru_land", "土砂キキクル（土砂災害の危険度）", "land",

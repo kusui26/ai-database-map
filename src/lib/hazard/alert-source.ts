@@ -12,6 +12,7 @@ import { HAZARD_DISCLAIMER_JA } from '@/shared/hazard'
 import { jmaMunicipality, type JmaMunicipality } from '@/shared/jma'
 import type { HazardAlertsResponse, HazardAlertArea } from '@/shared/api'
 import type { SourceRef } from '@/shared/protocol'
+import { GSI_REVERSE_GEOCODER_SOURCE, JMA_WARNING_SOURCE } from '@/domain/hazard/sources'
 import {
   ALERT_LIMITATION_JA,
   alertHeadlineJa,
@@ -34,18 +35,8 @@ import {
 /** 呼び名の既定。 */
 export const DEFAULT_PLACE_JA = 'この地点'
 
-const SOURCES: readonly SourceRef[] = [
-  {
-    labelJa: '出典：気象庁 気象警報・注意報',
-    url: 'https://www.jma.go.jp/bosai/warning/',
-    license: '気象庁 公共データ利用規約（第1.0版）',
-  },
-  {
-    labelJa: '出典：国土地理院 逆ジオコーディング',
-    url: 'https://maps.gsi.go.jp/',
-    license: '国土地理院コンテンツ利用規約',
-  },
-]
+/** 出典は `domain/hazard/sources` が唯一の真実（About と同じものを読む）。 */
+const SOURCES: readonly SourceRef[] = [JMA_WARNING_SOURCE, GSI_REVERSE_GEOCODER_SOURCE]
 
 export type HazardAlertRequest = {
   readonly lon: number

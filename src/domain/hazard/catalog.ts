@@ -120,6 +120,34 @@ export type HazardLegendSection = {
   readonly rows: readonly HazardLegendRow[]
   /** 地形グループか（ハザードと視覚的に分けるための印・§3.7）。 */
   readonly isTerrain: boolean
+  /**
+   * 白い場所を補える参考レイヤ（§3.7）。**まだ出していないものだけ**を返す。
+   * 内水は 47 都道府県中 22 しか整備されておらず、「レイヤを OFF にしているのか、
+   * 地図が無いのか」が見分けられない。地形で補えることを、押せる形で見せるためにある。
+   */
+  readonly fallbacks: readonly HazardLayerRef[]
+}
+
+/** レイヤの参照（key と表示名）。名前はカタログから引くので、UI に書かない。 */
+export type HazardLayerRef = {
+  readonly key: string
+  readonly labelJa: string
+}
+
+/**
+ * そのレイヤの白い場所を補える参考レイヤ（実在するものだけ・カタログ順）。
+ * `shown` に入っているものは**除く**——既に出ているレイヤを「足しませんか」と勧めない。
+ */
+export function hazardFallbackLayers(
+  layerKey: string,
+  shown: readonly string[] = [],
+): readonly HazardLayerRef[] {
+  const displayed = new Set(shown)
+  const keys = getHazardLayer(layerKey)?.fallbackLayerKeys ?? []
+  return resolveHazardLayerKeys(keys).flatMap((key) => {
+    const layer = getHazardLayer(key)
+    return layer === undefined || displayed.has(key) ? [] : [{ key, labelJa: layer.labelJa }]
+  })
 }
 
 /**
@@ -127,9 +155,13 @@ export type HazardLegendSection = {
  * 年度・出典・網羅性の注記まで 1 まとまりにするので、UI がどれかを出し忘れられない（§7.5）。
  */
 export function hazardLegendSections(layerKeys: readonly string[]): readonly HazardLegendSection[] {
+  // 同じ参考レイヤを何度も勧めない（土砂 3 枚はどれも傾斜量図を指す）。
+  const offered = new Set<string>()
   return hazardDrawOrder(layerKeys).flatMap((key) => {
     const layer = getHazardLayer(key)
     if (layer === undefined) return []
+    const fallbacks = hazardFallbackLayers(layer.key, [...layerKeys, ...offered])
+    fallbacks.forEach((fallback) => offered.add(fallback.key))
     return [
       {
         layerKey: layer.key,
@@ -141,6 +173,7 @@ export function hazardLegendSections(layerKeys: readonly string[]): readonly Haz
         legendUrl: layer.legendUrl,
         rows: hazardLegend(layer),
         isTerrain: layer.group === 'terrain',
+        fallbacks,
       },
     ]
   })

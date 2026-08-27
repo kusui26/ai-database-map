@@ -197,18 +197,34 @@ export const DETAIL_TABS: readonly DetailTab[] = [...]
 
 ## 5. 問題 2（切れる）の直し方
 
-**第一に、構造で消す。** 展開をヘッダから本文（タブ）へ移す。
+**追加の直しは要らない。§4 のタブ化だけで消える。**
 
-**第二に、保険を掛ける。** タブに移しても、将来また「ヘッダで伸びるもの」を置く誘惑はある。
-`DetailBody` のヘッダに**伸びうるものを置かない**という不変条件を、テストで固定する。
+`DetailBody`（`StationDetailPanel.tsx`）は 3 段で、**スクロールするのは 3 段目だけ**である。
 
-- `tests/panel-layout.test.ts` に「ヘッダの中に `PanelStack` / `PanelRenderer` を置かない」旨の
-  静的検査を足す（`StationDetailPanel.tsx` を読んで、`<header>` の中にパネル描画が無いことを見る）
-- モバイル（vaul のボトムシート）も同じ `DetailBody` を通るので、同時に直る
+```
+<div className="flex min-h-0 flex-1 flex-col">
+  <header>            ← バッジがここで展開する（スクロールしない）
+  <DetailTabs />                                （スクロールしない）
+  <div className="min-h-0 flex-1 overflow-y-auto">  ← ここだけ
+```
 
-**もし §7 で「タブは作らない」と決まった場合**の代替：展開部に
-`max-h-[50vh] overflow-y-auto` を付ける（警戒バナーの引き出しと同じ作法）。
-これは 1 行で直るが、**ヘッダが画面の半分を占める**ことは変わらないので、次善である。
+外側は高さが固定である（PC は `absolute top-20 right-3 bottom-3 … overflow-hidden`、
+モバイルの `vaul` は `max-h-[86vh]`）。つまり**ヘッダが伸びたぶんは `overflow-hidden` に
+切り落とされる**。スクロールバーが出ないのは当然で、**伸びている場所がスクロール領域の外**だからである。
+
+PR-1 でバッジから `useState(open)` と `PanelRenderer` を外し、押したら**タブを切り替えるだけ**にすると、
+ヘッダで伸びるものが無くなる。中身は `overflow-y-auto` の中に出るので、そのままスクロールできる。
+本文に入るパネル側に `max-h` / `overflow-y` は無いので、**二重スクロールも生まれない**（確認済み）。
+モバイルも同じ `DetailBody` を通るので同時に直る。
+
+**したがってこの節に残る作業は、回帰テスト 1 本だけである。**
+
+- `tests/panel-layout.test.ts` に「**ヘッダの中にパネル描画（`PanelRenderer` / `PanelStack`）を
+  置かない**」の静的検査を足す（`StationDetailPanel.tsx` を読んで、`<header>` の中に無いことを見る）
+- 今回のバグは「ヘッダに伸びるものを置いた」の一点で起きた。**同じ置き方を機械が止める**ようにしておく
+
+> 展開部に `max-h-[50vh] overflow-y-auto` を付ける案もあったが、**§7 の決定 1（タブを作る）により不採用**。
+> 1 行で切れなくはなるが、**ヘッダが画面の半分を占める**ことは変わらないためである。
 
 ---
 

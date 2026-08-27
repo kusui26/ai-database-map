@@ -36,8 +36,8 @@ import {
  */
 
 describe('hazard カタログ（Zod ロード）', () => {
-  it('15 レイヤ・カウント整合・生成元が rules', () => {
-    expect(hazardCatalog.layerCount).toBe(15)
+  it('18 レイヤ・カウント整合・生成元が rules', () => {
+    expect(hazardCatalog.layerCount).toBe(18)
     expect(hazardLayers.length).toBe(hazardCatalog.layerCount)
     expect(hazardCatalog.generatedFrom).toBe('pipeline/hazard_rules.py')
     expect(hazardCatalog.version).toBeGreaterThanOrEqual(1)
@@ -93,11 +93,22 @@ describe('hazard カタログ: レイヤの不変条件', () => {
     expect(new Set(keys).size).toBe(keys.length)
   })
 
-  it('グループ別の件数の合計が全件（realtime は Phase 3 まで 0 件）', () => {
+  it('グループ別の件数の合計が全件（realtime は Phase 3 で 3 件）', () => {
     const total = HAZARD_GROUPS.reduce((sum, group) => sum + hazardLayersForGroup(group).length, 0)
     expect(total).toBe(hazardLayers.length)
-    expect(hazardLayersForGroup('realtime').length).toBe(0)
+    expect(hazardLayersForGroup('realtime').length).toBe(3)
     expect(hazardLayersForGroup('flood').length).toBeGreaterThan(0)
+  })
+
+  /**
+   * キキクルだけは**時刻を差し込んでから**使う。`timesUrl` が無いまま `{basetime}` を
+   * 含む URL を地図に渡すと、**404 が延々と出るだけで誰も気づかない**。
+   */
+  it('時刻を差し込むタイルは timesUrl を必ず持つ（その逆も）', () => {
+    for (const layer of hazardLayers) {
+      const needsTime = layer.tile !== null && layer.tile.url.includes('{basetime}')
+      expect(layer.tile?.timesUrl != null, layer.key).toBe(needsTime)
+    }
   })
 
   it('すべてのレイヤに出典・ライセンス・attribution がある（出典表示は利用条件）', () => {

@@ -1,24 +1,13 @@
 'use client'
 
-/** オフライン通知（P7a）。navigator.onLine を監視し、切断中のみ上部にピルを出す。 */
+/** オフライン通知（P7a）。切断中のみ上部にピルを出す。監視は `useIsOnline` が持つ。 */
 
-import { useEffect, useState } from 'react'
+import { useIsOnline } from '@/hooks/useIsOnline'
 
 export function OfflineBanner() {
-  const [offline, setOffline] = useState(false)
+  const online = useIsOnline()
 
-  useEffect(() => {
-    const update = () => setOffline(!navigator.onLine)
-    update()
-    window.addEventListener('online', update)
-    window.addEventListener('offline', update)
-    return () => {
-      window.removeEventListener('online', update)
-      window.removeEventListener('offline', update)
-    }
-  }, [])
-
-  if (!offline) return null
+  if (online) return null
   return (
     <div
       role="status"

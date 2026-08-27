@@ -22,6 +22,21 @@ export type MarkedPoint = {
   readonly labelJa: string | null
 }
 
+/**
+ * いま見ている場所（地図の中心・**丸めてある**）。
+ *
+ * 警戒バナー（§7.4）が「この地域に何が出ているか」を引くのに使う。生の中心をそのまま持つと
+ * 1px 動かすたびに問い合わせが走るので、**約 1km に丸めてから**入れる。
+ * 警報は市区町村単位なので、この粗さで答えは実質変わらない。
+ */
+export type MapCenter = {
+  readonly lon: number
+  readonly lat: number
+}
+
+/** 中心の丸め（小数 2 桁 ≒ 1.1km）。 */
+const CENTER_DECIMALS = 2
+
 /** チャットの flyTo 要求（同一座標でも seq で再実行させる・GUI Chat Protocol の mapAction）。 */
 export type FlyToRequest = {
   readonly lon: number
@@ -53,9 +68,21 @@ type MapStore = {
   /** チャットが指した地点（null＝印なし）。地図にピンとラベルを出す。 */
   markedPoint: MarkedPoint | null
   setMarkedPoint: (point: MarkedPoint | null) => void
+
+  /** 地図の中心（丸め済み・未初期化は null）。 */
+  center: MapCenter | null
+  /** 地図が止まったときに呼ぶ。**丸めて変化が無ければ何もしない**（無駄な再描画を作らない）。 */
+  setCenter: (center: MapCenter) => void
 }
 
-export const useMapStore = create<MapStore>((set) => ({
+function roundCenter(center: MapCenter): MapCenter {
+  return {
+    lon: Number(center.lon.toFixed(CENTER_DECIMALS)),
+    lat: Number(center.lat.toFixed(CENTER_DECIMALS)),
+  }
+}
+
+export const useMapStore = create<MapStore>((set, get) => ({
   ready: false,
   setReady: (ready) => set({ ready }),
 
@@ -71,4 +98,12 @@ export const useMapStore = create<MapStore>((set) => ({
 
   markedPoint: null,
   setMarkedPoint: (point) => set({ markedPoint: point }),
+
+  center: null,
+  setCenter: (center) => {
+    const rounded = roundCenter(center)
+    const current = get().center
+    if (current?.lon === rounded.lon && current.lat === rounded.lat) return
+    set({ center: rounded })
+  },
 }))

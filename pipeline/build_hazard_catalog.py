@@ -123,12 +123,12 @@ def write_if_changed(path: Path, text: str) -> bool:
 def report(layers: list[HazardLayer]) -> None:
     per_group = Counter(layer.group for layer in layers)
     rank_total = sum(len(layer.ranks) for layer in layers)
-    measured = sum(1 for layer in layers for rank in layer.ranks if rank.colorSource == "measured")
-    unset = sum(1 for layer in layers for rank in layer.ranks if rank.color is None)
+    # 引き算で出さない。`色はあるが根拠が無い` 階級を official に数えてしまい、取り違えが隠れる。
+    sources = Counter(rank.colorSource for layer in layers for rank in layer.ranks)
     print(f"✓ {OUT_JSON.relative_to(ROOT)} — {len(layers)} レイヤ / {rank_total} 階級")
     for group in GROUP_ORDER:
         print(f"    {group:14s} {per_group.get(group, 0):3d}")
-    print(f"    配色: official {rank_total - measured - unset} / measured {measured} / 未確定 {unset}")
+    print(f"    配色: official {sources['official']} / measured {sources['measured']} / 未確定 {sources[None]}")
     print(f"✓ {OUT_LABELS.relative_to(ROOT)} — レイヤ一覧")
 
 

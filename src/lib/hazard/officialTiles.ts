@@ -77,20 +77,6 @@ export async function officialTileSample(
   return { reached: true, hex: pixel.a === 0 ? null : hexOf(pixel) }
 }
 
-/**
- * その地点の画素の色（`#RRGGBB`）。**透明・データ無しは null**。
- * 透明を「区域外」と解釈するのは呼び出し側（＝カタログを通して意味づけする側）の仕事。
- * 「届かなかった」まで区別したいときは `officialTileSample` を使う。
- */
-export async function officialTileHex(
-  layerKey: string,
-  lon: number,
-  lat: number,
-  zoom = POINT_QUERY_ZOOM,
-): Promise<string | null> {
-  return (await officialTileSample(layerKey, lon, lat, zoom)).hex
-}
-
 /** テスト用：キャッシュを空にする。 */
 export function clearOfficialTileCache(): void {
   images.clear()

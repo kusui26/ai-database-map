@@ -51,6 +51,9 @@ async function offlineHazard(target: HazardTarget): Promise<HazardPointResponse>
       placeJa: target.placeJa,
       mesh: mesh.mesh,
       tile: [],
+      // オフラインでは公式タイルに届かないので、近さも図の有無も測れない。
+      tileNearby: [],
+      uncoveredLayerKeys: [],
       rivers: [],
       elevationM: mesh.elevationM,
       online: false,

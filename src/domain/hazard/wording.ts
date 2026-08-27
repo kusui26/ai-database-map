@@ -84,9 +84,46 @@ export function partialHeadlineJa(
   )
 }
 
-/** 隣のメッシュだけが区域のときの 1 文（GPS 誤差と混在セルを補う・§8.3）。 */
-export function neighbourNoteJa(layerLabelJa: string): string {
-  return `${layerLabelJa}：この場所は区域外ですが、**隣の 250m メッシュ**が区域です（GPS の誤差にご注意ください）`
+/** 近くが区域のときの距離感（出所で意味が違うので、言い方も変える）。 */
+export const PROXIMITY_JA: Readonly<Record<'tile' | 'mesh', string>> = {
+  tile: '約 20m 以内',
+  mesh: '隣の 250m メッシュ',
+}
+
+/**
+ * 近くだけが区域のときの 1 文（GPS 誤差・混在セル・区域の縁を補う・§8.3・§6.2 の追記）。
+ * **「区域外です」で終わらせない**——終わらせると「安全」と読まれる（§7.5-1）。
+ */
+export function neighbourNoteJa(layerLabelJa: string, source: 'tile' | 'mesh'): string {
+  const where = source === 'tile' ? `**${PROXIMITY_JA.tile}**` : `**${PROXIMITY_JA.mesh}**`
+  const caution = source === 'tile' ? '区域の境界はごく近くです' : 'GPS の誤差にご注意ください'
+  return `${layerLabelJa}：この場所は区域外ですが、${where}が区域です（${caution}）`
+}
+
+/**
+ * この地域に区域図そのものが無いときの 1 文（**グループ名は付けない**——
+ * 複数のグループで同じ文になるので、呼び出し側が畳んでから前置きを付ける）。
+ *
+ * **全国の一般論より強い。** 「47 都道府県のうち 22 でしか整備されていません」は正しいが、
+ * 読む人は**自分がどちら側にいるか**を知りたい。分かったのなら、そう書く。
+ * ⚠ **「区域が無い」とは言わない**——図が無いだけで、起きないという意味ではない（§7.5-1）。
+ */
+export const UNCOVERED_NOTE_JA =
+  '**この地域には想定区域図がありません**（未整備の可能性があります）。' +
+  '区域が無いという意味ではないので、市町村のハザードマップもご確認ください'
+
+/**
+ * 該当は無いが**近くが区域**のときの見出し。
+ * 「入っていません」だけで終えると、10m 先が土砂災害警戒区域でも「安全」に読める（§6.2 の追記）。
+ */
+export function nearHazardHeadlineJa(
+  layerLabelsJa: readonly string[],
+  proximityJa: string,
+): string {
+  return (
+    `この場所そのものは指定区域の外ですが、**${proximityJa}に${layerLabelsJa.join('・')}があります**。` +
+    '正確な位置は地図でご確認ください（安全という意味ではありません）。'
+  )
 }
 
 /**

@@ -32,7 +32,12 @@ import {
 import type { HazardItem, SourceRef } from '@/shared/protocol'
 import type { HazardNeighbour, HazardPointResponse, HazardRiver, HazardVerdict } from '@/shared/api'
 import { MESH_SIZE_M, meshCenterOf, meshCodeFromLonLat } from '@/shared/mesh'
-import { HAZARD_GROUP_LABELS_JA, hazardLevelWeight, type HazardGroup } from '@/shared/constants'
+import {
+  HAZARD_GROUP_LABELS_JA,
+  hazardLevelWeight,
+  type HazardGroup,
+  type HazardLevel,
+} from '@/shared/constants'
 import {
   hazardRankOfColor,
   hazardRankOfDepth,
@@ -43,7 +48,9 @@ import {
   certaintyOf,
   meshNoteJa,
   neighbourNoteJa,
+  PROXIMITY_JA,
   riverReasonsJa,
+  UNCOVERED_NOTE_JA,
   valuePhraseJa,
   weakestCertainty,
 } from './wording'
@@ -74,6 +81,16 @@ export type PointHazardInput = {
   readonly placeJa: string
   readonly mesh: readonly MeshReading[]
   readonly tile: readonly TileReading[]
+  /**
+   * その点は塗られていないが、**すぐ近く（約 20m）が区域**だったもの（§6.2 の追記）。
+   * メッシュが隣接セルを教えてくれないレイヤ（土砂・高潮・津波）で効く。
+   */
+  readonly tileNearby: readonly TileReading[]
+  /**
+   * **この地域に区域図が無かった**レイヤ（粗いズームでも届かなかったもの）。
+   * 全国の一般論ではなく「ここには無い」と言うために使う（§7.5-2）。
+   */
+  readonly uncoveredLayerKeys: readonly string[]
   readonly rivers: readonly HazardRiver[]
   /** 平均標高（m・無ければ null）。 */
   readonly elevationM: number | null
@@ -142,15 +159,42 @@ function byDangerFirst(items: readonly HazardItem[]): readonly HazardItem[] {
   return [...items].sort((a, b) => hazardLevelWeight(b.level) - hazardLevelWeight(a.level))
 }
 
-/** 中心セルは区域外だが、**隣の 250m メッシュ**が区域のもの。 */
+/**
+ * その点は区域外だが、**近くが区域**のもの。
+ *
+ * 出所が 2 つある。**メッシュの隣接セル（250m）**と、**公式タイルで測ったすぐ近く（約 20m）**。
+ * 前者は混在セルと GPS 誤差を補い（§8.3）、後者は**区域の縁**を拾う（§6.2 の追記）。
+ * 同じレイヤが両方に出たら、**近い方（タイル）だけ**を残す——同じことを 2 回言わない。
+ */
 function neighboursOf(input: PointHazardInput): readonly HazardNeighbour[] {
-  return input.mesh.flatMap((reading) => {
+  const hitLayerKeys = new Set(input.tile.map((reading) => reading.layerKey))
+  const fromTile = input.tileNearby.flatMap((reading) => {
+    const rank = hazardRankOfColor(reading.layerKey, reading.hex)
+    const layer = getHazardLayer(reading.layerKey)
+    if (rank === null || layer === undefined || hitLayerKeys.has(reading.layerKey)) return []
+    return [neighbour(reading.layerKey, layer.labelJa, rank.level, 'tile')]
+  })
+  const seen = new Set(fromTile.map((each) => each.layerKey))
+  const fromMesh = input.mesh.flatMap((reading) => {
     if (reading.sourceCode > 0 || reading.neighbourSourceCode <= 0) return []
+    if (seen.has(reading.layerKey) || hitLayerKeys.has(reading.layerKey)) return []
     const rank = hazardRankOfSourceCode(reading.layerKey, reading.neighbourSourceCode)
     const layer = getHazardLayer(reading.layerKey)
     if (rank === null || layer === undefined) return []
-    return [{ layerKey: reading.layerKey, labelJa: layer.labelJa, level: rank.level }]
+    return [neighbour(reading.layerKey, layer.labelJa, rank.level, 'mesh')]
   })
+  // 近い方（タイル）を先に。UI も AI も先頭から読む。
+  return [...fromTile, ...fromMesh]
+}
+
+/** 近接 1 件（距離感の言い方はドメインが決める）。 */
+function neighbour(
+  layerKey: string,
+  labelJa: string,
+  level: HazardLevel,
+  source: 'tile' | 'mesh',
+): HazardNeighbour {
+  return { layerKey, labelJa, level, source, proximityJa: PROXIMITY_JA[source] }
 }
 
 /**
@@ -159,16 +203,32 @@ function neighboursOf(input: PointHazardInput): readonly HazardNeighbour[] {
  * **同じ文を持つレイヤは 1 行に畳む。** 畳まないと 11 レイヤぶんで 11 行になり、
  * 同じ文が並んで読み飛ばされる——**読まれない注意書きは無いのと同じ**。
  * 見出しはグループ名にする（「洪水：白い場所は…」）。
+ *
+ * ⚠ **この地域に区域図が無いレイヤは、全国の一般論ではなく「ここには無い」と言う。**
+ * 「47 都道府県のうち 22 でしか整備されていません」は正しいが、**自分がその 25 側にいるのか**は
+ * 分からない。粗いズームで図の有無を確かめられる（PR-4c の手）ので、分かったことをそのまま書く。
  */
-function coverageNotesOf(layerKeys: readonly string[]): readonly string[] {
+function coverageNotesOf(
+  layerKeys: readonly string[],
+  uncoveredLayerKeys: readonly string[],
+): readonly string[] {
+  const uncovered = new Set(uncoveredLayerKeys)
+  // 文 → その文を持つグループ。**同じ文は 1 行に畳む**（「ここには図が無い」も同じ扱い）。
   const grouped = new Map<string, Set<HazardGroup>>()
+  const add = (note: string, group: HazardGroup): void => {
+    grouped.set(note, (grouped.get(note) ?? new Set<HazardGroup>()).add(group))
+  }
   for (const key of layerKeys) {
     const layer = getHazardLayer(key)
-    if (layer?.coverageNoteJa == null) continue
-    const groups = grouped.get(layer.coverageNoteJa) ?? new Set<HazardGroup>()
-    grouped.set(layer.coverageNoteJa, groups.add(layer.group))
+    if (layer === undefined) continue
+    if (uncovered.has(key)) add(UNCOVERED_NOTE_JA, layer.group)
+    else if (layer.coverageNoteJa !== null) add(layer.coverageNoteJa, layer.group)
   }
-  return [...grouped].map(
+  // 「ここには図が無い」を先に出す。**いちばん具体的で、いちばん誤解を生む事実**なので。
+  const ordered = [...grouped].sort(
+    ([left], [right]) => Number(right === UNCOVERED_NOTE_JA) - Number(left === UNCOVERED_NOTE_JA),
+  )
+  return ordered.map(
     ([note, groups]) =>
       `${[...groups].map((group) => HAZARD_GROUP_LABELS_JA[group]).join('・')}：${note}`,
   )
@@ -211,7 +271,10 @@ function meshNotesOf(
       ? [meshNoteJa(item.labelJa, item.coverage)]
       : [],
   )
-  return [...fromCells, ...neighbours.map((neighbour) => neighbourNoteJa(neighbour.labelJa))]
+  return [
+    ...fromCells,
+    ...neighbours.map((each) => neighbourNoteJa(each.labelJa, each.source)),
+  ]
 }
 
 /**
@@ -256,11 +319,15 @@ export function pointHazard(
       hazardVerdict(
         resolved.map((each) => toVerdictItem(each.item, each.rank)),
         certainty,
+        neighbours,
       ),
       input.rivers,
     ),
     certainty,
-    coverageNotesJa: [...coverageNotesOf(layerKeys), ...meshNotesOf(items, neighbours)],
+    coverageNotesJa: [
+      ...coverageNotesOf(layerKeys, input.uncoveredLayerKeys),
+      ...meshNotesOf(items, neighbours),
+    ],
     sources: [
       ...sourcesOf(
         items.map((item) => item.layerKey),

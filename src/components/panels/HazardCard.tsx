@@ -23,6 +23,7 @@ import {
   HAZARD_SOURCE_LABELS_JA,
 } from '@/shared/constants'
 import { cn } from '@/lib/utils'
+import { Emphasis } from './Emphasis'
 
 /** 危険度バッジ（色 ＋ 記号 ＋ ラベルの 3 重）。 */
 function LevelBadge({ level }: { level: HazardCardPanel['level'] }) {
@@ -92,7 +93,9 @@ export function HazardCard({ panel }: { panel: HazardCardPanel }) {
         <LevelBadge level={panel.level} />
       </div>
 
-      <p className="mt-2 text-sm font-medium text-slate-800">{panel.headlineJa}</p>
+      <p className="mt-2 text-sm font-medium text-slate-800">
+        <Emphasis text={panel.headlineJa} />
+      </p>
 
       {panel.certainty !== 'exact' && (
         <p className="mt-1 text-xs text-amber-700">
@@ -128,7 +131,9 @@ export function HazardCard({ panel }: { panel: HazardCardPanel }) {
       {panel.coverageNotesJa.length > 0 && (
         <ul className="mt-3 space-y-1 rounded-lg bg-amber-50 p-2 text-xs text-amber-800">
           {panel.coverageNotesJa.map((note) => (
-            <li key={note}>{note}</li>
+            <li key={note}>
+              <Emphasis text={note} />
+            </li>
           ))}
         </ul>
       )}

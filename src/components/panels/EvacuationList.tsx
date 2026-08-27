@@ -12,7 +12,9 @@
  */
 
 import { type EvacuationItem, type EvacuationListPanel } from '@/shared/protocol'
+import { HAZARD_SOURCE_LABELS_JA } from '@/shared/constants'
 import { cn } from '@/lib/utils'
+import { Emphasis } from './Emphasis'
 
 /** 想定区域との重なりの見せ方（色 ＋ 記号 ＋ テキストの 3 重・§7.6）。 */
 const AREA_STYLE: Readonly<
@@ -32,6 +34,12 @@ function AreaBadge({ item }: { item: EvacuationItem }) {
         'shrink-0 rounded px-1.5 py-px text-[10px] font-medium whitespace-nowrap',
         style?.className,
       )}
+      // 同じ「区域の中」でも、地図と同じ画素で見たのか 250m メッシュで見たのかは意味が違う。
+      title={
+        item.hazardAreaSource === null
+          ? undefined
+          : `出所：${HAZARD_SOURCE_LABELS_JA[item.hazardAreaSource]}`
+      }
     >
       <span aria-hidden className="mr-0.5">
         {style?.icon}
@@ -63,6 +71,12 @@ function SiteRow({ item, index }: { item: EvacuationItem; index: number }) {
           {item.addressJa}
           {item.elevationM !== null && `／標高 約${item.elevationM.toFixed(1)}m`}
         </p>
+        {/* 当たった区域の名前は**捨てない**。「イエローゾーン」か「レッドゾーン」かで意味が違う。 */}
+        {item.hazardAreaDetailJa !== null && (
+          <p className="mt-0.5 text-[11px] font-medium text-rose-700">
+            この場所は「{item.hazardAreaDetailJa}」にかかります
+          </p>
+        )}
         <p className="mt-0.5 text-[11px] text-slate-400">
           対応：{item.disastersJa.join('・')}
         </p>
@@ -91,7 +105,9 @@ export function EvacuationList({ panel }: { panel: EvacuationListPanel }) {
         </span>
       </div>
 
-      <p className="mt-2 text-sm font-medium text-slate-800">{panel.headlineJa}</p>
+      <p className="mt-2 text-sm font-medium text-slate-800">
+        <Emphasis text={panel.headlineJa} />
+      </p>
 
       {panel.items.length > 0 && (
         <ul className="mt-2">
@@ -104,7 +120,9 @@ export function EvacuationList({ panel }: { panel: EvacuationListPanel }) {
       {panel.notesJa.length > 0 && (
         <ul className="mt-3 space-y-1 rounded-lg bg-amber-50 p-2 text-xs text-amber-800">
           {panel.notesJa.map((note) => (
-            <li key={note}>{note}</li>
+            <li key={note}>
+              <Emphasis text={note} />
+            </li>
           ))}
         </ul>
       )}
@@ -112,7 +130,9 @@ export function EvacuationList({ panel }: { panel: EvacuationListPanel }) {
       {/* 限界は**必ず全部**。1 行落ちるだけで誤解の余地が増える（§11 リスク 10）。 */}
       <ul className="mt-3 space-y-1 rounded-lg bg-slate-50 p-2 text-[11px] text-slate-600">
         {panel.limitationsJa.map((limitation) => (
-          <li key={limitation}>※ {limitation}</li>
+          <li key={limitation}>
+            ※ <Emphasis text={limitation} />
+          </li>
         ))}
       </ul>
 

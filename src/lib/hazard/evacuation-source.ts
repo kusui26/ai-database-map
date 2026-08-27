@@ -26,30 +26,34 @@ import {
   evacuationDisaster,
   evacuationDisasterLabelJa,
   evacuationTileSchema,
-  EVACUATION_HAZARD_GROUP,
+  EVACUATION_AREA_LAYERS,
   EVACUATION_SITE_KIND_JA,
   type EvacuationDisasterKey,
   type EvacuationFeature,
 } from '@/shared/evacuation'
-import { hazardLayersForGroup } from '@/shared/hazard'
+import { getHazardLayer } from '@/shared/hazard'
+import { hazardRankOfColor } from '@/domain/hazard/catalog'
 import type { HazardEvacuationResponse } from '@/shared/api'
 import type { SourceRef } from '@/shared/protocol'
 import {
   evacuationHeadlineJa,
   evacuationNotesJa,
+  hazardAreaFromMesh,
+  hazardAreaFromTiles,
   hazardAreaLabelJa,
   rankEvacuationSites,
+  strongerHazardArea,
   EVACUATION_LIMITATIONS_JA,
   EVACUATION_RADIUS_DEFAULT_M,
   EVACUATION_TOP_DEFAULT,
+  HAZARD_AREA_UNKNOWN,
   type EvacuationCandidate,
-  type HazardAreaCertainty,
+  type HazardArea,
 } from '@/domain/hazard/evacuation'
-import type { MeshReading } from '@/domain/hazard/point'
 import { jmaMunicipality } from '@/shared/jma'
 import { createLru, remember } from '@/lib/lru'
 import { municipalityCodeAt } from './jma'
-import { meshReadings } from './readings'
+import { areaTileReadings, meshReadings } from './readings'
 
 /** 地物タイルのネイティブズーム（国土地理院の配信・§3.5）。 */
 const TILE_ZOOM = 10
@@ -61,6 +65,24 @@ const TILE_URL = 'https://maps.gsi.go.jp/xyz/{layer}/{z}/{x}/{y}.geojson'
 const FETCH_TIMEOUT_MS = 8_000
 /** タイルのキャッシュ容量（レイヤ 8 種 × 数タイル）。指定の一覧は滅多に変わらない。 */
 const TILE_CACHE_CAPACITY = 64
+
+/**
+ * 公式タイルで読み直す件数の余裕（返す件数＋これだけ）。
+ * 並べ替えで 1〜2 件入れ替わっても、表に出るものは全部タイルで確かめてある状態にする。
+ */
+const REFINE_MARGIN = 3
+
+/**
+ * 公式タイルで読み直す件数の上限。1 件 1 レイヤごとに 1 枚取りに行くので、
+ * ここを外すと `top=20` のときに 60 枚取ることになる。上限を超えたぶんはメッシュの答えのまま。
+ */
+const REFINE_MAX = 15
+
+/**
+ * 読み直しの回数の上限。1 回目で並びが変わり、2 回目で新しく上がってきたものを拾う。
+ * 実測では 2 回で止まるが、**必ず終わる**ことを型ではなく回数で保証しておく。
+ */
+const REFINE_ROUNDS = 3
 
 /**
  * 浸水の判定にかける件数の上限。
@@ -152,58 +174,136 @@ function toCandidate(
     lat: feature.geometry.coordinates[1],
     remarksJa: remarks.length === 0 ? null : remarks,
     disastersJa: supported.map((each) => each.labelJa),
-    hazardAreaCertainty: null,
+    hazardArea: HAZARD_AREA_UNKNOWN,
     elevationM: null,
   }
 }
 
 /**
- * その災害の想定区域に**含まれていないレイヤ**の集合（自前メッシュで見られるものだけ）。
- * 種別にメッシュが無ければ空——呼び出し側はそれを「判定できない」に翻訳する。
+ * その災害の区域を表すレイヤのうち、**自前メッシュで読めるもの / 公式タイルで読めるもの**。
+ * どちらも `EVACUATION_AREA_LAYERS`（意味の表）から導く——キーを 2 か所に書かない。
  */
-function meshLayerKeysFor(disaster: EvacuationDisasterKey): ReadonlySet<string> {
-  const group = EVACUATION_HAZARD_GROUP[disaster]
-  if (group === null) return new Set()
-  return new Set(
-    hazardLayersForGroup(group)
-      .filter((layer) => layer.mesh?.available === true)
-      .map((layer) => layer.key),
-  )
+function areaLayersFor(disaster: EvacuationDisasterKey): {
+  mesh: ReadonlySet<string>
+  tile: readonly string[]
+} {
+  const layers = EVACUATION_AREA_LAYERS[disaster].flatMap((key) => {
+    const layer = getHazardLayer(key)
+    return layer === undefined ? [] : [layer]
+  })
+  return {
+    mesh: new Set(layers.filter((layer) => layer.mesh?.available === true).map((l) => l.key)),
+    tile: layers.filter((layer) => layer.tile !== null).map((layer) => layer.key),
+  }
+}
+
+/** 画素の色 → その階級の名前（カタログが唯一の正）。未知の色は名前を付けない。 */
+function rankLabelOf(layerKey: string, hex: string): string | null {
+  return hazardRankOfColor(layerKey, hex)?.labelJa ?? null
 }
 
 /**
- * その場所と**その災害の**想定区域の重なり方（250m メッシュ）。**分からなければ `null`**。
+ * 候補 1 件の「その災害の区域との重なり」を決める（**§6.3 の優先順位をそのまま適用**）。
  *
- * 見るのは聞かれた種別のレイヤだけ（`EVACUATION_HAZARD_GROUP` に理由を書いた）。
- * 1 レイヤも読めなければ「分からない」を返す——読めなかったことを「区域の外」にしない。
+ * 1. **公式タイルの画素**（点そのもの・地図と同じ）
+ * 2. **250m メッシュ**（区間でしか言えない）
+ * 3. どちらも読めないが、**粗いズームには一帯のデータがある**（＝この区画に塗るものが無い）
  *
- * **真偽値にしない。** セルが持つのは「セル内の最大」なので、`0` でないことは
- * 「この点が区域内」ではなく「セルのどこかが区域」でしかない（§5.9）。
- * 被覆率の両端（0＝一切かからない／1＝全域）だけを言い切り、間は `'partial'` に落とす。
+ * 3 を最後に置くのが要点である。**「データが無い」で「区域にかかる」を打ち消さない**——
+ * 証拠の不在は、証拠の存在に勝ってはいけない（§7.5-1）。
  */
-function certaintyOf(readings: readonly MeshReading[]): HazardAreaCertainty {
-  if (readings.length === 0) return null
-  if (readings.every((reading) => reading.coverage === 0)) return 'outside'
-  return readings.some((reading) => reading.coverage === 1) ? 'inside' : 'partial'
-}
-
-async function withHazardCheck(
+async function withMeshArea(
   candidate: EvacuationCandidate,
-  layerKeys: ReadonlySet<string>,
+  meshKeys: ReadonlySet<string>,
   baseUrl: string,
 ): Promise<EvacuationCandidate> {
   const readings = await meshReadings(candidate.lon, candidate.lat, baseUrl)
-  const relevant = readings.mesh.filter((reading) => layerKeys.has(reading.layerKey))
+  const relevant = readings.mesh.filter((reading) => meshKeys.has(reading.layerKey))
   return {
     ...candidate,
-    hazardAreaCertainty: certaintyOf(relevant),
+    hazardArea: hazardAreaFromMesh(relevant),
     elevationM: readings.elevationM,
   }
 }
 
 /**
+ * 画素もメッシュも無いが、**粗いズームには一帯のデータがあった**ときの答え。
+ * 「この区画に塗るものが無い」＝区域外、と読める（根拠は `areaTileReadings` の `COARSE_ZOOM`）。
+ *
+ * **いちばん最後にしか使わない。** 証拠の不在は、証拠の存在に勝ってはいけない——
+ * メッシュが「かかる」と言っているものを、タイルが無いことで打ち消さない（§7.5-1）。
+ */
+const AREA_ABSENT_BUT_COVERED = {
+  certainty: 'outside',
+  source: 'tile',
+  detailJa: null,
+} as const satisfies HazardArea
+
+/** 公式タイルの画素で読み直す（メッシュより強い答えが出たときだけ差し替わる）。 */
+async function withTileArea(
+  candidate: EvacuationCandidate,
+  tileKeys: readonly string[],
+): Promise<EvacuationCandidate> {
+  const tiles = await areaTileReadings(candidate.lon, candidate.lat, tileKeys).catch(() => null)
+  if (tiles === null) return candidate
+  const fromTile = hazardAreaFromTiles(tiles.readings, rankLabelOf)
+  const area = strongerHazardArea(fromTile, candidate.hazardArea)
+  const resolved =
+    area.certainty === null && tiles.absentButCovered ? AREA_ABSENT_BUT_COVERED : area
+  return { ...candidate, hazardArea: resolved }
+}
+
+/** 候補を一意に指す鍵（並べ替えで新しい物体になるので、参照では追えない）。 */
+function siteKey(candidate: EvacuationCandidate): string {
+  return `${candidate.nameJa}\u0000${candidate.lon}\u0000${candidate.lat}`
+}
+
+/**
+ * 半径内の全件をメッシュで見てから、**表に出るものだけ**を公式タイルで読み直す。
+ *
+ * メッシュは通信を伴わない（タイルはプロセス内）ので全件にかけられる。公式タイルは
+ * 1 件 1 レイヤごとに 1 枚取りに行くので、**返す件数ぶん＋余裕**に絞る。
+ *
+ * ⚠ **1 回では足りない。** 読み直すと並びが変わる——メッシュで「一部かかる」だったものが
+ * タイルで「区域の中」に落ちると、その下にいた**未精査の候補が表に上がってくる**。
+ * 実測（亀有駅・洪水）で、5 件目だけ 250m メッシュの答えのまま表示された。
+ * だから**上位が全部タイルで確かめ済みになるまで**繰り返す（数回で必ず止まる）。
+ */
+async function refineNearest(
+  origin: { readonly lon: number; readonly lat: number },
+  candidates: readonly EvacuationCandidate[],
+  layers: { mesh: ReadonlySet<string>; tile: readonly string[] },
+  top: number,
+  baseUrl: string,
+): Promise<readonly EvacuationCandidate[]> {
+  const meshed = await Promise.all(candidates.map((c) => withMeshArea(c, layers.mesh, baseUrl)))
+  if (layers.tile.length === 0) return meshed
+  const budget = Math.min(
+    meshed.length,
+    Math.max(top, EVACUATION_TOP_DEFAULT) + REFINE_MARGIN,
+    REFINE_MAX,
+  )
+  const done = new Set<string>()
+  let pool: readonly EvacuationCandidate[] = meshed
+  for (let round = 0; round < REFINE_ROUNDS; round += 1) {
+    const ordered = rankEvacuationSites(origin, pool, pool.length)
+    const targets = ordered.slice(0, budget).filter((site) => !done.has(siteKey(site)))
+    if (targets.length === 0) break
+    const refined = new Map(
+      (await Promise.all(targets.map((c) => withTileArea(c, layers.tile)))).map((c) => [
+        siteKey(c),
+        c,
+      ]),
+    )
+    refined.forEach((_value, key) => done.add(key))
+    pool = pool.map((candidate) => refined.get(siteKey(candidate)) ?? candidate)
+  }
+  return pool
+}
+
+/**
  * 近い順に上限まで絞ってから、浸水の判定をかける。
- * この時点では `hazardAreaCertainty` が全件 `null` なので、並べ替えは**距離だけ**で決まる。
+ * この時点では重なりが全件「判定できない」なので、並べ替えは**距離だけ**で決まる。
  */
 function nearestFirst(
   lon: number,
@@ -264,9 +364,15 @@ export async function evacuationSitesAt(
     return candidate === null ? [] : [candidate]
   })
   const near = nearestFirst(request.lon, request.lat, candidates, radiusM)
-  const layerKeys = meshLayerKeysFor(request.disaster)
+  const layers = areaLayersFor(request.disaster)
   const [checked, municipalityJa] = await Promise.all([
-    Promise.all(near.within.map((c) => withHazardCheck(c, layerKeys, baseUrl))),
+    refineNearest(
+      { lon: request.lon, lat: request.lat },
+      near.within,
+      layers,
+      top,
+      baseUrl,
+    ),
     municipalityJaAt(request.lon, request.lat),
   ])
   const sites = rankEvacuationSites({ lon: request.lon, lat: request.lat }, checked, top)
@@ -280,7 +386,10 @@ export async function evacuationSitesAt(
     sites: sites.map((site) => ({
       ...site,
       disastersJa: [...site.disastersJa],
-      hazardAreaJa: hazardAreaLabelJa(site.hazardAreaCertainty),
+      hazardAreaCertainty: site.hazardArea.certainty,
+      hazardAreaSource: site.hazardArea.source,
+      hazardAreaJa: hazardAreaLabelJa(site.hazardArea),
+      hazardAreaDetailJa: site.hazardArea.detailJa,
     })),
     limitationsJa: [...EVACUATION_LIMITATIONS_JA],
     notesJa: [

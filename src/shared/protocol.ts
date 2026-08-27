@@ -133,8 +133,12 @@ export const evacuationItemSchema = z.object({
   disastersJa: z.array(z.string()),
   /** 想定区域との重なり（`null`＝判定できない）。**真偽値にしない**（§5.9）。 */
   hazardAreaCertainty: z.enum(['outside', 'partial', 'inside']).nullable(),
+  /** どこから読んだか（`tile`＝地図と同じ画素／`mesh`＝250m メッシュ）。 */
+  hazardAreaSource: z.enum(['tile', 'mesh']).nullable(),
   /** 上の日本語（「想定区域にかからない」など）。 */
   hazardAreaJa: z.string(),
+  /** 当たった区域の名前（「土砂災害警戒区域（イエローゾーン）」など）。無ければ null。 */
+  hazardAreaDetailJa: z.string().nullable(),
   elevationM: z.number().nullable(),
   /** 原典の備考（「洪水での避難は◯◯川を対象とする」など。**捨てない**）。 */
   remarksJa: z.string().nullable(),

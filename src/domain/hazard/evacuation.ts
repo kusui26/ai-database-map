@@ -71,26 +71,50 @@ export type EvacuationCandidate = {
   readonly remarksJa: string | null
   /** その場所が指定されている災害種別（表示名）。 */
   readonly disastersJa: readonly string[]
-  /**
-   * 自前 250m メッシュで見た、**その災害の**想定区域との重なり方。
-   *
-   * ⚠ **真偽値にしてはいけない。** メッシュの 1 セルは 250m 四方で、持っているのは
-   * **セル内の最大**（`all_touched`）である。「0 でない」は「この点が区域内」ではなく
-   * 「**セルのどこかが区域**」でしかない（§5.9）。実測（新宿駅・洪水）で、
-   * 真偽値にすると標高 25〜30m の避難場所まで「区域の中」と言い切ってしまった。
-   *
-   * - `'outside'` … セルに一切かからない（**言い切ってよい**）
-   * - `'partial'` … セルの一部が区域（**「一部」までしか言えない**）
-   * - `'inside'`  … セル全域が区域（**言い切ってよい**）
-   * - `null`      … 判定できない（メッシュが無い地域・メッシュ化していない災害）
-   */
-  readonly hazardAreaCertainty: HazardAreaCertainty
+  /** **その災害の**想定区域との重なり（`hazardArea` が意味づけ済みの形で持つ）。 */
+  readonly hazardArea: HazardArea
   /** 平均標高（m・分からなければ null）。 */
   readonly elevationM: number | null
 }
 
 /** 想定区域との重なり（`null`＝判定できない）。 */
 export type HazardAreaCertainty = CellCertainty | null
+
+/** 重なりを何から読んだか。無ければ（判定できなければ）`null`。 */
+export type HazardAreaSource = 'tile' | 'mesh'
+
+/**
+ * 避難場所と**その災害の**想定区域の重なり。
+ *
+ * ⚠ **真偽値にしてはいけない。** 言い切れるのは両端だけである（§5.9）。
+ *
+ * | | メッシュ（250m） | 公式タイル（画素 ≒ 2m） |
+ * |---|---|---|
+ * | `outside` | セルに一切かからない | その点は塗られていない |
+ * | `partial` | セルの**一部**が区域 | 点は外だが**すぐ近く**が区域 |
+ * | `inside`  | セル**全域**が区域 | **その点が区域内** |
+ * | `null`    | メッシュが無い | タイルが無い（未整備かもしれない）|
+ *
+ * 同じ `'inside'` でも、メッシュは「250m 四方のどこか」までしか言えず、タイルは
+ * **その点そのもの**を指す。だから `source` を捨てずに持ち歩き、言い方を変える。
+ *
+ * 実測（新宿駅・洪水）で、これを真偽値にすると**標高 25〜30m の避難場所まで
+ * 「区域の中」**と言い切ってしまった。
+ */
+export type HazardArea = {
+  readonly certainty: HazardAreaCertainty
+  /** どこから読んだか（判定できなければ null）。 */
+  readonly source: HazardAreaSource | null
+  /** 当たった区域の名前（「土砂災害警戒区域（イエローゾーン）」など）。分からなければ null。 */
+  readonly detailJa: string | null
+}
+
+/** 判定できなかったときの値。 */
+export const HAZARD_AREA_UNKNOWN: HazardArea = {
+  certainty: null,
+  source: null,
+  detailJa: null,
+}
 
 /** 並べ替えたあとの 1 件（距離と方角が付く）。 */
 export type EvacuationSite = EvacuationCandidate & {
@@ -144,7 +168,7 @@ export function rankEvacuationSites(
     .map((candidate) => toSite(origin, candidate))
     .sort(
       (a, b) =>
-        outsideRank(a.hazardAreaCertainty) - outsideRank(b.hazardAreaCertainty) ||
+        outsideRank(a.hazardArea.certainty) - outsideRank(b.hazardArea.certainty) ||
         a.distanceM - b.distanceM,
     )
     .slice(0, top)
@@ -184,26 +208,117 @@ export function evacuationHeadlineJa(
   }
   const where = `${head.bearingJa}へ${head.distanceJa}の「${head.nameJa}」`
   const lead = `${placeJa}の近くで${forJa}に対応した${EVACUATION_SITE_KIND_JA}`
-  if (head.hazardAreaCertainty === 'outside') {
+  if (head.hazardArea.certainty === 'outside') {
     return `${lead}のうち、**${forJa}の想定区域にかからない**もので、いちばん近いのは${where}です。`
   }
-  if (head.hazardAreaCertainty === null) {
+  if (head.hazardArea.certainty === null) {
     return `${lead}のうち、いちばん近いのは${where}です（${forJa}の想定区域との重なりは判定できませんでした）。`
   }
   return `${lead}は${where}が最寄りですが、**この範囲では${forJa}の想定区域にかからないものが見つかりませんでした**。市町村の避難情報を確認してください。`
 }
 
-/** 想定区域との重なり方の言い方（**言い切れるのは両端だけ**・§5.9）。 */
-export const HAZARD_AREA_CERTAINTY_JA: Readonly<Record<NonNullable<HazardAreaCertainty>, string>> =
-  {
+// --- 重なりの読み取り（**両端だけを言い切る**・§5.9・§6.3） -----------------
+
+/** 250m メッシュの 1 レイヤぶん（`domain/hazard/point` の `MeshReading` の部分集合）。 */
+export type AreaMeshReading = {
+  readonly coverage: number
+}
+
+/**
+ * メッシュから重なりを読む。**被覆率の両端だけが厳密**で、間は `'partial'`。
+ * 1 レイヤも無ければ「判定できない」——読めなかったことを「区域の外」にしない。
+ */
+export function hazardAreaFromMesh(readings: readonly AreaMeshReading[]): HazardArea {
+  if (readings.length === 0) return HAZARD_AREA_UNKNOWN
+  const certainty = readings.every((reading) => reading.coverage === 0)
+    ? 'outside'
+    : readings.some((reading) => reading.coverage === 1)
+      ? 'inside'
+      : 'partial'
+  return { certainty, source: 'mesh', detailJa: null }
+}
+
+/** 公式タイルの 1 レイヤぶん（画素の色。読み取りは `lib/hazard/readings` が行う）。 */
+export type AreaTileReading = {
+  readonly layerKey: string
+  /** タイルが届いて画素を読めたか。**404 を「区域外」にしない**ための旗。 */
+  readonly reached: boolean
+  /** その点の色（塗られていなければ null）。 */
+  readonly hexAtPoint: string | null
+  /** 周囲を確かめたときに見つかった色（見つからなければ null）。 */
+  readonly hexNearby: string | null
+}
+
+/**
+ * 公式タイルの画素から重なりを読む（§6.3 の優先順位 ②）。
+ *
+ * タイルは原典の解像度（z16 で 1 画素 ≒ 2m）なので、**塗られていればその点が区域内**と
+ * 言い切れる。メッシュの `'inside'`（250m 四方のどこか）より強い主張である。
+ *
+ * ⚠ **境界の画素は色が混ざる。** 実測（土石流警戒区域・熱海）で、塗りは `#E6C832` なのに
+ * 縁の画素は `#E6C732`（α225）だった。色は**完全一致だけ**を採る規約（§10.2 ③）なので、
+ * 縁に立つと「該当なし」になってしまう。そこで**周囲も確かめ**、点は外でも近くが区域なら
+ * `'partial'`（＝区域のすぐ近く）とする。メッシュ側の隣接セル確認（§8.3）と同じ発想である。
+ */
+export function hazardAreaFromTiles(
+  readings: readonly AreaTileReading[],
+  rankLabelOf: (layerKey: string, hex: string) => string | null,
+): HazardArea {
+  const reached = readings.filter((reading) => reading.reached)
+  if (reached.length === 0) return HAZARD_AREA_UNKNOWN
+  const hit = reached.find((reading) => reading.hexAtPoint !== null)
+  if (hit !== undefined) {
+    return {
+      certainty: 'inside',
+      source: 'tile',
+      detailJa: rankLabelOf(hit.layerKey, hit.hexAtPoint ?? ''),
+    }
+  }
+  const near = reached.find((reading) => reading.hexNearby !== null)
+  if (near !== undefined) {
+    return {
+      certainty: 'partial',
+      source: 'tile',
+      detailJa: rankLabelOf(near.layerKey, near.hexNearby ?? ''),
+    }
+  }
+  return { certainty: 'outside', source: 'tile', detailJa: null }
+}
+
+/**
+ * より強い方の答えを採る（§6.3 の優先順位）。
+ * **タイル ＞ メッシュ**——タイルは点そのもの、メッシュは 250m の区間だから。
+ * タイルが判定できなかったときだけメッシュに落ちる。
+ */
+export function strongerHazardArea(tile: HazardArea, mesh: HazardArea): HazardArea {
+  return tile.certainty === null ? mesh : tile
+}
+
+// --- 文言 -----------------------------------------------------------------
+
+/**
+ * 重なり方の言い方。**出所で言い方を変える**——同じ `'inside'` でも、
+ * タイルは「その点が区域内」、メッシュは「250m 四方のどこか」までしか言えない（§5.9）。
+ */
+const AREA_LABELS_JA: Readonly<
+  Record<HazardAreaSource, Readonly<Record<NonNullable<HazardAreaCertainty>, string>>>
+> = {
+  tile: {
+    outside: '想定区域にかからない',
+    partial: '区域のすぐ近く',
+    inside: '想定区域の中',
+  },
+  mesh: {
     outside: '想定区域にかからない',
     partial: '一部が想定区域（250mメッシュ）',
-    inside: '想定区域の中',
-  }
+    inside: '想定区域の中（250mメッシュ）',
+  },
+}
 
-/** その重なり方を、避難先として見たときの重さ（UI の色分け・AI の言い方の土台）。 */
-export function hazardAreaLabelJa(certainty: HazardAreaCertainty): string {
-  return certainty === null ? '想定区域との重なりは不明' : HAZARD_AREA_CERTAINTY_JA[certainty]
+/** その重なり方の見せ方（UI のバッジ・AI の言い方の土台）。 */
+export function hazardAreaLabelJa(area: HazardArea): string {
+  if (area.certainty === null || area.source === null) return '想定区域との重なりは不明'
+  return AREA_LABELS_JA[area.source][area.certainty]
 }
 
 /** 一覧に添える注記（区域にかかるもの・判定できなかったものがあるときだけ増える）。 */
@@ -214,9 +329,11 @@ export function evacuationNotesJa(
   const forJa = evacuationDisasterLabelJa(disaster)
   const named = (list: readonly EvacuationSite[]): string =>
     list.map((site) => site.nameJa).join('・')
-  const inside = sites.filter((site) => site.hazardAreaCertainty === 'inside')
-  const partial = sites.filter((site) => site.hazardAreaCertainty === 'partial')
-  const unknown = sites.filter((site) => site.hazardAreaCertainty === null)
+  const withCertainty = (want: HazardAreaCertainty): readonly EvacuationSite[] =>
+    sites.filter((site) => site.hazardArea.certainty === want)
+  const inside = withCertainty('inside')
+  const partial = withCertainty('partial')
+  const unknown = withCertainty(null)
   return [
     ...(inside.length === 0
       ? []
@@ -226,12 +343,12 @@ export function evacuationNotesJa(
     ...(partial.length === 0
       ? []
       : [
-          `${partial.length} 件は、その 250m メッシュの**一部**が${forJa}の想定区域にかかっています（${named(partial)}）。その場所そのものが浸かるとは限りませんが、地図の色で確かめてください。`,
+          `${partial.length} 件は${forJa}の想定区域に**接しています**（${named(partial)}）。その場所そのものが区域内とは限りませんが、地図の色で確かめてください。`,
         ]),
     ...(unknown.length === 0
       ? []
       : [
-          `${unknown.length} 件は想定区域との重なりを**判定できませんでした**（この災害は 250m メッシュを持っていないか、この地域のメッシュを読めていません）。`,
+          `${unknown.length} 件は想定区域との重なりを**判定できませんでした**（${named(unknown)}）。この地域に${forJa}の区域図が無いか、取得できませんでした——**区域が無いという意味ではありません**。`,
         ]),
   ]
 }

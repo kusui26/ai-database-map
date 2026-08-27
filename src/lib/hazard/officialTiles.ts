@@ -47,8 +47,40 @@ async function loadImage(url: string): Promise<DecodedImage | null> {
 }
 
 /**
+ * 1 画素の読み取り結果。
+ *
+ * ⚠ **「塗られていない」と「タイルが無い」を同じ null にしない。**
+ * 前者は「この点は区域外」と言ってよいが、後者は**未整備かもしれない**（実測：富山県には
+ * 内水のタイルが 1 枚も無い・§10.3）。区別しないと「未整備」を「安全」と読ませる
+ * ——このアプリでいちばん危ない誤りである（§7.5-1）。
+ */
+export type TileSample = {
+  /** タイルが届いて画素を読めたか（404 は `false`）。 */
+  readonly reached: boolean
+  /** 塗られていた色（`#RRGGBB`）。透明・未到達は null。 */
+  readonly hex: string | null
+}
+
+/** 1 画素を読む（到達したかどうかも返す）。 */
+export async function officialTileSample(
+  layerKey: string,
+  lon: number,
+  lat: number,
+  zoom = POINT_QUERY_ZOOM,
+): Promise<TileSample> {
+  const { x, y, px, py } = tilePixelOf(lon, lat, zoom)
+  const url = tileUrl(layerKey, x, y, zoom)
+  if (url === null) return { reached: false, hex: null }
+  const image = await remember(images, url, () => loadImage(url))
+  if (image === null) return { reached: false, hex: null }
+  const pixel = pixelAt(image, px, py)
+  return { reached: true, hex: pixel.a === 0 ? null : hexOf(pixel) }
+}
+
+/**
  * その地点の画素の色（`#RRGGBB`）。**透明・データ無しは null**。
  * 透明を「区域外」と解釈するのは呼び出し側（＝カタログを通して意味づけする側）の仕事。
+ * 「届かなかった」まで区別したいときは `officialTileSample` を使う。
  */
 export async function officialTileHex(
   layerKey: string,
@@ -56,13 +88,7 @@ export async function officialTileHex(
   lat: number,
   zoom = POINT_QUERY_ZOOM,
 ): Promise<string | null> {
-  const { x, y, px, py } = tilePixelOf(lon, lat, zoom)
-  const url = tileUrl(layerKey, x, y, zoom)
-  if (url === null) return null
-  const image = await remember(images, url, () => loadImage(url))
-  if (image === null) return null
-  const pixel = pixelAt(image, px, py)
-  return pixel.a === 0 ? null : hexOf(pixel)
+  return (await officialTileSample(layerKey, lon, lat, zoom)).hex
 }
 
 /** テスト用：キャッシュを空にする。 */

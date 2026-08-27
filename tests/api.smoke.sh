@@ -181,6 +181,15 @@ get "$BASE/api/hazard/evacuation" "lon=139.0786" "lat=35.1043" "placeJa=熱海�
   [ "$(echo "$BODY" | jq -r '[.sites[] | select(.disastersJa | index("崖崩れ・土石流・地滑り") | not)] | length')" -eq 0 ]; } &&
   ok "hazard/evacuation（土砂は土砂の指定だけ）" || ng "hazard evacuation landslide"
 
+# 13d-2) 区域との重なりを**実際に答えている**か（§6.3 の優先順位を避難先にも適用・PR-4c）。
+#        メッシュを持たない土砂でも、公式タイルの画素で答えられるようになった。
+#        「不明」しか返らない状態に戻ったら落ちる。
+get "$BASE/api/hazard/evacuation" "lon=136.99" "lat=36.85" "placeJa=氷見駅" "for=landslide"
+{ [ "$HTTP" = 200 ] &&
+  [ "$(echo "$BODY" | jq '[.sites[] | select(.hazardAreaSource == "tile")] | length')" -gt 0 ]; } &&
+  ok "hazard/evacuation（土砂でも重なりを答える・タイル $(echo "$BODY" | jq '[.sites[] | select(.hazardAreaSource == "tile")] | length') 件）" ||
+  ng "hazard evacuation area by tile"
+
 # 13e) 異常系：災害種別が無い → 400（既定で洪水に倒さない・§11 リスク 10）
 get "$BASE/api/hazard/evacuation" "lon=139.847" "lat=35.7645"
 [ "$HTTP" = 400 ] && ok "hazard/evacuation：災害種別なし → 400" || ng "evacuation missing for should 400"

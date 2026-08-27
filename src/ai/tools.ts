@@ -212,6 +212,7 @@ function evacuationSummaryForLlm(evacuation: HazardEvacuationResponse) {
       distanceJa: site.distanceJa,
       bearingJa: site.bearingJa,
       hazardAreaJa: site.hazardAreaJa,
+      hazardAreaDetailJa: site.hazardAreaDetailJa,
       elevationM: site.elevationM,
       remarksJa: site.remarksJa,
       disastersJa: site.disastersJa,

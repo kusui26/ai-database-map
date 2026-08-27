@@ -305,7 +305,7 @@ function summarizePanel(panel: Panel): string {
       const items = panel.items
         .map(
           (item, index) =>
-            `${index + 1}. ${item.nameJa}（${item.bearingJa}へ${item.distanceJa}・${item.hazardAreaJa}）`,
+            `${index + 1}. ${item.nameJa}（${item.bearingJa}へ${item.distanceJa}・${item.hazardAreaJa}${item.hazardAreaDetailJa === null ? '' : `／${item.hazardAreaDetailJa}`}）`,
         )
         .join('、')
       return `${panel.placeJa}の${panel.siteKindJa}（${panel.forDisasterJa}）: ${panel.headlineJa} ${items}`

@@ -28,7 +28,6 @@
  */
 
 import { z } from 'zod'
-import type { HazardGroup } from './constants'
 
 /** このアプリが扱う避難場所の種類。**滞在する「指定避難所」ではない。** */
 export const EVACUATION_SITE_KIND_JA = '指定緊急避難場所'
@@ -115,24 +114,33 @@ export function disastersOfFeature(feature: EvacuationFeature): readonly Evacuat
 }
 
 /**
- * 災害種別 → 自前メッシュで見られるハザード・グループ（無い種別は `null`）。
+ * 災害種別 → **その災害の「指定区域」を表すハザードレイヤ**（無い種別は空）。
  *
- * ⚠ **「浸水想定区域の中か」は、聞かれた災害種別と同じ物差しで見る。** 実測（2026-08-27・新宿駅）で、
- * すべてのメッシュ層を一括で見ると **標高 25m の避難場所まで「浸水想定区域の中」**になった
- * ——東京 23 区は内水の想定区域がほぼ全域を覆っているためである。
+ * 避難場所が「その災害の区域にかかっているか」を答えるために読むレイヤの一覧である。
+ *
+ * ## なぜ聞かれた災害のレイヤだけを見るのか
+ *
+ * ⚠ 実測（2026-08-27・新宿駅）で、**すべてのレイヤを一括で見ると標高 25〜30m の避難場所まで
+ * 「浸水想定区域の中」**になった——東京 23 区は内水の想定区域がほぼ全域を覆っているためである。
  * 洪水から逃げる人にとって、その場所に内水の溜まりがあるかは**別の問い**で、
- * 混ぜると「どこも区域の中」になって判断の役に立たない（§7.5 の逆・警告の飽和）。
+ * 混ぜると「どこも区域の中」になって判断の役に立たない（警告の飽和）。
  *
- * メッシュ化しているのは洪水と内水だけ（決定 4）。ほかは `null`＝「判定できない」。
+ * ## なぜ「そのグループの全レイヤ」ではないのか
+ *
+ * 洪水グループは 5 枚あるが、**計画規模（`flood_l1`）と浸水継続時間（`flood_duration`）は
+ * 想定最大規模（`flood_l2`）の内側**なので、区域の内外を問うだけなら読む意味が無い。
+ * 一方**家屋倒壊等氾濫想定区域（河岸侵食）は浸水域の外に広がりうる**ので落とせない。
+ * この包含関係はカタログには書いていない知識なので、ここに表として持ち、テストで固定する。
+ *
+ * 地震・大規模な火事・火山現象は、対応するハザード面を当アプリが持っていないので空。
  */
-export const EVACUATION_HAZARD_GROUP: Readonly<Record<EvacuationDisasterKey, HazardGroup | null>> =
-  {
-    flood: 'flood',
-    inland_flood: 'inland_flood',
-    landslide: null,
-    storm_surge: null,
-    earthquake: null,
-    tsunami: null,
-    fire: null,
-    volcano: null,
-  }
+export const EVACUATION_AREA_LAYERS: Readonly<Record<EvacuationDisasterKey, readonly string[]>> = {
+  flood: ['flood_l2', 'flood_kaoku_hanran', 'flood_kaoku_kagan'],
+  inland_flood: ['naisui'],
+  landslide: ['dosekiryu', 'kyukeisha', 'jisuberi'],
+  storm_surge: ['hightide_l2'],
+  tsunami: ['tsunami_shinsui'],
+  earthquake: [],
+  fire: [],
+  volcano: [],
+}

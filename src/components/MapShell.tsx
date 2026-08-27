@@ -10,6 +10,7 @@ import { useMapUrlState } from './map/useMapUrlState'
 import { useHazardUrlState } from './map/useHazardUrlState'
 import { useAlertTarget, useHazardAlerts } from './hazard/useHazardAlerts'
 import { useWarningMode } from './hazard/useWarningMode'
+import { isWarningMode } from '@/domain/hazard/warning-mode'
 import { AppHeader } from './AppHeader'
 import { Fab } from './Fab'
 import { OfflineBanner } from './OfflineBanner'
@@ -63,15 +64,20 @@ export function MapShell() {
   const [promotionSeen, setPromotionSeen] = useState(false)
   // 現在地の監視は**アプリ全体で 1 本だけ**。ここで回し、地図もカードも geoStore から読む。
   useCurrentPosition()
-  // オフラインで効かせるには**オフラインになる前に**落としておくしかない（§8.3）。
-  useOfflineHazardCache(useGeoStore((state) => state.position))
-  const geoActive = useGeoStore((state) => state.active)
-  const [geoSeen, setGeoSeen] = useState(false)
   // 警戒モード（§7.4）：レベル3相当以上なら、まだ何も選ばれていないときに限り
   // 「いまの危険度＋想定区域」を出す。バナー（`AppHeader`）とは SWR のキャッシュを共有する。
   const { layerKeys, setLayerKeys } = useHazardUrlState()
-  const { alerts } = useHazardAlerts(useAlertTarget())
+  const alertTarget = useAlertTarget()
+  const { alerts } = useHazardAlerts(alertTarget)
   useWarningMode({ alerts, layerKeys, setLayerKeys })
+  // オフラインで効かせるには**オフラインになる前に**落としておくしかない（§8.3）。
+  // 現在地に加えて、**警戒中に見ている場所**も落とす——これから通信が切れる側だから。
+  useOfflineHazardCache(
+    useGeoStore((state) => state.position),
+    alerts !== undefined && isWarningMode(alerts.alertLevel) ? alertTarget : null,
+  )
+  const geoActive = useGeoStore((state) => state.active)
+  const [geoSeen, setGeoSeen] = useState(false)
 
   // 初回ロード時、デスクトップ幅ならチャットを既定オープン（P8d 案B）。
   // モバイルは既定クローズ＝地図の初見を優先し、ChatPanel の遅延ロードを維持（mobile LCP に影響なし）。

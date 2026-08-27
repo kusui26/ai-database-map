@@ -5,6 +5,7 @@ import {
   nearestOutsideCell,
   outsideAlreadyJa,
   ESCAPE_LIMITATIONS_JA,
+  ESCAPE_OFFLINE_NOTE_JA,
   type EscapeCell,
 } from '@/domain/hazard/escape'
 import { escapeDirectionPanel } from '@/domain/hazard/panels'
@@ -180,5 +181,23 @@ describe('domain/hazard: escapeDirection パネル', () => {
     expect(panel.direction?.bearingJa).toBe('南西')
     // 限界は**1 行も落とさない**。
     expect(panel.limitationsJa).toEqual(ESCAPE_LIMITATIONS_JA)
+  })
+})
+
+/**
+ * オフラインの正直さ（§8.3・PR-5b）。
+ *
+ * 脱出方向は**配布済みのメッシュだけで計算できる**ので、通信が切れても答えが出る。
+ * ただし「公式の地図でも塗られていないか」の確認はできない——その差を隠さない。
+ */
+describe('domain/hazard: オフラインで答えたときの注記', () => {
+  it('メッシュだけで判断したことと、その限界を言う', () => {
+    expect(ESCAPE_OFFLINE_NOTE_JA).toContain('オフライン')
+    expect(ESCAPE_OFFLINE_NOTE_JA).toContain('250m メッシュ')
+    // **確認できていないこと**を言う（§11 リスク 7c ぶん甘い方に出る）。
+    expect(ESCAPE_OFFLINE_NOTE_JA).toContain('照合ができていない')
+    expect(ESCAPE_OFFLINE_NOTE_JA).toContain('区域の中のことがあります')
+    // 「安全」とは言わない。
+    expect(ESCAPE_OFFLINE_NOTE_JA).not.toContain('安全です')
   })
 })

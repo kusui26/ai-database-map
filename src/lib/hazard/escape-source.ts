@@ -42,6 +42,7 @@ import {
   nearestOutsideCell,
   outsideAlreadyJa,
   ESCAPE_LIMITATIONS_JA,
+  ESCAPE_OFFLINE_NOTE_JA,
   type EscapeCell,
   type EscapeSearchResult,
 } from '@/domain/hazard/escape'
@@ -79,6 +80,15 @@ export type HazardEscapeRequest = {
   readonly lat: number
   readonly placeJa?: string
   readonly disaster: EvacuationDisasterKey
+  /**
+   * 公式タイルに届くか（既定 true）。**オフラインでは false**。
+   *
+   * 通信できないとき、**メッシュだけで答えることはできる**（配布タイルは端末にある）。
+   * ただし「公式の地図でも塗られていないか」の確認ができないので、
+   * §11 リスク 7c（メッシュは公式タイルより薄い）の分だけ答えが甘くなる。
+   * **黙って甘い答えを返さない**ために、注記に残す。
+   */
+  readonly online?: boolean
 }
 
 /** その災害の区域のうち、**自前メッシュで読めるもの**（洪水・内水だけ・決定 4）。 */
@@ -167,6 +177,11 @@ async function searchVerified(
   probe: (indices: MeshIndices) => EscapeCell,
   tileLayerKeys: readonly string[],
 ): Promise<EscapeSearchResult & { rejected: number }> {
+  // 公式タイルに届かない（オフライン）なら、確認そのものを飛ばす。
+  // 届かない前提で 6 回探し直しても答えは変わらず、待たせるだけになる。
+  if (tileLayerKeys.length === 0) {
+    return { ...nearestOutsideCell(origin, start, probe, MAX_RADIUS_CELLS), rejected: 0 }
+  }
   const rejected = new Set<string>()
   const key = (indices: MeshIndices): string => `${indices.latIndex}/${indices.lonIndex}`
   for (let attempt = 0; attempt < MAX_TILE_CHECKS; attempt += 1) {
@@ -188,8 +203,12 @@ async function searchVerified(
 }
 
 /** 探した結果に添える注記（黙って打ち切らない）。 */
-function escapeNotesJa(result: EscapeSearchResult & { rejected: number }): readonly string[] {
+function escapeNotesJa(
+  result: EscapeSearchResult & { rejected: number },
+  online: boolean,
+): readonly string[] {
   return [
+    ...(online ? [] : [ESCAPE_OFFLINE_NOTE_JA]),
     ...(result.target === null && result.sawUnknown
       ? ['探した範囲に、メッシュを読めない区画がありました。**区域の外が無いという意味ではありません**。']
       : []),
@@ -280,7 +299,13 @@ export async function escapeDirectionAt(
           await loadTiles(layerKeys, surroundingPrimaries(origin.lon, origin.lat), baseUrl),
           layerKeys,
         )
-  const result = await searchVerified(origin, start, probe, tileLayerKeysFor(request.disaster))
+  const online = request.online ?? true
+  const result = await searchVerified(
+    origin,
+    start,
+    probe,
+    online ? tileLayerKeysFor(request.disaster) : [],
+  )
 
   const searchedM = result.searchedRadiusCells * MESH_SIZE_M
   return {
@@ -289,7 +314,7 @@ export async function escapeDirectionAt(
       placeJa,
       areaLabelJa,
       escapeHeadlineJa(placeJa, areaLabelJa, result.target, searchedM),
-      escapeNotesJa(result),
+      escapeNotesJa(result, online),
     ),
     inside: true,
     direction:

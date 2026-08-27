@@ -1,12 +1,13 @@
 /**
- * 評価 runner：ゴールデン 33 問を実 /api/chat（SSE）に投げ、score.ts で採点する。
+ * 評価 runner：ゴールデン 37 問を実 /api/chat（SSE）に投げ、score.ts で採点する。
  *
  * 通常の `pnpm test` では **スキップ**（LLM/DB/課金に依存）。実行は：
  *   1) 別端末で dev サーバ起動：`pnpm dev`（.env に GEMINI_API_KEY・SUPABASE_* が必要）
  *   2) `EVAL=1 pnpm exec vitest run tests/chat-eval.test.ts`
  *      （ポート変更時は `CHAT_BASE_URL=http://localhost:PORT`／閾値は `EVAL_PASS`／間隔は `EVAL_THROTTLE_MS`）
  *      失敗問だけの再実行は `EVAL_ONLY=id1,id2`（モデル側の遅延で落ちた問を全 33 問流さず確認する）
- *      災害の 6 問だけなら `EVAL_ONLY=hazard-station-risk,hazard-is-safe,hazard-depth,hazard-arrive-time,hazard-evacuate-where,hazard-shows-layer`
+ *      災害だけなら `EVAL_ONLY=$(node -e "…")` ——**id を手で並べない**（増えるたびに古くなる）。
+ *      分野で絞りたいときは `EVAL_CATEGORY=災害`（`cases.ts` の `category` と一致するもの）。
  *
  * Gemini 無料枠は 5 req/分・1 問が多段ツールで数回モデルを呼ぶため、問間にスロットルを入れ、
  * quota で失敗した問は 1 度だけクールダウン再試行する。合格率と各問の内訳を出力する。
@@ -20,12 +21,29 @@ import { scoreCase, type EvalObserved } from '@/ai/eval/score'
 
 const ENABLED = process.env.EVAL === '1'
 const BASE_URL = process.env.CHAT_BASE_URL ?? 'http://localhost:3000'
-const PASS_THRESHOLD = Number(process.env.EVAL_PASS ?? '22')
+/**
+ * 全体の合格数の下限。
+ *
+ * 実測（2026-08-28）で **37/37**。以前も 20/20（閾値 16）だったが、問が増えるたびに
+ * 閾値を据え置いたので **67% まで緩んでいた**——12 問壊れても通る状態だった。
+ * **数問の揺らぎ（無料枠の quota・多段ツールの遅延）だけを許す**線に引き直す。
+ */
+const PASS_THRESHOLD = Number(process.env.EVAL_PASS ?? '35')
+
+/**
+ * **1 問でも落としてはいけない分野。**
+ *
+ * 合格数の下限だけだと、**災害の禁止応答（「安全です」と言わない等）が壊れても
+ * 全体では通ってしまう**。ここは人命に関わる不変条件（§6.5・§7.5）なので、別に見る。
+ */
+const CRITICAL_CATEGORIES: readonly string[] = ['災害', '拒否']
 const THROTTLE_MS = Number(process.env.EVAL_THROTTLE_MS ?? '45000')
 const REQUEST_TIMEOUT_MS = 75_000
 const REPORT_PATH = process.env.EVAL_REPORT ?? ''
 /** 実行する問を id で絞る（空＝全問）。落ちた問だけを流し直すため。 */
 const ONLY = (process.env.EVAL_ONLY ?? '').split(',').filter((id) => id.length > 0)
+/** 分野で絞る（`災害` など）。**id を手で並べない**——問が増えるたびに古くなるため。 */
+const CATEGORY = process.env.EVAL_CATEGORY ?? ''
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -106,15 +124,21 @@ async function ask(query: string, selectedGrp?: string, radiusM?: number): Promi
   return { toolCalls, panelTypes, actionTypes, text, haystack, mapResponseValid, errored }
 }
 
-describe.skipIf(!ENABLED)('eval — ゴールデン 33 問', () => {
+describe.skipIf(!ENABLED)(`eval — ゴールデン ${EVAL_CASES.length} 問`, () => {
   it(
     '合格率を計測する',
     async () => {
-      const cases = ONLY.length > 0 ? EVAL_CASES.filter((c) => ONLY.includes(c.id)) : EVAL_CASES
+      const selected = EVAL_CASES.filter(
+        (each) =>
+          (ONLY.length === 0 || ONLY.includes(each.id)) &&
+          (CATEGORY.length === 0 || each.category === CATEGORY),
+      )
+      const cases = selected
       const lines: string[] = ['# eval レポート', '', `対象: ${BASE_URL}`, '']
       const rows: string[] = ['| # | id | 分野 | 合否 | 失敗チェック |', '|---|---|---|---|---|']
       let passed = 0
       let firstAsk = true
+      const criticalFailures: string[] = []
 
       for (let index = 0; index < cases.length; index += 1) {
         const testCase = cases[index]
@@ -132,6 +156,9 @@ describe.skipIf(!ENABLED)('eval — ゴールデン 33 問', () => {
         const result = scoreCase(testCase.expect, observed)
         if (result.pass) passed += 1
         const failed = result.checks.filter((check) => !check.ok).map((check) => check.name)
+        if (!result.pass && CRITICAL_CATEGORIES.includes(testCase.category)) {
+          criticalFailures.push(`${testCase.id}（${failed.join('；')}）`)
+        }
         rows.push(
           `| ${index + 1} | ${testCase.id} | ${testCase.category} | ${result.pass ? '✅' : '❌'} | ${failed.join('；') || '—'} |`,
         )
@@ -145,12 +172,25 @@ describe.skipIf(!ENABLED)('eval — ゴールデン 33 問', () => {
       }
 
       const rate = `${passed}/${cases.length}`
-      lines.push(`**合格率: ${rate}（閾値 ${PASS_THRESHOLD}）**`, '', ...rows, '')
+      lines.push(
+        `**合格率: ${rate}（閾値 ${PASS_THRESHOLD}）**`,
+        '',
+        `**落としてはいけない分野（${CRITICAL_CATEGORIES.join('・')}）の失敗: ${
+          criticalFailures.length === 0 ? 'なし' : criticalFailures.join('、')
+        }**`,
+        '',
+        ...rows,
+        '',
+      )
       const report = lines.join('\n')
       console.log('\n' + report)
       if (REPORT_PATH.length > 0) writeFileSync(REPORT_PATH, report)
 
-      expect(passed).toBeGreaterThanOrEqual(ONLY.length > 0 ? 0 : PASS_THRESHOLD)
+      // **災害・拒否は 1 問も落とさない**（絞って流したときも当てる——ここが本題だから）。
+      expect(criticalFailures, '落としてはいけない分野で失敗した').toEqual([])
+      // 一部だけ流したとき（id・分野で絞ったとき）は、全体の下限は当てない。
+      const partial = ONLY.length > 0 || CATEGORY.length > 0
+      expect(passed).toBeGreaterThanOrEqual(partial ? 0 : PASS_THRESHOLD)
     },
     45 * 60 * 1000,
   )

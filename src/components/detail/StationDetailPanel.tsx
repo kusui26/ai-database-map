@@ -3,16 +3,19 @@
 /**
  * 駅詳細パネル（骨格＋乗降タブ）。デスクトップ＝右ドロワー／モバイル＝vaul ボトムシート。
  * ?grp 選択で開き、閉じると ?grp をクリア。カード＋タブは Protocol の Panel を PanelStack で描画する。
- * タブは 8 カテゴリ（乗降・人口・所得・売上・地価・バス・事業所・従業者）。半径依存タブは集計半径セレクタを表示。
+ * タブは 8 カテゴリ（乗降・人口・所得・売上・地価・バス・事業所・従業者）＋**災害**。
+ * 半径依存タブは集計半径セレクタを表示。
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { Drawer } from 'vaul'
 import { type Panel } from '@/shared/protocol'
 import { type StationDetail } from '@/shared/api'
 import {
   type Category,
+  type DetailTab,
   CATEGORY_LABELS_JA,
+  DETAIL_TAB_LABELS_JA,
   PANEL_WIDTH_CSS,
   RADII_M,
   RADIUS_LABELS,
@@ -35,19 +38,27 @@ import { useStationDetail } from '@/components/detail/useStationDetail'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { PanelRenderer, PanelStack } from '@/components/panels/PanelRenderer'
 import { StationHazardBadge } from '@/components/hazard/StationHazardBadge'
+import { StationHazardTab } from '@/components/hazard/StationHazardTab'
+import { type HazardTarget } from '@/components/hazard/useHazardPoint'
+import { TAB_FADE_WIDTH_PX, tabStripScrollLeft } from '@/lib/tab-strip'
 import { cn } from '@/lib/utils'
 
 /**
  * 詳細タブ（表示順）。所得は「そこに住む人の稼ぎ」、売上は「そこで落ちるお金」なので、
  * 人口 → 所得 → 売上 と並べる（`CATEGORY_ORDER` と同順）。
  *
- * ⚠ タブ帯は 7 タブで 460px、**8 タブ（売上）で 516px** になり、パネル幅 420px を超えて
- * 横スライドが要る（パネルを広げると地図が狭くなるので広げない・
+ * **災害は末尾**（`docs/260828_fix_flood.md` §7 決定 2）。指標ではないので `Category` ではなく
+ * `DetailTab` で持つ。2 番目に置けば見つけやすいが、**乗降・人口を主に使う人の並びを乱す**——
+ * ヘッダのバッジという確実な入口があるので、並びを壊してまで前に出さない。
+ *
+ * ⚠ タブ帯は 7 タブで 460px、8 タブ（売上）で 516px、**9 タブ（災害）で 572px** になり、
+ * パネル幅 420px を超えて横スライドが要る（パネルを広げると地図が狭くなるので広げない・
  * `docs/260805_research_add_dataset_economy.md` §16.3）。7 タブまでは最後のタブが 26px 見えて
- * 「続きがある」と分かったが、**8 タブでは最後のタブが完全に隠れる**ため、
- * 帯の右端にフェードを出して示す（`docs/260816_sales.md` §7.4 案A・`tests/panel-layout.test.ts`）。
+ * 「続きがある」と分かったが、**8 タブ以降は最後のタブが完全に隠れる**ため、帯の右端に
+ * フェードを出し、**選んだタブは帯を送って見せる**（`docs/260816_sales.md` §7.4 案A・
+ * `docs/260828_fix_flood.md` §4.2・`tests/panel-layout.test.ts`）。
  */
-export const DETAIL_TABS: readonly Category[] = [
+export const DETAIL_TABS: readonly DetailTab[] = [
   'passenger',
   'population',
   'income',
@@ -56,7 +67,16 @@ export const DETAIL_TABS: readonly Category[] = [
   'bus',
   'establishment',
   'employee',
+  'hazard',
 ]
+
+/**
+ * 災害バッジとタブが見る地点。**1 か所で作る**——バッジ（ヘッダ）とタブ（本文）で
+ * `useHazardPoint` の SWR キーが同じになり、**タブを開いても追加の通信が起きない**。
+ */
+function hazardTargetOf(detail: StationDetail): HazardTarget {
+  return { lon: detail.station.lon, lat: detail.station.lat, placeJa: detail.station.label }
+}
 
 /** タブごとの本文パネル（選択半径で再計算）。パネルの組み立てはドメイン層が持つ。 */
 function tabPanels(detail: StationDetail, tab: Category, radiusM: number): Panel[] {
@@ -130,16 +150,29 @@ function CloseButton({ onClick }: { onClick: () => void }) {
 }
 
 /**
- * タブ帯の右端フェードの幅（px）。**いちばん狭いタブ（52px）より狭く**して、
- * タブ名そのものを覆い隠さないようにする（`tests/panel-layout.test.ts` が守る）。
+ * 選んだタブを帯の中に出す。**選んだタブが見えないままだと壊れて見える**——
+ * 災害タブは末尾にあり、既定では完全に隠れているので、バッジから飛んだときに必ず要る。
+ * 既に見えているときは動かさない（幾何と境界は `src/lib/tab-strip.ts`）。
  */
-export const TAB_FADE_WIDTH_PX = 32
+function useRevealTab(
+  value: DetailTab,
+  stripRef: RefObject<HTMLDivElement | null>,
+  tabRefs: RefObject<Map<DetailTab, HTMLButtonElement>>,
+) {
+  useEffect(() => {
+    const strip = stripRef.current
+    const tab = tabRefs.current.get(value)
+    if (strip === null || tab === undefined) return
+    strip.scrollTo({ left: tabStripScrollLeft(strip, tab), behavior: 'smooth' })
+  }, [value, stripRef, tabRefs])
+}
 
-function DetailTabs({ value, onChange }: { value: Category; onChange: (tab: Category) => void }) {
+function DetailTabs({ value, onChange }: { value: DetailTab; onChange: (tab: DetailTab) => void }) {
   const stripRef = useRef<HTMLDivElement>(null)
+  const tabRefs = useRef(new Map<DetailTab, HTMLButtonElement>())
   const [atEnd, setAtEnd] = useState(false)
 
-  // 8 タブで帯は 516px になり、420px のパネルからはみ出して最後のタブが完全に隠れる。
+  // 9 タブで帯は 572px になり、420px のパネルからはみ出して最後のタブが完全に隠れる。
   // 右端にフェードを出して「まだ続く」ことを示し、**右端まで送ったら消す**（無い続きを示唆しない）。
   const syncFade = useCallback(() => {
     const strip = stripRef.current
@@ -153,22 +186,28 @@ function DetailTabs({ value, onChange }: { value: Category; onChange: (tab: Cate
     return () => window.removeEventListener('resize', syncFade)
   }, [syncFade])
 
+  useRevealTab(value, stripRef, tabRefs)
+
   return (
     <div className="relative border-b border-slate-100">
-      <div ref={stripRef} onScroll={syncFade} className="flex gap-1 overflow-x-auto px-2">
-        {DETAIL_TABS.map((category) => (
+      {/* `relative`＝タブの `offsetLeft` を**この帯を基準に**測るため（`tabStripScrollLeft`）。 */}
+      <div ref={stripRef} onScroll={syncFade} className="relative flex gap-1 overflow-x-auto px-2">
+        {DETAIL_TABS.map((tab) => (
           <button
-            key={category}
+            key={tab}
             type="button"
-            onClick={() => onChange(category)}
+            ref={(node) => {
+              if (node !== null) tabRefs.current.set(tab, node)
+            }}
+            onClick={() => onChange(tab)}
             className={cn(
               'shrink-0 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors',
-              value === category
+              value === tab
                 ? 'border-indigo-600 text-indigo-700'
                 : 'border-transparent text-slate-500 hover:text-slate-700',
             )}
           >
-            {CATEGORY_LABELS_JA[category]}
+            {DETAIL_TAB_LABELS_JA[tab]}
           </button>
         ))}
       </div>
@@ -183,7 +222,8 @@ function DetailTabs({ value, onChange }: { value: Category; onChange: (tab: Cate
   )
 }
 
-function TabContent({
+/** 指標タブの本文（半径セレクタ＋パネル束）。 */
+function MetricTabContent({
   detail,
   tab,
   radiusM,
@@ -211,12 +251,31 @@ function TabContent({
   )
 }
 
+/**
+ * タブの本文。**災害だけは指標ではない**ので、集計半径もカタログも通さず別の器に渡す
+ * （`docs/260828_fix_flood.md` §4.1）。ここで分けておくと、指標側の型が `Category` のまま保てる。
+ */
+function TabContent({
+  detail,
+  tab,
+  radiusM,
+  onRadius,
+}: {
+  detail: StationDetail
+  tab: DetailTab
+  radiusM: number
+  onRadius: (radiusM: number) => void
+}) {
+  if (tab === 'hazard') return <StationHazardTab target={hazardTargetOf(detail)} />
+  return <MetricTabContent detail={detail} tab={tab} radiusM={radiusM} onRadius={onRadius} />
+}
+
 type BodyProps = {
   detail: StationDetail | undefined
   isLoading: boolean
   error: Error | undefined
-  tab: Category
-  onTab: (tab: Category) => void
+  tab: DetailTab
+  onTab: (tab: DetailTab) => void
   radiusM: number
   onRadius: (radiusM: number) => void
   onClose: () => void
@@ -240,12 +299,9 @@ function DetailBody({
           {detail !== undefined ? (
             <>
               <PanelRenderer panel={stationCardPanel(detail)} />
-              {/* タブは増やさず、1 行のバッジで災害リスクへの入口を作る（§7.2）。 */}
-              <StationHazardBadge
-                lon={detail.station.lon}
-                lat={detail.station.lat}
-                stationName={detail.station.label}
-              />
+              {/* 災害タブは末尾で既定では隠れるので、1 行のバッジを確実な入口にする（§7.2）。
+                  ⚠ ここで**開かない**——ヘッダはスクロールしないので、伸ばすと下が切れる。 */}
+              <StationHazardBadge target={hazardTargetOf(detail)} onOpen={() => onTab('hazard')} />
             </>
           ) : (
             <p className="py-2 text-sm text-slate-400">{isLoading ? '読み込み中…' : '駅を選択'}</p>
@@ -275,7 +331,7 @@ export function StationDetailPanel() {
   const { grp, setGrp, radiusM, setRadiusM } = useMapUrlState()
   const isDesktop = useIsDesktop()
   const { detail, isLoading, error } = useStationDetail(grp)
-  const [tab, setTab] = useState<Category>('passenger')
+  const [tab, setTab] = useState<DetailTab>('passenger')
 
   // チャットの ⤢ 昇格が焦点タブを要求していれば、その1回だけ反映（無ければ乗降）。
   const requestedCategory = useChatStore((state) => state.requestedCategory)

@@ -3,25 +3,25 @@
 /**
  * 駅カードに添える災害バッジ（`docs/260824_flood.md` §7.2）。
  *
- * **駅詳細のタブは増やさない。** タブ帯は 8 タブ＝516px で既にパネル幅 420px を超えており、
- * 9 タブ目はレイアウトの不変条件（`tests/panel-layout.test.ts`）を壊す。
- * 代わりに 1 行のバッジを置き、押すと**現在地カードと同じ `hazardCard`** をその場で開く。
+ * **1 行の入口に徹する。** 押すと**その場では開かず、駅詳細の「災害」タブへ切り替える**。
+ * 9 タブ目は帯の外にあって既定では完全に隠れるので、ここが確実な入口になる。
+ *
+ * ⚠ **ここで中身を開いてはいけない**（`docs/260828_fix_flood.md` §5）。バッジは
+ * **スクロールしないヘッダ**の中にあり、そこで伸びたぶんは外側の `overflow-hidden` に
+ * 切り落とされる——実際にそれで「下が切れて読めない」が起きた。中身はタブ（＝スクロールする
+ * 領域）に置く。この不変条件は `tests/panel-layout.test.ts` が静的に守る。
  *
  * 意味づけは一切ここに書かない——危険度・文言・出典・免責はすべて共通API が決めている。
- * このコンポーネントがやるのは「1 行に畳む／開く」だけである。
  */
 
-import { useState } from 'react'
 import { HAZARD_LEVEL_COLORS, HAZARD_LEVEL_ICONS, HAZARD_LEVEL_LABELS_JA } from '@/shared/constants'
-import { hazardBadgeJa, hazardCardPanel, STATION_HAZARD_CAVEAT_JA } from '@/domain/hazard/panels'
-import { PanelRenderer } from '@/components/panels/PanelRenderer'
-import { useHazardPoint } from './useHazardPoint'
-import { cn } from '@/lib/utils'
+import { hazardBadgeJa, STATION_HAZARD_CAVEAT_JA } from '@/domain/hazard/panels'
+import { useHazardPoint, type HazardTarget } from './useHazardPoint'
 
 export type StationHazardBadgeProps = {
-  readonly lon: number
-  readonly lat: number
-  readonly stationName: string
+  readonly target: HazardTarget
+  /** 押されたとき（＝「災害」タブへ切り替える）。 */
+  readonly onOpen: () => void
 }
 
 function Skeleton() {
@@ -33,9 +33,8 @@ function Skeleton() {
   )
 }
 
-export function StationHazardBadge({ lon, lat, stationName }: StationHazardBadgeProps) {
-  const [open, setOpen] = useState(false)
-  const { point, isLoading } = useHazardPoint({ lon, lat, placeJa: stationName })
+export function StationHazardBadge({ target, onOpen }: StationHazardBadgeProps) {
+  const { point, isLoading } = useHazardPoint(target)
 
   if (point === undefined) return isLoading ? <Skeleton /> : null
 
@@ -57,22 +56,14 @@ export function StationHazardBadge({ lon, lat, stationName }: StationHazardBadge
         </span>
         <button
           type="button"
-          onClick={() => setOpen((current) => !current)}
-          aria-expanded={open}
-          className={cn(
-            'shrink-0 rounded-md px-2 py-0.5 text-xs font-medium transition-colors',
-            open ? 'bg-slate-100 text-slate-600' : 'text-indigo-600 hover:bg-indigo-50',
-          )}
+          onClick={onOpen}
+          className="shrink-0 rounded-md px-2 py-0.5 text-xs font-medium text-indigo-600 transition-colors hover:bg-indigo-50"
         >
-          {open ? '閉じる' : '詳しく見る'}
+          詳しく見る
         </button>
       </div>
+      {/* 限界は**常時表示**にする（§7.2）。押さないと読めない注意書きは、無いのと同じ。 */}
       <p className="mt-0.5 text-[11px] text-slate-400">{STATION_HAZARD_CAVEAT_JA}</p>
-      {open && (
-        <div className="mt-2 rounded-xl bg-slate-50 p-2">
-          <PanelRenderer panel={hazardCardPanel(point, 'compact')} />
-        </div>
-      )}
     </div>
   )
 }

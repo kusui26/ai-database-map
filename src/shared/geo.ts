@@ -12,9 +12,34 @@ export type CirclePolygon = {
   coordinates: [number, number][][]
 }
 
+/** 経緯度の 1 点。 */
+export type LonLat = {
+  readonly lon: number
+  readonly lat: number
+}
+
+/**
+ * 中心から半径 `radiusM` の円周上に、等間隔の点を並べる。
+ * 経度方向は緯度による収束（cos）を補正。小さめの半径（≤20km）で十分な近似。
+ *
+ * 半径サークルの描画と、**区域の縁を確かめる周囲サンプル**（§6.3・避難先の重なり判定）で共用する。
+ */
+export function ringAround(
+  lon: number,
+  lat: number,
+  radiusM: number,
+  segments: number,
+): readonly LonLat[] {
+  const dLat = radiusM / METERS_PER_DEG_LAT
+  const dLon = radiusM / (METERS_PER_DEG_LAT * Math.cos((lat * Math.PI) / 180))
+  return Array.from({ length: segments }, (_unused, index) => {
+    const angle = (2 * Math.PI * index) / segments
+    return { lon: lon + dLon * Math.cos(angle), lat: lat + dLat * Math.sin(angle) }
+  })
+}
+
 /**
  * 中心 (lon, lat) から半径 `radiusM`（メートル）の円ポリゴンを生成する。
- * 経度方向は緯度による収束（cos）を補正。小さめの半径（≤20km）での表示用途に十分な近似。
  * リングは閉じる（先頭と末尾が一致）。
  */
 export function circlePolygon(
@@ -23,18 +48,12 @@ export function circlePolygon(
   radiusM: number,
   segments = 64,
 ): CirclePolygon {
-  const latRad = (lat * Math.PI) / 180
-  const dLat = radiusM / METERS_PER_DEG_LAT
-  const dLon = radiusM / (METERS_PER_DEG_LAT * Math.cos(latRad))
-
-  const ring: [number, number][] = []
-  for (let i = 0; i < segments; i += 1) {
-    const angle = (2 * Math.PI * i) / segments
-    ring.push([lon + dLon * Math.cos(angle), lat + dLat * Math.sin(angle)])
-  }
+  const ring: [number, number][] = ringAround(lon, lat, radiusM, segments).map((point) => [
+    point.lon,
+    point.lat,
+  ])
   const first = ring[0]
   if (first) ring.push(first) // リングを閉じる
-
   return { type: 'Polygon', coordinates: [ring] }
 }
 

@@ -413,14 +413,20 @@ export const hazardEvacuationSiteSchema = z.object({
   /** その場所が指定されている災害種別（表示名）。**洪水だけとは限らない。** */
   disastersJa: z.array(z.string()),
   /**
-   * 250m メッシュで見た、**その災害の**想定区域との重なり方（`null`＝判定できない）。
-   * **真偽値にしない**——セルが持つのは「セル内の最大」なので、言い切れるのは
-   * `outside`（一切かからない）と `inside`（全域）だけで、間は `partial` である（§5.9）。
-   * メッシュを持つのは洪水・内水だけ（決定 4）なので、他の種別では常に `null`。
+   * **その災害の**想定区域との重なり方（`null`＝判定できない）。
+   * **真偽値にしない**——言い切れるのは両端だけである（§5.9）。
    */
   hazardAreaCertainty: hazardCertaintyOfAreaSchema.nullable(),
+  /**
+   * どこから読んだか（§6.3 の優先順位）。`tile`＝公式タイルの画素（点そのもの・地図と同じ）、
+   * `mesh`＝250m メッシュ（区間でしか言えない）。判定できなければ null。
+   * **同じ `inside` でも意味の強さが違う**ので、確からしさと一緒に運ぶ。
+   */
+  hazardAreaSource: z.enum(['tile', 'mesh']).nullable(),
   /** 上の重なり方の日本語（UI と AI で言い方を割らないよう、サーバが作る）。 */
   hazardAreaJa: z.string(),
+  /** 当たった区域の名前（「土砂災害警戒区域（イエローゾーン）」など）。無ければ null。 */
+  hazardAreaDetailJa: z.string().nullable(),
   elevationM: z.number().nullable(),
   remarksJa: z.string().nullable(),
 })

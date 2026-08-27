@@ -19,6 +19,7 @@
  * オフラインでは**取りに行かない**——古い発表を「今」として出さないため。
  */
 
+import { useMemo } from 'react'
 import useSWR from 'swr'
 import { hazardAlertsResponseSchema, type HazardAlertsResponse } from '@/shared/api'
 import { useGeoStore } from '@/stores/geoStore'
@@ -45,13 +46,22 @@ function round(value: number): number {
   return Number(value.toFixed(COORD_DECIMALS))
 }
 
-/** 現在地があればそれ、無ければ地図の中心。 */
+/**
+ * 現在地があればそれ、無ければ地図の中心。
+ *
+ * **同じ値なら同じ物体を返す**（`useMemo`）。毎レンダで新しい物体を返すと、
+ * これを `useEffect` の依存に置いた側（オフライン先読み）が毎回走ってしまう。
+ */
 export function useAlertTarget(): AlertTarget | null {
   const position = useGeoStore((state) => state.position)
   const center = useMapStore((state) => state.center)
-  if (position !== null)
-    return { lon: position.lon, lat: position.lat, isCurrentPosition: true }
-  return center === null ? null : { ...center, isCurrentPosition: false }
+  const lon = position?.lon ?? center?.lon ?? null
+  const lat = position?.lat ?? center?.lat ?? null
+  const isCurrentPosition = position !== null
+  return useMemo(
+    () => (lon === null || lat === null ? null : { lon, lat, isCurrentPosition }),
+    [lon, lat, isCurrentPosition],
+  )
 }
 
 async function fetchAlerts([, lon, lat]: readonly [string, number, number]): Promise<

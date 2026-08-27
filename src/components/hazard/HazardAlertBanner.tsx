@@ -32,6 +32,7 @@ import {
 import { evacuationDisasterFor, isWarningMode } from '@/domain/hazard/warning-mode'
 import { PanelRenderer } from '@/components/panels/PanelRenderer'
 import { useIsOnline } from '@/hooks/useIsOnline'
+import { cn } from '@/lib/utils'
 import { useMapStore } from '@/stores/mapStore'
 import type { HazardAlertsResponse } from '@/shared/api'
 import { useAlertTarget, useHazardAlerts } from './useHazardAlerts'
@@ -40,6 +41,22 @@ import { useEscapeDirection } from './useEscapeDirection'
 
 /** 開いている引き出し（避難先は押されるまで取りに行かない）。 */
 type Drawer = 'none' | 'detail' | 'evacuation'
+
+/**
+ * 避難場所を出せないときの言い方。
+ *
+ * **オフラインで「取得できませんでした」だけ出すのは不親切**——なぜ出ないのか、
+ * 代わりに何が見られるのかを言う。方向（`escapeDirection`）は端末の中だけで出せる。
+ */
+function evacuationMessageJa(online: boolean, loading: boolean): string {
+  if (!online) {
+    return (
+      'オフラインのため、避難場所の一覧は出せません（端末に保存していないデータです）。' +
+      '上の「区域の外へ出る向き」は、保存した 250m メッシュだけで出しています。'
+    )
+  }
+  return loading ? '避難場所を探しています…' : '避難場所を取得できませんでした。'
+}
 
 /** どこの「今」を見ているか（主語をはっきりさせる）。 */
 function whereJa(alerts: HazardAlertsResponse, isCurrentPosition: boolean): string {
@@ -66,7 +83,11 @@ export function HazardAlertBanner() {
           disaster: evacuationDisasterFor(alerts.warnings, alerts.floodForecasts.length > 0),
         }
       : null
-  const { evacuation, isLoading: evacuationLoading } = useEvacuationSites(evacuationTarget)
+  // 避難場所は**他ドメインのデータ**（国土地理院のタイル）なので、端末に保存していない。
+  // オフラインでは取りに行かず、取れないことを正直に言う（§8.3）。
+  const { evacuation, isLoading: evacuationLoading } = useEvacuationSites(
+    online ? evacuationTarget : null,
+  )
   // 「どちらへ動けば区域を出られるか」も同じ場面で要る（§8.6）。押す回数は増やさない。
   const { escape } = useEscapeDirection(evacuationTarget)
 
@@ -153,14 +174,17 @@ export function HazardAlertBanner() {
               {escape?.inside === true && (
                 <PanelRenderer panel={escapeDirectionPanel(escape, 'compact')} />
               )}
-              {evacuation === undefined ? (
-                <p className="p-2 text-xs text-slate-500">
-                  {evacuationLoading
-                    ? '避難場所を探しています…'
-                    : '避難場所を取得できませんでした。'}
-                </p>
-              ) : (
+              {evacuation !== undefined ? (
                 <PanelRenderer panel={evacuationListPanel(evacuation, 'compact')} />
+              ) : (
+                <p
+                  className={cn(
+                    'rounded-lg p-2 text-xs',
+                    online ? 'text-slate-500' : 'bg-amber-50 font-medium text-amber-800',
+                  )}
+                >
+                  {evacuationMessageJa(online, evacuationLoading)}
+                </p>
               )}
             </div>
           )}

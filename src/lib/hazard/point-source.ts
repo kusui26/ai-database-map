@@ -54,6 +54,8 @@ export async function hazardPointAt(request: HazardPointRequest): Promise<Hazard
       placeJa: request.placeJa ?? DEFAULT_PLACE_JA,
       mesh: mesh.mesh,
       tile: tile.tile,
+      tileNearby: tile.nearby,
+      uncoveredLayerKeys: tile.uncoveredLayerKeys,
       rivers: navi.rivers,
       elevationM: mesh.elevationM,
       online: tile.reached,

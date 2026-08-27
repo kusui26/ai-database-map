@@ -17,13 +17,20 @@
  * 分かっている**ことが前提である。オフラインでメッシュしか見られなかった場合は
  * 「該当しない」ではなく「**分からない**」なので、`evacuation` を null にする
  * （プロトコルの「判定できないときは null（断定しない）」・§6.4）。閾値の変更ではない。
+ *
+ * ## **区域のすぐ外**でも「留まってよい」と言わない（§6.2 の追記・PR-4d）
+ *
+ * 実測で、土石流警戒区域の**約 10m 外**が `evacuation: 'stay'`（その場に留まる）になっていた。
+ * 公式タイルは 1 画素しか見ておらず、土砂はメッシュ化していないので隣接セルの手掛かりも無い
+ * ——**手掛かりゼロのまま「留まってよい」と言っていた**。近くが区域なら 6 番を適用しない。
+ * これも閾値の変更ではなく、「該当しない」と言い切れる状況の定義を狭めたものである。
  */
 
 import { getHazardLayer, type HazardCertainty } from '@/shared/hazard'
-import type { HazardVerdict } from '@/shared/api'
+import type { HazardNeighbour, HazardVerdict } from '@/shared/api'
 import type { EvacuationAction, HazardLevel } from '@/shared/constants'
 import { heaviestHazardLevel } from './catalog'
-import { noHazardHeadlineJa, partialHeadlineJa } from './wording'
+import { nearHazardHeadlineJa, noHazardHeadlineJa, partialHeadlineJa } from './wording'
 
 /** 判定に必要な 1 件ぶん（`domain/hazard/point` が組み立てる）。 */
 export type VerdictItem = {
@@ -107,11 +114,24 @@ const RULES: readonly Rule[] = [
 ]
 
 /**
- * 1 文の結論。守るのは 2 つ——**該当が無いときに「安全」と言わない**（§7.5）ことと、
- * **区間でしか言えないときに「入っています」と断定しない**（§5.9）こと。
+ * 1 文の結論。守るのは 3 つ——**該当が無いときに「安全」と言わない**（§7.5）ことと、
+ * **区間でしか言えないときに「入っています」と断定しない**（§5.9）ことと、
+ * **近くが区域ならそれを言う**（§6.2 の追記）こと。
  */
-function headlineJa(matched: VerdictItem | null, certainty: HazardCertainty): string {
-  if (matched === null) return noHazardHeadlineJa(certainty)
+function headlineJa(
+  matched: VerdictItem | null,
+  certainty: HazardCertainty,
+  neighbours: readonly HazardNeighbour[],
+): string {
+  if (matched === null) {
+    const nearest = neighbours[0]
+    return nearest === undefined
+      ? noHazardHeadlineJa(certainty)
+      : nearHazardHeadlineJa(
+          neighbours.filter((each) => each.source === nearest.source).map((each) => each.labelJa),
+          nearest.proximityJa,
+        )
+  }
   if (matched.certainty === 'partial' && matched.coverage !== null) {
     return partialHeadlineJa(matched.labelJa, matched.rankLabelJa, matched.coverage)
   }
@@ -119,6 +139,13 @@ function headlineJa(matched: VerdictItem | null, certainty: HazardCertainty): st
     return `この場所は、${matched.labelJa}に入っています。`
   }
   return `この場所は、${matched.labelJa}に入っています（${matched.valueJa}）。`
+}
+
+/** 近くが区域であることの根拠（**当たっていないレイヤの話**なので、規則の理由とは分けて足す）。 */
+function neighbourReasonsJa(neighbours: readonly HazardNeighbour[]): readonly string[] {
+  return neighbours.map(
+    (each) => `${each.labelJa}：この場所は区域外ですが、${each.proximityJa}が区域です`,
+  )
 }
 
 /** 最初に当たった規則と、その原因になった項目。 */
@@ -136,6 +163,7 @@ function firstMatch(items: readonly VerdictItem[]): { rule: Rule; item: VerdictI
 export function hazardVerdict(
   items: readonly VerdictItem[],
   certainty: HazardCertainty,
+  neighbours: readonly HazardNeighbour[] = [],
 ): HazardVerdict {
   const hit = firstMatch(items)
   const level = heaviestHazardLevel(items.map((item) => item.level))
@@ -146,18 +174,20 @@ export function hazardVerdict(
     return item === undefined ? [] : [rule.reasonJa(item)]
   })
   if (hit === null) {
-    const undecided = certainty === 'unknown' || items.length > 0
+    // **近くが区域なら 6 番を適用しない。** 「留まってよい」と言えるのは、
+    // その地点のハザードが分かっていて、かつ近くにも無いときだけである（§6.2 の追記）。
+    const undecided = certainty === 'unknown' || items.length > 0 || neighbours.length > 0
     return {
       level,
-      headlineJa: headlineJa(null, certainty),
+      headlineJa: headlineJa(null, certainty, neighbours),
       evacuation: undecided ? null : 'stay',
-      reasonsJa,
+      reasonsJa: [...reasonsJa, ...neighbourReasonsJa(neighbours)],
     }
   }
   return {
     level,
-    headlineJa: headlineJa(hit.item, certainty),
+    headlineJa: headlineJa(hit.item, certainty, neighbours),
     evacuation: hit.rule.action,
-    reasonsJa,
+    reasonsJa: [...reasonsJa, ...neighbourReasonsJa(neighbours)],
   }
 }

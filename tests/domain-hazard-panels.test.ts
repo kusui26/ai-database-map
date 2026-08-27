@@ -21,6 +21,8 @@ const BASE = {
   placeJa: '現在地',
   mesh: [],
   tile: [],
+  tileNearby: [],
+  uncoveredLayerKeys: [],
   rivers: [],
   elevationM: 0.2,
   online: true,
@@ -156,6 +158,8 @@ describe('hazard/panels: 駅バッジの 1 行（§7.2）', () => {
           { layerKey: 'flood_l2', hex: '#FFB7B7' },
           { layerKey: 'hightide_l2', hex: '#FFFFB3' },
         ],
+        tileNearby: [],
+        uncoveredLayerKeys: [],
       },
       ALL_LAYERS,
     )

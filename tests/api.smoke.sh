@@ -118,6 +118,21 @@ fi
   ok "hazard/point：河川が返る（浸水ナビが届いている・$NRIVER 本）" ||
   ng "hazard point rivers（浸水ナビに届いていない）"
 
+# 12b) 区域の**すぐ外**で「その場に留まる」と言わない（§6.2 の追記・PR-4d）。
+#      実測で見つけた座標：土石流警戒区域の約 10m 外。ここが 'stay' に戻ったら落ちる。
+get "$BASE/api/hazard/point" "lon=139.071025" "lat=35.124252" "placeJa=区域の縁"
+{ [ "$HTTP" = 200 ] && [ "$(echo "$BODY" | jq -r '.verdict.evacuation')" = null ] &&
+  [ "$(echo "$BODY" | jq -r '[.neighbours[] | select(.source == "tile")] | length')" -gt 0 ] &&
+  [ "$(echo "$BODY" | jq -r '.verdict.headlineJa | contains("20m")')" = true ]; } &&
+  ok "hazard/point：区域のすぐ外は「留まってよい」と言わない" || ng "hazard point boundary"
+
+# 12c) キキクル（表示専用）が地点の答えに混ざっていない（決定 5・§9.1）。
+#      混ざっていると {basetime} 入りの URL を気象庁に投げ、無関係な注記も出る。
+{ [ "$(echo "$BODY" | jq -r '[.coverageNotesJa[] | select(contains("10 分ごとに更新"))] | length')" -eq 0 ] &&
+  [ "$(echo "$BODY" | jq -r '[.hazards[] | select(.layerKey | startswith("kikikuru"))] | length')" -eq 0 ]; } &&
+  ok "hazard/point：キキクルは地点の答えに混ざらない（注記 $(echo "$BODY" | jq '.coverageNotesJa | length') 件）" ||
+  ng "hazard point kikikuru leak"
+
 # 13) hazard/alerts（いまの警戒状況）
 #     平時はほぼ全域が「発表なし」なので、**中身ではなく骨格**を見る：
 #     区域が解決できているか（＝逆ジオ＋対応表が動いているか）と、限界の 1 文が必ず入るか。

@@ -10,11 +10,36 @@
 import { ringAround } from '@/shared/geo'
 import { cellAt, elevationAtCell } from '@/shared/hazard-mesh'
 import { isCellIndex, meshCellFromLonLat, type MeshCell } from '@/shared/mesh'
+import { getHazardLayer } from '@/shared/hazard'
 import { hazardLayersWithPointAnswer } from '@/domain/hazard/catalog'
 import type { AreaTileReading } from '@/domain/hazard/evacuation'
 import type { MeshReading, TileReading } from '@/domain/hazard/point'
 import { elevationMeshTile, hazardMeshIndex, hazardMeshTile } from './meshTiles'
-import { officialTileHex, officialTileSample, POINT_QUERY_ZOOM } from './officialTiles'
+import { officialTileSample, POINT_QUERY_ZOOM } from './officialTiles'
+
+/**
+ * 区域の縁を確かめる半径（メートル）。
+ *
+ * 公式タイルは境界の画素で色が混ざり（実測：塗り `#E6C832` に対し縁は `#E6C732`）、
+ * 完全一致だけを採る規約（§10.2 ③）では縁に立つと「該当なし」になる。
+ * また避難場所の座標は建物の代表点なので、**敷地の広がりぶんの余裕**も要る。
+ * 20m は「隣が区域なら知らせるが、通り 1 本向こうまでは含めない」距離として選んだ。
+ */
+const NEARBY_RADIUS_M = 20
+
+/** 周囲を確かめる方位の数（八方位）。 */
+const NEARBY_SAMPLES = 8
+
+/**
+ * 粗いズーム。**「塗られていない」と「タイルが無い」を見分ける**ために引く。
+ *
+ * z10 は約 40km 四方。ここにタイルがあれば「この一帯には区域図がある」と分かるので、
+ * z16 の 404 は「**この区画に塗るものが無い**」＝区域外と読める。
+ * どちらのズームも無ければ、区域が無いのか未整備なのかは分からない
+ * （実測 2026-08-27：富山県の内水は z16・z10 とも 404 ＝未整備。
+ * 熱海の海上は z16 404・z10 200 ＝区域外）。
+ */
+const COARSE_ZOOM = 10
 
 /** 隣接セルの相対位置（周囲 8 マス）。同じタイル内に収まるものだけを見る。 */
 const NEIGHBOUR_OFFSETS: readonly (readonly [number, number])[] = [
@@ -98,55 +123,86 @@ export async function meshReadings(
 
 export type TileReadingsResult = {
   readonly tile: readonly TileReading[]
+  /**
+   * その点は塗られていないが、**すぐ近く（約 20m）が区域**だったもの（§6.2 の追記）。
+   * メッシュが隣接セルで教えてくれないレイヤ——土砂・高潮・津波——だけを見る。
+   */
+  readonly nearby: readonly TileReading[]
+  /** この地域にそもそも区域図が無いレイヤ（未整備の可能性・注記を地域固有にするため）。 */
+  readonly uncoveredLayerKeys: readonly string[]
   readonly noteJa: string | null
   /** 1 レイヤでも公式タイルに届いたか（届いていなければ答えは `unknown`）。 */
   readonly reached: boolean
 }
 
 /**
+ * そのレイヤは「すぐ近く」まで見るか。
+ *
+ * **メッシュを持つレイヤは見ない。** 洪水・内水は 250m メッシュが被覆率と隣接セルを持っていて、
+ * 「このメッシュの◯%が区域」「隣のメッシュが区域」と既に言えている（§8.3）。
+ * 見るのは**メッシュを持たない土砂・高潮・津波**だけ——そこだけが手掛かりゼロだった。
+ * 通信も増えない（周囲 20m はほぼ同じタイルの中なので、展開済みの画像を読み直すだけ）。
+ */
+function needsProximity(layerKey: string): boolean {
+  return getHazardLayer(layerKey)?.mesh?.available !== true
+}
+
+/** 1 レイヤぶんの読み取り（点 → 近く → その地域に図があるか）。 */
+async function readPointLayer(
+  layerKey: string,
+  lon: number,
+  lat: number,
+): Promise<{
+  readonly layerKey: string
+  readonly hex: string | null
+  readonly nearbyHex: string | null
+  readonly covered: boolean
+}> {
+  const point = await officialTileSample(layerKey, lon, lat, POINT_QUERY_ZOOM)
+  if (!point.reached) {
+    // 届かなかった。**「区域外」と「未整備」を粗いズームで見分ける**（PR-4c と同じ手）。
+    const coarse = await officialTileSample(layerKey, lon, lat, COARSE_ZOOM)
+    return { layerKey, hex: null, nearbyHex: null, covered: coarse.reached }
+  }
+  if (point.hex !== null || !needsProximity(layerKey)) {
+    return { layerKey, hex: point.hex, nearbyHex: null, covered: true }
+  }
+  const ring = ringAround(lon, lat, NEARBY_RADIUS_M, NEARBY_SAMPLES)
+  const samples = await Promise.all(
+    ring.map((each) => officialTileSample(layerKey, each.lon, each.lat, POINT_QUERY_ZOOM)),
+  )
+  return {
+    layerKey,
+    hex: null,
+    nearbyHex: samples.find((sample) => sample.hex !== null)?.hex ?? null,
+    covered: true,
+  }
+}
+
+/**
  * 公式タイルの画素を全レイヤぶん読む（**塗られていた画素だけ**を返す）。
  * 1 枚でも届けばオンライン扱いにする——全滅したときだけメッシュだけの答えになる。
+ *
+ * 塗られていないレイヤについては、**すぐ近くが区域か**と**この地域に図があるか**も返す。
+ * どちらも「白＝安全」と読ませないために要る（§7.5-1）。
  */
 export async function tileReadings(lon: number, lat: number): Promise<TileReadingsResult> {
   const keys = hazardLayersWithPointAnswer()
-  const results = await Promise.allSettled(
-    keys.map(async (layerKey) => ({ layerKey, hex: await officialTileHex(layerKey, lon, lat) })),
-  )
+  const results = await Promise.allSettled(keys.map((key) => readPointLayer(key, lon, lat)))
   const settled = results.flatMap((result) => (result.status === 'fulfilled' ? [result.value] : []))
-  const tile = settled.flatMap(({ layerKey, hex }) => (hex === null ? [] : [{ layerKey, hex }]))
   const failed = results.length - settled.length
   return {
-    tile,
+    tile: settled.flatMap((each) => (each.hex === null ? [] : [{ layerKey: each.layerKey, hex: each.hex }])),
+    nearby: settled.flatMap((each) =>
+      each.nearbyHex === null ? [] : [{ layerKey: each.layerKey, hex: each.nearbyHex }],
+    ),
+    uncoveredLayerKeys: settled.flatMap((each) => (each.covered ? [] : [each.layerKey])),
     reached: settled.length > 0,
     noteJa: failed === 0 ? null : `公式タイルを ${failed} レイヤぶん取得できませんでした`,
   }
 }
 
 // --- 区域との重なり（避難先の判定・§6.3） --------------------------------
-
-/**
- * 区域の縁を確かめる半径（メートル）。
- *
- * 公式タイルは境界の画素で色が混ざり（実測：塗り `#E6C832` に対し縁は `#E6C732`）、
- * 完全一致だけを採る規約（§10.2 ③）では縁に立つと「該当なし」になる。
- * また避難場所の座標は建物の代表点なので、**敷地の広がりぶんの余裕**も要る。
- * 20m は「隣が区域なら知らせるが、通り 1 本向こうまでは含めない」距離として選んだ。
- */
-const NEARBY_RADIUS_M = 20
-
-/** 周囲を確かめる方位の数（八方位）。 */
-const NEARBY_SAMPLES = 8
-
-/**
- * 粗いズーム。**「塗られていない」と「タイルが無い」を見分ける**ために引く。
- *
- * z10 は約 40km 四方。ここにタイルがあれば「この一帯には区域図がある」と分かるので、
- * z16 の 404 は「**この区画に塗るものが無い**」＝区域外と読める。
- * どちらのズームも無ければ、区域が無いのか未整備なのかは分からない
- * （実測 2026-08-27：富山県の内水は z16・z10 とも 404 ＝未整備。
- * 熱海の海上は z16 404・z10 200 ＝区域外）。
- */
-const COARSE_ZOOM = 10
 
 export type AreaTileReadingsResult = {
   readonly readings: readonly AreaTileReading[]

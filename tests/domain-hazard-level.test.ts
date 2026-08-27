@@ -6,9 +6,16 @@ import {
   hazardLevelOfAlert,
   heaviestAlertLevel,
   toAlertWarning,
+  alertLevelOfFloodName,
   type AlertWarning,
 } from '@/domain/hazard/level'
-import { JMA_WARNING_KINDS, jmaAreaTable, jmaMunicipality, jmaWarningKind } from '@/shared/jma'
+import {
+  alertLevelOfLocalCode,
+  JMA_WARNING_KINDS,
+  jmaAreaTable,
+  jmaMunicipality,
+  jmaWarningKind,
+} from '@/shared/jma'
 import { ALERT_LEVELS, ALERT_LEVEL_LABELS_JA } from '@/shared/constants'
 import { hazardAlertCardPanel, reportedAtJa } from '@/domain/hazard/panels'
 import { hazardAlertsResponseSchema } from '@/shared/api'
@@ -31,6 +38,7 @@ function warning(overrides: Partial<AlertWarning> = {}): AlertWarning {
     alertLevel: 3,
     areaJa: '葛飾区',
     statusJa: '発表',
+    detailJa: null,
     ...overrides,
   }
 }
@@ -149,10 +157,34 @@ describe('level: 言い方の規律（§7.4・§7.5）', () => {
     expect(reasons[1]).toBe('横浜市：雷注意報（発表）')
   })
 
-  it('判定に含まれていないものを明示する文がある', () => {
-    expect(ALERT_LIMITATION_JA).toContain('土砂災害警戒情報')
-    expect(ALERT_LIMITATION_JA).toContain('氾濫危険情報')
-    expect(ALERT_LIMITATION_JA).toContain('現れないことがあります')
+  it('分からないこと（市町村の避難情報）を明示する文がある', () => {
+    expect(ALERT_LIMITATION_JA).toContain('避難情報')
+    expect(ALERT_LIMITATION_JA).toContain('市町村')
+  })
+
+  /** 「危険度」は発表される“もの”ではなく状態。日本語として通る言い方に変える。 */
+  it('危険度は「◯◯が警戒レベル4相当です」と言う', () => {
+    const headline = alertHeadlineJa('小矢部市', [
+      warning({ code: '49', nameJa: '土砂災害の危険度', kindJa: null, alertLevel: 4 }),
+    ])
+    expect(headline).toBe('小矢部市は土砂災害の危険度が警戒レベル4相当です。')
+  })
+
+  /** 名指しの河川がいちばん具体的なので、同じレベルなら河川を見出しにする。 */
+  it('指定河川洪水予報が同じか重ければ、河川を見出しにする', () => {
+    const headline = alertHeadlineJa(
+      '小矢部市',
+      [warning({ alertLevel: 3 })],
+      [
+        {
+          riverNameJa: '小矢部川',
+          nameJa: 'レベル４氾濫危険情報',
+          alertLevel: 4,
+          reportedAt: null,
+        },
+      ],
+    )
+    expect(headline).toBe('小矢部川にレベル４氾濫危険情報（警戒レベル4相当）が発表されています。')
   })
 
   it('ラベルはすべて「相当」（0 を除く）', () => {
@@ -207,6 +239,7 @@ describe('panels: いまの警戒状況 → hazardCard', () => {
       level: hazardLevelOfAlert(heaviestAlertLevel(warnings)),
       headlineJa: alertHeadlineJa('葛飾区', warnings),
       warnings: [...warnings],
+      floodForecasts: [],
       reasonsJa: [...alertReasonsJa(warnings)],
       reportedAt,
       limitationsJa: [ALERT_LIMITATION_JA],
@@ -236,7 +269,7 @@ describe('panels: いまの警戒状況 → hazardCard', () => {
   it('発表時刻と限界を注記に必ず入れる（10 分前を「今」と言わない）', () => {
     const panel = hazardAlertCardPanel(alerts([], '2026-05-28T10:16:00+09:00'))
     expect(panel.coverageNotesJa[0]).toContain('気象庁の発表時刻')
-    expect(panel.coverageNotesJa.some((note) => note.includes('土砂災害警戒情報'))).toBe(true)
+    expect(panel.coverageNotesJa.some((note) => note.includes('避難情報'))).toBe(true)
   })
 
   it('同じ種別が複数区域で出ても行のキーが衝突しない', () => {
@@ -249,5 +282,82 @@ describe('panels: いまの警戒状況 → hazardCard', () => {
   it('壊れた発表時刻は落ちずに省かれる', () => {
     expect(reportedAtJa(null)).toBeNull()
     expect(reportedAtJa('こわれた日時')).toBeNull()
+  })
+})
+
+describe('level: 危険度から警戒レベル相当を読む（r8 の properties）', () => {
+  /**
+   * 実測（2026-08-27）：レベルを運ぶ危険度の local は **`X1`**（21/31/41/51）で、
+   * 雷・風・波・濃霧・乾燥の危険度は**すべて `20`**。だから `X1` かどうかで見分ける。
+   */
+  it('local が X1 のものだけがレベルを持つ', () => {
+    for (const [local, level] of [
+      ['21', 2],
+      ['31', 3],
+      ['41', 4],
+      ['51', 5],
+    ] as const) {
+      expect(alertLevelOfLocalCode(local), local).toBe(level)
+    }
+    // 雷危険度などは 20。レベル 2 に化けさせない。
+    expect(alertLevelOfLocalCode('20')).toBeNull()
+    expect(alertLevelOfLocalCode(undefined)).toBeNull()
+    expect(alertLevelOfLocalCode('61')).toBeNull()
+  })
+
+  it('危険度からレベルを拾い、名前も危険度から作る（表に無いコードでも拾える）', () => {
+    const landslide = toAlertWarning(
+      {
+        code: '49',
+        status: '継続',
+        properties: [
+          {
+            type: '土砂災害危険度',
+            significancyPart: { locals: [{ code: '41' }] },
+            criteriaPeriod: {
+              locals: [{ sentence: '２７日８時から１３時まで、警戒レベル４相当' }],
+            },
+          },
+        ],
+      },
+      '小矢部市',
+    )
+    expect(landslide?.alertLevel).toBe(4)
+    expect(landslide?.nameJa).toBe('土砂災害の危険度')
+    expect(landslide?.detailJa).toContain('警戒レベル４相当')
+  })
+
+  it('種別コードと危険度の重い方を採る', () => {
+    // 大雨警報（表では 3 相当）に、浸水害の危険度 4 相当が付いている場合。
+    const heavy = toAlertWarning(
+      {
+        code: '03',
+        status: '発表',
+        properties: [{ type: '大雨浸水危険度', significancyPart: { locals: [{ code: '41' }] } }],
+      },
+      '小矢部市',
+    )
+    expect(heavy?.nameJa).toBe('大雨警報') // 名前は表が優先
+    expect(heavy?.alertLevel).toBe(4) // レベルは重い方
+  })
+
+  it('雷注意報の危険度（local 20）はレベル 0 のまま', () => {
+    const thunder = toAlertWarning(
+      {
+        code: '14',
+        status: '発表',
+        properties: [{ type: '雷危険度', significancyPart: { locals: [{ code: '20' }] } }],
+      },
+      '小矢部市',
+    )
+    expect(thunder?.alertLevel).toBe(0)
+    expect(thunder?.nameJa).toBe('雷注意報')
+  })
+
+  it('指定河川洪水予報のレベルは名前から読む（全角も半角も）', () => {
+    expect(alertLevelOfFloodName('レベル３氾濫警報')).toBe(3)
+    expect(alertLevelOfFloodName('レベル４氾濫危険情報')).toBe(4)
+    expect(alertLevelOfFloodName('レベル5氾濫発生情報')).toBe(5)
+    expect(alertLevelOfFloodName('氾濫注意情報')).toBe(0)
   })
 })

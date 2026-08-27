@@ -6,7 +6,12 @@
  * 「画面には出るが AI は説明できない」というズレが構造的に起きない（.claude/CLAUDE.md §2）。
  */
 
-import type { HazardAlertsResponse, HazardAlertWarning, HazardPointResponse } from '@/shared/api'
+import type {
+  HazardAlertsResponse,
+  HazardAlertWarning,
+  HazardFloodForecast,
+  HazardPointResponse,
+} from '@/shared/api'
 import type { HazardCardPanel, HazardItem, PanelSize } from '@/shared/protocol'
 import { ALERT_LEVEL_LABELS_JA, HAZARD_GROUP_LABELS_JA } from '@/shared/constants'
 import { getHazardLayer } from '@/shared/hazard'
@@ -84,8 +89,24 @@ function alertItem(warning: HazardAlertWarning): HazardItem {
     layerKey: `jma-${warning.areaJa}-${warning.code}`,
     labelJa: warning.nameJa,
     valueJa: warning.alertLevel === 0 ? warning.statusJa : `${levelJa}・${warning.statusJa}`,
-    meaningJa: warning.areaJa,
+    // 補足の文（「２７日８時から１３時まで、警戒レベル４相当」）があればそちらを出す。
+    meaningJa: warning.detailJa ?? warning.areaJa,
     level: hazardLevelOfAlert(warning.alertLevel),
+    color: null,
+    source: 'jma',
+    coverage: null,
+    certainty: 'exact',
+  }
+}
+
+/** 指定河川洪水予報 1 件 → カードの 1 行（**河川名を主語にする**）。 */
+function floodItem(forecast: HazardFloodForecast): HazardItem {
+  return {
+    layerKey: `jma-river-${forecast.riverNameJa}-${forecast.nameJa}`,
+    labelJa: `${forecast.riverNameJa}（指定河川洪水予報）`,
+    valueJa: `${forecast.nameJa}・${ALERT_LEVEL_LABELS_JA[forecast.alertLevel]}`,
+    meaningJa: null,
+    level: hazardLevelOfAlert(forecast.alertLevel),
     color: null,
     source: 'jma',
     coverage: null,
@@ -111,7 +132,8 @@ export function hazardAlertCardPanel(
     headlineJa: alerts.headlineJa,
     evacuation: null,
     certainty: 'exact',
-    items: alerts.warnings.map(alertItem),
+    // 河川の予報を先に置く（名指しの河川がいちばん具体的なので）。
+    items: [...alerts.floodForecasts.map(floodItem), ...alerts.warnings.map(alertItem)],
     reasonsJa: alerts.reasonsJa,
     // 時刻・限界・取れなかったものを 1 か所にまとめる（UI が出し忘れられない形）。
     coverageNotesJa: [

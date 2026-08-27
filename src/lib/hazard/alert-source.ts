@@ -15,13 +15,21 @@ import type { SourceRef } from '@/shared/protocol'
 import {
   ALERT_LIMITATION_JA,
   alertHeadlineJa,
+  alertLevelOfFloodName,
   alertReasonsJa,
   hazardLevelOfAlert,
   heaviestAlertLevel,
   toAlertWarning,
   type AlertWarning,
+  type FloodForecastWarning,
 } from '@/domain/hazard/level'
-import { jmaWarningMap, municipalityCodeAt, type WarningMap } from './jma'
+import {
+  jmaFloodForecasts,
+  jmaWarningMap,
+  municipalityCodeAt,
+  type FloodForecast,
+  type WarningMap,
+} from './jma'
 
 /** 呼び名の既定。 */
 export const DEFAULT_PLACE_JA = 'この地点'
@@ -89,6 +97,25 @@ function reportedAtOf(municipality: JmaMunicipality, map: WarningMap): string | 
   )
 }
 
+/**
+ * その市区町村の区域を対象にした指定河川洪水予報。
+ * `class20Codes` を持っているので、区域コードで素直に絞れる。
+ */
+function floodsFor(
+  municipality: JmaMunicipality,
+  forecasts: readonly FloodForecast[],
+): readonly FloodForecastWarning[] {
+  const areaCodes = new Set(municipality.areas.map((area) => area.code))
+  return forecasts
+    .filter((forecast) => forecast.areaCodes.some((code) => areaCodes.has(code)))
+    .map((forecast) => ({
+      riverNameJa: forecast.riverNameJa,
+      nameJa: forecast.nameJa,
+      alertLevel: alertLevelOfFloodName(forecast.nameJa),
+      reportedAt: forecast.reportedAt,
+    }))
+}
+
 /** 市区町村が決まらなかったとき（海上・国外）の応答。**沈黙させない**。 */
 function unresolved(
   request: HazardAlertRequest,
@@ -102,6 +129,7 @@ function unresolved(
     level: 'none',
     headlineJa: `${placeJa}は、気象庁の発表区域を特定できませんでした。`,
     warnings: [],
+    floodForecasts: [],
     reasonsJa: [],
     reportedAt: null,
     limitationsJa: [ALERT_LIMITATION_JA],
@@ -114,9 +142,10 @@ function unresolved(
 /** その地点の「今」。**警戒レベル相当までしか言わない**（避難情報は市町村が出すもの・§7.4）。 */
 export async function hazardAlertsAt(request: HazardAlertRequest): Promise<HazardAlertsResponse> {
   const placeJa = request.placeJa ?? DEFAULT_PLACE_JA
-  const [code, map] = await Promise.all([
+  const [code, map, forecasts] = await Promise.all([
     municipalityCodeAt(request.lon, request.lat).catch(() => null),
     jmaWarningMap(request.now).catch(() => null),
+    jmaFloodForecasts(request.now).catch(() => []),
   ])
   if (code === null)
     return unresolved(
@@ -133,15 +162,18 @@ export async function hazardAlertsAt(request: HazardAlertRequest): Promise<Hazar
     return { ...noArea, area: toArea(code, municipality) }
   }
   const warnings = warningsFor(municipality, map)
-  const alertLevel = heaviestAlertLevel(warnings)
+  const floods = floodsFor(municipality, forecasts)
+  // 河川の予報も同じ物差しで混ぜる（氾濫危険情報は警戒レベル4相当）。
+  const alertLevel = heaviestAlertLevel([...warnings, ...floods])
   return {
     point: { lon: request.lon, lat: request.lat, placeJa },
     area: toArea(code, municipality),
     alertLevel,
     level: hazardLevelOfAlert(alertLevel),
-    headlineJa: alertHeadlineJa(areaLabelJa(municipality), warnings),
+    headlineJa: alertHeadlineJa(areaLabelJa(municipality), warnings, floods),
     warnings: [...warnings],
-    reasonsJa: [...alertReasonsJa(warnings)],
+    floodForecasts: [...floods],
+    reasonsJa: [...alertReasonsJa(warnings, floods)],
     reportedAt: reportedAtOf(municipality, map),
     limitationsJa: [ALERT_LIMITATION_JA],
     sources: [...SOURCES],

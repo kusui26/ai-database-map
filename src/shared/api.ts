@@ -329,8 +329,19 @@ export const hazardAlertWarningSchema = z.object({
   /** どの二次細分区域の発表か（市が複数区域に分かれるとき効く）。 */
   areaJa: z.string(),
   statusJa: z.string(),
+  /** 気象庁が添えている補足（例「２７日８時から１３時まで、警戒レベル４相当」）。 */
+  detailJa: z.string().nullable(),
 })
 export type HazardAlertWarning = z.infer<typeof hazardAlertWarningSchema>
+
+/** 指定河川洪水予報の 1 件（氾濫注意〜氾濫発生）。 */
+export const hazardFloodForecastSchema = z.object({
+  riverNameJa: z.string(),
+  nameJa: z.string(),
+  alertLevel: alertLevelSchema,
+  reportedAt: z.string().nullable(),
+})
+export type HazardFloodForecast = z.infer<typeof hazardFloodForecastSchema>
 
 /** 地点が属する気象庁の区域。 */
 export const hazardAlertAreaSchema = z.object({
@@ -354,6 +365,8 @@ export const hazardAlertsResponseSchema = z.object({
   level: hazardLevelSchema,
   headlineJa: z.string(),
   warnings: z.array(hazardAlertWarningSchema),
+  /** その区域を対象にした指定河川洪水予報（発表中のものだけ）。 */
+  floodForecasts: z.array(hazardFloodForecastSchema),
   reasonsJa: z.array(z.string()),
   /** 気象庁の発表時刻。**10 分前の情報を「今」と言わない**ため必ず出す（§7.4）。 */
   reportedAt: z.string().nullable(),

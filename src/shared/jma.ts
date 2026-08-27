@@ -6,6 +6,15 @@
  * 1. **警報・注意報の種別コード表**（下の `JMA_WARNING_KINDS`）
  * 2. **市区町村コード → 二次細分区域**（`jma-areas.json`・`pipeline/build_jma_areas.py` が生成）
  *
+ * ## ⚠ どのエンドポイントを見るか
+ *
+ * **`warning/data/warning/map.json` は更新が止まっている。** 実測（2026-08-27）で
+ * `last-modified` が **3 か月前**（2026-05-28）のまま、`cache-control: max-age=60` を返し続けていた
+ * ——**生きているように見えて中身が凍っている**という、いちばん質の悪い壊れ方である。
+ * 生きているのは **`warning/data/r8/map.json`**（`last-modified` が当日・最新の `reportDatetime` が 3 分前）。
+ *
+ * r8 はさらに**キキクル相当の警戒レベル**（下の危険度）と**土砂災害警戒情報**を含む。
+ *
  * ## ⚠ コード表は「公開された定義ファイルが無い」ので自分で持つ
  *
  * 指標カタログやハザードカタログと違い、**気象庁はコード → 名称の定義を配っていない**
@@ -16,7 +25,7 @@
 
 import { z } from 'zod'
 import areasJson from './hazard/jma-areas.json'
-import type { AlertLevel } from './constants'
+import { ALERT_LEVELS, type AlertLevel } from './constants'
 
 // --- 警報・注意報の種別 ---------------------------------------------------
 
@@ -82,6 +91,51 @@ export const JMA_WARNING_KINDS: Readonly<Record<string, JmaWarningDefinition>> =
 /** 種別コード → 意味（未知なら undefined。**呼び出し側は必ず「未知」を表に出す**）。 */
 export function jmaWarningKind(code: string): JmaWarningDefinition | undefined {
   return JMA_WARNING_KINDS[code]
+}
+
+// --- 危険度（キキクル相当の警戒レベル）------------------------------------
+
+/**
+ * `r8/map.json` の `kinds[].properties[]` が運ぶ「危険度」。
+ *
+ * **気象庁自身が警戒レベル相当を書いている**ので、§3.3(d) の表を手で当てるより確実で、
+ * かつ**タイルの色を読まずに済む**（決定 5・§9.1 を守れる）。
+ *
+ * ## レベルを持つものと持たないものの見分け方（実測・2026-08-27）
+ *
+ * `significancyPart.locals[].code` が **`X1` で終わるものだけ**が警戒レベル相当を運ぶ。
+ *
+ * | type | 観測された local | 意味 |
+ * |---|---|---|
+ * | 大雨浸水危険度 | 21 / 31 / 41 / 51 | **警戒レベル 2〜5 相当** |
+ * | 土砂災害危険度 | 21 / 41 | **警戒レベル 2・4 相当**（41 は文にも「警戒レベル４相当」と明記） |
+ * | 雷危険度・風危険度・波危険度・濃霧危険度・乾燥危険度 | **すべて 20** | 警戒レベルの体系外 |
+ *
+ * **許可リスト（大雨浸水・土砂災害だけ）にはしない。** 将来 `洪水危険度` が増えたときに
+ * **静かに見落とす**からで、過小報告は防災アプリでいちばん危ない誤りである。
+ */
+const LEVEL_BEARING_LOCAL = /^([1-5])1$/
+
+/** 危険度の local コード → 警戒レベル相当（レベルを運ばないものは null）。 */
+export function alertLevelOfLocalCode(local: string | undefined): AlertLevel | null {
+  const matched = local === undefined ? null : LEVEL_BEARING_LOCAL.exec(local)
+  if (matched === null) return null
+  const level = Number(matched[1])
+  return ALERT_LEVELS.find((candidate) => candidate === level) ?? null
+}
+
+/**
+ * 危険度の種別 → 読める名前。
+ * **知らない種別はそのまま出す**（勝手な名前を付けない・捨てない）。
+ */
+const RISK_TYPE_LABELS_JA: Readonly<Record<string, string>> = {
+  大雨浸水危険度: '浸水害の危険度',
+  土砂災害危険度: '土砂災害の危険度',
+  洪水危険度: '洪水の危険度',
+}
+
+export function riskTypeLabelJa(type: string): string {
+  return RISK_TYPE_LABELS_JA[type] ?? type
 }
 
 // --- 市区町村 → 二次細分区域 ----------------------------------------------

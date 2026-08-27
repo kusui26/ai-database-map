@@ -175,7 +175,10 @@ function alertSummaryForLlm(alerts: HazardAlertsResponse) {
       alertLevel: warning.alertLevel,
       statusJa: warning.statusJa,
       areaJa: warning.areaJa,
+      detailJa: warning.detailJa,
     })),
+    // 指定河川洪水予報（氾濫危険情報など）。**河川名を落とさない**——いちばん具体的な情報なので。
+    floodForecasts: alerts.floodForecasts,
     // 生の ISO ではなく**読める形**で渡す（そのまま本文に出るので）。
     reportedAtJa: reportedAtJa(alerts.reportedAt),
     limitationsJa: alerts.limitationsJa,

@@ -6,10 +6,16 @@
  * 「画面には出るが AI は説明できない」というズレが構造的に起きない（.claude/CLAUDE.md §2）。
  */
 
-import type { HazardPointResponse } from '@/shared/api'
-import type { HazardCardPanel, PanelSize } from '@/shared/protocol'
-import { HAZARD_GROUP_LABELS_JA } from '@/shared/constants'
+import type {
+  HazardAlertsResponse,
+  HazardAlertWarning,
+  HazardFloodForecast,
+  HazardPointResponse,
+} from '@/shared/api'
+import type { HazardCardPanel, HazardItem, PanelSize } from '@/shared/protocol'
+import { ALERT_LEVEL_LABELS_JA, HAZARD_GROUP_LABELS_JA } from '@/shared/constants'
 import { getHazardLayer } from '@/shared/hazard'
+import { hazardLevelOfAlert } from './level'
 
 /**
  * 地点の応答 → `hazardCard`。**意味づけは足さない**——応答が持っている文字列を並べ替えるだけ。
@@ -62,3 +68,81 @@ export function hazardBadgeJa(point: HazardPointResponse): string {
  */
 export const STATION_HAZARD_CAVEAT_JA =
   '駅の代表点 1 点の値です。駅前の反対側では異なることがあります。'
+
+// --- アラート（いまの警戒状況・Phase 3） ----------------------------------
+
+/** 発表時刻の表示（**10 分前の情報を「今」と言わない**ため必ず出す・§7.4）。 */
+export function reportedAtJa(iso: string | null): string | null {
+  if (iso === null) return null
+  const at = new Date(iso)
+  if (Number.isNaN(at.getTime())) return null
+  const pad = (value: number): string => String(value).padStart(2, '0')
+  const date = `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`
+  return `気象庁の発表時刻：${date} ${pad(at.getHours())}:${pad(at.getMinutes())}`
+}
+
+/** 発表 1 件 → カードの 1 行。 */
+function alertItem(warning: HazardAlertWarning): HazardItem {
+  const levelJa = ALERT_LEVEL_LABELS_JA[warning.alertLevel]
+  return {
+    // 同じ種別が複数区域で出ることがあるので、区域名を混ぜて一意にする。
+    layerKey: `jma-${warning.areaJa}-${warning.code}`,
+    labelJa: warning.nameJa,
+    valueJa: warning.alertLevel === 0 ? warning.statusJa : `${levelJa}・${warning.statusJa}`,
+    // 補足の文（「２７日８時から１３時まで、警戒レベル４相当」）があればそちらを出す。
+    meaningJa: warning.detailJa ?? warning.areaJa,
+    level: hazardLevelOfAlert(warning.alertLevel),
+    color: null,
+    source: 'jma',
+    coverage: null,
+    certainty: 'exact',
+  }
+}
+
+/** 指定河川洪水予報 1 件 → カードの 1 行（**河川名を主語にする**）。 */
+function floodItem(forecast: HazardFloodForecast): HazardItem {
+  return {
+    layerKey: `jma-river-${forecast.riverNameJa}-${forecast.nameJa}`,
+    labelJa: `${forecast.riverNameJa}（指定河川洪水予報）`,
+    valueJa: `${forecast.nameJa}・${ALERT_LEVEL_LABELS_JA[forecast.alertLevel]}`,
+    meaningJa: null,
+    level: hazardLevelOfAlert(forecast.alertLevel),
+    color: null,
+    source: 'jma',
+    coverage: null,
+    certainty: 'exact',
+  }
+}
+
+/**
+ * いまの警戒状況 → `hazardCard`。**平時のカード（`hazardCardPanel`）と同じ型**にするので、
+ * UI もチャットも描き分けが要らない（§6.4）。
+ *
+ * **`evacuation` は必ず null。** 避難の要否を出すのは市町村で、こちらは知り得ない（§7.4）。
+ */
+export function hazardAlertCardPanel(
+  alerts: HazardAlertsResponse,
+  size?: PanelSize,
+): HazardCardPanel {
+  const reported = reportedAtJa(alerts.reportedAt)
+  return {
+    type: 'hazardCard',
+    placeJa: alerts.point.placeJa,
+    level: alerts.level,
+    headlineJa: alerts.headlineJa,
+    evacuation: null,
+    certainty: 'exact',
+    // 河川の予報を先に置く（名指しの河川がいちばん具体的なので）。
+    items: [...alerts.floodForecasts.map(floodItem), ...alerts.warnings.map(alertItem)],
+    reasonsJa: alerts.reasonsJa,
+    // 時刻・限界・取れなかったものを 1 か所にまとめる（UI が出し忘れられない形）。
+    coverageNotesJa: [
+      ...(reported === null ? [] : [reported]),
+      ...alerts.limitationsJa,
+      ...alerts.notesJa,
+    ],
+    sources: alerts.sources,
+    disclaimerJa: alerts.disclaimerJa,
+    size,
+  }
+}

@@ -12,7 +12,7 @@ import { z } from 'zod'
 import { categorySchema, requireEntry } from '@/shared/catalog'
 import { PREFECTURES, RADII_M, type RadiusM, ROUTE_TYPES, routeTypeLabel } from '@/shared/constants'
 import { type MapResponse } from '@/shared/protocol'
-import { type HazardPointResponse } from '@/shared/api'
+import { type HazardAlertsResponse, type HazardPointResponse } from '@/shared/api'
 import {
   rankByColumn,
   searchStations,
@@ -24,6 +24,8 @@ import { buildStationDetail } from '@/domain/stations/presenter'
 import { buildRanking } from '@/domain/ranking/presenter'
 import { buildGrowth } from '@/domain/growth/presenter'
 import { hazardPointAt } from '@/lib/hazard/point-source'
+import { hazardAlertsAt } from '@/lib/hazard/alert-source'
+import { reportedAtJa } from '@/domain/hazard/panels'
 import { type EffectCollector } from './types'
 import { panelsForStationDetail, summarizePanels } from './assemble'
 import { metricsCatalogDigest } from './catalog-digest'
@@ -152,6 +154,36 @@ function hazardSummaryForLlm(point: HazardPointResponse) {
     coverageNotesJa: point.coverageNotesJa,
     notesJa: point.notesJa,
     disclaimerJa: point.disclaimerJa,
+  }
+}
+
+/**
+ * アラートの応答 → LLM 向けの要約。
+ * **`limitationsJa` を削らない**——「レベル2相当」を「レベル4は出ていない」と読ませないための 1 文で、
+ * これを落とすと誤った安心を作る（§7.5）。
+ */
+function alertSummaryForLlm(alerts: HazardAlertsResponse) {
+  return {
+    placeJa: alerts.point.placeJa,
+    areaJa: alerts.area === null ? null : alerts.area.areas.map((area) => area.nameJa).join('・'),
+    municipalityJa: alerts.area?.municipalityJa ?? null,
+    alertLevel: alerts.alertLevel,
+    level: alerts.level,
+    headlineJa: alerts.headlineJa,
+    warnings: alerts.warnings.map((warning) => ({
+      nameJa: warning.nameJa,
+      alertLevel: warning.alertLevel,
+      statusJa: warning.statusJa,
+      areaJa: warning.areaJa,
+      detailJa: warning.detailJa,
+    })),
+    // 指定河川洪水予報（氾濫危険情報など）。**河川名を落とさない**——いちばん具体的な情報なので。
+    floodForecasts: alerts.floodForecasts,
+    // 生の ISO ではなく**読める形**で渡す（そのまま本文に出るので）。
+    reportedAtJa: reportedAtJa(alerts.reportedAt),
+    limitationsJa: alerts.limitationsJa,
+    notesJa: alerts.notesJa,
+    disclaimerJa: alerts.disclaimerJa,
   }
 }
 
@@ -481,6 +513,37 @@ export function createTools(collector: EffectCollector, origin: string) {
         } catch (error) {
           return {
             error: error instanceof Error ? error.message : '災害リスクの取得に失敗しました',
+          }
+        }
+      },
+    }),
+
+    /**
+     * **いま**その地点に出ている警報・注意報（`/api/hazard/alerts` と同じ関数を通る）。
+     * 平時の `getHazardAtPoint`（もし起きたら）とは**別のツール**。混ぜると誤読される。
+     */
+    getHazardAlerts: tool({
+      description:
+        'いまその地点に発表されている気象庁の警報・注意報と、警戒レベル相当を調べる。' +
+        '駅なら grp、任意地点なら lon/lat を渡す。' +
+        '「今どうなってる」「警報は出てる？」「大雨警報は？」「避難した方がいい？」に使う。' +
+        '⚠ 土砂災害警戒情報と指定河川洪水予報は含まれない（返り値の limitationsJa を必ず伝えること）。',
+      inputSchema: z.object({
+        grp: z.string().optional().describe('searchStations が返した駅 grp'),
+        lon: z.number().optional().describe('経度（grp を使わないとき）'),
+        lat: z.number().optional().describe('緯度（grp を使わないとき）'),
+        placeJa: z.string().optional().describe('地点の呼び名。例: 亀有駅、現在地'),
+      }),
+      execute: async ({ grp, lon, lat, placeJa }) => {
+        try {
+          const target = await resolveHazardTarget({ grp, lon, lat, placeJa })
+          if ('error' in target) return target
+          const alerts = await hazardAlertsAt({ ...target, now: Date.now() })
+          collector.push({ kind: 'hazardAlerts', alerts })
+          return alertSummaryForLlm(alerts)
+        } catch (error) {
+          return {
+            error: error instanceof Error ? error.message : '警戒状況の取得に失敗しました',
           }
         }
       },

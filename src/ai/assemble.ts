@@ -22,10 +22,11 @@ import {
 } from '@/domain/stations/panels'
 import { rankingPanel } from '@/domain/ranking/panel'
 import { scatterPanel } from '@/domain/growth/panel'
-import { hazardCardPanel } from '@/domain/hazard/panels'
+import { hazardAlertCardPanel, hazardCardPanel } from '@/domain/hazard/panels'
 import { hazardLayersToShow } from '@/domain/hazard/catalog'
 import {
   type GrowthEffect,
+  type HazardAlertsEffect,
   type HazardPointEffect,
   type RankingEffect,
   type StationDetailEffect,
@@ -86,6 +87,11 @@ export function panelsForHazardPoint(effect: HazardPointEffect): Panel[] {
   return [inline(hazardCardPanel(effect.point, 'compact'))]
 }
 
+/** アラートツール → パネル（hazardCard・compact/inline）。 */
+export function panelsForHazardAlerts(effect: HazardAlertsEffect): Panel[] {
+  return [inline(hazardAlertCardPanel(effect.alerts, 'compact'))]
+}
+
 /** 副産物 → パネル。 */
 function panelsFor(effect: ToolEffect): Panel[] {
   switch (effect.kind) {
@@ -97,6 +103,8 @@ function panelsFor(effect: ToolEffect): Panel[] {
       return panelsForGrowth(effect)
     case 'hazardPoint':
       return panelsForHazardPoint(effect)
+    case 'hazardAlerts':
+      return panelsForHazardAlerts(effect)
   }
 }
 
@@ -132,6 +140,12 @@ export function mapActionsForEffect(effect: ToolEffect): MapAction[] {
         // 該当ゼロの地点を聞いただけで、利用者が自分で点けたレイヤを消してしまう。
         ...(layers.length > 0 ? [{ type: 'setHazardLayers' as const, layers: [...layers] }] : []),
       ]
+    }
+    case 'hazardAlerts': {
+      // 地点を指すだけ。**キキクルのレイヤ表示は PR2**（タイルが basetime を持つので
+      // カタログの `HazardTile` では表せず、表示の仕組みごと足す必要がある・§8.4）。
+      const { point } = effect.alerts
+      return [{ type: 'showPoint', lon: point.lon, lat: point.lat, labelJa: point.placeJa }]
     }
   }
 }

@@ -54,8 +54,9 @@ export const evacuationActionSchema = z.enum(['takeaway', 'vertical', 'stay'])
  * - `suibou-navi` … 浸水ナビ API の実測（洪水・m 単位）。いちばん精密
  * - `tile`        … 公式ラスタタイルの画素。**地図に描いてある色と必ず一致する**
  * - `mesh`        … 自前 250m メッシュ。点ではなく**区間**（オフラインでも答えられる）
+ * - `jma`         … 気象庁の警報・注意報。**「もし起きたら」ではなく「今」**の情報（Phase 3）
  */
-export const hazardSourceSchema = z.enum(['suibou-navi', 'tile', 'mesh'])
+export const hazardSourceSchema = z.enum(['suibou-navi', 'tile', 'mesh', 'jma'])
 export type HazardSource = z.infer<typeof hazardSourceSchema>
 
 /**

@@ -12,6 +12,8 @@ import {
   hazardLayerSchema,
   hazardLevelSchema,
 } from './hazard'
+import { jmaWarningKindSchema } from './jma'
+import { ALERT_LEVELS } from './constants'
 import { hazardItemSchema, rankingRowSchema, scatterPointSchema, sourceRefSchema } from './protocol'
 
 // --- エラー封筒 ---------------------------------------------------------
@@ -303,6 +305,78 @@ export const hazardPointResponseSchema = z.object({
   disclaimerJa: z.string(),
 })
 export type HazardPointResponse = z.infer<typeof hazardPointResponseSchema>
+
+// --- ハザード：アラート（GET /api/hazard/alerts・260824_flood §3.3(d)・§8.4） ------
+
+/** 地点は必須。呼び名は UI から渡せる（「現在地」「亀有駅」）。 */
+export const hazardAlertQuerySchema = z.object({
+  lon: queryNumber(-180, 180),
+  lat: queryNumber(-90, 90),
+  placeJa: z.string().min(1).max(60).optional(),
+})
+export type HazardAlertQuery = z.infer<typeof hazardAlertQuerySchema>
+
+/** 警戒レベル**相当**（0＝発表なし）。市町村が出す「警戒レベル◯」そのものではない。 */
+export const alertLevelSchema = z.literal([...ALERT_LEVELS])
+
+/** 気象庁が発表している 1 件（意味づけ済み）。 */
+export const hazardAlertWarningSchema = z.object({
+  code: z.string(),
+  nameJa: z.string(),
+  /** 未知のコードは種別も分からない（`null`）。**黙って落とさない**。 */
+  kindJa: jmaWarningKindSchema.nullable(),
+  alertLevel: alertLevelSchema,
+  /** どの二次細分区域の発表か（市が複数区域に分かれるとき効く）。 */
+  areaJa: z.string(),
+  statusJa: z.string(),
+  /** 気象庁が添えている補足（例「２７日８時から１３時まで、警戒レベル４相当」）。 */
+  detailJa: z.string().nullable(),
+})
+export type HazardAlertWarning = z.infer<typeof hazardAlertWarningSchema>
+
+/** 指定河川洪水予報の 1 件（氾濫注意〜氾濫発生）。 */
+export const hazardFloodForecastSchema = z.object({
+  riverNameJa: z.string(),
+  nameJa: z.string(),
+  alertLevel: alertLevelSchema,
+  reportedAt: z.string().nullable(),
+})
+export type HazardFloodForecast = z.infer<typeof hazardFloodForecastSchema>
+
+/** 地点が属する気象庁の区域。 */
+export const hazardAlertAreaSchema = z.object({
+  municipalityCode: z.string(),
+  municipalityJa: z.string(),
+  prefectureJa: z.string(),
+  areas: z.array(z.object({ code: z.string(), nameJa: z.string() })),
+})
+export type HazardAlertArea = z.infer<typeof hazardAlertAreaSchema>
+
+/**
+ * 「いま、その地点はどうなっているか」。**平時の「もし起きたら」（`/api/hazard/point`）とは別物**で、
+ * 混ぜて表示しない（§7.4 は 2 段に分けている）。
+ */
+export const hazardAlertsResponseSchema = z.object({
+  point: z.object({ lon: z.number(), lat: z.number(), placeJa: z.string() }),
+  /** 海上・国外など、市区町村が決まらないときは null。 */
+  area: hazardAlertAreaSchema.nullable(),
+  alertLevel: alertLevelSchema,
+  /** カードや地図で使う危険度（警戒レベル相当からの写像）。 */
+  level: hazardLevelSchema,
+  headlineJa: z.string(),
+  warnings: z.array(hazardAlertWarningSchema),
+  /** その区域を対象にした指定河川洪水予報（発表中のものだけ）。 */
+  floodForecasts: z.array(hazardFloodForecastSchema),
+  reasonsJa: z.array(z.string()),
+  /** 気象庁の発表時刻。**10 分前の情報を「今」と言わない**ため必ず出す（§7.4）。 */
+  reportedAt: z.string().nullable(),
+  /** **この判定に含まれていないもの**（土砂災害警戒情報・指定河川洪水予報）。必ず表示する。 */
+  limitationsJa: z.array(z.string()),
+  sources: z.array(sourceRefSchema),
+  notesJa: z.array(z.string()),
+  disclaimerJa: z.string(),
+})
+export type HazardAlertsResponse = z.infer<typeof hazardAlertsResponseSchema>
 
 export const healthResponseSchema = z.object({ ok: z.literal(true) })
 export type HealthResponse = z.infer<typeof healthResponseSchema>

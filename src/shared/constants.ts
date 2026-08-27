@@ -70,6 +70,24 @@ export const CATEGORY_LABELS_JA: Readonly<Record<Category, string>> = {
   employee: '従業者',
 }
 
+/**
+ * 駅詳細のタブ。**指標のカテゴリ ＋ 指標ではないタブ（災害）**。
+ *
+ * `Category` は**指標カタログの語彙**である（`/api/metrics?category=`・AI ツールの `category` 引数・
+ * ランキングの絞り込み・カタログの CSV 列）。ここに「災害」を足すと、**指標ではないものが
+ * 指標の語彙に混ざる**——だからタブの型を分ける（`docs/260828_fix_flood.md` §4.1）。
+ *
+ * もともと 1 対 1 ではない（`Category` は 9 個、タブは `population_forecast` を出さない）ので、
+ * 「タブ＝カテゴリ」という対応は**分ける前から既に崩れていた**。
+ */
+export type DetailTab = Category | 'hazard'
+
+/** タブの日本語ラベル。指標ぶんは `CATEGORY_LABELS_JA` を単一の出所として使う（重複させない）。 */
+export const DETAIL_TAB_LABELS_JA: Readonly<Record<DetailTab, string>> = {
+  ...CATEGORY_LABELS_JA,
+  hazard: '災害',
+}
+
 // --- 配色トークン（plan_fable §2.4） ------------------------------------
 // Chart.js（canvas）が直接消費するため、Tailwind 既定パレット相当の sRGB hex で保持する。
 
@@ -125,11 +143,13 @@ export function clusterColor(clusterIndex: number): string {
  * 常に横スライドが要る状態だった。16px の余裕を足した 420px にしてスライドを無くした
  * （docs/260804_station_window_width.md §1・§4）。
  *
- * ⚠ 260813 に**所得タブを足して 7 タブ＝460px**、260817 に**売上タブで 8 タブ＝516px** になり、
- * 96px ぶんがはみ出す。ここをさらに広げると地図が狭くなるため広げない、と判断している
- * （docs/260805_research_add_dataset_economy.md §16.3）。7 タブまでは「最後のタブが 26px 見える」で
- * 続きに気づけたが、8 タブでは完全に隠れるので**帯の右端にフェード**を出す
- * （docs/260816_sales.md §7.4 案A）。この不変条件は `tests/panel-layout.test.ts` が守る。
+ * ⚠ 260813 に**所得タブを足して 7 タブ＝460px**、260817 に**売上タブで 8 タブ＝516px**、
+ * 260828 に**災害タブで 9 タブ＝572px** になり、はみ出しは 152px。ここをさらに広げると
+ * 地図が狭くなるため広げない、と判断している（docs/260805_research_add_dataset_economy.md §16.3）。
+ * 7 タブまでは「最後のタブが 26px 見える」で続きに気づけたが、**8 タブ以降は完全に隠れる**ので
+ * **帯の右端にフェード**を出し、**選んだタブは帯を送って見せる**
+ * （docs/260816_sales.md §7.4 案A・docs/260828_fix_flood.md §4.2）。
+ * この不変条件は `tests/panel-layout.test.ts` が守る。
  *
  * この 1 つの値から **flyTo の余白・キャンバスの左右端・FAB の退避位置**を算出する。
  * 以前はそれぞれに数値が直書きされており、片方だけ直すと

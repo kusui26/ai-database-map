@@ -6,7 +6,7 @@
  */
 
 import { create } from 'zustand'
-import { type Category } from '@/shared/constants'
+import { type DetailTab } from '@/shared/constants'
 import { type Order } from '@/shared/api'
 
 /** ⤢ 昇格の対象（クリックUIと同じモーダルへ・plan_fable §2.4 ルール③）。 */
@@ -55,9 +55,12 @@ type ChatStore = {
   canvasKey: string | null
   setCanvasKey: (key: string) => void
 
-  /** 駅詳細昇格時にドロワーで開く焦点タブ（1 回消費）。 */
-  requestedCategory: Category | null
-  setRequestedCategory: (category: Category | null) => void
+  /**
+   * 駅詳細昇格時にドロワーで開く焦点タブ（1 回消費）。
+   * **指標のカテゴリとは限らない**——災害タブも要求できるので `DetailTab` で持つ。
+   */
+  requestedCategory: DetailTab | null
+  setRequestedCategory: (category: DetailTab | null) => void
 }
 
 export const useChatStore = create<ChatStore>((set) => ({

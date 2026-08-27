@@ -91,6 +91,7 @@ get "$BASE/api/growth" "x=pop_gr_2020_2015_2km" "y=rate_covid" "prefecture=千�
 
 # 11) hazard/catalog（自己記述カタログ）
 get "$BASE/api/hazard/catalog"
+CATALOG="$BODY"
 { [ "$HTTP" = 200 ] && [ "$(echo "$BODY" | jq '.layers | length')" -ge 15 ] &&
   [ "$(echo "$BODY" | jq -r '.disclaimerJa | length > 0')" = true ]; } &&
   ok "hazard/catalog（レイヤ＋免責）" || ng "hazard catalog"
@@ -125,9 +126,38 @@ get "$BASE/api/hazard/alerts" "lon=139.847" "lat=35.7645" "placeJa=亀有駅"
   [ "$(echo "$BODY" | jq -r '.area.areas[0].code')" = 1312200 ]; } &&
   ok "hazard/alerts（区域を解決できている）" || ng "hazard alerts area"
 
-{ [ "$(echo "$BODY" | jq -r '[.limitationsJa[] | select(contains("土砂災害警戒情報"))] | length')" -gt 0 ] &&
+# ⚠ 「土砂災害警戒情報」を限界として数えていたが、**r8 では危険度（コード 49）として拾えるようになった**
+#    ので限界から外した（Phase 3 PR1）。ここが見るのは**避難情報の主語**——
+#    「避難指示を出すのは市町村」と必ず書いてあることと、「安全」と言っていないこと。
+{ [ "$(echo "$BODY" | jq -r '[.limitationsJa[] | select(contains("市町村"))] | length')" -gt 0 ] &&
+  [ "$(echo "$BODY" | jq -r '[.limitationsJa[] | select(contains("避難情報"))] | length')" -gt 0 ] &&
   [ "$(echo "$BODY" | jq -r '.headlineJa | contains("安全")')" = false ]; } &&
   ok "hazard/alerts（限界を明示・「安全」と言わない）" || ng "hazard alerts wording"
+
+# 13b) キキクル：カタログの `timesUrl` から最新時刻を解決し、実タイルが 200 で返るか。
+#      これは**気象庁の配信を直接**叩く（自前サーバを経由しない設計・§7.4）。
+#      配信の形が変わると、地図には 404 が並ぶだけで**何も出ないまま静かに壊れる**ので、ここで見る。
+TIMES_URL=$(echo "$CATALOG" | jq -r '[.layers[] | select(.tile.timesUrl != null) | .tile.timesUrl][0]')
+KIKI_URL=$(echo "$CATALOG" | jq -r '[.layers[] | select(.tile.timesUrl != null) | .tile.url][0]')
+if [ -n "$TIMES_URL" ] && [ "$TIMES_URL" != null ]; then
+  TIMES=$(curl -s --max-time 20 "$TIMES_URL")
+  BT=$(echo "$TIMES" | jq -r '[.[] | select(.elements == null or (.elements | index("land")))] | max_by(.basetime) | .basetime')
+  MB=$(echo "$TIMES" | jq -r '[.[] | select(.elements == null or (.elements | index("land")))] | max_by(.basetime) | .member')
+  VT=$(echo "$TIMES" | jq -r '[.[] | select(.elements == null or (.elements | index("land")))] | max_by(.basetime) | .validtime')
+  # 富山県のあたり（z=9）。色の有無は天気次第なので**見ない**——見るのは 200 が返ることだけ。
+  TILE=${KIKI_URL//\{basetime\}/$BT}
+  TILE=${TILE//\{member\}/$MB}
+  TILE=${TILE//\{validtime\}/$VT}
+  TILE=${TILE//\{z\}/9}
+  TILE=${TILE//\{x\}/450}
+  TILE=${TILE//\{y\}/199}
+  HTTP=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$TILE")
+  BODY="$TILE"
+  { [ "$HTTP" = 200 ] && [ -n "$BT" ] && [ "$BT" != null ] && [[ "$TILE" != *"{"* ]]; } &&
+    ok "キキクル：最新時刻（${BT}・${MB}）を差し込んでタイルが 200" || ng "kikikuru tile"
+else
+  ng "kikikuru timesUrl がカタログに無い"
+fi
 
 # 14) hazard/point 異常系：座標が無い → 400
 get "$BASE/api/hazard/point" "lat=35.7645"

@@ -133,6 +133,9 @@ class HazardTile:
     minZoom: int
     maxZoom: int
     format: str  # 'png' | 'geojson' | 'pbf'
+    #: 時刻を差し込むタイル（キキクル）で、最新時刻を取りに行く先。静的なタイルは None。
+    #: url に {basetime} / {member} / {validtime} が含まれるとき**だけ**必要になる。
+    timesUrl: str | None = None
 
 
 @dataclass(frozen=True)
@@ -574,12 +577,96 @@ def _terrain_layers() -> list[HazardLayer]:
     ]
 
 
+#: キキクル（危険度分布）のタイル。時刻は `targetTimes.json` から差し込む。
+KIKIKURU_TILE = (
+    "https://www.jma.go.jp/bosai/jmatile/data/risk/"
+    "{basetime}/{member}/{validtime}/surf/{element}/{z}/{x}/{y}.png"
+)
+KIKIKURU_TIMES = "https://www.jma.go.jp/bosai/jmatile/data/risk/targetTimes.json"
+JMA_ATTRIBUTION = "出典：気象庁 キキクル（危険度分布）"
+JMA_LICENSE = "気象庁 公共データ利用規約（第1.0版）"
+
+
+def _kikikuru_ranks() -> list[HazardRank]:
+    """キキクルの 4 段階。**配色は実測**（2026-08-27・実タイルの画素から採取）。
+
+    2022-06-30 に薄紫・濃紫 → 紫・黒へ変わっているので、**新配色を前提にする**（§3.3(a)）。
+    黄・赤は気象庁サイト自身の凡例素材（`bosai/risk/images/texture_{caution,warning}.svg`）が
+    同じ値を持っていることも確認した。
+
+    黒（警戒レベル 5 相当）だけは **色を持たせない**。滅多に出ない階級で、実タイルの標本に
+    現れず、気象庁が配色表を機械可読な形で公開していないため、**推測した色を置くと
+    「実測した」他の階級と見分けがつかなくなる**。凡例では「色は未確定」と出す。
+    """
+    return [
+        HazardRank(1, "注意（警戒レベル2相当）", "今後の情報に注意してください。", None,
+                   "caution", "#F2E700", "measured", None, None, 1),
+        HazardRank(2, "警戒（警戒レベル3相当）", "高齢者等は避難を始める段階の情報です。", None,
+                   "warning", "#FF2800", "measured", None, None, 2),
+        HazardRank(3, "非常に危険（警戒レベル4相当）", "危険な場所からの避難が必要な段階の情報です。", None,
+                   "danger", "#AA00AA", "measured", None, None, 3),
+        HazardRank(4, "極めて危険（警戒レベル5相当）", "すでに災害が発生・切迫している段階の情報です。", None,
+                   "critical", None, None, None, None, 4),
+    ]
+
+
+def _realtime_layers() -> list[HazardLayer]:
+    """キキクル（危険度分布）。**表示専用**で、レベル判定には使わない（決定 5・§9.1）。
+
+    色から意味を読むには canvas で画素を読む必要があり、配色が変われば静かに壊れる。
+    レベルは警報 JSON（テキスト）から取るので、ここは「面を見せる」だけの役目である。
+    """
+    common = {
+        "group": "realtime",
+        "display": "base",
+        "rankUnit": None,
+        "mesh": None,
+        "legendUrl": "https://www.jma.go.jp/bosai/risk/",
+        "vintage": None,
+        "updateCadence": "10min",
+        "source": "気象庁 キキクル（危険度分布）",
+        "license": JMA_LICENSE,
+        "attribution": JMA_ATTRIBUTION,
+        "coverageNoteJa": (
+            "10 分ごとに更新される「いまの危険度」です。"
+            "**色が付いていないのは「今この瞬間、危険度の基準に達していない」という意味で、"
+            "「安全」という意味でも「警報が解除された」という意味でもありません。**"
+            "雨が弱まっても警報は続きます（実測 2026-08-27：大雨特別警報の最中に、"
+            "その地域のキキクルは色なしだった）。"
+            "**避難の判断は、お住まいの市町村が発表する避難情報に従ってください。**"
+        ),
+        "fallbackLayersJa": [],
+    }
+    specs = [
+        ("kikikuru_land", "土砂キキクル（土砂災害の危険度）", "land",
+         "大雨による土砂災害の危険度を 1km メッシュで 10 分ごとに更新した分布図です。"),
+        ("kikikuru_inund", "浸水キキクル（浸水害の危険度）", "inund",
+         "短時間の大雨による浸水害（内水氾濫）の危険度を、10 分ごとに更新した分布図です。"),
+        ("kikikuru_flood", "洪水キキクル（中小河川の洪水の危険度）", "flood",
+         "中小河川の洪水の危険度を 10 分ごとに更新した分布図です。大河川は指定河川洪水予報で発表されます。"),
+    ]
+    return [
+        HazardLayer(
+            key=key,
+            labelJa=label,
+            summaryJa=summary,
+            ranks=_kikikuru_ranks(),
+            tile=HazardTile(
+                KIKIKURU_TILE.replace("{element}", element), 2, 12, "png", KIKIKURU_TIMES
+            ),
+            **common,
+        )
+        for key, label, element, summary in specs
+    ]
+
+
 def build_layers() -> list[HazardLayer]:
     """カタログに載せる全レイヤ（表示順）。"""
     return [
         *_flood_layers(),
         *_other_hazard_layers(),
         *_landslide_layers(),
+        *_realtime_layers(),
         *_terrain_layers(),
     ]
 

@@ -112,10 +112,19 @@ export type HazardRank = z.infer<typeof hazardRankSchema>
 
 /** XYZ タイル配信の定義。 */
 export const hazardTileSchema = z.object({
+  /**
+   * XYZ テンプレート。キキクルだけは `{basetime}` / `{member}` / `{validtime}` を含み、
+   * **最新時刻を差し込んでから**使う（`timesUrl` を見る）。
+   */
   url: z.string(),
   minZoom: z.number().int(),
   maxZoom: z.number().int(),
   format: tileFormatSchema,
+  /**
+   * 時刻を差し込むタイルで、最新時刻を取りに行く先（静的なタイルは null）。
+   * **10 分ごとに変わるものを、静的タイルと同じ形で扱わない**ための印でもある。
+   */
+  timesUrl: z.string().nullable().default(null),
 })
 export type HazardTile = z.infer<typeof hazardTileSchema>
 

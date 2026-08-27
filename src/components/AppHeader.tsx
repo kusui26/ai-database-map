@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { cn } from '@/lib/utils'
 import { useChatStore } from '@/stores/chatStore'
+import { HazardAlertBanner } from './hazard/HazardAlertBanner'
 import { HazardControl } from './hazard/HazardControl'
 import { RadiusControl } from './RadiusControl'
 import { StationSearch } from './StationSearch'
@@ -86,6 +87,8 @@ export function AppHeader() {
     // z-30＝浮遊パネル（z-20）より前。駅名検索の候補がチャット/駅詳細に隠れないようにする
     // （重なり順の一覧は `MapShell.tsx`）。
     <header className="pointer-events-none absolute inset-x-0 top-0 z-30 p-3">
+      {/* 警戒バナーはヘッダの**一番上**。平時は何も描かない（§7.4）。 */}
+      <HazardAlertBanner />
       <div className="pointer-events-auto flex flex-col gap-2 sm:flex-row sm:items-start">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <div className="flex shrink-0 items-center gap-2 rounded-xl bg-white/90 px-3 py-2.5 shadow-lg ring-1 ring-slate-200 backdrop-blur">

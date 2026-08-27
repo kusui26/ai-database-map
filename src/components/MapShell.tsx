@@ -7,6 +7,9 @@ import { useGeoStore } from '@/stores/geoStore'
 import { useCurrentPosition } from '@/hooks/useCurrentPosition'
 import { useOfflineHazardCache } from '@/hooks/useOfflineHazardCache'
 import { useMapUrlState } from './map/useMapUrlState'
+import { useHazardUrlState } from './map/useHazardUrlState'
+import { useAlertTarget, useHazardAlerts } from './hazard/useHazardAlerts'
+import { useWarningMode } from './hazard/useWarningMode'
 import { AppHeader } from './AppHeader'
 import { Fab } from './Fab'
 import { OfflineBanner } from './OfflineBanner'
@@ -64,6 +67,11 @@ export function MapShell() {
   useOfflineHazardCache(useGeoStore((state) => state.position))
   const geoActive = useGeoStore((state) => state.active)
   const [geoSeen, setGeoSeen] = useState(false)
+  // 警戒モード（§7.4）：レベル3相当以上なら、まだ何も選ばれていないときに限り
+  // 「いまの危険度＋想定区域」を出す。バナー（`AppHeader`）とは SWR のキャッシュを共有する。
+  const { layerKeys, setLayerKeys } = useHazardUrlState()
+  const { alerts } = useHazardAlerts(useAlertTarget())
+  useWarningMode({ alerts, layerKeys, setLayerKeys })
 
   // 初回ロード時、デスクトップ幅ならチャットを既定オープン（P8d 案B）。
   // モバイルは既定クローズ＝地図の初見を優先し、ChatPanel の遅延ロードを維持（mobile LCP に影響なし）。

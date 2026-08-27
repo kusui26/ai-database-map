@@ -1,7 +1,7 @@
 {
   "version": 1,
   "generatedFrom": "pipeline/hazard_rules.py",
-  "layerCount": 15,
+  "layerCount": 18,
   "groups": [
     "flood",
     "inland_flood",
@@ -129,7 +129,8 @@
         "url": "https://disaportaldata.gsi.go.jp/raster/01_flood_l2_shinsuishin_data/{z}/{x}/{y}.png",
         "minZoom": 2,
         "maxZoom": 17,
-        "format": "png"
+        "format": "png",
+        "timesUrl": null
       },
       "mesh": {
         "available": true,
@@ -253,7 +254,8 @@
         "url": "https://disaportaldata.gsi.go.jp/raster/01_flood_l1_shinsuishin_newlegend_data/{z}/{x}/{y}.png",
         "minZoom": 2,
         "maxZoom": 17,
-        "format": "png"
+        "format": "png",
+        "timesUrl": null
       },
       "mesh": {
         "available": true,
@@ -365,7 +367,8 @@
         "url": "https://disaportaldata.gsi.go.jp/raster/01_flood_l2_keizoku_data/{z}/{x}/{y}.png",
         "minZoom": 2,
         "maxZoom": 17,
-        "format": "png"
+        "format": "png",
+        "timesUrl": null
       },
       "mesh": {
         "available": true,
@@ -405,7 +408,8 @@
         "url": "https://disaportaldata.gsi.go.jp/raster/01_flood_l2_kaokutoukai_hanran_data/{z}/{x}/{y}.png",
         "minZoom": 4,
         "maxZoom": 17,
-        "format": "png"
+        "format": "png",
+        "timesUrl": null
       },
       "mesh": {
         "available": true,
@@ -445,7 +449,8 @@
         "url": "https://disaportaldata.gsi.go.jp/raster/01_flood_l2_kaokutoukai_kagan_data/{z}/{x}/{y}.png",
         "minZoom": 4,
         "maxZoom": 17,
-        "format": "png"
+        "format": "png",
+        "timesUrl": null
       },
       "mesh": {
         "available": true,
@@ -569,7 +574,8 @@
         "url": "https://disaportaldata.gsi.go.jp/raster/02_naisui_data/{z}/{x}/{y}.png",
         "minZoom": 2,
         "maxZoom": 17,
-        "format": "png"
+        "format": "png",
+        "timesUrl": null
       },
       "mesh": {
         "available": true,
@@ -698,7 +704,8 @@
         "url": "https://disaportaldata.gsi.go.jp/raster/03_hightide_l2_shinsuishin_data/{z}/{x}/{y}.png",
         "minZoom": 2,
         "maxZoom": 17,
-        "format": "png"
+        "format": "png",
+        "timesUrl": null
       },
       "mesh": null,
       "legendUrl": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A49-2024.html",
@@ -821,7 +828,8 @@
         "url": "https://disaportaldata.gsi.go.jp/raster/04_tsunami_newlegend_data/{z}/{x}/{y}.png",
         "minZoom": 2,
         "maxZoom": 17,
-        "format": "png"
+        "format": "png",
+        "timesUrl": null
       },
       "mesh": null,
       "legendUrl": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A40-2024.html",
@@ -872,7 +880,8 @@
         "url": "https://disaportaldata.gsi.go.jp/raster/05_dosekiryukeikaikuiki/{z}/{x}/{y}.png",
         "minZoom": 2,
         "maxZoom": 17,
-        "format": "png"
+        "format": "png",
+        "timesUrl": null
       },
       "mesh": null,
       "legendUrl": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A33-2025.html",
@@ -923,7 +932,8 @@
         "url": "https://disaportaldata.gsi.go.jp/raster/05_kyukeishakeikaikuiki/{z}/{x}/{y}.png",
         "minZoom": 2,
         "maxZoom": 17,
-        "format": "png"
+        "format": "png",
+        "timesUrl": null
       },
       "mesh": null,
       "legendUrl": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A33-2025.html",
@@ -974,7 +984,8 @@
         "url": "https://disaportaldata.gsi.go.jp/raster/05_jisuberikeikaikuiki/{z}/{x}/{y}.png",
         "minZoom": 2,
         "maxZoom": 17,
-        "format": "png"
+        "format": "png",
+        "timesUrl": null
       },
       "mesh": null,
       "legendUrl": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A33-2025.html",
@@ -989,6 +1000,228 @@
       ]
     },
     {
+      "key": "kikikuru_land",
+      "group": "realtime",
+      "labelJa": "土砂キキクル（土砂災害の危険度）",
+      "summaryJa": "大雨による土砂災害の危険度を 1km メッシュで 10 分ごとに更新した分布図です。",
+      "display": "base",
+      "rankUnit": null,
+      "ranks": [
+        {
+          "order": 1,
+          "labelJa": "注意（警戒レベル2相当）",
+          "meaningJa": "今後の情報に注意してください。",
+          "actionJa": null,
+          "level": "caution",
+          "color": "#F2E700",
+          "colorSource": "measured",
+          "min": null,
+          "max": null,
+          "sourceCode": 1
+        },
+        {
+          "order": 2,
+          "labelJa": "警戒（警戒レベル3相当）",
+          "meaningJa": "高齢者等は避難を始める段階の情報です。",
+          "actionJa": null,
+          "level": "warning",
+          "color": "#FF2800",
+          "colorSource": "measured",
+          "min": null,
+          "max": null,
+          "sourceCode": 2
+        },
+        {
+          "order": 3,
+          "labelJa": "非常に危険（警戒レベル4相当）",
+          "meaningJa": "危険な場所からの避難が必要な段階の情報です。",
+          "actionJa": null,
+          "level": "danger",
+          "color": "#AA00AA",
+          "colorSource": "measured",
+          "min": null,
+          "max": null,
+          "sourceCode": 3
+        },
+        {
+          "order": 4,
+          "labelJa": "極めて危険（警戒レベル5相当）",
+          "meaningJa": "すでに災害が発生・切迫している段階の情報です。",
+          "actionJa": null,
+          "level": "critical",
+          "color": null,
+          "colorSource": null,
+          "min": null,
+          "max": null,
+          "sourceCode": 4
+        }
+      ],
+      "tile": {
+        "url": "https://www.jma.go.jp/bosai/jmatile/data/risk/{basetime}/{member}/{validtime}/surf/land/{z}/{x}/{y}.png",
+        "minZoom": 2,
+        "maxZoom": 12,
+        "format": "png",
+        "timesUrl": "https://www.jma.go.jp/bosai/jmatile/data/risk/targetTimes.json"
+      },
+      "mesh": null,
+      "legendUrl": "https://www.jma.go.jp/bosai/risk/",
+      "vintage": null,
+      "updateCadence": "10min",
+      "source": "気象庁 キキクル（危険度分布）",
+      "license": "気象庁 公共データ利用規約（第1.0版）",
+      "attribution": "出典：気象庁 キキクル（危険度分布）",
+      "coverageNoteJa": "10 分ごとに更新される「いまの危険度」です。**色が付いていないのは「今この瞬間、危険度の基準に達していない」という意味で、「安全」という意味でも「警報が解除された」という意味でもありません。**雨が弱まっても警報は続きます（実測 2026-08-27：大雨特別警報の最中に、その地域のキキクルは色なしだった）。**避難の判断は、お住まいの市町村が発表する避難情報に従ってください。**",
+      "fallbackLayersJa": []
+    },
+    {
+      "key": "kikikuru_inund",
+      "group": "realtime",
+      "labelJa": "浸水キキクル（浸水害の危険度）",
+      "summaryJa": "短時間の大雨による浸水害（内水氾濫）の危険度を、10 分ごとに更新した分布図です。",
+      "display": "base",
+      "rankUnit": null,
+      "ranks": [
+        {
+          "order": 1,
+          "labelJa": "注意（警戒レベル2相当）",
+          "meaningJa": "今後の情報に注意してください。",
+          "actionJa": null,
+          "level": "caution",
+          "color": "#F2E700",
+          "colorSource": "measured",
+          "min": null,
+          "max": null,
+          "sourceCode": 1
+        },
+        {
+          "order": 2,
+          "labelJa": "警戒（警戒レベル3相当）",
+          "meaningJa": "高齢者等は避難を始める段階の情報です。",
+          "actionJa": null,
+          "level": "warning",
+          "color": "#FF2800",
+          "colorSource": "measured",
+          "min": null,
+          "max": null,
+          "sourceCode": 2
+        },
+        {
+          "order": 3,
+          "labelJa": "非常に危険（警戒レベル4相当）",
+          "meaningJa": "危険な場所からの避難が必要な段階の情報です。",
+          "actionJa": null,
+          "level": "danger",
+          "color": "#AA00AA",
+          "colorSource": "measured",
+          "min": null,
+          "max": null,
+          "sourceCode": 3
+        },
+        {
+          "order": 4,
+          "labelJa": "極めて危険（警戒レベル5相当）",
+          "meaningJa": "すでに災害が発生・切迫している段階の情報です。",
+          "actionJa": null,
+          "level": "critical",
+          "color": null,
+          "colorSource": null,
+          "min": null,
+          "max": null,
+          "sourceCode": 4
+        }
+      ],
+      "tile": {
+        "url": "https://www.jma.go.jp/bosai/jmatile/data/risk/{basetime}/{member}/{validtime}/surf/inund/{z}/{x}/{y}.png",
+        "minZoom": 2,
+        "maxZoom": 12,
+        "format": "png",
+        "timesUrl": "https://www.jma.go.jp/bosai/jmatile/data/risk/targetTimes.json"
+      },
+      "mesh": null,
+      "legendUrl": "https://www.jma.go.jp/bosai/risk/",
+      "vintage": null,
+      "updateCadence": "10min",
+      "source": "気象庁 キキクル（危険度分布）",
+      "license": "気象庁 公共データ利用規約（第1.0版）",
+      "attribution": "出典：気象庁 キキクル（危険度分布）",
+      "coverageNoteJa": "10 分ごとに更新される「いまの危険度」です。**色が付いていないのは「今この瞬間、危険度の基準に達していない」という意味で、「安全」という意味でも「警報が解除された」という意味でもありません。**雨が弱まっても警報は続きます（実測 2026-08-27：大雨特別警報の最中に、その地域のキキクルは色なしだった）。**避難の判断は、お住まいの市町村が発表する避難情報に従ってください。**",
+      "fallbackLayersJa": []
+    },
+    {
+      "key": "kikikuru_flood",
+      "group": "realtime",
+      "labelJa": "洪水キキクル（中小河川の洪水の危険度）",
+      "summaryJa": "中小河川の洪水の危険度を 10 分ごとに更新した分布図です。大河川は指定河川洪水予報で発表されます。",
+      "display": "base",
+      "rankUnit": null,
+      "ranks": [
+        {
+          "order": 1,
+          "labelJa": "注意（警戒レベル2相当）",
+          "meaningJa": "今後の情報に注意してください。",
+          "actionJa": null,
+          "level": "caution",
+          "color": "#F2E700",
+          "colorSource": "measured",
+          "min": null,
+          "max": null,
+          "sourceCode": 1
+        },
+        {
+          "order": 2,
+          "labelJa": "警戒（警戒レベル3相当）",
+          "meaningJa": "高齢者等は避難を始める段階の情報です。",
+          "actionJa": null,
+          "level": "warning",
+          "color": "#FF2800",
+          "colorSource": "measured",
+          "min": null,
+          "max": null,
+          "sourceCode": 2
+        },
+        {
+          "order": 3,
+          "labelJa": "非常に危険（警戒レベル4相当）",
+          "meaningJa": "危険な場所からの避難が必要な段階の情報です。",
+          "actionJa": null,
+          "level": "danger",
+          "color": "#AA00AA",
+          "colorSource": "measured",
+          "min": null,
+          "max": null,
+          "sourceCode": 3
+        },
+        {
+          "order": 4,
+          "labelJa": "極めて危険（警戒レベル5相当）",
+          "meaningJa": "すでに災害が発生・切迫している段階の情報です。",
+          "actionJa": null,
+          "level": "critical",
+          "color": null,
+          "colorSource": null,
+          "min": null,
+          "max": null,
+          "sourceCode": 4
+        }
+      ],
+      "tile": {
+        "url": "https://www.jma.go.jp/bosai/jmatile/data/risk/{basetime}/{member}/{validtime}/surf/flood/{z}/{x}/{y}.png",
+        "minZoom": 2,
+        "maxZoom": 12,
+        "format": "png",
+        "timesUrl": "https://www.jma.go.jp/bosai/jmatile/data/risk/targetTimes.json"
+      },
+      "mesh": null,
+      "legendUrl": "https://www.jma.go.jp/bosai/risk/",
+      "vintage": null,
+      "updateCadence": "10min",
+      "source": "気象庁 キキクル（危険度分布）",
+      "license": "気象庁 公共データ利用規約（第1.0版）",
+      "attribution": "出典：気象庁 キキクル（危険度分布）",
+      "coverageNoteJa": "10 分ごとに更新される「いまの危険度」です。**色が付いていないのは「今この瞬間、危険度の基準に達していない」という意味で、「安全」という意味でも「警報が解除された」という意味でもありません。**雨が弱まっても警報は続きます（実測 2026-08-27：大雨特別警報の最中に、その地域のキキクルは色なしだった）。**避難の判断は、お住まいの市町村が発表する避難情報に従ってください。**",
+      "fallbackLayersJa": []
+    },
+    {
       "key": "chisui_chikei",
       "group": "terrain",
       "labelJa": "治水地形分類図",
@@ -1000,7 +1233,8 @@
         "url": "https://cyberjapandata.gsi.go.jp/xyz/lcmfc2/{z}/{x}/{y}.png",
         "minZoom": 2,
         "maxZoom": 17,
-        "format": "png"
+        "format": "png",
+        "timesUrl": null
       },
       "mesh": null,
       "legendUrl": "https://maps.gsi.go.jp/development/ichiran.html",
@@ -1024,7 +1258,8 @@
         "url": "https://cyberjapandata.gsi.go.jp/xyz/lcm25k_2012/{z}/{x}/{y}.png",
         "minZoom": 2,
         "maxZoom": 17,
-        "format": "png"
+        "format": "png",
+        "timesUrl": null
       },
       "mesh": null,
       "legendUrl": "https://maps.gsi.go.jp/development/ichiran.html",
@@ -1048,7 +1283,8 @@
         "url": "https://cyberjapandata.gsi.go.jp/xyz/relief/{z}/{x}/{y}.png",
         "minZoom": 2,
         "maxZoom": 17,
-        "format": "png"
+        "format": "png",
+        "timesUrl": null
       },
       "mesh": null,
       "legendUrl": "https://maps.gsi.go.jp/development/ichiran.html",
@@ -1072,7 +1308,8 @@
         "url": "https://cyberjapandata.gsi.go.jp/xyz/slopemap/{z}/{x}/{y}.png",
         "minZoom": 2,
         "maxZoom": 17,
-        "format": "png"
+        "format": "png",
+        "timesUrl": null
       },
       "mesh": null,
       "legendUrl": "https://maps.gsi.go.jp/development/ichiran.html",

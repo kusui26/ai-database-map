@@ -23,6 +23,7 @@ import { syncHazardLayers } from './hazardSource'
 import { addPointMarkerLayers, syncPointMarker } from './pointMarkerSource'
 import { loadStations } from './stationsSource'
 import { useHazardUrlState } from './useHazardUrlState'
+import { useHazardTileTimes } from '@/hooks/useHazardTileTimes'
 import { useMapUrlState } from './useMapUrlState'
 
 const STYLE_URL = process.env.NEXT_PUBLIC_MAP_STYLE_URL ?? '/map/gsi-pale-style.json'
@@ -249,9 +250,12 @@ export function MapView() {
 
   const { grp, setGrp, radiusM } = useMapUrlState()
   const { layerKeys: hazardLayerKeys, opacity: hazardOpacity } = useHazardUrlState()
+  // キキクルは 10 分ごとに面が変わる。時刻を差し込んだ URL が来るまでは載せない（§7.4）。
+  const { urls: hazardTileUrls } = useHazardTileTimes(hazardLayerKeys)
   const currentPosition = useGeoStore((state) => state.position)
   const markedPoint = useMapStore((state) => state.markedPoint)
   const setHovered = useMapStore((state) => state.setHovered)
+  const setCenter = useMapStore((state) => state.setCenter)
   const highlightedGrps = useMapStore((state) => state.highlightedGrps)
   const flyToReq = useMapStore((state) => state.flyTo)
   const chatOpen = useChatStore((state) => state.open)
@@ -296,6 +300,14 @@ export function MapView() {
     // 待っている間にアンマウントされたら、消えた地図に触らない。
     let disposed = false
 
+    // いま見ている場所（警戒バナーが「この地域に何が出ているか」を引く・§7.4）。
+    // **止まってから**報告する——ドラッグ中に流すと、動かすたびに問い合わせが走る。
+    const reportCenter = (): void => {
+      const center = map.getCenter()
+      setCenter({ lon: center.lng, lat: center.lat })
+    }
+    map.on('moveend', reportCenter)
+
     map.on('load', () => {
       void (async () => {
         try {
@@ -314,6 +326,8 @@ export function MapView() {
           addLayers(map)
           addHandlers(map, setGrpRef, setHoveredRef)
           setReady(true)
+          // 初期位置は動かないので `moveend` が来ない。1 回だけ自分で報告する。
+          reportCenter()
         } catch (error) {
           // 駅が出ないだけで地図は使える。原因を残して静かに諦める。
           console.error('駅データを地図に追加できませんでした', error)
@@ -387,8 +401,8 @@ export function MapView() {
   useEffect(() => {
     const map = mapRef.current
     if (!ready || map === null) return
-    syncHazardLayers(map, hazardLayerKeys, hazardOpacity)
-  }, [ready, hazardLayerKeys, hazardOpacity])
+    syncHazardLayers(map, hazardLayerKeys, hazardOpacity, hazardTileUrls)
+  }, [ready, hazardLayerKeys, hazardOpacity, hazardTileUrls])
 
   // チャットが指した地点（showPoint）。駅の選択とは別の操作系（§7.1）。
   useEffect(() => {

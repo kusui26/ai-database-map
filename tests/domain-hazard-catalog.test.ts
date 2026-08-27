@@ -24,7 +24,7 @@ import {
 } from '@/shared/constants'
 
 describe('domain/hazard: グループ・レベルのビュー', () => {
-  it('レイヤを持つグループだけを表示順で返す（realtime は 0 件なので出さない）', () => {
+  it('レイヤを持つグループだけを表示順で返す（Phase 3 で realtime が入った）', () => {
     const views = hazardGroupViews()
     expect(views.map((view) => view.group)).toEqual([
       'flood',
@@ -33,9 +33,9 @@ describe('domain/hazard: グループ・レベルのビュー', () => {
       'tsunami',
       'landslide',
       'terrain',
+      'realtime',
     ])
     expect(views.every((view) => view.layerKeys.length > 0)).toBe(true)
-    expect(views.map((view) => view.group)).not.toContain('realtime')
   })
 
   it('グループ表示順は constants.HAZARD_GROUPS の部分列', () => {

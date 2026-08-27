@@ -15,6 +15,7 @@ import type {
 import type { HazardCardPanel, HazardItem, PanelSize } from '@/shared/protocol'
 import { ALERT_LEVEL_LABELS_JA, HAZARD_GROUP_LABELS_JA } from '@/shared/constants'
 import { getHazardLayer } from '@/shared/hazard'
+import { jstDateTimeJa, parseIso } from '@/shared/time'
 import { hazardLevelOfAlert } from './level'
 
 /**
@@ -71,14 +72,16 @@ export const STATION_HAZARD_CAVEAT_JA =
 
 // --- アラート（いまの警戒状況・Phase 3） ----------------------------------
 
-/** 発表時刻の表示（**10 分前の情報を「今」と言わない**ため必ず出す・§7.4）。 */
+/**
+ * 発表時刻の表示（**10 分前の情報を「今」と言わない**ため必ず出す・§7.4）。
+ *
+ * **必ず日本時間で書く。** `getHours()` など実行環境のタイムゾーンに従う関数を使うと、
+ * 同じ発表が Vercel（UTC）では 9 時間前に見える——時刻がずれると、
+ * 「その情報が古いかどうか」という判断そのものが壊れる。
+ */
 export function reportedAtJa(iso: string | null): string | null {
-  if (iso === null) return null
-  const at = new Date(iso)
-  if (Number.isNaN(at.getTime())) return null
-  const pad = (value: number): string => String(value).padStart(2, '0')
-  const date = `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`
-  return `気象庁の発表時刻：${date} ${pad(at.getHours())}:${pad(at.getMinutes())}`
+  const epochMs = iso === null ? null : parseIso(iso)
+  return epochMs === null ? null : `気象庁の発表時刻：${jstDateTimeJa(epochMs)}`
 }
 
 /** 発表 1 件 → カードの 1 行。 */

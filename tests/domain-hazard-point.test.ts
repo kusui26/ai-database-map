@@ -36,6 +36,8 @@ function input(overrides: Partial<PointHazardInput> = {}): PointHazardInput {
     placeJa: '亀有駅',
     mesh: [],
     tile: [],
+    tileNearby: [],
+    uncoveredLayerKeys: [],
     rivers: [],
     elevationM: 0.2,
     online: true,
@@ -104,9 +106,92 @@ describe('hazard/point: 区間でしか言えないときは断定しない（§
     const result = pointHazard(input({ mesh }), ALL_LAYERS)
     expect(result.hazards).toHaveLength(0)
     expect(result.neighbours).toEqual([
-      { layerKey: 'flood_l2', labelJa: '洪水浸水想定区域（想定最大規模）', level: 'danger' },
+      {
+        layerKey: 'flood_l2',
+        labelJa: '洪水浸水想定区域（想定最大規模）',
+        level: 'danger',
+        source: 'mesh',
+        proximityJa: '隣の 250m メッシュ',
+      },
     ])
     expect(result.coverageNotesJa.some((note) => note.includes('隣の 250m メッシュ'))).toBe(true)
+    // **「その場に留まる」とは言わない。** 近くが区域なら §6.2 の 6 番を適用しない。
+    expect(result.verdict.evacuation).toBeNull()
+  })
+})
+
+/**
+ * 区域の**縁**（§6.2 の追記・PR-4d）。
+ *
+ * 実測で、土石流警戒区域の約 10m 外が `evacuation: 'stay'`（その場に留まる）になっていた。
+ * 公式タイルは 1 画素しか見ておらず、土砂はメッシュ化していないので手掛かりがゼロだった。
+ */
+describe('hazard/point: 区域のすぐ外で「留まってよい」と言わない（§6.2 の追記）', () => {
+  /** 土石流警戒区域（イエローゾーン）の塗り色。実測 2026-08-27・熱海。 */
+  const DOSEKIRYU_YELLOW = '#E6C832'
+
+  it('その点は区域外でも、約 20m 以内が区域ならそう言う', () => {
+    const result = pointHazard(
+      input({ tileNearby: [{ layerKey: 'dosekiryu', hex: DOSEKIRYU_YELLOW }] }),
+      ALL_LAYERS,
+    )
+    expect(result.hazards).toHaveLength(0)
+    expect(result.neighbours).toHaveLength(1)
+    expect(result.neighbours[0]?.source).toBe('tile')
+    expect(result.neighbours[0]?.proximityJa).toBe('約 20m 以内')
+    // 見出しでも近さを言う（「入っていません」で終えない）。
+    expect(result.verdict.headlineJa).toContain('約 20m 以内')
+    expect(result.verdict.headlineJa).toContain('安全という意味ではありません')
+    // **ここが本体。** 10m 先が土石流警戒区域なのに「その場に留まる」と言っていた。
+    expect(result.verdict.evacuation).toBeNull()
+    expect(result.verdict.reasonsJa.some((reason) => reason.includes('区域外ですが'))).toBe(true)
+  })
+
+  it('その点が区域内なら、近さの話は足さない（同じことを 2 回言わない）', () => {
+    const result = pointHazard(
+      input({
+        tile: [{ layerKey: 'dosekiryu', hex: DOSEKIRYU_YELLOW }],
+        tileNearby: [{ layerKey: 'dosekiryu', hex: DOSEKIRYU_YELLOW }],
+      }),
+      ALL_LAYERS,
+    )
+    expect(result.hazards).toHaveLength(1)
+    expect(result.neighbours).toHaveLength(0)
+    expect(result.verdict.evacuation).toBe('takeaway')
+  })
+
+  it('近いのがタイル・遠いのがメッシュなら、近い方だけを残す', () => {
+    const result = pointHazard(
+      input({
+        mesh: [{ layerKey: 'dosekiryu', sourceCode: 0, coverage: 0, neighbourSourceCode: 1 }],
+        tileNearby: [{ layerKey: 'dosekiryu', hex: DOSEKIRYU_YELLOW }],
+      }),
+      ALL_LAYERS,
+    )
+    expect(result.neighbours).toHaveLength(1)
+    expect(result.neighbours[0]?.source).toBe('tile')
+  })
+})
+
+/**
+ * 注記は**この地点で言えること**に絞る（§7.5-2・PR-4d）。
+ * 全国の一般論を毎回 8 行並べると、いちばん読ませたい 1 行が埋もれる。
+ */
+describe('hazard/point: 網羅性の注記', () => {
+  it('この地域に区域図が無いレイヤは「ここには無い」と言う（全国の一般論に差し替える）', () => {
+    const result = pointHazard(input({ uncoveredLayerKeys: ['naisui'] }), ALL_LAYERS)
+    const notes = result.coverageNotesJa.join('\n')
+    expect(notes).toContain('この地域には想定区域図がありません')
+    // 「区域が無い」とは言わない（図が無いだけ）。
+    expect(notes).toContain('区域が無いという意味ではない')
+    // 内水の全国の一般論（22 府県）は出さない——ここに図が無いことの方が具体的。
+    expect(notes).not.toContain('47 都道府県のうち 22')
+  })
+
+  it('キキクル（表示専用）は地点の答えにも注記にも出てこない（決定 5・§9.1）', () => {
+    expect(ALL_LAYERS.some((key) => key.startsWith('kikikuru'))).toBe(false)
+    const result = pointHazard(input(), ALL_LAYERS)
+    expect(result.coverageNotesJa.join('\n')).not.toContain('10 分ごとに更新')
   })
 })
 

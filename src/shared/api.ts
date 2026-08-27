@@ -260,11 +260,20 @@ export const hazardRiverSchema = z.object({
 })
 export type HazardRiver = z.infer<typeof hazardRiverSchema>
 
-/** 隣接メッシュだけが区域のときの手掛かり（混在セルと GPS 誤差を補う・§8.3）。 */
+/**
+ * その点は区域外だが、**近くが区域**のときの手掛かり（§8.3・§6.2 の追記）。
+ *
+ * 出所で意味が違うので、必ず一緒に運ぶ。
+ * - `mesh` … **隣の 250m メッシュ**が区域（混在セルと GPS 誤差を補う）
+ * - `tile` … **約 20m 以内**が区域（区域の縁。土砂のようにメッシュを持たない災害で効く）
+ */
 export const hazardNeighbourSchema = z.object({
   layerKey: z.string(),
   labelJa: z.string(),
   level: hazardLevelSchema,
+  source: z.enum(['tile', 'mesh']),
+  /** 「約 20m 以内」など、距離感の言い方（UI と AI で割らないようサーバが作る）。 */
+  proximityJa: z.string(),
 })
 export type HazardNeighbour = z.infer<typeof hazardNeighbourSchema>
 

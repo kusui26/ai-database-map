@@ -301,10 +301,23 @@ export function hazardLayersToShow(layerKeys: readonly string[]): readonly strin
   })
 }
 
-/** 点の答えを持ちうるレイヤ（タイルがあり、色つきの階級を持つもの）。 */
+/**
+ * 点の答えを持ちうるレイヤ（タイルがあり、色つきの階級を持つもの）。
+ *
+ * ⚠ **`realtime`（キキクル）は必ず外す。** タイルも色つき階級も持っているので条件には合うが、
+ * キキクルは**表示専用**で、**色からレベルを読まない**と決めてある（決定 5・§9.1）。
+ * 実測（2026-08-27）では、外していなかったために `/api/hazard/point` が毎回
+ * `…/risk/{basetime}/{member}/{validtime}/surf/land/…` という**差し込み前の URL** を
+ * 3 本、気象庁に投げて 404 を受けていた。無駄なだけでなく、**解決していたら決定 5 に反していた**。
+ */
 export function hazardLayersWithPointAnswer(): readonly string[] {
   return hazardLayers
-    .filter((layer) => layer.tile !== null && layer.ranks.some((rank) => rank.color !== null))
+    .filter(
+      (layer) =>
+        layer.group !== 'realtime' &&
+        layer.tile !== null &&
+        layer.ranks.some((rank) => rank.color !== null),
+    )
     .map((layer) => layer.key)
 }
 

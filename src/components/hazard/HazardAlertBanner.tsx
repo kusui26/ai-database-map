@@ -17,18 +17,27 @@
  * ここで言い換えると、**同じ状況について AI とバナーが違うことを言い出す**（`.claude/CLAUDE.md` §2）。
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   ALERT_LEVEL_LABELS_JA,
   HAZARD_LEVEL_COLORS,
   HAZARD_LEVEL_ICONS,
 } from '@/shared/constants'
-import { hazardAlertCardPanel, reportedAtJa } from '@/domain/hazard/panels'
-import { isWarningMode } from '@/domain/hazard/warning-mode'
+import {
+  evacuationListPanel,
+  hazardAlertCardPanel,
+  reportedAtJa,
+} from '@/domain/hazard/panels'
+import { evacuationDisasterFor, isWarningMode } from '@/domain/hazard/warning-mode'
 import { PanelRenderer } from '@/components/panels/PanelRenderer'
 import { useIsOnline } from '@/hooks/useIsOnline'
+import { useMapStore } from '@/stores/mapStore'
 import type { HazardAlertsResponse } from '@/shared/api'
 import { useAlertTarget, useHazardAlerts } from './useHazardAlerts'
+import { useEvacuationSites, type EvacuationTarget } from './useEvacuationSites'
+
+/** 開いている引き出し（避難先は押されるまで取りに行かない）。 */
+type Drawer = 'none' | 'detail' | 'evacuation'
 
 /** どこの「今」を見ているか（主語をはっきりさせる）。 */
 function whereJa(alerts: HazardAlertsResponse, isCurrentPosition: boolean): string {
@@ -41,7 +50,31 @@ export function HazardAlertBanner() {
   const target = useAlertTarget()
   const { alerts } = useHazardAlerts(target)
   const online = useIsOnline()
-  const [open, setOpen] = useState(false)
+  const [drawer, setDrawer] = useState<Drawer>('none')
+  const setHighlightedPoints = useMapStore((state) => state.setHighlightedPoints)
+
+  // 避難先は**押されたときだけ**取りに行く（`null` の間は問い合わせが走らない）。
+  // 災害種別は「いま出ている発表」から決める——洪水に対応していない場所を出さないため。
+  const evacuationTarget: EvacuationTarget | null =
+    drawer === 'evacuation' && alerts !== undefined && target !== null
+      ? {
+          lon: target.lon,
+          lat: target.lat,
+          placeJa: target.isCurrentPosition ? '現在地' : (alerts.area?.municipalityJa ?? 'この地点'),
+          disaster: evacuationDisasterFor(alerts.warnings, alerts.floodForecasts.length > 0),
+        }
+      : null
+  const { evacuation, isLoading: evacuationLoading } = useEvacuationSites(evacuationTarget)
+
+  // 一覧と地図の印を揃える（並びも番号も同じ）。閉じたら消す。
+  const sites = evacuation?.sites
+  useEffect(() => {
+    if (sites === undefined) return
+    setHighlightedPoints(sites.map((site) => ({ lon: site.lon, lat: site.lat, labelJa: site.nameJa })))
+  }, [sites, setHighlightedPoints])
+  useEffect(() => {
+    if (drawer !== 'evacuation') setHighlightedPoints([])
+  }, [drawer, setHighlightedPoints])
 
   // 平時は何も出さない（レベル1・2 で毎回バナーを出すと、肝心のときに読まれなくなる）。
   if (alerts === undefined || target === null || !isWarningMode(alerts.alertLevel)) return null
@@ -85,18 +118,38 @@ export function HazardAlertBanner() {
             </p>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => setOpen((current) => !current)}
-          aria-expanded={open}
-          className="shrink-0 rounded-md px-2 py-0.5 text-xs font-medium text-indigo-600 transition-colors hover:bg-indigo-50"
-        >
-          {open ? '閉じる' : '詳しく見る'}
-        </button>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          {/* 主 CTA（§7.4）。**警戒中の画面でいちばん押されるべきもの**なので、
+              「詳しく見る」より目立たせる。 */}
+          <button
+            type="button"
+            onClick={() => setDrawer((current) => (current === 'evacuation' ? 'none' : 'evacuation'))}
+            aria-expanded={drawer === 'evacuation'}
+            className="rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700"
+          >
+            {drawer === 'evacuation' ? '閉じる' : '安全な場所を探す'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setDrawer((current) => (current === 'detail' ? 'none' : 'detail'))}
+            aria-expanded={drawer === 'detail'}
+            className="rounded-md px-2 py-0.5 text-xs font-medium text-indigo-600 transition-colors hover:bg-indigo-50"
+          >
+            {drawer === 'detail' ? '閉じる' : '詳しく見る'}
+          </button>
+        </div>
       </div>
-      {open && (
+      {drawer !== 'none' && (
         <div className="max-h-[50vh] overflow-y-auto border-t border-slate-200 bg-slate-50 p-2">
-          <PanelRenderer panel={hazardAlertCardPanel(alerts, 'compact')} />
+          {drawer === 'detail' && <PanelRenderer panel={hazardAlertCardPanel(alerts, 'compact')} />}
+          {drawer === 'evacuation' &&
+            (evacuation === undefined ? (
+              <p className="p-2 text-xs text-slate-500">
+                {evacuationLoading ? '避難場所を探しています…' : '避難場所を取得できませんでした。'}
+              </p>
+            ) : (
+              <PanelRenderer panel={evacuationListPanel(evacuation, 'compact')} />
+            ))}
         </div>
       )}
     </div>

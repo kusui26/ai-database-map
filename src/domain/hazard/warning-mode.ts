@@ -18,6 +18,7 @@
  */
 
 import type { AlertLevel } from '@/shared/constants'
+import type { EvacuationDisasterKey } from '@/shared/evacuation'
 import { resolveHazardLayerKeys } from './catalog'
 
 /** 警戒モードに入る警戒レベル相当（§7.4 の表）。 */
@@ -119,4 +120,27 @@ export function warningModeLayers(
   hasFloodForecast: boolean,
 ): readonly string[] {
   return resolveHazardLayerKeys(LAYERS_BY_PHENOMENON[leadingPhenomenon(warnings, hasFloodForecast)])
+}
+
+/**
+ * 現象 → 避難先を探すときの災害種別（`skhb01`〜`skhb08` のどれを見るか）。
+ *
+ * **浸水害（大雨）は「内水氾濫」に対応づける。** 指定緊急避難場所の種別で
+ * 大雨による浸水に当たるのは `disaster7`（内水氾濫）で、`disaster1`（洪水）は
+ * 河川の氾濫を指す。ここを取り違えると、**その災害に指定されていない場所**を出してしまう
+ * （§11 リスク 10 ＝人命）。
+ */
+const EVACUATION_BY_PHENOMENON: Readonly<Record<WarningPhenomenon, EvacuationDisasterKey>> = {
+  landslide: 'landslide',
+  inundation: 'inland_flood',
+  flood: 'flood',
+  storm_surge: 'storm_surge',
+}
+
+/** いま出ている発表から、避難先を探すべき災害種別を決める。 */
+export function evacuationDisasterFor(
+  warnings: readonly WarningLike[],
+  hasFloodForecast: boolean,
+): EvacuationDisasterKey {
+  return EVACUATION_BY_PHENOMENON[leadingPhenomenon(warnings, hasFloodForecast)]
 }

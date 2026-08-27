@@ -15,6 +15,7 @@ import {
 import { jmaWarningKindSchema } from './jma'
 import { ALERT_LEVELS } from './constants'
 import { hazardItemSchema, rankingRowSchema, scatterPointSchema, sourceRefSchema } from './protocol'
+import { evacuationDisasterKeySchema } from './evacuation'
 
 // --- エラー封筒 ---------------------------------------------------------
 export const errorEnvelopeSchema = z.object({
@@ -370,13 +371,78 @@ export const hazardAlertsResponseSchema = z.object({
   reasonsJa: z.array(z.string()),
   /** 気象庁の発表時刻。**10 分前の情報を「今」と言わない**ため必ず出す（§7.4）。 */
   reportedAt: z.string().nullable(),
-  /** **この判定に含まれていないもの**（土砂災害警戒情報・指定河川洪水予報）。必ず表示する。 */
+  /** **この判定に含まれていないもの**（市町村が出す避難情報）。必ず表示する。 */
   limitationsJa: z.array(z.string()),
   sources: z.array(sourceRefSchema),
   notesJa: z.array(z.string()),
   disclaimerJa: z.string(),
 })
 export type HazardAlertsResponse = z.infer<typeof hazardAlertsResponseSchema>
+
+// --- ハザード：避難先（GET /api/hazard/evacuation・260824_flood §3.5・§8.5） ------
+
+/**
+ * 災害種別は**必須**にする。既定で「洪水」に倒すと、土砂災害を心配している人に
+ * **洪水にしか対応していない避難場所**を返しうる（§11 リスク 10 ＝人命）。
+ * 呼び出し側（UI もチャットも）が必ず選ぶ。
+ */
+export const hazardEvacuationQuerySchema = z.object({
+  lon: queryNumber(-180, 180),
+  lat: queryNumber(-90, 90),
+  for: evacuationDisasterKeySchema,
+  placeJa: z.string().min(1).max(60).optional(),
+  radiusM: queryNumber(500, 20_000).optional(),
+  top: queryNumber(1, 20).optional(),
+})
+export type HazardEvacuationQuery = z.infer<typeof hazardEvacuationQuerySchema>
+
+/** 想定区域との重なり方（`shared/hazard-mesh` の `CellCertainty` と同値）。 */
+export const hazardCertaintyOfAreaSchema = z.enum(['outside', 'partial', 'inside'])
+
+/** 避難先 1 件（意味づけ済み。UI も AI もこの形だけを読む）。 */
+export const hazardEvacuationSiteSchema = z.object({
+  nameJa: z.string(),
+  addressJa: z.string(),
+  lon: z.number(),
+  lat: z.number(),
+  distanceM: z.number().int(),
+  /** 「約1.2km」。UI と AI で言い方を変えないよう、文字列もサーバが作る。 */
+  distanceJa: z.string(),
+  /** 八方位（「北東」）。地図が見られない状況でも動ける情報にする。 */
+  bearingJa: z.string(),
+  /** その場所が指定されている災害種別（表示名）。**洪水だけとは限らない。** */
+  disastersJa: z.array(z.string()),
+  /**
+   * 250m メッシュで見た、**その災害の**想定区域との重なり方（`null`＝判定できない）。
+   * **真偽値にしない**——セルが持つのは「セル内の最大」なので、言い切れるのは
+   * `outside`（一切かからない）と `inside`（全域）だけで、間は `partial` である（§5.9）。
+   * メッシュを持つのは洪水・内水だけ（決定 4）なので、他の種別では常に `null`。
+   */
+  hazardAreaCertainty: hazardCertaintyOfAreaSchema.nullable(),
+  /** 上の重なり方の日本語（UI と AI で言い方を割らないよう、サーバが作る）。 */
+  hazardAreaJa: z.string(),
+  elevationM: z.number().nullable(),
+  remarksJa: z.string().nullable(),
+})
+export type HazardEvacuationSite = z.infer<typeof hazardEvacuationSiteSchema>
+
+/** 避難先の一覧（`/api/hazard/evacuation` と AI ツール `findEvacuationSites` が共有）。 */
+export const hazardEvacuationResponseSchema = z.object({
+  point: z.object({ lon: z.number(), lat: z.number(), placeJa: z.string() }),
+  forDisaster: evacuationDisasterKeySchema,
+  forDisasterJa: z.string(),
+  /** 「指定緊急避難場所」。滞在する「指定避難所」と混同させないため、応答に必ず入れる。 */
+  siteKindJa: z.string(),
+  searchRadiusM: z.number().int(),
+  headlineJa: z.string(),
+  sites: z.array(hazardEvacuationSiteSchema),
+  /** **必ず全部表示する**（開設状況は分からない・直線距離である・指定避難所ではない…）。 */
+  limitationsJa: z.array(z.string()),
+  notesJa: z.array(z.string()),
+  sources: z.array(sourceRefSchema),
+  disclaimerJa: z.string(),
+})
+export type HazardEvacuationResponse = z.infer<typeof hazardEvacuationResponseSchema>
 
 export const healthResponseSchema = z.object({ ok: z.literal(true) })
 export type HealthResponse = z.infer<typeof healthResponseSchema>

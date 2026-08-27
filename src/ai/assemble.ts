@@ -22,9 +22,15 @@ import {
 } from '@/domain/stations/panels'
 import { rankingPanel } from '@/domain/ranking/panel'
 import { scatterPanel } from '@/domain/growth/panel'
-import { hazardAlertCardPanel, hazardCardPanel } from '@/domain/hazard/panels'
-import { hazardLayersToShow } from '@/domain/hazard/catalog'
 import {
+  evacuationListPanel,
+  hazardAlertCardPanel,
+  hazardCardPanel,
+} from '@/domain/hazard/panels'
+import { hazardLayersToShow } from '@/domain/hazard/catalog'
+import { isWarningMode, warningModeLayers } from '@/domain/hazard/warning-mode'
+import {
+  type EvacuationEffect,
   type GrowthEffect,
   type HazardAlertsEffect,
   type HazardPointEffect,
@@ -92,6 +98,11 @@ export function panelsForHazardAlerts(effect: HazardAlertsEffect): Panel[] {
   return [inline(hazardAlertCardPanel(effect.alerts, 'compact'))]
 }
 
+/** 避難先ツール → パネル（evacuationList・compact/inline）。 */
+export function panelsForEvacuation(effect: EvacuationEffect): Panel[] {
+  return [inline(evacuationListPanel(effect.evacuation, 'compact'))]
+}
+
 /** 副産物 → パネル。 */
 function panelsFor(effect: ToolEffect): Panel[] {
   switch (effect.kind) {
@@ -105,6 +116,8 @@ function panelsFor(effect: ToolEffect): Panel[] {
       return panelsForHazardPoint(effect)
     case 'hazardAlerts':
       return panelsForHazardAlerts(effect)
+    case 'evacuation':
+      return panelsForEvacuation(effect)
   }
 }
 
@@ -142,10 +155,38 @@ export function mapActionsForEffect(effect: ToolEffect): MapAction[] {
       ]
     }
     case 'hazardAlerts': {
-      // 地点を指すだけ。**キキクルのレイヤ表示は PR2**（タイルが basetime を持つので
-      // カタログの `HazardTile` では表せず、表示の仕組みごと足す必要がある・§8.4）。
-      const { point } = effect.alerts
-      return [{ type: 'showPoint', lon: point.lon, lat: point.lat, labelJa: point.placeJa }]
+      // 地点を指したうえで、**いまの危険度の面（キキクル）と想定区域**を出す（§6.5）。
+      // 出すレイヤは警戒モードの UI と**同じドメイン関数**が決める——
+      // チャットで聞いたときと画面で警戒モードに入ったときで、地図が違ったら混乱する。
+      const { point, alertLevel, warnings, floodForecasts } = effect.alerts
+      const layers = isWarningMode(alertLevel)
+        ? warningModeLayers(warnings, floodForecasts.length > 0)
+        : []
+      return [
+        { type: 'showPoint', lon: point.lon, lat: point.lat, labelJa: point.placeJa },
+        // 空配列は「すべて消す」の意味なので、出すものが無いときは送らない（§6.4）。
+        ...(layers.length > 0 ? [{ type: 'setHazardLayers' as const, layers: [...layers] }] : []),
+      ]
+    }
+    case 'evacuation': {
+      // 起点（今いる場所）と行き先（候補）を**別の印**で置く。
+      // 同じ印にすると「どこからどこへ」が読めない（§8.5）。
+      const { point, sites } = effect.evacuation
+      return [
+        { type: 'showPoint', lon: point.lon, lat: point.lat, labelJa: point.placeJa },
+        ...(sites.length === 0
+          ? []
+          : [
+              {
+                type: 'highlightPoints' as const,
+                points: sites.map((site) => ({
+                  lon: site.lon,
+                  lat: site.lat,
+                  labelJa: site.nameJa,
+                })),
+              },
+            ]),
+      ]
     }
   }
 }
@@ -258,6 +299,16 @@ function summarizePanel(panel: Panel): string {
       const items = panel.items.map((item) => `${item.labelJa} ${item.valueJa}`).join('・')
       const evacuation = panel.evacuation === null ? '' : `／${panel.evacuation}`
       return `${panel.placeJa}: ${panel.headlineJa}（${panel.level}${evacuation}）${items}`
+    }
+    case 'evacuationList': {
+      // 行き先はサーバが選び順まで決めている。LLM は説明するだけでよい。
+      const items = panel.items
+        .map(
+          (item, index) =>
+            `${index + 1}. ${item.nameJa}（${item.bearingJa}へ${item.distanceJa}・${item.hazardAreaJa}）`,
+        )
+        .join('、')
+      return `${panel.placeJa}の${panel.siteKindJa}（${panel.forDisasterJa}）: ${panel.headlineJa} ${items}`
     }
     case 'markdown':
       return panel.body

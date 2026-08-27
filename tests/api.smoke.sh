@@ -159,6 +159,32 @@ else
   ng "kikikuru timesUrl がカタログに無い"
 fi
 
+# 13c) hazard/evacuation（避難先）
+#      平時でも中身が出る（指定の一覧は常にある）ので、**種別の絞り込み**まで見る。
+#      ①亀有＝洪水で 1 件以上返る ②各件がその種別に指定されている ③限界の 3 点が入っている。
+get "$BASE/api/hazard/evacuation" "lon=139.847" "lat=35.7645" "placeJa=亀有駅" "for=flood"
+{ [ "$HTTP" = 200 ] && [ "$(echo "$BODY" | jq -r '.forDisasterJa')" = 洪水 ] &&
+  [ "$(echo "$BODY" | jq '.sites | length')" -gt 0 ] &&
+  [ "$(echo "$BODY" | jq -r '[.sites[] | select(.disastersJa | index("洪水") | not)] | length')" -eq 0 ]; } &&
+  ok "hazard/evacuation（洪水に対応した場所だけ・$(echo "$BODY" | jq '.sites | length') 件）" ||
+  ng "hazard evacuation flood"
+
+{ [ "$(echo "$BODY" | jq -r '[.limitationsJa[] | select(contains("開設されているか"))] | length')" -gt 0 ] &&
+  [ "$(echo "$BODY" | jq -r '[.limitationsJa[] | select(contains("直線距離"))] | length')" -gt 0 ] &&
+  [ "$(echo "$BODY" | jq -r '[.limitationsJa[] | select(contains("指定避難所"))] | length')" -gt 0 ] &&
+  [ "$(echo "$BODY" | jq -r '.siteKindJa')" = 指定緊急避難場所 ]; } &&
+  ok "hazard/evacuation（限界を明示・「開いている」と言わない）" || ng "hazard evacuation wording"
+
+# 13d) 種別を変えると**別のレイヤ**を見る（洪水用を土砂災害に使い回さない・§11 リスク 10）
+get "$BASE/api/hazard/evacuation" "lon=139.0786" "lat=35.1043" "placeJa=熱海駅" "for=landslide"
+{ [ "$HTTP" = 200 ] && [ "$(echo "$BODY" | jq -r '.forDisaster')" = landslide ] &&
+  [ "$(echo "$BODY" | jq -r '[.sites[] | select(.disastersJa | index("崖崩れ・土石流・地滑り") | not)] | length')" -eq 0 ]; } &&
+  ok "hazard/evacuation（土砂は土砂の指定だけ）" || ng "hazard evacuation landslide"
+
+# 13e) 異常系：災害種別が無い → 400（既定で洪水に倒さない・§11 リスク 10）
+get "$BASE/api/hazard/evacuation" "lon=139.847" "lat=35.7645"
+[ "$HTTP" = 400 ] && ok "hazard/evacuation：災害種別なし → 400" || ng "evacuation missing for should 400"
+
 # 14) hazard/point 異常系：座標が無い → 400
 get "$BASE/api/hazard/point" "lat=35.7645"
 [ "$HTTP" = 400 ] && ok "hazard/point：座標なし → 400" || ng "hazard point missing lon should 400"

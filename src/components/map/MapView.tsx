@@ -21,6 +21,7 @@ import { HoverTooltip } from './HoverTooltip'
 import { addCurrentPositionLayers, syncCurrentPosition } from './currentPositionSource'
 import { syncHazardLayers } from './hazardSource'
 import { addPointMarkerLayers, syncPointMarker } from './pointMarkerSource'
+import { addEvacuationPointLayers, syncEvacuationPoints } from './evacuationPointsSource'
 import { loadStations } from './stationsSource'
 import { useHazardUrlState } from './useHazardUrlState'
 import { useHazardTileTimes } from '@/hooks/useHazardTileTimes'
@@ -188,6 +189,8 @@ function addLayers(map: maplibregl.Map): void {
 
   // 指し示した地点と現在地はいちばん上（ハザードの塗りにも駅名にも隠されない）。
   addPointMarkerLayers(map)
+  // 行き先（避難先）は起点の印より下に置く——起点が隠れると「どこから」が読めない。
+  addEvacuationPointLayers(map)
   addCurrentPositionLayers(map)
 }
 
@@ -254,6 +257,7 @@ export function MapView() {
   const { urls: hazardTileUrls } = useHazardTileTimes(hazardLayerKeys)
   const currentPosition = useGeoStore((state) => state.position)
   const markedPoint = useMapStore((state) => state.markedPoint)
+  const highlightedPoints = useMapStore((state) => state.highlightedPoints)
   const setHovered = useMapStore((state) => state.setHovered)
   const setCenter = useMapStore((state) => state.setCenter)
   const highlightedGrps = useMapStore((state) => state.highlightedGrps)
@@ -410,6 +414,13 @@ export function MapView() {
     if (!ready || map === null) return
     syncPointMarker(map, markedPoint)
   }, [ready, markedPoint])
+
+  // 避難先：行き先の印（番号つき）。起点の印とは別レイヤ（§8.5）。
+  useEffect(() => {
+    const map = mapRef.current
+    if (!ready || map === null) return
+    syncEvacuationPoints(map, highlightedPoints)
+  }, [ready, highlightedPoints])
 
   // 現在地：ピンと精度円。**精度円を必ず出す**（点だけだと「ここにいる」と誤解させる・§7.6）。
   useEffect(() => {

@@ -12,7 +12,12 @@ import { z } from 'zod'
 import { categorySchema, requireEntry } from '@/shared/catalog'
 import { PREFECTURES, RADII_M, type RadiusM, ROUTE_TYPES, routeTypeLabel } from '@/shared/constants'
 import { type MapResponse } from '@/shared/protocol'
-import { type HazardAlertsResponse, type HazardPointResponse } from '@/shared/api'
+import {
+  type HazardAlertsResponse,
+  type HazardEvacuationResponse,
+  type HazardPointResponse,
+} from '@/shared/api'
+import { evacuationDisasterKeySchema, EVACUATION_DISASTERS } from '@/shared/evacuation'
 import {
   rankByColumn,
   searchStations,
@@ -25,6 +30,7 @@ import { buildRanking } from '@/domain/ranking/presenter'
 import { buildGrowth } from '@/domain/growth/presenter'
 import { hazardPointAt } from '@/lib/hazard/point-source'
 import { hazardAlertsAt } from '@/lib/hazard/alert-source'
+import { evacuationSitesAt } from '@/lib/hazard/evacuation-source'
 import { reportedAtJa } from '@/domain/hazard/panels'
 import { type EffectCollector } from './types'
 import { panelsForStationDetail, summarizePanels } from './assemble'
@@ -184,6 +190,35 @@ function alertSummaryForLlm(alerts: HazardAlertsResponse) {
     limitationsJa: alerts.limitationsJa,
     notesJa: alerts.notesJa,
     disclaimerJa: alerts.disclaimerJa,
+  }
+}
+
+/**
+ * 避難先 → LLM 向けの要約（同 §8.5）。
+ *
+ * **`limitationsJa` を削らない**——「開設されているとは限らない」「直線距離である」
+ * 「指定避難所ではない」の 3 つは、落ちた瞬間に誤解が生まれる（§11 リスク 10）。
+ * 距離・方角・区域との重なりは**サーバが作った日本語**をそのまま渡す（LLM に計算させない）。
+ */
+function evacuationSummaryForLlm(evacuation: HazardEvacuationResponse) {
+  return {
+    placeJa: evacuation.point.placeJa,
+    forDisasterJa: evacuation.forDisasterJa,
+    siteKindJa: evacuation.siteKindJa,
+    headlineJa: evacuation.headlineJa,
+    sites: evacuation.sites.map((site) => ({
+      nameJa: site.nameJa,
+      addressJa: site.addressJa,
+      distanceJa: site.distanceJa,
+      bearingJa: site.bearingJa,
+      hazardAreaJa: site.hazardAreaJa,
+      elevationM: site.elevationM,
+      remarksJa: site.remarksJa,
+      disastersJa: site.disastersJa,
+    })),
+    notesJa: evacuation.notesJa,
+    limitationsJa: evacuation.limitationsJa,
+    disclaimerJa: evacuation.disclaimerJa,
   }
 }
 
@@ -527,7 +562,8 @@ export function createTools(collector: EffectCollector, origin: string) {
         'いまその地点に発表されている気象庁の警報・注意報と、警戒レベル相当を調べる。' +
         '駅なら grp、任意地点なら lon/lat を渡す。' +
         '「今どうなってる」「警報は出てる？」「大雨警報は？」「避難した方がいい？」に使う。' +
-        '⚠ 土砂災害警戒情報と指定河川洪水予報は含まれない（返り値の limitationsJa を必ず伝えること）。',
+        '土砂災害の危険度・指定河川洪水予報（氾濫危険情報など）も含む。' +
+        '⚠ 市町村が出す避難情報（避難指示など）は含まれない（返り値の limitationsJa を必ず伝えること）。',
       inputSchema: z.object({
         grp: z.string().optional().describe('searchStations が返した駅 grp'),
         lon: z.number().optional().describe('経度（grp を使わないとき）'),
@@ -544,6 +580,47 @@ export function createTools(collector: EffectCollector, origin: string) {
         } catch (error) {
           return {
             error: error instanceof Error ? error.message : '警戒状況の取得に失敗しました',
+          }
+        }
+      },
+    }),
+
+    /**
+     * **どこへ逃げるか**（`/api/hazard/evacuation` と同じ関数を通る）。
+     *
+     * `for`（災害種別）を**必須**にしてある。既定で洪水に倒すと、土砂災害を心配している人に
+     * 洪水にしか対応していない避難場所を返しうる（§11 リスク 10 ＝人命）。
+     */
+    findEvacuationSites: tool({
+      description:
+        'その地点の近くにある「指定緊急避難場所」を、災害種別に対応したものだけ調べる。' +
+        '駅なら grp、任意地点なら lon/lat を渡し、for に災害種別を必ず指定する。' +
+        '「どこに逃げればいい」「避難場所は」「近くの避難所」に使う。' +
+        '⚠ 返るのは市町村が指定した一覧で、**いま開設されているかは分からない**。' +
+        '返り値の limitationsJa を必ず伝え、「ここへ避難してください」とは書かないこと。',
+      inputSchema: z.object({
+        grp: z.string().optional().describe('searchStations が返した駅 grp'),
+        lon: z.number().optional().describe('経度（grp を使わないとき）'),
+        lat: z.number().optional().describe('緯度（grp を使わないとき）'),
+        placeJa: z.string().optional().describe('地点の呼び名。例: 亀有駅、現在地'),
+        for: evacuationDisasterKeySchema.describe(
+          `対応する災害種別（必須）。${EVACUATION_DISASTERS.map((d) => `${d.key}=${d.labelJa}`).join(' / ')}`,
+        ),
+        radiusM: z
+          .number()
+          .optional()
+          .describe('探す半径（メートル・既定 5000・最大 20000）'),
+      }),
+      execute: async ({ grp, lon, lat, placeJa, for: disaster, radiusM }) => {
+        try {
+          const target = await resolveHazardTarget({ grp, lon, lat, placeJa })
+          if ('error' in target) return target
+          const evacuation = await evacuationSitesAt({ ...target, disaster, radiusM }, origin)
+          collector.push({ kind: 'evacuation', evacuation })
+          return evacuationSummaryForLlm(evacuation)
+        } catch (error) {
+          return {
+            error: error instanceof Error ? error.message : '避難場所の取得に失敗しました',
           }
         }
       },

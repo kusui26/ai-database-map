@@ -17,6 +17,8 @@ export function chipLabel(panels: readonly Panel[]): string {
   for (const panel of panels) {
     if (panel.type === 'stationCard') return `${panel.label} の詳細`
     if (panel.type === 'hazardCard') return `${panel.placeJa} の災害リスク`
+    if (panel.type === 'evacuationList')
+      return `${panel.placeJa} の${panel.siteKindJa}（${panel.forDisasterJa}）`
     if (panel.type !== 'markdown') return panel.title
   }
   return '結果'

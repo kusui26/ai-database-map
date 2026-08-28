@@ -21,7 +21,8 @@ import type {
   HazardItem,
   PanelSize,
 } from '@/shared/protocol'
-import { ALERT_LEVEL_LABELS_JA, HAZARD_GROUP_LABELS_JA } from '@/shared/constants'
+import { ALERT_LEVEL_LABELS_JA, HAZARD_GROUP_LABELS_JA, type HazardGroup } from '@/shared/constants'
+import { evacuationDisasterLabelJa, type EvacuationDisasterKey } from '@/shared/evacuation'
 import { getHazardLayer } from '@/shared/hazard'
 import { jstDateTimeJa, parseIso } from '@/shared/time'
 import { hazardLevelOfAlert } from './level'
@@ -94,6 +95,77 @@ export const HAZARD_TENSE_NOW_NOTE_JA = '気象庁がいま発表しているも
 export const HAZARD_TENSE_ASSUMED_JA = 'もし起きたら'
 export const HAZARD_TENSE_ASSUMED_NOTE_JA =
   '想定される最大級の被害。いま起きていることではありません。'
+
+// --- 逃げる（駅タブの③・260828 PR-3） -------------------------------------
+
+/**
+ * 静的ハザードのグループ → 指定緊急避難場所の災害種別（`skhb01`〜`skhb08` のどれを見るか）。
+ *
+ * 発表から決める対応表（`warning-mode.ts` の `EVACUATION_BY_PHENOMENON`）の**想定区域版**である。
+ * こちらは名前がほぼ 1 対 1 に揃っているが、**表を省いて文字列を写してはいけない**——
+ * 種別を取り違えると、その災害に対応していない場所を出す（§11 リスク 10 ＝人命）。
+ *
+ * 地形は参考情報、リアルタイムは「いま」の話——どちらも「逃げる先の種別」を持たない
+ * （地点カードにもそもそも出ない）。
+ */
+const EVACUATION_DISASTER_BY_GROUP: Readonly<Record<HazardGroup, EvacuationDisasterKey | null>> = {
+  flood: 'flood',
+  inland_flood: 'inland_flood',
+  storm_surge: 'storm_surge',
+  tsunami: 'tsunami',
+  landslide: 'landslide',
+  terrain: null,
+  realtime: null,
+}
+
+/**
+ * その地点の「逃げる」で扱う災害種別。**いちばん重い静的ハザード**から決める
+ * （`hazards` は重い順・`hazardBadgeJa` と同じ前提）。
+ *
+ * `null` ＝ 指定区域の該当が無い。**そのときは種別を勝手に選ばない**——
+ * 根拠なく選んだ種別の避難場所を出すくらいなら、段ごと出さない方が誠実である。
+ */
+export function evacuationDisasterForPoint(point: {
+  readonly hazards: readonly { readonly layerKey: string }[]
+}): EvacuationDisasterKey | null {
+  const disasters = point.hazards.map((item) => {
+    const group = getHazardLayer(item.layerKey)?.group
+    return group === undefined ? null : EVACUATION_DISASTER_BY_GROUP[group]
+  })
+  return disasters.find((disaster) => disaster !== null) ?? null
+}
+
+/**
+ * 「逃げる」の段の文言（`docs/260828_fix_flood.md` §4.3 の③）。
+ *
+ * ボタンに**「安全」という語を使わない**（§7.5-5）——指定緊急避難場所は
+ * 「指定されている」だけで、いま開設されているかも、安全かどうかも言えない。
+ * 警戒バナーの CTA（警戒中の文脈がある）とは、あえて言い方を変えている。
+ */
+export const HAZARD_ESCAPE_TITLE_JA = '逃げる'
+export const HAZARD_ESCAPE_OPEN_JA = '避難先と向きを調べる'
+export const HAZARD_ESCAPE_CLOSE_JA = '閉じる'
+
+/** 段の注記。**どの災害の話か**を主語として必ず言う（種別を黙って選ばない）。 */
+export function hazardEscapeNoteJa(disaster: EvacuationDisasterKey): string {
+  return `いちばん重い想定（${evacuationDisasterLabelJa(disaster)}）に対応した避難先と、区域の外へ出る向き。押したときだけ調べます。`
+}
+
+/**
+ * 避難場所を出せないときの言い方（警戒バナーの引き出しと**同じ文**を使う）。
+ *
+ * **オフラインで「取得できませんでした」だけ出すのは不親切**——なぜ出ないのか、
+ * 代わりに何が見られるのかを言う。方向（`escapeDirection`）は端末の中だけで出せる。
+ */
+export function evacuationUnavailableJa(online: boolean, loading: boolean): string {
+  if (!online) {
+    return (
+      'オフラインのため、避難場所の一覧は出せません（端末に保存していないデータです）。' +
+      '「区域の外へ出る向き」は、保存した 250m メッシュだけで出しています。'
+    )
+  }
+  return loading ? '避難場所を探しています…' : '避難場所を取得できませんでした。'
+}
 
 // --- アラート（いまの警戒状況・Phase 3） ----------------------------------
 

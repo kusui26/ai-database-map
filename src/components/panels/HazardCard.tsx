@@ -24,6 +24,7 @@ import {
 } from '@/shared/constants'
 import { cn } from '@/lib/utils'
 import { Emphasis } from './Emphasis'
+import { SourceList } from './SourceList'
 
 /** 危険度バッジ（色 ＋ 記号 ＋ ラベルの 3 重）。 */
 function LevelBadge({ level }: { level: HazardCardPanel['level'] }) {
@@ -138,26 +139,7 @@ export function HazardCard({ panel }: { panel: HazardCardPanel }) {
         </ul>
       )}
 
-      {panel.sources.length > 0 && (
-        <ul className="mt-3 space-y-0.5 text-[11px] text-slate-400">
-          {panel.sources.map((source) => (
-            <li key={source.labelJa}>
-              {source.url === null ? (
-                source.labelJa
-              ) : (
-                <a
-                  href={source.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="underline underline-offset-2 hover:text-slate-600"
-                >
-                  {source.labelJa}
-                </a>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+      <SourceList sources={panel.sources} className="mt-3" />
 
       <p className="mt-2 text-[11px] text-slate-500">ⓘ {panel.disclaimerJa}</p>
     </section>

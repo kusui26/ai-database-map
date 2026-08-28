@@ -20,6 +20,7 @@ import type {
   HazardCardPanel,
   HazardItem,
   PanelSize,
+  SourceRef,
 } from '@/shared/protocol'
 import { ALERT_LEVEL_LABELS_JA, HAZARD_GROUP_LABELS_JA, type HazardGroup } from '@/shared/constants'
 import { evacuationDisasterLabelJa, type EvacuationDisasterKey } from '@/shared/evacuation'
@@ -298,4 +299,58 @@ export function escapeDirectionPanel(
     disclaimerJa: escape.disclaimerJa,
     size,
   }
+}
+
+// --- 出典の束ね方（`docs/260828_fix_flood.md` §11・案 C） -------------------
+
+/**
+ * 表示用に束ねた出典の 1 行。
+ *
+ * - `url` が付くのは**束ねる相手がいない従来どおりの 1 行**（ラベル自身がリンク）
+ * - 束ねたときは `url` を `null` にし、`links` に**名前つきリンク**を並べる
+ *   （名前は `SourceRef.forJa`。例「洪水」「高潮」）
+ */
+export type BundledSource = {
+  readonly labelJa: string
+  readonly url: string | null
+  readonly links: readonly { readonly textJa: string; readonly url: string }[]
+}
+
+/**
+ * 出典の一覧 → 表示の行（**`labelJa` で束ねる**）。
+ *
+ * 出典の 1 件は「法的な出典表示」と「凡例へのリンク」の 2 つの仕事をしていて、
+ * 後者のために前者を繰り返すのが §11 の不具合だった。ここで文を 1 回に畳み、
+ * **リンクは 1 本も落とさない**（`source` と `legendUrl` が 1:1 なので束ねても失われない）。
+ *
+ * 束ねたあとのラベルは重複しえないので、**React の key にそのまま使える**
+ * （3 パネルが同じ `<li key={labelJa}>` を書き写して同じ壊れ方をしていた・§11.5）。
+ */
+export function bundledSources(sources: readonly SourceRef[]): readonly BundledSource[] {
+  const byLabel = new Map<string, SourceRef[]>()
+  for (const source of sources) {
+    const rows = byLabel.get(source.labelJa) ?? []
+    // 完全に同じ（URL も名前も同じ）行だけ畳む。URL が違えば別のリンクなので残す。
+    if (!rows.some((row) => row.url === source.url && row.forJa === source.forJa)) {
+      rows.push(source)
+    }
+    byLabel.set(source.labelJa, rows)
+  }
+  return [...byLabel.entries()].map(([labelJa, rows]) => {
+    const single = rows.length === 1 ? rows[0] : undefined
+    if (single !== undefined && single.forJa === null) {
+      return { labelJa, url: single.url, links: [] }
+    }
+    return {
+      labelJa,
+      url: null,
+      links: rows.flatMap((row) =>
+        row.url === null
+          ? []
+          : // `forJa` の無い行が束に混ざるのは今のデータでは起きない（層由来は必ず持ち、
+            // API 由来はラベルが一意）。起きても黙って落とさないための受け皿。
+            [{ textJa: row.forJa ?? '詳細', url: row.url }],
+      ),
+    }
+  })
 }

@@ -72,6 +72,7 @@ const SOURCES: readonly SourceRef[] = [
     labelJa: '出典：国土数値情報（洪水浸水想定区域 A31b・雨水出水浸水想定区域 A51）を 250m メッシュに集計',
     url: 'https://nlftp.mlit.go.jp/ksj/',
     license: '国土数値情報 利用約款',
+    forJa: null,
   },
 ]
 

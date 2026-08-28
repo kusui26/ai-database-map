@@ -11,14 +11,14 @@ import { useEffect, useRef } from 'react'
 import type { FeatureCollection } from 'geojson'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { ACCENT_COLOR, MAPLIBRE_CREDIT_HTML, PANEL_WIDTH_PX } from '@/shared/constants'
+import { ACCENT_COLOR, PANEL_WIDTH_PX } from '@/shared/constants'
 import { circlePolygon } from '@/shared/geo'
 import { type HoverInfo, useMapStore } from '@/stores/mapStore'
 import { useChatStore } from '@/stores/chatStore'
 import { useGeoStore } from '@/stores/geoStore'
 import { useUiStore } from '@/stores/uiStore'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
-import { addAttributionAboutButton } from './attributionAbout'
+import { addAttributionControl } from './attribution'
 import { HoverTooltip } from './HoverTooltip'
 import { addCurrentPositionLayers, syncCurrentPosition } from './currentPositionSource'
 import { syncHazardLayers } from './hazardSource'
@@ -298,18 +298,13 @@ export function MapView() {
       zoom: 9,
       minZoom: 4,
       maxZoom: 18,
-      // 出典は**常時展開**で出す（compact: false）。出典の表示は利用条件で、
-      // 既定だとⓘ付きのピルで出て、**地図をドラッグすると畳まれる**——押さないと読めない
-      // 出典は明記になっていない（2026-08-28・ハッカソン事務局からの指摘）。
-      // オプションを渡すと MapLibre の既定（MapLibre の表記を含む）が丸ごと置き換わるので、
-      // 表記はこちらから明示的に渡す（`docs/260828_fix_source_display.md` §1.3）。
+      // 出典は既定のコントロールを使わず、スタイルが読めてから自前で足す（`attribution.ts`・
+      // `load` の中）。常時展開（既定はドラッグで畳まれる）・並び順・ⓘ をそこで決める。
       // デスクトップは浮遊 UI が bottom-9 より上に退くので、下端の帯で必ず読める
       // （`MAP_ATTRIBUTION_STRIP_PX`）。モバイルは FAB より上に置く（`globals.css`）。
-      attributionControl: { compact: false, customAttribution: MAPLIBRE_CREDIT_HTML },
+      attributionControl: false,
     })
     mapRef.current = map
-    // 出典ピルの ⓘ（About を開く）。MapLibre の畳むボタンは使わない（`attributionAbout.ts`）。
-    addAttributionAboutButton(map, () => useUiStore.getState().openAbout())
     // 左下の器は**あとから足したものが上に積まれる**（MapLibre は bottom-* の器で先頭に挿す）。
     // スケールを先に足して帯の底に置き、拡大縮小をその上に積む（デスクトップの帯の構成は
     // 「左にスケール・右に出典」・モバイルはスケールを CSS で消す）。
@@ -329,6 +324,9 @@ export function MapView() {
     map.on('moveend', reportCenter)
 
     map.on('load', () => {
+      // 出典（ベース地図の出典をスタイルから読むので、スタイルが揃ってから）。
+      // 駅データの取得を待たない——出典は地図が見えた瞬間から出ているべきもの。
+      addAttributionControl(map, () => useUiStore.getState().openAbout())
       void (async () => {
         try {
           const featureCollection: FeatureCollection = await stations

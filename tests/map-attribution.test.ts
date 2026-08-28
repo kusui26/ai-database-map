@@ -2,9 +2,11 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { MAP_ATTRIBUTION_STRIP_PX, MAPLIBRE_CREDIT_HTML, PANEL_GAP_PX } from '@/shared/constants'
 import {
+  attributionHtml,
   ATTRIBUTION_ABOUT_CLASS,
   ATTRIBUTION_ABOUT_LABEL_JA,
-} from '@/components/map/attributionAbout'
+} from '@/components/map/attribution'
+import { hazardLayers } from '@/shared/hazard'
 import { useUiStore } from '@/stores/uiStore'
 
 /**
@@ -18,37 +20,93 @@ import { useUiStore } from '@/stores/uiStore'
  *
  * 直し方は「下端に地図のフッター行を空ける」——浮遊 UI（チャット・駅詳細・FAB）を
  * 帯より上に退かせ、出典は常時展開のピルにする（`docs/260828_fix_source_display.md`）。
- * ここで固定するのは、**帯の高さが 1 か所の定数で語られ、退く側がそれに揃っていること**と、
- * **消えやすいもの（MapLibre 表記・ⓘ）が消えていないこと**である。
+ * ここで固定するのは、**帯の高さが 1 か所の定数で語られ、退く側がそれに揃っていること**、
+ * **消えやすいもの（MapLibre 表記・ⓘ）が消えていないこと**、**並び順が崩れないこと**である。
  * 実寸（バーの高さ・重なりの有無）は Playwright の実測で確かめた（PR 記載）。
  */
 
 const MAP_VIEW = readFileSync('src/components/map/MapView.tsx', 'utf-8')
+const ATTRIBUTION = readFileSync('src/components/map/attribution.ts', 'utf-8')
 const CHAT = readFileSync('src/components/chat/ChatPanel.tsx', 'utf-8')
 const DETAIL = readFileSync('src/components/detail/StationDetailPanel.tsx', 'utf-8')
 const FAB = readFileSync('src/components/Fab.tsx', 'utf-8')
 const HEADER = readFileSync('src/components/AppHeader.tsx', 'utf-8')
 const CSS = readFileSync('src/app/globals.css', 'utf-8')
 
+/** 本番のベース地図スタイル（`MapView` の既定 `STYLE_URL`）。 */
+const STYLE: unknown = JSON.parse(readFileSync('public/map/gsi-pale-style.json', 'utf-8'))
+
 const TAILWIND_SPACING_PX = 4
 
-describe('出典は常時展開（畳まれない）', () => {
-  it('MapView は compact: false で出典コントロールを作る', () => {
+function styleSources(style: unknown): Readonly<Record<string, unknown>> {
+  if (typeof style !== 'object' || style === null || !('sources' in style)) return {}
+  const sources = style.sources
+  return typeof sources === 'object' && sources !== null ? { ...sources } : {}
+}
+
+describe('出典は常時展開（畳まれない）・スタイルが読めてから足す', () => {
+  it('既定のコントロールを使わず、load の中で自前のコントロールを足す', () => {
+    expect(MAP_VIEW).toContain('attributionControl: false')
+    expect(MAP_VIEW).toContain('addAttributionControl(map')
     // 既定（compact: true）だと ⓘ 付きのピルで出て、ドラッグすると畳まれる。
-    expect(MAP_VIEW).toContain('compact: false')
+    expect(ATTRIBUTION).toContain('compact: false')
+  })
+})
+
+describe('並び順：「[重ねたデータの出典] | ベース地図 | MapLibre」（決定 6）', () => {
+  const GSI = '<a href="https://www.gsi.go.jp/">国土地理院</a>'
+
+  it('ベース地図の出典が先、MapLibre が最後。出典の無いソースは飛ばす', () => {
+    const html = attributionHtml({
+      gsi: { type: 'vector', attribution: GSI },
+      stations: { type: 'geojson' },
+      empty: { type: 'raster', attribution: '   ' },
+    })
+    expect(html).toBe(`${GSI} | ${MAPLIBRE_CREDIT_HTML}`)
   })
 
-  it('MapLibre の表記を明示的に渡す（オプションを渡すと既定が丸ごと置き換わる）', () => {
-    expect(MAP_VIEW).toContain('customAttribution: MAPLIBRE_CREDIT_HTML')
+  it('同じ文は 1 回（同じ出典を持つソースが複数あっても繰り返さない）', () => {
+    const html = attributionHtml({ a: { attribution: GSI }, b: { attribution: GSI } })
+    expect(html).toBe(`${GSI} | ${MAPLIBRE_CREDIT_HTML}`)
+  })
+
+  it('本番のスタイルでは「国土地理院最適化ベクトルタイル | MapLibre」になる', () => {
+    const html = attributionHtml(styleSources(STYLE))
+    expect(html.startsWith('<a href="https://www.gsi.go.jp/"')).toBe(true)
+    expect(html).toContain('国土地理院最適化ベクトルタイル')
+    expect(html.endsWith(MAPLIBRE_CREDIT_HTML)).toBe(true)
+    expect(html.indexOf('国土地理院')).toBeLessThan(html.indexOf('MapLibre'))
+  })
+
+  it('MapLibre は出典を長さ順に並べるので、重ねたデータの出典はどれも 1 本の文字列より短い', () => {
+    // ここが崩れると、災害レイヤの出典がベース地図の右（固定ブロックの中）に割り込む。
+    const combined = attributionHtml(styleSources(STYLE)).length
+    for (const layer of hazardLayers) {
+      expect(layer.attribution.length, layer.key).toBeLessThan(combined)
+    }
+  })
+
+  it('スタイルの出典は 1 本の文字列の部分文字列（MapLibre の重複除去で 2 重に出ない）', () => {
+    const html = attributionHtml(styleSources(STYLE))
+    for (const source of Object.values(styleSources(STYLE))) {
+      if (typeof source !== 'object' || source === null || !('attribution' in source)) continue
+      if (typeof source.attribution === 'string') expect(html).toContain(source.attribution)
+    }
+  })
+})
+
+describe('MapLibre の表記（決定 4）', () => {
+  it('表記を明示的に持つ（オプションを渡すと既定が丸ごと置き換わる）', () => {
+    expect(ATTRIBUTION).toContain('MAPLIBRE_CREDIT_HTML')
     expect(MAPLIBRE_CREDIT_HTML).toContain('https://maplibre.org/')
     expect(MAPLIBRE_CREDIT_HTML).toContain('>MapLibre<')
   })
 })
 
 describe('ⓘ は About を開く（決定 3）', () => {
-  it('MapView は出典ピルに自前の ⓘ を足し、About を開く', () => {
-    expect(MAP_VIEW).toContain('addAttributionAboutButton(map')
+  it('出典ピルに自前の ⓘ を足し、About を開く', () => {
     expect(MAP_VIEW).toContain('openAbout()')
+    expect(ATTRIBUTION).toContain(`className = ATTRIBUTION_ABOUT_CLASS`)
     // 見た目は globals.css がクラス名で受ける。
     expect(CSS).toContain(`.${ATTRIBUTION_ABOUT_CLASS}`)
   })
@@ -102,7 +160,7 @@ describe('下端のフッター行（デスクトップ）', () => {
   })
 
   it('拡大縮小は、退いた FAB のさらに上（重なりを実測した値）', () => {
-    // FAB 上端 36 + 40 = 76px。器の余白ではなくグループに付ける（スケールは帯の中に残す）。
+    // FAB 上端 36 + 36 = 72px。器の余白ではなくグループに付ける（スケールは帯の中に残す）。
     expect(CSS).toMatch(/maplibregl-ctrl-group \{[\s\S]{0,80}margin-bottom: 58px/)
   })
 })

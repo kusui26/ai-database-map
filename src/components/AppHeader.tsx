@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import { cn } from '@/lib/utils'
 import { useChatStore } from '@/stores/chatStore'
+import { useUiStore } from '@/stores/uiStore'
 import { HazardAlertBanner } from './hazard/HazardAlertBanner'
 import { HazardControl } from './hazard/HazardControl'
 import { RadiusControl } from './RadiusControl'
@@ -81,8 +82,11 @@ function ChatToggle() {
 
 /** 浮遊ヘッダ：ロゴ・About・駅名検索・半径セグメント・災害レイヤ・AI。モバイルは縦積み（375px でも崩れない）。 */
 export function AppHeader() {
-  const [aboutOpen, setAboutOpen] = useState(false)
-  const [aboutSeen, setAboutSeen] = useState(false)
+  // About は地図の出典ピルの ⓘ からも開く（`uiStore`）ので、ここの状態にしない。
+  const aboutOpen = useUiStore((state) => state.aboutOpen)
+  const aboutSeen = useUiStore((state) => state.aboutSeen)
+  const openAbout = useUiStore((state) => state.openAbout)
+  const setAboutOpen = useUiStore((state) => state.setAboutOpen)
   return (
     // z-30＝浮遊パネル（z-20）より前。駅名検索の候補がチャット/駅詳細に隠れないようにする
     // （重なり順の一覧は `MapShell.tsx`）。
@@ -98,10 +102,7 @@ export function AppHeader() {
             </span>
             <button
               type="button"
-              onClick={() => {
-                setAboutSeen(true)
-                setAboutOpen(true)
-              }}
+              onClick={openAbout}
               aria-label="このアプリ・データ出典について"
               title="このアプリ・データ出典について"
               className="-mr-1 rounded-md p-0.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"

@@ -22,29 +22,82 @@ textarea:focus-visible,
   outline-offset: 2px;
 }
 
-/* 拡大縮小コントロール（MapLibre・左下）：デスクトップは左下の FAB と重ならないよう上げる。
-   モバイルは FAB が下部中央のため既定位置（左下）のままでよい。
-   5.5rem＝FAB が出典の帯（bottom-9・36px）の上に退いたぶん、その上（FAB 上端 76px ＋ 余白）。 */
+/* ---------------------------------------------------------------------------
+   地図のフッター行（docs/260828_fix_source_display.md §4）
+   下端の帯（MAP_ATTRIBUTION_STRIP_PX＝36px）に「左にスケール・右に出典」を置く。
+   浮遊 UI（チャット・駅詳細・FAB）は bottom-9 でその上に退いている。
+   MapLibre の CSS はこのファイルより後に読まれるので、詳細度を 1 段上げて上書きする。
+   --------------------------------------------------------------------------- */
+
+/* 出典ピル（右下）：常時展開（compact: false は MapView 側）。MapLibre の compact 表示と
+   同じ角丸のピルにし、下余白 6px（決定 2）。右の 28px は ⓘ（.map-attrib-about）のぶん。 */
+.maplibregl-ctrl-bottom-right .maplibregl-ctrl.maplibregl-ctrl-attrib {
+  position: relative;
+  box-sizing: content-box;
+  min-height: 20px;
+  margin: 0 10px 6px 0;
+  padding: 2px 28px 2px 8px;
+  border-radius: 12px;
+  background-color: rgb(255 255 255 / 0.85);
+}
+
+/* ⓘ：About（このアプリ・データ出典・ライセンス）を開く自前のボタン（attributionAbout.ts）。
+   MapLibre の summary ボタン（畳む動作）は使わず、その見た目（24px・角丸）だけ借りる。 */
+.map-attrib-about {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background-color: transparent;
+  color: #333;
+  cursor: pointer;
+}
+.map-attrib-about:hover {
+  background-color: rgb(0 0 0 / 0.05);
+}
+.map-attrib-about svg {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
+}
+
 @media (min-width: 640px) {
+  /* 左下の器（スケール＋拡大縮小）は帯の底に付け、要素ごとに余白を配る。 */
   .maplibregl-ctrl-bottom-left {
-    margin-bottom: 5.5rem;
+    margin-bottom: 0;
+  }
+  /* スケール：帯の中。出典ピルと同じ下余白 6px で揃える。 */
+  .maplibregl-ctrl-bottom-left .maplibregl-ctrl.maplibregl-ctrl-scale {
+    margin: 0 0 6px 10px;
+  }
+  /* 拡大縮小：退いた FAB（下端 36px・実測高 36px → 上端 72px）のさらに上。
+     58px ＝ 下端 86px（実測。FAB 上端との隙間 14px）− スケール（下余白 6 ＋ 実測高 22）。 */
+  .maplibregl-ctrl-bottom-left .maplibregl-ctrl.maplibregl-ctrl-group {
+    margin-bottom: 58px;
   }
 }
 
-/* 地図の出典（MapLibre attribution・右下）：出典の表示は利用条件なので、常時展開で読める
-   位置に置く（compact: false は MapView 側）。
-   - デスクトップ：浮遊 UI（チャット・駅詳細・FAB）が bottom-9 より上に退くので、
-     下端の帯（MAP_ATTRIBUTION_STRIP_PX）にそのまま出す（余白は不要）。
-   - モバイル：帯は作らない（ボトムシートが下端を覆う構造のため）。下部中央の FAB
-     （bottom-4・高さ 40px）と重ならないよう、その上へ上げる。 */
+/* モバイル：帯は作らない（ボトムシートが下端を覆う構造のため）。
+   - 出典：下部中央の FAB（bottom-4・高さ 40px）と重ならないよう、その上へ上げる。
+     折り返した出典が画面幅いっぱいに広がると左下の拡大縮小（幅 29px＋余白）に重なる
+     （実測 390px・災害レイヤ ON で 2 行）ので、右寄せのまま最大幅を絞る。
+   - スケール：左下に拡大縮小があり、帯も無いので出さない。 */
 @media (max-width: 639px) {
-  .maplibregl-ctrl-bottom-right {
+  .maplibregl-ctrl-bottom-right .maplibregl-ctrl.maplibregl-ctrl-attrib {
     margin-bottom: 3.5rem;
-  }
-  /* 折り返した出典が画面幅いっぱいに広がると、左下の拡大縮小コントロール
-     （幅 29px＋余白）に重なる（実測 390px・災害レイヤ ON で 2 行 40px）。
-     右寄せのまま最大幅を絞って、左の列を空けておく。 */
-  .maplibregl-ctrl-bottom-right .maplibregl-ctrl-attrib {
+    /* ピルの padding（8 + 28px）込みで幅を絞る（content-box のままだと 36px はみ出して
+       拡大縮小に重なる・実測 390px）。 */
+    box-sizing: border-box;
     max-width: calc(100vw - 3.5rem);
+  }
+  .maplibregl-ctrl-bottom-left .maplibregl-ctrl.maplibregl-ctrl-scale {
+    display: none;
   }
 }

@@ -167,19 +167,32 @@ export const PANEL_GAP_PX = 12
 export const PANEL_WIDTH_CSS = `min(${PANEL_WIDTH_PX}px, calc(100% - ${PANEL_GAP_PX * 2}px))`
 
 /**
- * 地図の出典表示（MapLibre attribution・右下）のために、**画面下端へ空けておく帯**の
- * 高さ（px）。Tailwind の `bottom-9` と同値。
+ * 地図の**フッター行**——出典表示（MapLibre attribution・右下）とスケール（左下）のために、
+ * 画面下端へ空けておく帯の高さ（px）。Tailwind の `bottom-9` と同値。
  *
  * 出典の表示は利用条件（国土地理院・気象庁・国土交通省とも出典明記を求めている）だが、
  * パネル類が `bottom-3` まで届いていたため、**駅を選ぶと出典がドロワーの裏に隠れていた**
  * （2026-08-28・ハッカソン事務局からの指摘）。デスクトップの浮遊 UI（チャット・駅詳細・FAB）は
- * この帯より上に置き、帯には出典**だけ**を出す——どのパネルを開いていても読めるようにする。
+ * この帯より上に置き、帯には出典とスケール**だけ**を出す——どのパネルを開いていても読めるようにする
+ * （`docs/260828_fix_source_display.md` §2〜§4）。
  *
- * 内訳：出典バーの実測高 22px ＋ 余白 14px（パネルの既定余白 `*-3`＝12px と同じ律動）。
+ * 内訳：下余白 6 ＋ 出典ピル 24（行 20 ＋ 上下 2）＋ 上の隙間 6。**36 より広げない**——
+ * 広げるほど FAB が浮いて見える（同 §2.3）。
  * モバイルはボトムシートが下端を覆う構造なので帯は作らず、出典を FAB より上に置く
  * （`globals.css`）。
  */
 export const MAP_ATTRIBUTION_STRIP_PX = 36
+
+/**
+ * 地図の出典に出す MapLibre の表記（MapLibre 既定の `customAttribution` と同じ HTML）。
+ *
+ * `attributionControl` にオプションを渡すと、MapLibre の既定オプション（この表記を含む）が
+ * **マージではなく丸ごと置き換わる**ので、こちらで持って明示的に渡す
+ * （`docs/260828_fix_source_display.md` §1.3）。法的義務は無い（BSD-3）が、元からあったものを
+ * 理由なく落とさない。
+ */
+export const MAPLIBRE_CREDIT_HTML =
+  '<a href="https://maplibre.org/" target="_blank" rel="noopener">MapLibre</a>'
 
 // --- 都道府県（47） -----------------------------------------------------
 

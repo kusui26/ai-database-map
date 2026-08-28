@@ -78,6 +78,23 @@ export function hazardBadgeJa(point: HazardPointResponse): string {
 export const STATION_HAZARD_CAVEAT_JA =
   '駅の代表点 1 点の値です。駅前の反対側では異なることがあります。'
 
+/**
+ * 時制の見出し（`docs/260828_fix_flood.md` §4.3・§4.4 決定 3）。
+ *
+ * **「いま」と「もし起きたら」は、並べて初めて違いが伝わる。** 片方だけ出していたとき、
+ * 静的な危険度（`HAZARD_LEVEL_LABELS_JA`：想定区域外／注意／警戒／危険／極めて危険）が
+ * 気象庁キキクル（**いま**の危険度分布：注意／警戒／非常に危険／極めて危険）と
+ * **5 段中 3 段で同じ語**なので、**いまの災害情報だと読まれた**（利用者からの報告・2026-08-28）。
+ *
+ * だから語を変えるのではなく、**時制の主語を先に置く**。
+ * バッジもタブの見出しも**この定数を使う**——別々に書くと必ずずれる。
+ */
+export const HAZARD_TENSE_NOW_JA = 'いま'
+export const HAZARD_TENSE_NOW_NOTE_JA = '気象庁がいま発表しているもの。'
+export const HAZARD_TENSE_ASSUMED_JA = 'もし起きたら'
+export const HAZARD_TENSE_ASSUMED_NOTE_JA =
+  '想定される最大級の被害。いま起きていることではありません。'
+
 // --- アラート（いまの警戒状況・Phase 3） ----------------------------------
 
 /**

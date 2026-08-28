@@ -11,11 +11,20 @@
  * 切り落とされる——実際にそれで「下が切れて読めない」が起きた。中身はタブ（＝スクロールする
  * 領域）に置く。この不変条件は `tests/panel-layout.test.ts` が静的に守る。
  *
+ * ⚠ **危険度の語（危険・極めて危険…）を画面に出さない**（同 §4.4 決定 3）。
+ * キキクル（いまの危険度分布）と 5 段中 3 段が同じ語なので、**いまの話に読まれる**。
+ * 代わりに時制（もし起きたら）を前置きし、重さは**色・記号・値**で示す。
+ * 読み上げには残す——文脈のある文として読まれるので、そこでは誤読しない。
+ *
  * 意味づけは一切ここに書かない——危険度・文言・出典・免責はすべて共通API が決めている。
  */
 
 import { HAZARD_LEVEL_COLORS, HAZARD_LEVEL_ICONS, HAZARD_LEVEL_LABELS_JA } from '@/shared/constants'
-import { hazardBadgeJa, STATION_HAZARD_CAVEAT_JA } from '@/domain/hazard/panels'
+import {
+  hazardBadgeJa,
+  HAZARD_TENSE_ASSUMED_JA,
+  STATION_HAZARD_CAVEAT_JA,
+} from '@/domain/hazard/panels'
 import { useHazardPoint, type HazardTarget } from './useHazardPoint'
 
 export type StationHazardBadgeProps = {
@@ -42,15 +51,18 @@ export function StationHazardBadge({ target, onOpen }: StationHazardBadgeProps) 
   return (
     <div className="mt-2">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        {/* 時制を**いちばん先**に置く。これが無いと、色と記号が「いまの危険度」に見える。 */}
+        <span className="text-[11px] font-medium text-slate-500">{HAZARD_TENSE_ASSUMED_JA}</span>
         <span
-          className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold text-white"
+          className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold text-white"
           style={{ backgroundColor: HAZARD_LEVEL_COLORS[level] }}
         >
           <span aria-hidden>{HAZARD_LEVEL_ICONS[level]}</span>
-          {HAZARD_LEVEL_LABELS_JA[level]}
+          <span className="sr-only">{HAZARD_LEVEL_LABELS_JA[level]}</span>
         </span>
         {/* 折り返す（切り詰めない）。「洪水 3.62m・3〜5m 未満」の m 値がいちばん効く情報で、
-            そこが「…」で消えると、バッジを置いた意味が無くなる。 */}
+            そこが「…」で消えると、バッジを置いた意味が無くなる。
+            色だけに頼らないための「文字」の channel も、この階級名が担う（§7.6）。 */}
         <span className="min-w-0 flex-1 text-xs break-words text-slate-600">
           {hazardBadgeJa(point)}
         </span>

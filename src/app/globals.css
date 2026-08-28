@@ -23,9 +23,28 @@ textarea:focus-visible,
 }
 
 /* 拡大縮小コントロール（MapLibre・左下）：デスクトップは左下の FAB と重ならないよう上げる。
-   モバイルは FAB が下部中央のため既定位置（左下）のままでよい。 */
+   モバイルは FAB が下部中央のため既定位置（左下）のままでよい。
+   5.5rem＝FAB が出典の帯（bottom-9・36px）の上に退いたぶん、その上（FAB 上端 76px ＋ 余白）。 */
 @media (min-width: 640px) {
   .maplibregl-ctrl-bottom-left {
-    margin-bottom: 3rem;
+    margin-bottom: 5.5rem;
+  }
+}
+
+/* 地図の出典（MapLibre attribution・右下）：出典の表示は利用条件なので、常時展開で読める
+   位置に置く（compact: false は MapView 側）。
+   - デスクトップ：浮遊 UI（チャット・駅詳細・FAB）が bottom-9 より上に退くので、
+     下端の帯（MAP_ATTRIBUTION_STRIP_PX）にそのまま出す（余白は不要）。
+   - モバイル：帯は作らない（ボトムシートが下端を覆う構造のため）。下部中央の FAB
+     （bottom-4・高さ 40px）と重ならないよう、その上へ上げる。 */
+@media (max-width: 639px) {
+  .maplibregl-ctrl-bottom-right {
+    margin-bottom: 3.5rem;
+  }
+  /* 折り返した出典が画面幅いっぱいに広がると、左下の拡大縮小コントロール
+     （幅 29px＋余白）に重なる（実測 390px・災害レイヤ ON で 2 行 40px）。
+     右寄せのまま最大幅を絞って、左の列を空けておく。 */
+  .maplibregl-ctrl-bottom-right .maplibregl-ctrl-attrib {
+    max-width: calc(100vw - 3.5rem);
   }
 }

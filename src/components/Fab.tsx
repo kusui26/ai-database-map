@@ -124,7 +124,9 @@ export function Fab() {
     <>
       <div
         style={shifted ? { left: FAB_LEFT_WITH_CHAT_PX } : undefined}
-        className="pointer-events-auto absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 gap-2 transition-[left] duration-300 sm:left-4 sm:translate-x-0"
+        // sm:bottom-9＝デスクトップは下端の出典の帯（MAP_ATTRIBUTION_STRIP_PX）に踏み込まない。
+        // モバイルは帯を作らない（出典側を FAB より上に置く・globals.css）ので bottom-4 のまま。
+        className="pointer-events-auto absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 gap-2 transition-[left] duration-300 sm:bottom-9 sm:left-4 sm:translate-x-0"
       >
         <FabButton
           icon={<LocationIcon />}

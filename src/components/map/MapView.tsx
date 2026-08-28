@@ -296,6 +296,12 @@ export function MapView() {
       zoom: 9,
       minZoom: 4,
       maxZoom: 18,
+      // 出典は**常時展開**で出す（compact: false）。出典の表示は利用条件で、
+      // 既定のレスポンシブ表示だと狭い画面で ⓘ に畳まれる——押さないと読めない出典は
+      // 明記になっていない（2026-08-28・ハッカソン事務局からの指摘）。
+      // デスクトップは浮遊 UI が bottom-9 より上に退くので、下端の帯で必ず読める
+      // （`MAP_ATTRIBUTION_STRIP_PX`）。モバイルは FAB より上に置く（`globals.css`）。
+      attributionControl: { compact: false },
     })
     mapRef.current = map
     // 拡大縮小は左下（ロゴと重ならない・デスクトップは FAB の上／CSS で余白）

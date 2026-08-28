@@ -260,7 +260,8 @@ export function ChatPanel() {
         style={{ width: PANEL_WIDTH_CSS }}
         className={cn(
           // z-20＝浮遊パネルの段。ヘッダ（z-30）の駅名検索の候補が前に出る（`MapShell.tsx`）。
-          'absolute top-20 bottom-3 left-3 z-20 flex flex-col overflow-hidden rounded-2xl bg-white/95 shadow-2xl ring-1 ring-slate-200 backdrop-blur transition-[transform,opacity] duration-300 ease-out',
+          // bottom-9＝下端に地図の出典の帯を空ける（MAP_ATTRIBUTION_STRIP_PX・駅詳細と同値）。
+          'absolute top-20 bottom-9 left-3 z-20 flex flex-col overflow-hidden rounded-2xl bg-white/95 shadow-2xl ring-1 ring-slate-200 backdrop-blur transition-[transform,opacity] duration-300 ease-out',
           open ? 'translate-x-0 opacity-100' : 'pointer-events-none -translate-x-[120%] opacity-0',
         )}
       >

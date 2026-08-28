@@ -18,14 +18,11 @@
  */
 
 import { useEffect, useState } from 'react'
-import {
-  ALERT_LEVEL_LABELS_JA,
-  HAZARD_LEVEL_COLORS,
-  HAZARD_LEVEL_ICONS,
-} from '@/shared/constants'
+import { ALERT_LEVEL_LABELS_JA, HAZARD_LEVEL_COLORS, HAZARD_LEVEL_ICONS } from '@/shared/constants'
 import {
   escapeDirectionPanel,
   evacuationListPanel,
+  evacuationUnavailableJa,
   hazardAlertCardPanel,
   reportedAtJa,
 } from '@/domain/hazard/panels'
@@ -41,22 +38,6 @@ import { useEscapeDirection } from './useEscapeDirection'
 
 /** 開いている引き出し（避難先は押されるまで取りに行かない）。 */
 type Drawer = 'none' | 'detail' | 'evacuation'
-
-/**
- * 避難場所を出せないときの言い方。
- *
- * **オフラインで「取得できませんでした」だけ出すのは不親切**——なぜ出ないのか、
- * 代わりに何が見られるのかを言う。方向（`escapeDirection`）は端末の中だけで出せる。
- */
-function evacuationMessageJa(online: boolean, loading: boolean): string {
-  if (!online) {
-    return (
-      'オフラインのため、避難場所の一覧は出せません（端末に保存していないデータです）。' +
-      '上の「区域の外へ出る向き」は、保存した 250m メッシュだけで出しています。'
-    )
-  }
-  return loading ? '避難場所を探しています…' : '避難場所を取得できませんでした。'
-}
 
 /** どこの「今」を見ているか（主語をはっきりさせる）。 */
 function whereJa(alerts: HazardAlertsResponse, isCurrentPosition: boolean): string {
@@ -79,7 +60,9 @@ export function HazardAlertBanner() {
       ? {
           lon: target.lon,
           lat: target.lat,
-          placeJa: target.isCurrentPosition ? '現在地' : (alerts.area?.municipalityJa ?? 'この地点'),
+          placeJa: target.isCurrentPosition
+            ? '現在地'
+            : (alerts.area?.municipalityJa ?? 'この地点'),
           disaster: evacuationDisasterFor(alerts.warnings, alerts.floodForecasts.length > 0),
         }
       : null
@@ -95,7 +78,9 @@ export function HazardAlertBanner() {
   const sites = evacuation?.sites
   useEffect(() => {
     if (sites === undefined) return
-    setHighlightedPoints(sites.map((site) => ({ lon: site.lon, lat: site.lat, labelJa: site.nameJa })))
+    setHighlightedPoints(
+      sites.map((site) => ({ lon: site.lon, lat: site.lat, labelJa: site.nameJa })),
+    )
   }, [sites, setHighlightedPoints])
   useEffect(() => {
     if (drawer !== 'evacuation') setHighlightedPoints([])
@@ -148,7 +133,9 @@ export function HazardAlertBanner() {
               「詳しく見る」より目立たせる。 */}
           <button
             type="button"
-            onClick={() => setDrawer((current) => (current === 'evacuation' ? 'none' : 'evacuation'))}
+            onClick={() =>
+              setDrawer((current) => (current === 'evacuation' ? 'none' : 'evacuation'))
+            }
             aria-expanded={drawer === 'evacuation'}
             className="rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700"
           >
@@ -183,7 +170,8 @@ export function HazardAlertBanner() {
                     online ? 'text-slate-500' : 'bg-amber-50 font-medium text-amber-800',
                   )}
                 >
-                  {evacuationMessageJa(online, evacuationLoading)}
+                  {/* 文言はドメインの共通関数——駅タブの「逃げる」と言うことを割らない。 */}
+                  {evacuationUnavailableJa(online, evacuationLoading)}
                 </p>
               )}
             </div>

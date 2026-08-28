@@ -40,9 +40,16 @@ describe('オフライン：落ちてはいけない経路が残っている', (
   it('避難場所はオフラインで取りに行かず、出せない理由を言う', () => {
     const banner = source('src/components/hazard/HazardAlertBanner.tsx')
     expect(banner).toContain('online ? evacuationTarget : null')
-    expect(banner).toContain('オフラインのため、避難場所の一覧は出せません')
+    // 文言は 260828 PR-3 でドメイン（`evacuationUnavailableJa`）へ移した——
+    // 駅タブの「逃げる」と同じ文を使うため。出し忘れないことはここで見る。
+    expect(banner).toContain('evacuationUnavailableJa(')
+    const tab = source('src/components/hazard/StationHazardTab.tsx')
+    expect(tab).toContain('online ? escapeTarget : null')
+    expect(tab).toContain('evacuationUnavailableJa(')
+    const domain = source('src/domain/hazard/panels.ts')
+    expect(domain).toContain('オフラインのため、避難場所の一覧は出せません')
     // 代わりに何が見られるかも言う。
-    expect(banner).toContain('区域の外へ出る向き')
+    expect(domain).toContain('区域の外へ出る向き')
   })
 
   it('警戒中は、現在地を使っていなくてもメッシュを先に落とす', () => {

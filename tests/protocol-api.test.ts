@@ -149,7 +149,12 @@ describe('GUI Chat Protocol: ハザード拡張（260824_flood §6.4）', () => 
       reasonsJa: ['家屋倒壊等氾濫想定区域（氾濫流）内のため、建物の上階に留まるのは危険です'],
       coverageNotesJa: ['白い場所は「浸水しない」という意味ではありません。'],
       sources: [
-        { labelJa: '国土数値情報 洪水浸水想定区域（2025年度）', url: null, license: 'CC BY 4.0' },
+        {
+          labelJa: '国土数値情報 洪水浸水想定区域（2025年度）',
+          url: null,
+          license: 'CC BY 4.0',
+          forJa: null,
+        },
       ],
       disclaimerJa: '実際の避難は、市町村が発表する避難情報に従ってください。',
     })

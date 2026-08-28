@@ -19,6 +19,7 @@ export const JMA_WARNING_SOURCE: SourceRef = {
   labelJa: '出典：気象庁 気象警報・注意報',
   url: 'https://www.jma.go.jp/bosai/warning/',
   license: '気象庁 公共データ利用規約（第1.0版）',
+  forJa: null,
 }
 
 /** 国土地理院の逆ジオコーディング（地点 → 市区町村）。 */
@@ -26,6 +27,7 @@ export const GSI_REVERSE_GEOCODER_SOURCE: SourceRef = {
   labelJa: '出典：国土地理院 逆ジオコーディング',
   url: 'https://maps.gsi.go.jp/',
   license: '国土地理院コンテンツ利用規約',
+  forJa: null,
 }
 
 /** 指定緊急避難場所（`/api/hazard/evacuation`）。 */
@@ -33,6 +35,7 @@ export const EVACUATION_SITE_SOURCE: SourceRef = {
   labelJa: `出典：国土地理院 ${EVACUATION_SITE_KIND_JA}データ`,
   url: 'https://hinanmap.gsi.go.jp/hinanjocp/hinanbasho/koukaidate.html',
   license: '国土地理院コンテンツ利用規約',
+  forJa: null,
 }
 
 /** 浸水ナビ（河川ごとの浸水深・到達時間）。 */
@@ -40,6 +43,7 @@ export const SUIBOU_NAVI_SOURCE: SourceRef = {
   labelJa: '国土地理院 地点別浸水シミュレーション検索システム（浸水ナビ）',
   url: 'https://suiboumap.gsi.go.jp/',
   license: '国土交通省 利用規約',
+  forJa: null,
 }
 
 /** キキクル（危険度分布・表示専用）。 */
@@ -47,6 +51,7 @@ export const KIKIKURU_SOURCE: SourceRef = {
   labelJa: '出典：気象庁 キキクル（危険度分布）',
   url: 'https://www.jma.go.jp/bosai/risk/',
   license: '気象庁 公共データ利用規約（第1.0版）',
+  forJa: null,
 }
 
 /** API から取る出典（レイヤのタイル以外で、答えに使っているもの）と、その役割。 */

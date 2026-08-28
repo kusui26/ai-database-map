@@ -170,7 +170,9 @@ describe('domain/hazard: escapeDirection パネル', () => {
     headlineJa: '見出し',
     limitationsJa: [...ESCAPE_LIMITATIONS_JA],
     notesJa: [],
-    sources: [{ labelJa: '出典：国土数値情報', url: null, license: '国土数値情報 利用約款' }],
+    sources: [
+      { labelJa: '出典：国土数値情報', url: null, license: '国土数値情報 利用約款', forJa: null },
+    ],
     disclaimerJa: '免責',
   })
 

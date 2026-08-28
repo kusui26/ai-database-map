@@ -421,7 +421,7 @@ describe('domain/hazard: evacuationList パネル', () => {
     ],
     limitationsJa: [...EVACUATION_LIMITATIONS_JA],
     notesJa: [],
-    sources: [{ labelJa: '出典：国土地理院', url: null, license: '国土地理院コンテンツ利用規約' }],
+    sources: [{ labelJa: '出典：国土地理院', url: null, license: '国土地理院コンテンツ利用規約', forJa: null }],
     disclaimerJa: '免責',
   })
 

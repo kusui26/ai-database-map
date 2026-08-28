@@ -61,9 +61,7 @@ export const mapActionSchema = z.discriminatedUnion('type', [
    */
   z.object({
     type: z.literal('highlightPoints'),
-    points: z.array(
-      z.object({ lon: z.number(), lat: z.number(), labelJa: z.string() }),
-    ),
+    points: z.array(z.object({ lon: z.number(), lat: z.number(), labelJa: z.string() })),
   }),
 ])
 export type MapAction = z.infer<typeof mapActionSchema>
@@ -81,11 +79,21 @@ export const reliabilityFlagSchema = z.object({
 })
 export type ReliabilityFlag = z.infer<typeof reliabilityFlagSchema>
 
-/** 出典の参照（ハザードは「いつの・誰のデータか」を必ず添える・260824_flood §7.5-3）。 */
+/**
+ * 出典の参照（ハザードは「いつの・誰のデータか」を必ず添える・260824_flood §7.5-3）。
+ *
+ * この 1 件は 2 つの仕事をしている（260828_fix_flood §11.3）。
+ * ①**法的な出典表示**（`labelJa`・配信元の verbatim）……同じ文なら 1 回出せばよい
+ * ②**凡例・詳細ページへのリンク**（`url`）……データセットごとに要る
+ * `forJa` は②のための名前で、「そのリンクが何のためか」（例「洪水」「高潮」）。
+ * 表示は `labelJa` で束ね、`forJa` をリンクの文字にする——こうすると①を繰り返さずに
+ * ②を 1 本も落とさない（同 §11.5 案 C）。`null` は「束ねる相手がいない」（従来どおりの 1 行）。
+ */
 export const sourceRefSchema = z.object({
   labelJa: z.string(),
   url: z.string().nullable(),
   license: z.string(),
+  forJa: z.string().nullable(),
 })
 export type SourceRef = z.infer<typeof sourceRefSchema>
 

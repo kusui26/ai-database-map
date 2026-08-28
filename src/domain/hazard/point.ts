@@ -234,15 +234,41 @@ function coverageNotesOf(
   )
 }
 
-/** 出典（重複を畳む）。表示は利用条件なので、答えに使ったものは必ず載せる。 */
-function sourcesOf(layerKeys: readonly string[], usedNavi: boolean): readonly SourceRef[] {
-  const seen = new Set<string>()
-  const refs = layerKeys.flatMap((key) => {
+/**
+ * 出典（**データセットごと**に畳む）。表示は利用条件なので、答えに使ったものは必ず載せる。
+ *
+ * 畳む鍵は `layer.source`（＝データセット。`legendUrl` と 1:1）、出す文字は
+ * `layer.attribution`（＝配信元。5 データセットが同じ 1 文になる）。粒度が違うので、
+ * そのまま並べると**同じ文で URL だけ違う行**が最大 5 行できる（260828_fix_flood §11.2）。
+ * だから `forJa` に**そのデータセットで答えたグループ名**を入れて返し、
+ * 表示側（`SourceList`）が `labelJa` で 1 行に束ねる——文は 1 回、リンクは全部残る（案 C）。
+ */
+export function sourcesOf(layerKeys: readonly string[], usedNavi: boolean): readonly SourceRef[] {
+  type Dataset = {
+    readonly labelJa: string
+    readonly url: string | null
+    readonly license: string
+    readonly groups: Set<HazardGroup>
+  }
+  const datasets = new Map<string, Dataset>()
+  for (const key of layerKeys) {
     const layer = getHazardLayer(key)
-    if (layer === undefined || seen.has(layer.source)) return []
-    seen.add(layer.source)
-    return [{ labelJa: layer.attribution, url: layer.legendUrl, license: layer.license }]
-  })
+    if (layer === undefined) continue
+    const current = datasets.get(layer.source) ?? {
+      labelJa: layer.attribution,
+      url: layer.legendUrl,
+      license: layer.license,
+      groups: new Set<HazardGroup>(),
+    }
+    current.groups.add(layer.group)
+    datasets.set(layer.source, current)
+  }
+  const refs = [...datasets.values()].map((dataset) => ({
+    labelJa: dataset.labelJa,
+    url: dataset.url,
+    license: dataset.license,
+    forJa: [...dataset.groups].map((group) => HAZARD_GROUP_LABELS_JA[group]).join('・'),
+  }))
   return usedNavi ? [...refs, SUIBOU_NAVI_SOURCE] : refs
 }
 
@@ -271,10 +297,7 @@ function meshNotesOf(
       ? [meshNoteJa(item.labelJa, item.coverage)]
       : [],
   )
-  return [
-    ...fromCells,
-    ...neighbours.map((each) => neighbourNoteJa(each.labelJa, each.source)),
-  ]
+  return [...fromCells, ...neighbours.map((each) => neighbourNoteJa(each.labelJa, each.source))]
 }
 
 /**

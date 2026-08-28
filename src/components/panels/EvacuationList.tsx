@@ -15,16 +15,16 @@ import { type EvacuationItem, type EvacuationListPanel } from '@/shared/protocol
 import { HAZARD_SOURCE_LABELS_JA } from '@/shared/constants'
 import { cn } from '@/lib/utils'
 import { Emphasis } from './Emphasis'
+import { SourceList } from './SourceList'
 
 /** 想定区域との重なりの見せ方（色 ＋ 記号 ＋ テキストの 3 重・§7.6）。 */
-const AREA_STYLE: Readonly<
-  Record<string, { readonly icon: string; readonly className: string }>
-> = {
-  outside: { icon: '○', className: 'bg-emerald-50 text-emerald-700' },
-  partial: { icon: '△', className: 'bg-amber-50 text-amber-700' },
-  inside: { icon: '✕', className: 'bg-rose-50 text-rose-700' },
-  unknown: { icon: '－', className: 'bg-slate-100 text-slate-500' },
-}
+const AREA_STYLE: Readonly<Record<string, { readonly icon: string; readonly className: string }>> =
+  {
+    outside: { icon: '○', className: 'bg-emerald-50 text-emerald-700' },
+    partial: { icon: '△', className: 'bg-amber-50 text-amber-700' },
+    inside: { icon: '✕', className: 'bg-rose-50 text-rose-700' },
+    unknown: { icon: '－', className: 'bg-slate-100 text-slate-500' },
+  }
 
 function AreaBadge({ item }: { item: EvacuationItem }) {
   const style = AREA_STYLE[item.hazardAreaCertainty ?? 'unknown'] ?? AREA_STYLE.unknown
@@ -77,9 +77,7 @@ function SiteRow({ item, index }: { item: EvacuationItem; index: number }) {
             この場所は「{item.hazardAreaDetailJa}」にかかります
           </p>
         )}
-        <p className="mt-0.5 text-[11px] text-slate-400">
-          対応：{item.disastersJa.join('・')}
-        </p>
+        <p className="mt-0.5 text-[11px] text-slate-400">対応：{item.disastersJa.join('・')}</p>
         {item.remarksJa !== null && (
           <p className="mt-1 rounded bg-slate-50 p-1.5 text-[11px] text-slate-600">
             {item.remarksJa}
@@ -136,26 +134,7 @@ export function EvacuationList({ panel }: { panel: EvacuationListPanel }) {
         ))}
       </ul>
 
-      {panel.sources.length > 0 && (
-        <ul className="mt-3 space-y-0.5 text-[11px] text-slate-400">
-          {panel.sources.map((source) => (
-            <li key={source.labelJa}>
-              {source.url === null ? (
-                source.labelJa
-              ) : (
-                <a
-                  href={source.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="underline underline-offset-2 hover:text-slate-600"
-                >
-                  {source.labelJa}
-                </a>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+      <SourceList sources={panel.sources} className="mt-3" />
 
       <p className="mt-2 text-[11px] text-slate-500">ⓘ {panel.disclaimerJa}</p>
     </section>

@@ -13,6 +13,7 @@
 import { type EscapeDirectionPanel } from '@/shared/protocol'
 import { cn } from '@/lib/utils'
 import { Emphasis } from './Emphasis'
+import { SourceList } from './SourceList'
 
 /** 八方位 → 矢印の回転角（北が 0 度・時計回り）。 */
 const BEARING_DEGREES: Readonly<Record<string, number>> = {
@@ -91,26 +92,7 @@ export function EscapeDirection({ panel }: { panel: EscapeDirectionPanel }) {
         ))}
       </ul>
 
-      {panel.sources.length > 0 && (
-        <ul className="mt-2 space-y-0.5 text-[11px] text-slate-400">
-          {panel.sources.map((source) => (
-            <li key={source.labelJa}>
-              {source.url === null ? (
-                source.labelJa
-              ) : (
-                <a
-                  href={source.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="underline underline-offset-2 hover:text-slate-600"
-                >
-                  {source.labelJa}
-                </a>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+      <SourceList sources={panel.sources} className="mt-2" />
 
       <p className="mt-2 text-[11px] text-slate-500">ⓘ {panel.disclaimerJa}</p>
     </section>

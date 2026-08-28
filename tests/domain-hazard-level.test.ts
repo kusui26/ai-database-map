@@ -243,7 +243,7 @@ describe('panels: いまの警戒状況 → hazardCard', () => {
       reasonsJa: [...alertReasonsJa(warnings)],
       reportedAt,
       limitationsJa: [ALERT_LIMITATION_JA],
-      sources: [{ labelJa: '出典：気象庁', url: null, license: '公共データ利用規約' }],
+      sources: [{ labelJa: '出典：気象庁', url: null, license: '公共データ利用規約', forJa: null }],
       notesJa: [],
       disclaimerJa: '実際の避難は市町村の情報に従ってください。',
     })

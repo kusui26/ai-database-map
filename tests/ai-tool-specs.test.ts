@@ -18,9 +18,10 @@ import { createCollector, type ToolEffect } from '@/ai/types'
  */
 
 describe('TOOL_SPECS（登録の網羅）', () => {
-  it('9 ツールが揃っている（増減したら MCP 側の写しも見直す）', () => {
+  it('10 ツールが揃っている（増減したら MCP 側の写しも見直す）', () => {
     expect(TOOL_SPEC_NAMES).toEqual([
       'searchStations',
+      'listStations',
       'getStationDetail',
       'rankStations',
       'compareGrowth',

@@ -37,6 +37,7 @@ const station: StationRow = {
   label: '東京',
   searchLabel: '東京（東京都）',
   prefecture: '東京都',
+  municipality: '千代田区',
   lon: 139.767,
   lat: 35.681,
   nOp: 3,

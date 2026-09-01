@@ -47,6 +47,20 @@ Step1 の中核資産である駅×半径データセットの**全体像・全�
 
 > ⚠ `flag_yoy` / `flag_covid` は**信頼性フラグ**（他の `*_lowbase` / `*_lown` と同じ flag 種別メトリクス）のため、駅属性ではなく**乗降客数の指標**として §2.2 に置く（除外・バッジが値経由で機能するよう metric_columns/station_values 化する・260727）。
 
+### 2.1 補：DB 側の駅属性（サイドカー・260902 PR-4）
+
+次の 2 列は**この CSV には無く**、`data/derived/station_municipality.csv`（サイドカー）から
+`pipeline/load_municipality.py` が `stations` テーブルへ結合する（`station_routes` と同じ流儀・
+フルロードの同一トランザクション内。**無ければロード失敗**＝hard-fail）。
+作り方は `prefecture` と同じ「**N03 行政区域を代表点に空間結合**」（`pipeline/build_municipality.py`・
+N03 2026 年版・政令市は市名＋区名、最近傍フォールバックは同一都道府県内のみ）。
+将来この CSV に列を統合したらサイドカーを廃止する（`docs/260828_research_claude_auth.md` §9.2 決定 10）。
+
+| 列 | 型 | 説明 |
+|---|---|---|
+| `municipality` | str | 市区町村名（例「横浜市西区」「大磯町」。「横浜市で」は前方一致で束ねる）|
+| `municipality_code` | str | JIS 市区町村コード（N03_007・5 桁）|
+
 ### 2.2 乗降客数（S12・19列）→ `docs/passenger_aggregation.md`
 | 列パターン | 数 | 型 | 説明 |
 |---|---|---|---|

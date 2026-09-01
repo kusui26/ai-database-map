@@ -97,6 +97,14 @@ export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
     maxResultSizeChars: 20_000,
     perMinute: 30,
   },
+  listStations: {
+    mcpName: 'list_stations',
+    titleJa: '駅の一覧（対象集合）',
+    descriptionEn:
+      'List stations by prefecture / municipality (prefix match; 横浜市 bundles its wards). Returns ids and coordinates only.',
+    maxResultSizeChars: 40_000,
+    perMinute: 30,
+  },
   getStationDetail: {
     mcpName: 'get_station_detail',
     titleJa: '駅の詳細',
@@ -284,6 +292,7 @@ export function registerMcpTools(
 ): void {
   const s = TOOL_SPECS
   registerSpec(server, 'searchStations', s.searchStations, origin, options)
+  registerSpec(server, 'listStations', s.listStations, origin, options)
   registerSpec(server, 'getStationDetail', s.getStationDetail, origin, options)
   registerSpec(server, 'rankStations', s.rankStations, origin, options)
   registerSpec(server, 'compareGrowth', s.compareGrowth, origin, options)

@@ -676,6 +676,35 @@ Claude : [list_stations: 横浜市 → 約150駅] [build_dataset: 150駅×14列 
 > 0.2.0（agent・スキルに list_stations 導線）。⚠ §5.3 のセレクタのうち operators／routes／bbox／
 > near は PR-5（`build_dataset`）で共通化する際に足す（未実装）。
 
+> **✅ PR-5 完了（2026-09-03）。** `build_dataset`＝分析グレードの本体。
+> **方式は「保存しない署名 URL」**——Vercel Blob 等のストアを増やさず、URL 自体が「HMAC 署名済みの
+> クエリ定義」（`DATASET_URL_SECRET`・base64url(deflateRaw)・**24 時間で 410**）で、GET のたびに
+> `/api/dataset` が**ライブの DB から CSV を再生成**する。値が常にアプリ／Layer 1 ツールと一致する
+> ため、§11 の「データ整合」を検証項目ではなく**構造で**満たす。
+> 列解決は `resolveMetricKey`（rank／散布と同じ解決器）＋カタログのみ（`src/ai/dataset/columns.ts`・
+> ファミリ×years 展開・重複排除・値列 ≤60）。CSV は RFC 4180・**値の欠損＝空欄／フラグ欠損＝0**
+> （0 非格納の規約どおり。notes と meta.json に明記）・信頼性フラグ列は**自動同伴**（§5.4-4 を形で
+> 強制）。meta.json に列の意味・単位・年次・source／license（案 C と同じ「権利表記を落とさない」）。
+> grps ≤500・生成 10/分（IP）・`maxDuration` 60s。
+> **セレクタ共通化（PR-4 の ⚠ 解消）**：`list_stations` RPC／ToolSpec／REST `/api/stations` に
+> operators／routes／routeTypes（述語は rank・散布と同じ `station_matches_filters` を共有）・
+> bbox・near・grps。migration `20260903090000` は**本番適用済み**。実測（DB 直）——東急電鉄 98 駅・
+> 東海道新幹線 17・新幹線 103・bbox（横浜周辺）21・near（横浜 1km）6・
+> 「東海旅客鉄道×東北新幹線」= 0 件（260801 の不変条件を維持）。
+> **E2E（本番ビルド＋本番 DB）**：MCP 11 本目（3 番目）・横浜市×8 ファミリ → **137 駅×20 列
+> CSV 18KB・URL 352 字**・pandas で読み 横浜#0 の pop_2020_1km が DB 直値と完全一致・
+> meta（sources 5 群）・改竄／トークン無し 400・期限切れ 410（単体テスト）・grps＋long・
+> 構造化エラー 3 態（排他・未知指標・未知の県）・レート制限 429 実測。
+> プラグイン **0.3.0**：**`analyze-csv` スキル新設**（§5.4 の作法の CSV 版——欠損とフラグを黙って
+> 使わない・正規化してから合成・重みはユーザーに確認・±20% 敏感度・出典列挙・URL 失効時の一手）＋
+> data-analyst／station-analysis に導線＋ `scripts/fetch_dataset.py`（stdlib のみ・再現性 §5.4-8）。
+> **設計判断 2 点**：① SDK（@modelcontextprotocol/server@2）の型に `resource_link` が無いため、
+> URL は text JSON の `url`／`metaUrl` で返す（structuredContent は従来どおり）。
+> ② `buildDataset` は **Gemini（アプリ内）に出さない**（§5.6 どおり・コード実行環境が無い。
+> `tests/ai-tool-specs.test.ts` で固定）。`include_hazard` は予定どおり PR-6 で。
+> ⚠ 運用：Vercel に **`DATASET_URL_SECRET`**（`openssl rand -hex 32`）を設定する。
+> 未設定でも他ツールは無傷で、build_dataset だけが文脈つきエラーで落ちる。
+
 ---
 
 ## 11. 検証計画

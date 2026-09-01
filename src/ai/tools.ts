@@ -7,8 +7,12 @@
  * EffectCollector へ記録し、LLM へは要約（`forLlm`）だけを返す（幻覚を防ぐ）。
  * assemble.ts が Effect を決定的にパネル/地図操作へ変換するのは従来どおり。
  *
- * `tool()` はツールごとに**具象スキーマのまま**呼ぶ（9 個の列挙）。ジェネリック越しに
+ * `tool()` はツールごとに**具象スキーマのまま**呼ぶ。ジェネリック越しに
  * 渡すと zod スキーマの入力型推論が壊れる（`InferUITools` がツール名ごとの型を失う）。
+ *
+ * ⚠ `buildDataset` は**ここに出さない**（§5.6）：アプリ内チャットにはコード実行環境が無く、
+ * CSV の URL を返しても分析できない。当面アプリ内は Layer 1 に限定し、
+ * buildDataset は MCP（Claude Code / Cowork）側だけに登録する（`mcp-tools.ts`）。
  */
 
 import { tool, type InferUITools, type UIMessage } from 'ai'

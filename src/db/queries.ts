@@ -69,7 +69,27 @@ export type ListStationsFilter = {
   readonly prefectures?: readonly string[]
   /** 市区町村名（前方一致・例「横浜市」）または JIS コード（前方一致）。 */
   readonly municipality?: string
+  /** 運営会社・路線・事業者種別（rank/scatter と同じ述語 station_matches_filters・260903）。 */
+  readonly operators?: readonly string[]
+  readonly routes?: readonly string[]
+  readonly routeTypes?: readonly number[]
+  /** 地図範囲（4 値すべて揃ったときだけ効く）。 */
+  readonly bbox?: {
+    readonly west: number
+    readonly south: number
+    readonly east: number
+    readonly north: number
+  }
+  /** 中心と半径（m・geography の正確な距離で絞る）。 */
+  readonly near?: { readonly lon: number; readonly lat: number; readonly radiusM: number }
+  /** 明示の駅 ID 集合（build_dataset の grps 指定・260903）。 */
+  readonly grps?: readonly string[]
   readonly limit?: number
+}
+
+/** 空配列は null（＝絞らない）へ写す（既存 RPC の空配列の扱いと揃える）。 */
+function arrayOrNull<T>(values: readonly T[] | undefined): readonly T[] | null {
+  return values !== undefined && values.length > 0 ? values : null
 }
 
 /** 対象集合を作る（値は返さない・`list_stations` RPC）。並びは乗降客数の降順。 */
@@ -77,8 +97,19 @@ export async function listStations(filter: ListStationsFilter): Promise<StationL
   const rows = await rpcRows(
     'list_stations',
     {
-      prefs: filter.prefectures ?? null,
+      prefs: arrayOrNull(filter.prefectures),
       muni: filter.municipality ?? null,
+      ops: arrayOrNull(filter.operators),
+      routes_in: arrayOrNull(filter.routes),
+      route_types: arrayOrNull(filter.routeTypes),
+      west: filter.bbox?.west ?? null,
+      south: filter.bbox?.south ?? null,
+      east: filter.bbox?.east ?? null,
+      north: filter.bbox?.north ?? null,
+      near_lon: filter.near?.lon ?? null,
+      near_lat: filter.near?.lat ?? null,
+      near_radius_m: filter.near?.radiusM ?? null,
+      grps: arrayOrNull(filter.grps),
       lim: filter.limit ?? null,
     },
     listRowSchema,
@@ -95,6 +126,21 @@ export async function listStations(filter: ListStationsFilter): Promise<StationL
     nOp: row.n_op,
     paxLatest: row.pax_latest,
   }))
+}
+
+// --- データセット（駅×指標の一括値・260903 PR-5） -----------------------
+const datasetValuesSchema = z.record(z.string(), z.record(z.string(), z.number()))
+
+/**
+ * 駅×指標の値を 1 回で取る（`dataset_rows` RPC・jsonb＝PostgREST の max-rows を跨がない）。
+ * 返りは grp → { key → value }。値の無いセルはキー自体が無い（NaN 非格納の規約どおり）。
+ */
+export async function datasetRows(
+  grps: readonly string[],
+  keys: readonly string[],
+): Promise<Record<string, Record<string, number>>> {
+  if (grps.length === 0 || keys.length === 0) return {}
+  return datasetValuesSchema.parse(await rpc('dataset_rows', { grps: [...grps], keys: [...keys] }))
 }
 
 export async function searchStations(q: string): Promise<StationSummary[]> {

@@ -14,21 +14,25 @@ AI Database Map の MCP ツール（`station-data` サーバ）で駅周辺の�
    「横浜市の駅」のような**地域から対象集合を作る**ときは
    `mcp__plugin_ai-database-map_station-data__list_stations`（municipality は前方一致・
    「横浜市」で全区を束ねる）。
-2. **指標キーはカタログが唯一の真実**：指標名を推測で書かない。
+2. **多数の駅を比べる・合成するなら CSV**：おおむね 10 駅を超える比較・スコアリング・相関は
+   `mcp__plugin_ai-database-map_station-data__build_dataset` で駅×指標の CSV（短命 URL）を
+   1 回で作り、ローカルの pandas で分析する（作法は [analyze-csv](../analyze-csv/SKILL.md)）。
+   `get_station_detail` を駅数ぶん繰り返さない。
+3. **指標キーはカタログが唯一の真実**：指標名を推測で書かない。
    `mcp__plugin_ai-database-map_station-data__get_metrics_catalog` で正確なキー・ラベル・単位・
    利用可能な半径と年次を引いてから `rank_stations` / `compare_growth` に渡す。
    キーの形は `{接頭辞}_{年}_{半径}`（例 `pop_gr_2020_2015_1km`）。ファミリ名
    （例 `pop_gr`, `lp_gr`, `lp_med`, `bus_n`, `rate_covid`）でも渡せるが、半径・年の既定
    （1km・直近）が使われることを本文で明示する。
-3. **半径は 6 段**：500 / 1000 / 2000 / 5000 / 10000 / 20000 m。未指定は 1km。
+4. **半径は 6 段**：500 / 1000 / 2000 / 5000 / 10000 / 20000 m。未指定は 1km。
    **どの半径の値かを必ず書く**（半径が違う値を比べない）。
-4. **数値には単位・年次を添える**：カタログの `unit` と対象年をそのまま使う。
+5. **数値には単位・年次を添える**：カタログの `unit` と対象年をそのまま使う。
    増減率は「どの年→どの年」かを書く。
-5. **信頼性フラグ（⚠）を黙って使わない**：`flagged` の行（母数が小さい・極端値）は
+6. **信頼性フラグ（⚠）を黙って使わない**：`flagged` の行（母数が小さい・極端値）は
    除外するか、⚠ を付けて注記する。除外したときは件数を書く。
-6. **出典を落とさない**：応答の `sources` / 出典情報を最後に列挙する（詳細は
+7. **出典を落とさない**：応答の `sources` / 出典情報を最後に列挙する（詳細は
    [references/sources.md](references/sources.md)）。
-7. **水害・災害に触れるときは** [hazard-reading](../hazard-reading/SKILL.md) の作法に従う
+8. **水害・災害に触れるときは** [hazard-reading](../hazard-reading/SKILL.md) の作法に従う
    （「安全」と言わない・時制を明示・limitations を全部伝える）。
 
 ## してはいけないこと

@@ -18,10 +18,11 @@ import { createCollector, type ToolEffect } from '@/ai/types'
  */
 
 describe('TOOL_SPECS（登録の網羅）', () => {
-  it('10 ツールが揃っている（増減したら MCP 側の写しも見直す）', () => {
+  it('11 ツールが揃っている（増減したら MCP 側の写しも見直す）', () => {
     expect(TOOL_SPEC_NAMES).toEqual([
       'searchStations',
       'listStations',
+      'buildDataset',
       'getStationDetail',
       'rankStations',
       'compareGrowth',
@@ -55,13 +56,19 @@ describe('TOOL_SPECS（登録の網羅）', () => {
 describe('Gemini のツール表面 ＝ Spec（同一の参照・ずれない）', () => {
   const tools = createTools(createCollector(), 'http://localhost:3000')
 
-  it('全ツールの説明とスキーマが Spec と同じ物体', () => {
+  it('全ツールの説明とスキーマが Spec と同じ物体（buildDataset は §5.6 で除外）', () => {
     for (const key of TOOL_SPEC_NAMES) {
+      if (key === 'buildDataset') continue
       const spec = TOOL_SPECS[key]
       const built = tools[key]
       expect(built.description, key).toBe(spec.description)
       expect(built.inputSchema, key).toBe(spec.inputSchema)
     }
+  })
+
+  it('buildDataset は Gemini に出さない（アプリ内にコード実行環境が無い・§5.6）', () => {
+    expect('buildDataset' in tools).toBe(false)
+    expect(Object.keys(tools)).toHaveLength(TOOL_SPEC_NAMES.length - 1)
   })
 })
 

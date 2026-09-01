@@ -646,6 +646,21 @@ Claude : [list_stations: 横浜市 → 約150駅] [build_dataset: 150駅×14列 
 > ⚠ 運用側の残作業：Vercel WAF ルール（Anthropic egress `160.79.104.0/21` 許可）と
 > Spend Management はダッシュボード設定（コードでは持てない）。
 
+> **✅ PR-3 完了（2026-09-02）。** Claude Code プラグインを当リポジトリ直下に置いた——
+> `/plugin marketplace add kusui26/AI-Database-Map` → `/plugin install ai-database-map@ai-database-map`。
+> 構成：`.claude-plugin/marketplace.json`（リポ直下）＋`plugins/ai-database-map/`
+> （plugin.json 0.1.0・`.mcp.json`＝remote http（`AIDB_MCP_URL` で差し替え可・既定は本番）・
+> 知識型スキル 2（`station-analysis`＋references 3 本・`hazard-reading`）・コマンド型スキル 2
+> （`/ai-database-map:station`・`:rank`。拡張は `argument-hint` と `allowed-tools` に限定）・
+> サブエージェント `data-analyst`（tools は MCP 9 本に限定）・SessionStart フック 1 文）。
+> **PreToolUse の半径検証は見送り**（サーバの単一の真実を殻で複製しない）。
+> 検証：`claude plugin validate --strict` がプラグイン・マーケットプレイス・skills・agents の
+> 全てで合格（CLI 2.1.251）、CI にも同ステップを追加。`tests/claude-plugin.test.ts`（9 件）が
+> マニフェスト・**完全修飾ツール名の実在**（`mcp__plugin_ai-database-map_station-data__*` を
+> `MCP_TOOL_CONFIGS` と突き合わせ）・知識型スキルの標準フィールド限定・フック JSON を固定。
+> 本番 `/api/mcp` の稼働も確認（tools/list 応答）。`userConfig.api_token` は導入時の入力摩擦を
+> 避けるため Phase 2（保護ツールが生まれるとき）に送った（§4.5 の記述から変更）。
+
 ---
 
 ## 11. 検証計画

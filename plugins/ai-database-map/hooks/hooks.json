@@ -1,0 +1,16 @@
+{
+  "description": "AI Database Map: セッション開始時に短い作法だけ知らせる（重い文脈は skills が遅延ロード）",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/session-context.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -20,6 +20,14 @@ export class BadRequestError extends Error {}
 /** 404（駅など未検出）。 */
 export class NotFoundError extends Error {}
 
+/** リクエスト元 IP。プラットフォームが設定する x-real-ip を優先（XFF 左端は詐称可能）。 */
+export function clientIp(request: Request): string {
+  const realIp = request.headers.get('x-real-ip')
+  if (realIp !== null && realIp.length > 0) return realIp
+  const forwarded = request.headers.get('x-forwarded-for')
+  return forwarded?.split(',')[0]?.trim() ?? 'unknown'
+}
+
 export function json<T>(data: T, cacheControl: string): NextResponse {
   return NextResponse.json(data, { headers: { 'Cache-Control': cacheControl } })
 }

@@ -36,6 +36,9 @@ export const stationsQuerySchema = z.object({
   // 対象集合づくり（260902 PR-4）。municipality は前方一致（「横浜市」で全区を束ねる）。
   municipality: z.string().min(1).optional(),
   prefecture: z.string().min(1).optional(), // municipality と併用可（単独でも一覧になる）
+  operators: z.string().min(1).optional(), // カンマ区切り（一覧の絞り込み・260903 PR-5）
+  routes: z.string().min(1).optional(), // カンマ区切り（同上）
+  routeTypes: z.string().min(1).optional(), // カンマ区切りの整数（1:新幹線 …・routes とは OR）
   limit: z.coerce.number().int().min(1).max(2000).optional(),
 })
 

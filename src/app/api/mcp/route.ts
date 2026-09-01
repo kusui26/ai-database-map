@@ -15,6 +15,7 @@
 import { createMcpHandler } from 'mcp-handler'
 import { checkRateLimit } from '@/ai/rate-limit'
 import { mcpIpStore, registerMcpTools } from '@/ai/mcp-tools'
+import { clientIp } from '@/lib/http'
 
 /** ハザード系ツールは上流とメッシュ読みで時間がかかる（既定 300s の枠内で余裕を持たせる）。 */
 export const maxDuration = 60
@@ -22,14 +23,6 @@ export const maxDuration = 60
 /** IP 全体の粗い上限（1 分・固定窓）。ツール別の細かい制限は mcp-tools 側。 */
 const IP_LIMIT_PER_MINUTE = 60
 const IP_WINDOW_MS = 60_000
-
-/** リクエスト元 IP。プラットフォームが設定する x-real-ip を優先（XFF 左端は詐称可能）。 */
-function clientIp(request: Request): string {
-  const realIp = request.headers.get('x-real-ip')
-  if (realIp !== null && realIp.length > 0) return realIp
-  const forwarded = request.headers.get('x-forwarded-for')
-  return forwarded?.split(',')[0]?.trim() ?? 'unknown'
-}
 
 /**
  * ハンドラはリクエストの origin に依存しない純関数群なので、プロセスで 1 個だけ作る。

@@ -100,12 +100,17 @@ describe('完全修飾ツール名（打ち間違いは静かに壊れる）', (
       }
     }
     // 主要ツールはどこかから参照されている（導線の欠落を検知）。
-    for (const key of ['search_stations', 'rank_stations', 'get_metrics_catalog']) {
+    for (const key of [
+      'search_stations',
+      'rank_stations',
+      'get_metrics_catalog',
+      'build_dataset',
+    ]) {
       expect(referenced.has(key), key).toBe(true)
     }
   })
 
-  it('サブエージェントの tools は 9 ツール全部', () => {
+  it('サブエージェントの tools は全ツール（TOOL_SPEC_NAMES と同数）', () => {
     const front = frontmatterOf(`${ROOT}/agents/data-analyst.md`)
     const tools = (front['tools'] ?? '').split(',').map((name) => name.trim())
     expect(tools.length).toBe(TOOL_SPEC_NAMES.length)
@@ -126,7 +131,7 @@ describe('スキルの互換性（claude.ai / Cowork でハードエラーにし
   ])
 
   it('知識型スキルは標準フィールドだけ（アップロード互換）', () => {
-    for (const skill of ['station-analysis', 'hazard-reading']) {
+    for (const skill of ['station-analysis', 'hazard-reading', 'analyze-csv']) {
       const front = frontmatterOf(`${ROOT}/skills/${skill}/SKILL.md`)
       for (const key of Object.keys(front)) {
         expect(STANDARD_KEYS.has(key), `${skill}: ${key}`).toBe(true)

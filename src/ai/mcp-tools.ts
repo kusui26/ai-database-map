@@ -12,7 +12,7 @@
  * - **ツール別レート制限**（上流：気象庁・国土地理院を叩くものは厳しく・§4.4）
  * - `structuredContent`＝GUI Chat Protocol（パネル＋地図操作）。text は Gemini と同じ要約 JSON
  *
- * 登録は `tools.ts` と同じ流儀で**ツールごとに具象のまま**ヘルパを 9 回呼ぶ——
+ * 登録は `tools.ts` と同じ流儀で**ツールごとに具象のまま**ヘルパをツール数ぶん呼ぶ——
  * ユニオンでループすると `run` の入力型が交差型に潰れて呼べなくなるため。
  */
 
@@ -101,9 +101,18 @@ export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
     mcpName: 'list_stations',
     titleJa: '駅の一覧（対象集合）',
     descriptionEn:
-      'List stations by prefecture / municipality (prefix match; 横浜市 bundles its wards). Returns ids and coordinates only.',
+      'List stations by prefecture / municipality (prefix match; 横浜市 bundles its wards), operator, route, bbox or near. Returns ids and coordinates only.',
     maxResultSizeChars: 40_000,
     perMinute: 30,
+  },
+  buildDataset: {
+    mcpName: 'build_dataset',
+    titleJa: 'データセット生成（駅×指標の CSV）',
+    descriptionEn:
+      'Build a stations × metrics CSV in one call. Returns short-lived URLs (csv + meta) with schema, preview and caveats only — analyse locally with pandas.',
+    maxResultSizeChars: 25_000,
+    // CSV 生成は 1 回で重いクエリ＋短命 URL の発行なので、検索系より絞る（§4.4）。
+    perMinute: 10,
   },
   getStationDetail: {
     mcpName: 'get_station_detail',
@@ -282,8 +291,10 @@ function registerSpec<Schema extends z.ZodTypeAny, Out>(
 }
 
 /**
- * 9 ツール＋カタログ resource を登録する。
+ * 全ツール（`TOOL_SPEC_NAMES` の順）＋カタログ resource を登録する。
  * `tools.ts` の `createTools` と同じく**キーを列挙**する（ユニオンでループしない）。
+ * ⚠ `buildDataset` は Gemini（`tools.ts`）には出さない（§5.6）が、MCP には出す——
+ * Claude Code / Cowork にはコード実行環境があり、CSV をローカルで分析できるため。
  */
 export function registerMcpTools(
   server: McpToolRegistry,
@@ -293,6 +304,7 @@ export function registerMcpTools(
   const s = TOOL_SPECS
   registerSpec(server, 'searchStations', s.searchStations, origin, options)
   registerSpec(server, 'listStations', s.listStations, origin, options)
+  registerSpec(server, 'buildDataset', s.buildDataset, origin, options)
   registerSpec(server, 'getStationDetail', s.getStationDetail, origin, options)
   registerSpec(server, 'rankStations', s.rankStations, origin, options)
   registerSpec(server, 'compareGrowth', s.compareGrowth, origin, options)

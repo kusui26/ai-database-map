@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0 — 2026-09-03
+
+- `build_dataset` を追加：駅×指標の CSV（短命の署名 URL・meta.json つき）を 1 回で生成し、
+  ローカル pandas で分析する入口。`analyze-csv` スキルを新設
+- `list_stations` のセレクタを拡張：operators / routes / routeTypes・bbox・near
+
 ## 0.2.0 — 2026-09-02
 
 - `list_stations` を追加：都道府県・市区町村（前方一致。「横浜市」で全区）から

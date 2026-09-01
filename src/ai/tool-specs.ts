@@ -29,15 +29,37 @@ import {
   type HazardEvacuationResponse,
   type HazardPointResponse,
   type RankingResponse,
+  type StationListItem,
 } from '@/shared/api'
+import {
+  DATASET_MAX_VALUE_COLUMNS,
+  resolveDatasetColumns,
+  type DatasetColumnsError,
+  type DatasetColumnsOk,
+} from './dataset/columns'
+import {
+  datasetNotes,
+  datasetPreview,
+  datasetRowCount,
+  type DatasetShape,
+  type DatasetValues,
+} from './dataset/csv'
+import {
+  datasetSecret,
+  signDatasetToken,
+  type DatasetQuery,
+  type DatasetSelector,
+} from './dataset/token'
 import { evacuationDisasterKeySchema, EVACUATION_DISASTERS } from '@/shared/evacuation'
 import {
+  datasetRows,
   listStations,
   rankByColumn,
   searchStations,
   stationBundle,
   stationByGrp,
   scatterPoints,
+  type ListStationsFilter,
 } from '@/db/queries'
 import { buildStationDetail } from '@/domain/stations/presenter'
 import { buildRanking } from '@/domain/ranking/presenter'
@@ -159,6 +181,132 @@ function unknownPrefectures(unknown: readonly string[]): { error: string; hint: 
   }
 }
 
+/** near セレクタの半径の下限・上限（m）。 */
+const NEAR_MIN_RADIUS_M = 100
+const NEAR_MAX_RADIUS_M = 100_000
+
+/** build_dataset の grps 指定の上限（署名 URL に埋め込むため・URL 長の実用範囲）。 */
+const DATASET_MAX_GRPS = 500
+/** build_dataset のセレクタ既定上限（対象集合は原則全件＝RPC 上限まで）。 */
+const DATASET_DEFAULT_STATION_LIMIT = LIST_MAX_LIMIT
+
+/**
+ * 対象集合セレクタ（listStations と buildDataset.stations で**同一**・§5.3 の共通化）。
+ * operators/routes/routeTypes の述語は rank/scatter と同じ station_matches_filters（DB 側で共有）。
+ */
+const stationSelectorSchema = z.object({
+  prefectures: z
+    .array(z.string())
+    .optional()
+    .describe('都道府県名の配列（正式名・例 ["神奈川県"]）。省略で全国'),
+  municipality: z
+    .string()
+    .optional()
+    .describe('市区町村名の前方一致（例: 横浜市、世田谷区）。JIS コードの前方一致も可'),
+  operators: z
+    .array(z.string())
+    .optional()
+    .describe(
+      '運営会社名の配列（正式名称・例 ["東日本旅客鉄道"]。JR東日本ではない）。どれか1社でも運営する駅が対象。省略で全社',
+    ),
+  routes: z
+    .array(z.string())
+    .optional()
+    .describe('路線名の配列（例 ["東海道新幹線"]）。省略で全路線'),
+  routeTypes: z
+    .array(z.number().int())
+    .optional()
+    .describe(`事業者種別の配列（${ROUTE_TYPE_HINT}）。routes とは OR。省略で全種別`),
+  bbox: z
+    .array(z.number())
+    .length(4)
+    .optional()
+    .describe('地図範囲 [west, south, east, north]（経度・緯度）'),
+  near: z
+    .object({ lon: z.number(), lat: z.number(), radiusM: z.number() })
+    .optional()
+    .describe(`中心座標と半径(m)で絞る（半径 ${NEAR_MIN_RADIUS_M}〜${NEAR_MAX_RADIUS_M}）`),
+  limit: z
+    .number()
+    .int()
+    .optional()
+    .describe(`件数上限（既定 ${LIST_DEFAULT_LIMIT}・最大 ${LIST_MAX_LIMIT}。乗降客数の多い順）`),
+})
+type StationSelector = z.output<typeof stationSelectorSchema>
+
+type SelectorResolution =
+  | { readonly ok: true; readonly filter: ListStationsFilter; readonly requested: number }
+  | { readonly ok: false; readonly error: HintErrorJa }
+
+/** セレクタ → DB フィルタ（正規化と検証。曖昧・不正は構造化エラーで返す）。 */
+function selectorToFilter(input: StationSelector, defaultLimit: number): SelectorResolution {
+  const { names: prefs, unknown } = normalizePrefectures(input.prefectures ?? [])
+  if (unknown.length > 0) return { ok: false, error: unknownPrefectures(unknown) }
+  let bbox: ListStationsFilter['bbox']
+  if (input.bbox !== undefined) {
+    const [west, south, east, north] = input.bbox
+    if (west === undefined || south === undefined || east === undefined || north === undefined) {
+      return {
+        ok: false,
+        error: {
+          error: 'bbox が不正です',
+          hint: 'bbox は [west, south, east, north] の 4 値です。',
+        },
+      }
+    }
+    if (!(west < east && south < north)) {
+      return {
+        ok: false,
+        error: {
+          error: 'bbox の範囲が不正です',
+          hint: '[west, south, east, north]（経度・緯度）で west < east・south < north にしてください。',
+        },
+      }
+    }
+    bbox = { west, south, east, north }
+  }
+  const near =
+    input.near === undefined
+      ? undefined
+      : {
+          lon: input.near.lon,
+          lat: input.near.lat,
+          radiusM: Math.min(Math.max(input.near.radiusM, NEAR_MIN_RADIUS_M), NEAR_MAX_RADIUS_M),
+        }
+  const municipality = input.municipality?.trim()
+  const requested = Math.min(Math.max(input.limit ?? defaultLimit, 1), LIST_MAX_LIMIT)
+  return {
+    ok: true,
+    requested,
+    filter: {
+      prefectures: prefs,
+      municipality: municipality === undefined || municipality === '' ? undefined : municipality,
+      operators: nonEmptyNames(input.operators),
+      routes: nonEmptyNames(input.routes),
+      routeTypes: (input.routeTypes ?? []).filter((type) => ROUTE_TYPES.some((t) => t === type)),
+      bbox,
+      near,
+      limit: requested,
+    },
+  }
+}
+
+/** 正規化済みフィルタ → 署名トークンに埋めるセレクタ（空の条件は載せない）。 */
+function tokenSelectorOf(filter: ListStationsFilter, requested: number): DatasetSelector {
+  const nonEmpty = <T>(values: readonly T[] | undefined): T[] | undefined =>
+    values !== undefined && values.length > 0 ? [...values] : undefined
+  return {
+    prefectures: nonEmpty(filter.prefectures),
+    municipality: filter.municipality,
+    operators: nonEmpty(filter.operators),
+    routes: nonEmpty(filter.routes),
+    routeTypes: nonEmpty(filter.routeTypes),
+    bbox: filter.bbox === undefined ? undefined : { ...filter.bbox },
+    near: filter.near === undefined ? undefined : { ...filter.near },
+    limit: requested,
+  }
+}
+
 /** 指標の解決失敗 → LLM 向けの構造化エラー（次の一手を hint で示す）。 */
 function metricError(resolution: Extract<MetricResolution, { ok: false }>): {
   error: string
@@ -215,6 +363,56 @@ function listStationsForLlm(stations: Awaited<ReturnType<typeof listStations>>, 
       lon: station.lon,
       lat: station.lat,
     })),
+  }
+}
+
+/** 列解決の失敗 → LLM 向けの構造化エラー（ok を落として次の一手だけ渡す）。 */
+function columnsError(result: DatasetColumnsError): {
+  error: string
+  hint: string
+  didYouMean: readonly string[]
+} {
+  return { error: result.error, hint: result.hint, didYouMean: result.didYouMean }
+}
+
+/**
+ * データセット生成 → LLM 向けの要約（**スキーマとプレビューだけ**・値は URL の CSV に・§5.3）。
+ * notes に「既定で埋めた事実」「欠損・フラグ」「見つからない grp」を全部載せる——黙って使わせない。
+ */
+function buildDatasetForLlm(args: {
+  stations: readonly StationListItem[]
+  values: DatasetValues
+  resolved: DatasetColumnsOk
+  shape: DatasetShape
+  urls: { url: string; metaUrl: string; expiresAtMs: number }
+  truncated: boolean
+  extraNotes: readonly string[]
+}) {
+  const { stations, values, resolved, shape } = args
+  return {
+    stationCount: stations.length,
+    rowCount: datasetRowCount(stations, values, resolved.columns, shape),
+    shape,
+    truncated: args.truncated,
+    url: args.urls.url,
+    metaUrl: args.urls.metaUrl,
+    expiresAt: new Date(args.urls.expiresAtMs).toISOString(),
+    columns: resolved.columns.map((column) => ({
+      key: column.key,
+      role: column.role,
+      label: column.labelJa,
+      unit: column.unit,
+      year: column.year,
+      yearBase: column.yearBase,
+      radiusM: column.radiusM,
+      flag: column.reliabilityFlagKey,
+    })),
+    preview: datasetPreview(stations, values, resolved.columns, shape),
+    notes: [
+      ...resolved.notes,
+      ...datasetNotes(stations, values, resolved.columns),
+      ...args.extraNotes,
+    ],
   }
 }
 
@@ -431,44 +629,151 @@ export const TOOL_SPECS = {
     },
   }),
 
-  /** 条件（都道府県・市区町村）→ 駅の一覧（対象集合づくり・値は返さない）。 */
+  /** 条件（都道府県・市区町村・会社・路線・範囲）→ 駅の一覧（対象集合づくり・値は返さない）。 */
   listStations: defineSpec({
     name: 'listStations',
     description:
-      '条件に合う駅の一覧（grp・駅名・位置だけ）を返す。「横浜市の駅」「神奈川県の駅」のような対象集合づくりの起点。' +
-      'municipality は市区町村名の前方一致（例「横浜市」で全区を束ねる。「世田谷区」も可）。値の取得や比較は他のツールで行う。',
+      '条件に合う駅の一覧（grp・駅名・位置だけ）を返す。「横浜市の駅」「神奈川県の駅」「東急電鉄の駅」のような対象集合づくりの起点。' +
+      'municipality は市区町村名の前方一致（例「横浜市」で全区を束ねる。「世田谷区」も可）。operators / routes / routeTypes・bbox・near でも絞れる（条件は AND・routes と routeTypes は OR）。値の取得や比較は他のツールで行う。',
+    inputSchema: stationSelectorSchema,
+    errorFallbackJa: '駅一覧の取得に失敗しました',
+    run: async (
+      input,
+    ): Promise<ToolRunResult<HintErrorJa | ReturnType<typeof listStationsForLlm>>> => {
+      const resolved = selectorToFilter(input, LIST_DEFAULT_LIMIT)
+      if (!resolved.ok) return pure(resolved.error)
+      const stations = await listStations(resolved.filter)
+      return pure(listStationsForLlm(stations, resolved.requested))
+    },
+  }),
+
+  /**
+   * 駅×指標の横持ちデータセット（CSV・短命の署名 URL）。§5.3 の分析グレード本体。
+   * 応答は**スキーマとプレビューだけ**——値は URL の CSV にあり、分析はローカル（pandas 等）で行う。
+   */
+  buildDataset: defineSpec({
+    name: 'buildDataset',
+    description:
+      '多数の駅 × 複数指標のデータセット（CSV）を 1 回で作り、短命のダウンロード URL を返す。' +
+      '複数駅の比較・スコアリング・相関などの分析は getStationDetail の繰り返しではなくこれを使い、CSV をローカル（pandas 等）で分析する。' +
+      'stations（listStations と同じセレクタ）か grps のどちらか一方で対象を指定。' +
+      `metrics はカタログキー（例 pop_2020_1km）でも指標ファミリ（例 pop, pop_gr, lp_med, rate_covid）でもよく、ファミリは radiusM / years で確定（既定 1km・直近。値列は最大 ${DATASET_MAX_VALUE_COLUMNS}）。` +
+      '値列の信頼性フラグ列（1=注意）は自動で同伴する。応答は列スキーマ・先頭 5 行・注意だけで、値は url の CSV に、列の意味・単位・出典は meta_url にある。URL の有効期限は約 24 時間。',
     inputSchema: z.object({
-      prefectures: z
+      stations: stationSelectorSchema
+        .optional()
+        .describe('対象駅のセレクタ（listStations と同じ）。grps と排他'),
+      grps: z
         .array(z.string())
+        .min(1)
+        .max(DATASET_MAX_GRPS)
         .optional()
-        .describe('都道府県名の配列（正式名・例 ["神奈川県"]）。省略で全国'),
-      municipality: z
-        .string()
-        .optional()
-        .describe('市区町村名の前方一致（例: 横浜市、世田谷区）。JIS コードの前方一致も可'),
-      limit: z
+        .describe(`対象駅の grp 配列（最大 ${DATASET_MAX_GRPS}）。stations と排他`),
+      metrics: z
+        .array(z.string())
+        .min(1)
+        .describe(
+          'カタログキーまたは指標ファミリの配列。例 ["pax", "pop", "pop_gr", "lp_med", "rate_covid"]',
+        ),
+      radiusM: z
         .number()
-        .int()
+        .optional()
+        .describe('ファミリ解決に使う集約半径(m): 500/1000/2000/5000/10000/20000。省略時 1000'),
+      years: z
+        .union([z.literal('latest'), z.array(z.number().int())])
         .optional()
         .describe(
-          `件数上限（既定 ${LIST_DEFAULT_LIMIT}・最大 ${LIST_MAX_LIMIT}。乗降客数の多い順）`,
+          'ファミリ解決に使う年。省略・"latest" は直近（増減率は直近 5 年ペア）。配列なら各年の列を作る（例 [2015, 2020]）',
         ),
+      shape: z
+        .enum(['wide', 'long'])
+        .optional()
+        .describe('wide=1 駅 1 行×指標列（既定）/ long=grp,key,value の縦持ち'),
     }),
-    errorFallbackJa: '駅一覧の取得に失敗しました',
-    run: async ({
-      prefectures,
-      municipality,
-      limit,
-    }): Promise<ToolRunResult<HintErrorJa | ReturnType<typeof listStationsForLlm>>> => {
-      const { names: prefs, unknown } = normalizePrefectures(prefectures ?? [])
-      if (unknown.length > 0) return pure(unknownPrefectures(unknown))
-      const requested = Math.min(Math.max(limit ?? LIST_DEFAULT_LIMIT, 1), LIST_MAX_LIMIT)
-      const stations = await listStations({
-        prefectures: prefs,
-        municipality: municipality?.trim() === '' ? undefined : municipality?.trim(),
-        limit: requested,
-      })
-      return pure(listStationsForLlm(stations, requested))
+    errorFallbackJa: 'データセットの生成に失敗しました',
+    run: async (
+      { stations: selector, grps, metrics, radiusM, years, shape },
+      ctx,
+    ): Promise<
+      ToolRunResult<
+        HintErrorJa | ReturnType<typeof columnsError> | ReturnType<typeof buildDatasetForLlm>
+      >
+    > => {
+      if ((selector === undefined) === (grps === undefined)) {
+        return pure({
+          error: '対象の指定が不正です',
+          hint: 'stations（セレクタ）か grps（駅 ID の配列）のどちらか一方だけを指定してください。',
+        })
+      }
+      const resolvedColumns = resolveDatasetColumns(metrics, radiusM, years)
+      if (!resolvedColumns.ok) return pure(columnsError(resolvedColumns))
+      const resolvedShape: DatasetShape = shape ?? 'wide'
+      const allKeys = [...resolvedColumns.valueKeys, ...resolvedColumns.flagKeys]
+      const extraNotes: string[] = []
+      let listed: StationListItem[]
+      let truncated = false
+      let tokenQuery: DatasetQuery
+      if (grps !== undefined) {
+        const unique = [...new Set(nonEmptyNames(grps))]
+        if (unique.length === 0) {
+          return pure({
+            error: '対象駅が指定されていません',
+            hint: 'grps に listStations / searchStations が返した grp を入れてください。',
+          })
+        }
+        listed = await listStations({ grps: unique, limit: LIST_MAX_LIMIT })
+        if (listed.length === 0) {
+          return pure({
+            error: '指定した grp の駅が見つかりません',
+            hint: 'searchStations / listStations で grp を取り直してください。',
+          })
+        }
+        const found = new Set(listed.map((station) => station.grp))
+        const missing = unique.filter((grp) => !found.has(grp))
+        if (missing.length > 0) {
+          extraNotes.push(
+            `見つからない grp を ${missing.length} 件除外: ${missing.slice(0, 5).join('・')}${missing.length > 5 ? ' …' : ''}`,
+          )
+        }
+        tokenQuery = {
+          grps: listed.map((station) => station.grp),
+          keys: allKeys,
+          shape: resolvedShape,
+        }
+      } else {
+        const resolvedSelector = selectorToFilter(selector ?? {}, DATASET_DEFAULT_STATION_LIMIT)
+        if (!resolvedSelector.ok) return pure(resolvedSelector.error)
+        listed = await listStations(resolvedSelector.filter)
+        if (listed.length === 0) {
+          return pure({
+            error: '条件に合う駅が 0 件でした',
+            hint: '市区町村の綴りや路線の正式名称（例「東海道新幹線」）を確認し、条件を緩めてください。',
+          })
+        }
+        truncated = listed.length >= resolvedSelector.requested
+        tokenQuery = {
+          selector: tokenSelectorOf(resolvedSelector.filter, resolvedSelector.requested),
+          keys: allKeys,
+          shape: resolvedShape,
+        }
+      }
+      const values = await datasetRows(
+        listed.map((station) => station.grp),
+        allKeys,
+      )
+      const signed = signDatasetToken(tokenQuery, { secret: datasetSecret(), now: Date.now() })
+      const url = `${ctx.origin}/api/dataset?t=${signed.token}`
+      return pure(
+        buildDatasetForLlm({
+          stations: listed,
+          values,
+          resolved: resolvedColumns,
+          shape: resolvedShape,
+          urls: { url, metaUrl: `${url}&kind=meta`, expiresAtMs: signed.expiresAtMs },
+          truncated,
+          extraNotes,
+        }),
+      )
     },
   }),
 
@@ -883,6 +1188,7 @@ export const TOOL_SPECS = {
 export const TOOL_SPEC_NAMES = [
   'searchStations',
   'listStations',
+  'buildDataset',
   'getStationDetail',
   'rankStations',
   'compareGrowth',

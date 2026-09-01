@@ -89,11 +89,13 @@ describe('名前と設定（Claude の制約・審査基準）', () => {
       expect(MCP_TOOL_CONFIGS[key].perMinute, key).toBeLessThanOrEqual(15)
     }
     expect(MCP_TOOL_CONFIGS.searchStations.perMinute).toBeGreaterThanOrEqual(30)
+    // CSV 生成（重いクエリ＋URL 発行）も検索系より絞る（§4.4）。
+    expect(MCP_TOOL_CONFIGS.buildDataset.perMinute).toBeLessThanOrEqual(10)
   })
 })
 
 describe('registerMcpTools（登録の網羅と中身）', () => {
-  it('10 ツール＋カタログ resource を、Spec と同じスキーマで登録する', () => {
+  it('11 ツール＋カタログ resource を、Spec と同じスキーマで登録する', () => {
     const { tools, resources, server } = fakeServer()
     registerMcpTools(server, 'http://localhost:3000')
 

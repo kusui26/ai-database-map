@@ -106,6 +106,9 @@ SRC: dict[str, tuple[str, str]] = {
 # --- 識別・駅属性（10列・指標ではない） ---------------------------------
 # ※ flag_yoy / flag_covid は信頼性フラグ（他の lowbase/lown と同じ「flag 種別メトリクス」）
 #   なので駅属性ではなく build_entry で値エントリ化する（除外/バッジは値経由で解決するため）。
+# ※ municipality / municipality_code（260902 PR-4）は CSV に無い **DB 側のサイドカー属性**
+#   （docs/dataset.md §2.1 補）。ここに載せると CSV ヘッダ照合が壊れるため、上流整形に
+#   列が統合されたときに IDENTITY_COLUMNS へ移す（docs/260828_research_claude_auth.md §9.2 決定 10）。
 IDENTITY_COLUMNS: list[dict[str, str]] = [
     {"key": "grp", "type": "string", "labelJa": "駅グループID", "role": "id"},
     {"key": "station_name", "type": "string", "labelJa": "駅名", "role": "name"},

@@ -61,6 +61,11 @@ export function createTools(collector: EffectCollector, origin: string) {
       inputSchema: s.searchStations.inputSchema,
       execute: executeFromSpec(s.searchStations, collector, origin),
     }),
+    listStations: tool({
+      description: s.listStations.description,
+      inputSchema: s.listStations.inputSchema,
+      execute: executeFromSpec(s.listStations, collector, origin),
+    }),
     getStationDetail: tool({
       description: s.getStationDetail.description,
       inputSchema: s.getStationDetail.inputSchema,

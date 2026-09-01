@@ -23,6 +23,7 @@ const station: StationRow = {
   label: '東京',
   searchLabel: '東京（東京都）',
   prefecture: '東京都',
+  municipality: '千代田区',
   lon: 139.767,
   lat: 35.681,
   nOp: 3,
@@ -316,7 +317,6 @@ describe('establishmentPanels / employeePanels（P5e で分離）', () => {
   })
 })
 
-
 // --- 所得（260813・PR5 で駅詳細タブに載せた） ------------------------------
 // 値は `data/derived/station_dataset.csv` の実測。テストが仕様書としても読めるようにする。
 
@@ -445,9 +445,7 @@ describe('incomePanels（所得タブ）', () => {
     )
     const chart = incomePanels(sakuradamon, 1000)[0]
     if (chart?.type !== 'trendChart') throw new Error('trendChart ではない')
-    expect(chart.flags).toEqual([
-      { label: '納税義務者が少なく1人当たりは参考値', level: 'warn' },
-    ])
+    expect(chart.flags).toEqual([{ label: '納税義務者が少なく1人当たりは参考値', level: 'warn' }])
     expect(chart.stats?.[0]?.flagged).toBe(true)
   })
 
@@ -591,7 +589,10 @@ describe('salesPanels（売上タブ）', () => {
     )
     const chart = salesPanels(tiny, 1000)[0]
     if (chart?.type !== 'trendChart') throw new Error('trendChart ではない')
-    expect(chart.flags[0]).toEqual({ label: '半径内の対象従業者が少なく推計は参考値', level: 'warn' })
+    expect(chart.flags[0]).toEqual({
+      label: '半径内の対象従業者が少なく推計は参考値',
+      level: 'warn',
+    })
     expect(chart.stats?.[0]?.flagged).toBe(true)
     expect(chart.stats?.[1]?.flagged).toBe(true) // 増減率も合成フラグで ⚠
   })

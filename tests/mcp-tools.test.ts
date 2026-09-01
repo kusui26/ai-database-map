@@ -93,7 +93,7 @@ describe('名前と設定（Claude の制約・審査基準）', () => {
 })
 
 describe('registerMcpTools（登録の網羅と中身）', () => {
-  it('9 ツール＋カタログ resource を、Spec と同じスキーマで登録する', () => {
+  it('10 ツール＋カタログ resource を、Spec と同じスキーマで登録する', () => {
     const { tools, resources, server } = fakeServer()
     registerMcpTools(server, 'http://localhost:3000')
 

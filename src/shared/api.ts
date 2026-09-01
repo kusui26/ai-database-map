@@ -33,6 +33,10 @@ export const stationsQuerySchema = z.object({
   q: z.string().min(1).optional(),
   bbox: z.string().optional(), // "west,south,east,north"
   near: z.string().optional(), // "lon,lat"
+  // 対象集合づくり（260902 PR-4）。municipality は前方一致（「横浜市」で全区を束ねる）。
+  municipality: z.string().min(1).optional(),
+  prefecture: z.string().min(1).optional(), // municipality と併用可（単独でも一覧になる）
+  limit: z.coerce.number().int().min(1).max(2000).optional(),
 })
 
 const boolFlag = z
@@ -69,6 +73,7 @@ export const stationRowSchema = z.object({
   label: z.string(),
   searchLabel: z.string(),
   prefecture: z.string(),
+  municipality: z.string().nullable(), // 市区町村（サイドカー・260902 PR-4。dataset.md §2.1 補）
   lon: z.number(),
   lat: z.number(),
   nOp: z.number().nullable(),
@@ -85,12 +90,31 @@ export const stationSummarySchema = z.object({
   label: z.string(),
   searchLabel: z.string().optional(), // 検索表示用（label＋都道府県・一意。search_stations のみ）
   prefecture: z.string(),
+  municipality: z.string().nullable().optional(), // search_stations / list_stations のみ（260902）
   lon: z.number(),
   lat: z.number(),
   paxLatest: z.number().nullable(),
   distM: z.number().optional(), // near 検索のみ
 })
 export type StationSummary = z.infer<typeof stationSummarySchema>
+
+/**
+ * 駅一覧（対象集合を作る・値は返さない・`docs/260828_research_claude_auth.md` §5.3）。
+ * 「横浜市で」は municipality の前方一致で区を束ねる（RPC `list_stations`）。
+ */
+export const stationListItemSchema = z.object({
+  grp: z.string(),
+  stationName: z.string(),
+  label: z.string(),
+  prefecture: z.string(),
+  municipality: z.string().nullable(),
+  municipalityCode: z.string().nullable(),
+  lon: z.number(),
+  lat: z.number(),
+  nOp: z.number().nullable(),
+  paxLatest: z.number().nullable(),
+})
+export type StationListItem = z.infer<typeof stationListItemSchema>
 
 // --- 駅詳細（presenter が組み立てる：カテゴリ×半径の系列） --------------
 export const detailPointSchema = z.object({

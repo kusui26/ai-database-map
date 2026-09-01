@@ -32,6 +32,7 @@ import {
 } from '@/shared/api'
 import { evacuationDisasterKeySchema, EVACUATION_DISASTERS } from '@/shared/evacuation'
 import {
+  listStations,
   rankByColumn,
   searchStations,
   stationBundle,
@@ -109,6 +110,10 @@ type HintErrorJa = { error: string; hint: string }
 
 /** `stationByGrp` の 1 行（null を除いた形）。 */
 type StationRow = NonNullable<Awaited<ReturnType<typeof stationByGrp>>>
+
+/** list_stations の既定・上限（RPC 側の least/greatest と同じ値・ずらさない）。 */
+const LIST_DEFAULT_LIMIT = 300
+const LIST_MAX_LIMIT = 2000
 
 /** 名前配列の前後空白を落とし、空文字を除く（会社名・路線名の共通前処理）。 */
 function nonEmptyNames(input: readonly string[] | undefined): string[] {
@@ -192,6 +197,25 @@ async function resolveHazardTarget(input: {
     }
   }
   return { lon: input.lon, lat: input.lat, placeJa: input.placeJa ?? 'この地点' }
+}
+
+/**
+ * 駅一覧 → LLM 向けの要約（**識別子と位置だけ**・値は返さない・§5.3）。
+ * 件数が要求上限に達したら truncated（全域を返した保証が無いことを LLM に伝える）。
+ */
+function listStationsForLlm(stations: Awaited<ReturnType<typeof listStations>>, requested: number) {
+  return {
+    count: stations.length,
+    truncated: stations.length >= requested,
+    stations: stations.map((station) => ({
+      grp: station.grp,
+      name: station.label,
+      prefecture: station.prefecture,
+      municipality: station.municipality,
+      lon: station.lon,
+      lat: station.lat,
+    })),
+  }
 }
 
 /**
@@ -404,6 +428,47 @@ export const TOOL_SPECS = {
           paxLatest: station.paxLatest,
         })),
       })
+    },
+  }),
+
+  /** 条件（都道府県・市区町村）→ 駅の一覧（対象集合づくり・値は返さない）。 */
+  listStations: defineSpec({
+    name: 'listStations',
+    description:
+      '条件に合う駅の一覧（grp・駅名・位置だけ）を返す。「横浜市の駅」「神奈川県の駅」のような対象集合づくりの起点。' +
+      'municipality は市区町村名の前方一致（例「横浜市」で全区を束ねる。「世田谷区」も可）。値の取得や比較は他のツールで行う。',
+    inputSchema: z.object({
+      prefectures: z
+        .array(z.string())
+        .optional()
+        .describe('都道府県名の配列（正式名・例 ["神奈川県"]）。省略で全国'),
+      municipality: z
+        .string()
+        .optional()
+        .describe('市区町村名の前方一致（例: 横浜市、世田谷区）。JIS コードの前方一致も可'),
+      limit: z
+        .number()
+        .int()
+        .optional()
+        .describe(
+          `件数上限（既定 ${LIST_DEFAULT_LIMIT}・最大 ${LIST_MAX_LIMIT}。乗降客数の多い順）`,
+        ),
+    }),
+    errorFallbackJa: '駅一覧の取得に失敗しました',
+    run: async ({
+      prefectures,
+      municipality,
+      limit,
+    }): Promise<ToolRunResult<HintErrorJa | ReturnType<typeof listStationsForLlm>>> => {
+      const { names: prefs, unknown } = normalizePrefectures(prefectures ?? [])
+      if (unknown.length > 0) return pure(unknownPrefectures(unknown))
+      const requested = Math.min(Math.max(limit ?? LIST_DEFAULT_LIMIT, 1), LIST_MAX_LIMIT)
+      const stations = await listStations({
+        prefectures: prefs,
+        municipality: municipality?.trim() === '' ? undefined : municipality?.trim(),
+        limit: requested,
+      })
+      return pure(listStationsForLlm(stations, requested))
     },
   }),
 
@@ -817,6 +882,7 @@ export const TOOL_SPECS = {
 /** ツール名（登録順）。テスト・MCP 側の網羅チェックに使う（キーの増減は satisfies が捕まえる）。 */
 export const TOOL_SPEC_NAMES = [
   'searchStations',
+  'listStations',
   'getStationDetail',
   'rankStations',
   'compareGrowth',

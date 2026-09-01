@@ -661,6 +661,21 @@ Claude : [list_stations: 横浜市 → 約150駅] [build_dataset: 150駅×14列 
 > 本番 `/api/mcp` の稼働も確認（tools/list 応答）。`userConfig.api_token` は導入時の入力摩擦を
 > 避けるため Phase 2（保護ツールが生まれるとき）に送った（§4.5 の記述から変更）。
 
+> **✅ PR-4 完了（2026-09-02・G1 解消）。** 方式は「サイドカー＋ローダ結合」（`station_routes` と
+> 同じ流儀・上流の整形 CSV には触れない・調査どおり将来は上流統合に前方互換）。
+> パイプライン：`fetch_admin_boundaries.py`（N03 **2026 年版**・全国 803MB）→
+> `build_municipality.py`（9,273 駅 × 125,130 ポリゴンを空間結合。`prefecture` と同じ方法論。
+> 政令市は市名＋区名・最近傍フォールバックは同一都道府県内のみ＝**2 駅・最大 442m**・
+> 都道府県の全数照合パス）→ `data/derived/station_municipality.csv`（1,425 市区町村・横浜市 137 駅）→
+> `load_municipality.py`（temp→UPDATE・**全駅に付かなければ失敗**）。`load_to_supabase.py` の
+> フルロードにも同一トランザクションで組み込み、**CSV が無ければロード自体を失敗**させる（hard-fail）。
+> DB：migration `20260902120000`（列 2 本＋前方一致 index＋RPC `list_stations`＋`search_stations` に
+> municipality 追加）を `supabase db push` で適用し、データも投入済み。
+> API/MCP：`/api/stations?municipality=横浜市`（≤2000・50 件の頭切りをしない別枝）と
+> MCP/Gemini 共通の **`listStations` ツール**（識別子と位置だけ・§5.3 の入口）。プラグインは
+> 0.2.0（agent・スキルに list_stations 導線）。⚠ §5.3 のセレクタのうち operators／routes／bbox／
+> near は PR-5（`build_dataset`）で共通化する際に足す（未実装）。
+
 ---
 
 ## 11. 検証計画

@@ -1,7 +1,7 @@
 {
   "name": "ai-database-map",
   "displayName": "AI Database Map",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "駅×半径のオープンデータ分析アシスタント。全国 9,273 駅の乗降客数・人口・地価・バス・事業所・従業者と水害リスクを、共通API（リモート MCP）で照会します。EN: Station-area open-data analysis for Japan via a remote MCP server.",
   "author": {
     "name": "kusui26",

@@ -4,7 +4,7 @@
  */
 
 import { z } from 'zod'
-import { type StationRow, type StationSummary } from '@/shared/api'
+import { type StationListItem, type StationRow, type StationSummary } from '@/shared/api'
 import { db, DbError } from './client'
 
 async function rpc(fn: string, args: Record<string, unknown>): Promise<unknown> {
@@ -29,6 +29,7 @@ const summaryRowSchema = z.object({
   label: z.string().optional(),
   search_label: z.string().optional(), // search_stations のみ返す
   prefecture: z.string(),
+  municipality: z.string().nullable().optional(), // search_stations のみ返す（260902）
   lon: z.number(),
   lat: z.number(),
   pax_latest: z.number().nullable().optional(),
@@ -45,8 +46,55 @@ function toSummary(row: z.infer<typeof summaryRowSchema>): StationSummary {
     lat: row.lat,
     paxLatest: row.pax_latest ?? null,
     ...(row.search_label === undefined ? {} : { searchLabel: row.search_label }),
+    ...(row.municipality === undefined ? {} : { municipality: row.municipality }),
     ...(row.dist_m === undefined ? {} : { distM: row.dist_m }),
   }
+}
+
+// --- 駅一覧（対象集合・260902 PR-4） ------------------------------------
+const listRowSchema = z.object({
+  grp: z.string(),
+  station_name: z.string(),
+  label: z.string(),
+  prefecture: z.string(),
+  municipality: z.string().nullable(),
+  municipality_code: z.string().nullable(),
+  lon: z.number(),
+  lat: z.number(),
+  n_op: z.number().nullable(),
+  pax_latest: z.number().nullable(),
+})
+
+export type ListStationsFilter = {
+  readonly prefectures?: readonly string[]
+  /** 市区町村名（前方一致・例「横浜市」）または JIS コード（前方一致）。 */
+  readonly municipality?: string
+  readonly limit?: number
+}
+
+/** 対象集合を作る（値は返さない・`list_stations` RPC）。並びは乗降客数の降順。 */
+export async function listStations(filter: ListStationsFilter): Promise<StationListItem[]> {
+  const rows = await rpcRows(
+    'list_stations',
+    {
+      prefs: filter.prefectures ?? null,
+      muni: filter.municipality ?? null,
+      lim: filter.limit ?? null,
+    },
+    listRowSchema,
+  )
+  return rows.map((row) => ({
+    grp: row.grp,
+    stationName: row.station_name,
+    label: row.label,
+    prefecture: row.prefecture,
+    municipality: row.municipality,
+    municipalityCode: row.municipality_code,
+    lon: row.lon,
+    lat: row.lat,
+    nOp: row.n_op,
+    paxLatest: row.pax_latest,
+  }))
 }
 
 export async function searchStations(q: string): Promise<StationSummary[]> {
@@ -257,6 +305,7 @@ const stationRowSchema = z.object({
   label: z.string(),
   search_label: z.string(),
   prefecture: z.string(),
+  municipality: z.string().nullable(),
   lon: z.number(),
   lat: z.number(),
   n_op: z.number().nullable(),
@@ -267,7 +316,7 @@ const stationRowSchema = z.object({
 })
 
 const STATION_COLUMNS =
-  'grp,station_name,label,search_label,prefecture,lon,lat,n_op,operators,pax_latest,lp_near_use,level_complete'
+  'grp,station_name,label,search_label,prefecture,municipality,lon,lat,n_op,operators,pax_latest,lp_near_use,level_complete'
 
 export async function stationByGrp(grp: string): Promise<StationRow | null> {
   const { data, error } = await db()
@@ -284,6 +333,7 @@ export async function stationByGrp(grp: string): Promise<StationRow | null> {
     label: row.label,
     searchLabel: row.search_label,
     prefecture: row.prefecture,
+    municipality: row.municipality,
     lon: row.lon,
     lat: row.lat,
     nOp: row.n_op,

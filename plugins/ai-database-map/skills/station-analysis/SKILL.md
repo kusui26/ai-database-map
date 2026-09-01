@@ -11,6 +11,9 @@ AI Database Map の MCP ツール（`station-data` サーバ）で駅周辺の�
 
 1. **駅の特定**：駅名は `mcp__plugin_ai-database-map_station-data__search_stations` で解決し、
    返った `grp` を以後のツールに渡す。同名駅（例：三田・府中）は候補の都道府県で確認する。
+   「横浜市の駅」のような**地域から対象集合を作る**ときは
+   `mcp__plugin_ai-database-map_station-data__list_stations`（municipality は前方一致・
+   「横浜市」で全区を束ねる）。
 2. **指標キーはカタログが唯一の真実**：指標名を推測で書かない。
    `mcp__plugin_ai-database-map_station-data__get_metrics_catalog` で正確なキー・ラベル・単位・
    利用可能な半径と年次を引いてから `rank_stations` / `compare_growth` に渡す。

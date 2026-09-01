@@ -43,6 +43,7 @@ import pandas as pd
 import psycopg
 
 from load_station_routes import ROUTES_CSV, copy_station_routes
+from load_municipality import MUNI_CSV, apply_municipality
 
 ROOT = Path(__file__).resolve().parents[1]
 CSV_PATH = ROOT / "data" / "derived" / "station_dataset.csv"
@@ -264,6 +265,13 @@ def main() -> int:
                 print(f"  station_routes ({routes_written:,} 行) copied in {time.time() - t0:.1f}s")
             else:
                 print(f"  station_routes: {ROUTES_CSV.name} が無いためスキップ")
+
+            # --- 市区町村（サイドカー・260902 PR-4）を同じトランザクションで結合 ---
+            # routes と違い**無ければ失敗**させる——list_stations（MCP）の前提なので、
+            # 欠けたまま静かにロードが通るとドリフトに気づけない（hard-fail の決定・調査文書 §9.2）。
+            t0 = time.time()
+            muni_rows = apply_municipality(cur, MUNI_CSV)
+            print(f"  municipality ({muni_rows:,} 行) applied in {time.time() - t0:.1f}s")
 
             # --- 数値メトリクスを melt（NaN・フラグの 0 をスキップ）→ station_values を COPY ---
             t0 = time.time()

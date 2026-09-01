@@ -33,3 +33,8 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+      # Claude Code プラグイン（plugins/）の静的検証。--strict は未知フィールドも落とす。
+      # 認証不要（ローカル検証のみ）。docs/260828_research_claude_auth.md §10 PR-3。
+      - name: Validate Claude Code plugin
+        run: npx -y @anthropic-ai/claude-code plugin validate plugins/ai-database-map --strict

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "station-data": {
+      "type": "http",
+      "url": "${AIDB_MCP_URL:-https://ai-database-map.vercel.app/api/mcp}"
+    }
+  }
+}

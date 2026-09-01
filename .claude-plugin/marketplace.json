@@ -1,0 +1,17 @@
+{
+  "name": "ai-database-map",
+  "description": "AI Database Map 公式マーケットプレイス：駅×半径の日本のオープンデータ分析（乗降客数・人口・地価・水害リスク）を Claude から使うプラグイン。",
+  "owner": {
+    "name": "kusui26",
+    "url": "https://github.com/kusui26"
+  },
+  "plugins": [
+    {
+      "name": "ai-database-map",
+      "source": "./plugins/ai-database-map",
+      "description": "駅×半径のオープンデータ分析（乗降客数・人口・地価・バス・事業所・従業者・水害リスク）。Station-area open-data analysis for Japan.",
+      "category": "data",
+      "keywords": ["open-data", "japan", "station", "gis", "hazard"]
+    }
+  ]
+}

@@ -621,6 +621,16 @@ Claude : [list_stations: 横浜市 → 約150駅] [build_dataset: 150駅×14列 
 
 **PR-2 で使い始められ（Layer 1）、PR-5〜7 が「高度な分析支援」の本体**。PR-6 のパイプラインは重いので早めに走らせる。
 
+> **✅ PR-1 完了（2026-09-01）。** `src/ai/tool-specs.ts` に 9 ツールの純粋定義を分離した。
+> `ToolSpec` は AI SDK にも EffectCollector にも依存せず、`run` が
+> `{ effects, forLlm }` を**値として返す**（押し込む先は消費側が決める）。`tools.ts` は
+> `toolFromSpec` で包むだけの薄い層になり、**説明文・スキーマ・エラー文言は 1 文字も変えていない**。
+> 構造化エラー（`{error, hint}`）は例外ではなく `forLlm` として返す整理にし、
+> 分離前の per-tool try/catch はアダプタの `errorFallbackJa` に写した（`getMetricsCatalog`
+> だけは分離前どおり捕捉しない）。不変条件は `tests/ai-tool-specs.test.ts` が固定——
+> Gemini が見る説明・スキーマが Spec と**同一の参照**であること、副産物の順序、
+> エラー 3 態（Error／非 Error／捕捉なし）、`origin` の伝搬。
+
 ---
 
 ## 11. 検証計画

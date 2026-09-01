@@ -631,6 +631,21 @@ Claude : [list_stations: 横浜市 → 約150駅] [build_dataset: 150駅×14列 
 > Gemini が見る説明・スキーマが Spec と**同一の参照**であること、副産物の順序、
 > エラー 3 態（Error／非 Error／捕捉なし）、`origin` の伝搬。
 
+> **✅ PR-2 完了（2026-09-01）。** `/api/mcp` を `mcp-handler@2.1`＋`@modelcontextprotocol/server@2`
+> で実装（ステートレス・Redis なし・`maxDuration` 60s）。ツールは `ai/mcp-tools.ts` が
+> ToolSpec から生成：snake_case 名（例 `search_stations`）・title 日本語・**説明は Spec の
+> 日本語そのまま＋英語 1 文併記**・全ツール `readOnlyHint`・`_meta["anthropic/maxResultSizeChars"]`。
+> text＝Gemini と同一の要約 JSON、**structuredContent＝GUI Chat Protocol（パネル＋mapActions）**
+> （例：`get_hazard_at_point` → `hazardCard`＋`showPoint`/`setHazardLayers`）。
+> カタログは `catalog://metrics` resource としても配信。濫用対策は二層——ルートで IP 全体
+> 60/分（429＋`Retry-After`）、ツール別に上流系（警報 10・避難 10・脱出 10・地点 15）/分
+> （`isError`＋再試行案内・IP ごとに独立）。実測（MCP Inspector CLI＋curl）——tools/list 9 本・
+> 実呼び出し（検索/カタログ/ハザード）・resources read・**2025-06-18 世代の initialize と
+> ステートレス tools/list が互換層で通る**（GET は 405）・70 連打で 429。
+> 契約は `tests/mcp-tools.test.ts`（8 件）が固定。認証は決定 2 どおり `none`（Phase 1）。
+> ⚠ 運用側の残作業：Vercel WAF ルール（Anthropic egress `160.79.104.0/21` 許可）と
+> Spend Management はダッシュボード設定（コードでは持てない）。
+
 ---
 
 ## 11. 検証計画

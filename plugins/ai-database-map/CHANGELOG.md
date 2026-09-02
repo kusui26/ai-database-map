@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.0 — 2026-09-03
+
+- 方法論スキルを 3 ユースケースへ拡張（CLAUDE.md §1 の想定ユーザー全対応）：
+  - `transport-planning`：輸送計画・ダイヤ検討の需要側材料（乗降トレンド 2011–2024・
+    コロナ回復×将来人口の 4 象限。ダイヤ・断面・混雑は「持っていない」と明言する規範）
+  - `market-analysis`：出店の商圏分析（業種別の按分売上・従業者=昼間 proxy・
+    競合=同業集積 proxy・2020 年=コロナ影響年の注記を必須化）
+- コマンド `/ai-database-map:demand`・`/ai-database-map:market` を追加
+- evals に transport / market の golden ケースを追加（ローカルランナーは --scenario 対応）
+
 ## 0.5.0 — 2026-09-03
 
 - 方法論スキル `station-recommendation` を追加：「〇〇市で住むのにおすすめの駅は？」の作法

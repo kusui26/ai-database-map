@@ -362,10 +362,15 @@ async function resolveHazardTarget(input: {
  * 駅一覧 → LLM 向けの要約（**識別子と位置だけ**・値は返さない・§5.3）。
  * 件数が要求上限に達したら truncated（全域を返した保証が無いことを LLM に伝える）。
  */
-function listStationsForLlm(stations: Awaited<ReturnType<typeof listStations>>, requested: number) {
+function listStationsForLlm(
+  stations: Awaited<ReturnType<typeof listStations>>,
+  requested: number,
+  note?: string,
+) {
   return {
     count: stations.length,
     truncated: stations.length >= requested,
+    ...(note === undefined ? {} : { note }),
     stations: stations.map((station) => ({
       grp: station.grp,
       name: station.label,
@@ -752,7 +757,14 @@ export const TOOL_SPECS = {
       const resolved = selectorToFilter(input, LIST_DEFAULT_LIMIT)
       if (!resolved.ok) return pure(resolved.error)
       const stations = await listStations(resolved.filter)
-      return pure(listStationsForLlm(stations, resolved.requested))
+      // 綴り違いは 0 件になるだけで区別がつかない（rank と同じ扱い・260903）。
+      // 名称の当てずっぽう再試行ループを防ぐため、次の一手を note で示す。
+      const emptyNote =
+        stations.length === 0 &&
+        ((resolved.filter.routes?.length ?? 0) > 0 || (resolved.filter.operators?.length ?? 0) > 0)
+          ? '該当 0 件でした。路線名はデータの正式名称で会社名を含まない形（例「東横線」「東海道新幹線」）、会社名は operators に正式名称（例「東急電鉄」）。0 件が続くときは operators だけで会社の全駅を取得してください。'
+          : undefined
+      return pure(listStationsForLlm(stations, resolved.requested, emptyNote))
     },
   }),
 
@@ -861,7 +873,7 @@ export const TOOL_SPECS = {
         if (listed.length === 0) {
           return pure({
             error: '条件に合う駅が 0 件でした',
-            hint: '市区町村の綴りや路線の正式名称（例「東海道新幹線」）を確認し、条件を緩めてください。',
+            hint: '市区町村の綴りや路線名を確認してください。路線名は会社名を含まない形（例「東横線」「東海道新幹線」）。0 件が続くときは operators（会社の正式名称）だけで全駅を取得してください。',
           })
         }
         truncated = listed.length >= resolvedSelector.requested

@@ -1,0 +1,18 @@
+# golden シナリオ（出店・商圏）：カフェ出店の 3 駅比較（500m 商圏）。
+# 按分推計・2020年＝コロナ影響年・proxy（従業者=昼間/競合=同業集積/地価≠賃料）を
+# 明示して比較できるか（market-analysis スキル）。
+schema_version: '1.1'
+name: golden-cafe-market
+tags: [golden, market]
+runs: 3
+max_turns: 30
+timeout_seconds: 900
+allowed_tools: ['Bash', 'Write', 'Read']
+
+context:
+  history_file: history.md
+
+prompt: |
+  業種はカフェ（飲食）です。商圏は徒歩圏の500mで。
+  候補は横浜駅・武蔵小杉駅・自由が丘駅の3駅を比較してください。
+  需要と競合のバランス重視で、地価も参考に見たいです。

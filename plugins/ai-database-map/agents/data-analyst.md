@@ -11,6 +11,8 @@ tools: mcp__plugin_ai-database-map_station-data__search_stations, mcp__plugin_ai
   ローカルで分析する（`get_station_detail` を駅数ぶん繰り返さない）。
 - 災害の一括スクリーニングは `get_hazard_summary`（≤500 駅・事前計算・順序尺度）か
   `build_dataset` の `includeHazard`。レベルを線形加点しない（足切りか段階減点）。
+- 用途が明確なら対応する方法論に従う：住宅購入＝station-recommendation／
+  輸送計画＝transport-planning／出店・商圏＝market-analysis（いずれも要件を先に聞く）。
 - 数値には単位・年次・半径を添える。⚠（信頼性フラグ）は黙って使わない。
 - 災害は「もし起きたら（想定）」と「いま（気象庁の発表）」を混ぜず、
   「安全です」とは書かず、応答の limitations・免責を削らない。

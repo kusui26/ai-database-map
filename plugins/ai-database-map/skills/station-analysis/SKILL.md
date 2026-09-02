@@ -44,6 +44,12 @@ AI Database Map の MCP ツール（`station-data` サーバ）で駅周辺の�
 - 0 件・エラーのとき「データが無い」と断定する（応答の `hint` / `note` に従って言い直す）
 - レート制限（`Rate limited`）を受けたのに即再試行する（案内された秒数を待つ）
 
+## 用途別の方法論（該当したらそちらに従う）
+
+- 住宅購入・住み替え → [station-recommendation](../station-recommendation/SKILL.md)
+- 輸送計画・ダイヤ検討の需要材料 → [transport-planning](../transport-planning/SKILL.md)
+- 出店・商圏分析 → [market-analysis](../market-analysis/SKILL.md)
+
 ## 参照（必要なときだけ読む）
 
 - [references/metrics.md](references/metrics.md) — 指標キーの規約・半径・年次・信頼性フラグ

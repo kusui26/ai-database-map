@@ -157,6 +157,29 @@ describe('スキルの互換性（claude.ai / Cowork でハードエラーにし
     }
   })
 
+  it('分析の型（共通骨格）が station-analysis に一枚岩で明文化されている', () => {
+    const skill = readFileSync(`${ROOT}/skills/station-analysis/SKILL.md`, 'utf-8')
+    expect(skill).toContain('分析の型')
+    expect(skill).toContain('ツールより先')
+    expect(skill).toContain('既定を宣言して')
+    expect(skill).toContain('正規化')
+    expect(skill).toContain('線形加点しない')
+    expect(skill).toContain('±20%')
+    expect(skill).toContain('代表点')
+    expect(skill).toContain('出典')
+    expect(skill).toContain('preview')
+  })
+
+  it('用途レシピは型のダイジェストを持つ（骨格が読み込まれなくても崩れない）', () => {
+    for (const skill of ['station-recommendation', 'transport-planning', 'market-analysis']) {
+      const source = readFileSync(`${ROOT}/skills/${skill}/SKILL.md`, 'utf-8')
+      expect(source, skill).toContain('分析の型')
+      expect(source, skill).toContain('既定を宣言して')
+      expect(source, skill).toContain('±20%')
+      expect(source, skill).toContain('出典')
+    }
+  })
+
   it('おすすめ駅の方法論に §11 チェックリストの核が明文化されている', () => {
     const skill = readFileSync(`${ROOT}/skills/station-recommendation/SKILL.md`, 'utf-8')
     // ①好みを先に聞く ④正規化 ⑤ハザード非線形・「安全」禁止 ⑥敏感度 ⑦限界（代理・代表点）と出典

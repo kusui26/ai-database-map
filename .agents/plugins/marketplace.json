@@ -1,0 +1,20 @@
+{
+  "name": "ai-database-map",
+  "interface": {
+    "displayName": "AI Database Map"
+  },
+  "plugins": [
+    {
+      "name": "ai-database-map",
+      "source": {
+        "source": "local",
+        "path": "./plugins/ai-database-map"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_USE"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.0 — 2026-09-03
+
+- **Codex 対応**：`.codex-plugin/plugin.json`（同じ skills/ と本番 MCP を参照）＋
+  リポジトリ直下 `.agents/plugins/marketplace.json`。
+  `codex plugin marketplace add kusui26/AI-Database-Map` → `/plugins` で導入
+- 導入ページ `https://ai-database-map.vercel.app/ai`（コマンド・コネクタ導入リンク・
+  プラン別/枠の注意）を公開
+
 ## 0.6.1 — 2026-09-03
 
 - リファクタ：意思決定支援の共通骨格を **station-analysis の「分析の型（8 段）」** に抽出し、

@@ -65,6 +65,14 @@ export function AboutDialog({
                 数値は各公的統計の二次加工であり、原典の定義・年次・集計単位に依存します。母数が小さい・一部の運営会社しかデータが無いなど、注意すべき値には
                 ⚠ を付しています。
               </p>
+              <p>
+                <a
+                  href="/ai"
+                  className="text-indigo-600 underline underline-offset-2 hover:text-indigo-700"
+                >
+                  あなたの Claude（Claude Code / Claude.ai）からこのデータを使う →
+                </a>
+              </p>
             </section>
 
             <section className="space-y-2">

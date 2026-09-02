@@ -1,0 +1,34 @@
+{
+  "name": "ai-database-map",
+  "version": "0.7.0",
+  "description": "駅×半径の日本のオープンデータ分析（乗降客数・人口・地価・売上・災害リスク）。Station-area open-data analysis for Japan from Codex.",
+  "author": {
+    "name": "kusui26",
+    "url": "https://github.com/kusui26"
+  },
+  "homepage": "https://ai-database-map.vercel.app/ai",
+  "repository": "https://github.com/kusui26/AI-Database-Map",
+  "license": "MIT",
+  "keywords": ["open-data", "japan", "station", "gis", "hazard", "mcp"],
+  "skills": "./skills/",
+  "mcpServers": {
+    "station-data": {
+      "type": "http",
+      "url": "https://ai-database-map.vercel.app/api/mcp"
+    }
+  },
+  "interface": {
+    "displayName": "AI Database Map",
+    "shortDescription": "駅×半径の日本のオープンデータ分析（12 ツール＋分析スキル）",
+    "longDescription": "全国 9,273 駅×半径のオープンデータ（乗降客数・人口・地価・売上・バス・事業所・従業者・水害/土砂リスク）を 12 の MCP ツールで照会し、住宅購入・鉄道の輸送計画・出店の商圏分析をデータで支援します。多数駅の比較は build_dataset が CSV（短命 URL）を 1 回で生成し、ローカルの pandas で分析します。読み取り専用・認証不要。",
+    "developerName": "kusui26",
+    "category": "Productivity",
+    "capabilities": ["Read"],
+    "websiteURL": "https://ai-database-map.vercel.app",
+    "defaultPrompt": [
+      "横浜市で中古マンションを買う予定。おすすめの駅は？",
+      "東急東横線の駅ごとの需要トレンドを分析して",
+      "武蔵小杉駅 500m 圏でカフェの商圏分析をして"
+    ]
+  }
+}

@@ -824,6 +824,23 @@ Claude : [list_stations: 横浜市 → 約150駅] [build_dataset: 150駅×14列 
 > ＝11/11 を一発通過**（本番 MCP・sonnet 実走・計 ~$5）。プラグイン **0.6.1**。
 > 以後の用途追加の限界費用は「レシピカード 1 枚（~40 行）＋eval シナリオ 1 本」。
 
+> **✅ PR-8 完了（2026-09-03・導入ページ＋Codex 対応）。**
+> **導入ページ `/ai`**（アプリ内 LP・§6 の内容を集約）：Claude Code の 2 コマンド（コピー
+> ボタン付き）・**Claude.ai コネクタ導入リンク**（§4.6 の事前入力 URL・Free 1 個の注記）・
+> Cowork・その他 MCP クライアント・ツール 12 本の一覧・**プラン別/枠の注意**（Pro/Max 5h＋
+> 週次共有・`/usage`・応答は要約中心で行データは CSV URL＝枠にやさしい設計・レート制限・
+> 読み取り専用）。About ダイアログから導線。**README** にも同内容の「あなたの Claude で使う」
+> 節（導入表・入っているもの・注意）を追加し、ステータスを Step2 完了へ更新。
+> **Codex 対応（PostHog 方式）**：`plugins/ai-database-map/.codex-plugin/plugin.json`
+> （公式スキーマの必須項目＋interface・**skills/ は Claude と共有**・MCP は inline の素の URL——
+> Claude 用 `.mcp.json` の `${AIDB_MCP_URL:-…}` 展開が Codex に無い前提で共有しない）＋
+> リポジトリ直下 `.agents/plugins/marketplace.json`（source: local・path 方式・policy は
+> 許容 enum）。導入は `codex plugin marketplace add kusui26/AI-Database-Map` → `/plugins`。
+> 形式は openai/codex 同梱の plugin-json-spec と PostHog/ai-plugin の実ファイルに逐語で
+> 突き合わせ、`tests/codex-plugin.test.ts`（6 件・**版の Claude/Codex 同期**を固定）で保全。
+> ⚠ Codex CLI が手元に無いため**実導入は未検証**（スキーマ準拠のみ・README に注記なし＝
+> 動かない報告が来たら Issue で追う）。プラグイン **0.7.0**。
+
 ---
 
 ## 11. 検証計画

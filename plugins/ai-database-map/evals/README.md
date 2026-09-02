@@ -28,12 +28,18 @@ python3 pipeline/eval_recommend.py --runs 5
 同じ決定的グレーダ＋LLM 判定（haiku）で採点する（結果は scratch へ・リポジトリを汚さない）。
 どちらのランナーも **5 回中 5 回合格**が受け入れ条件（§11）。
 
-## ケース
+## ケース（3 ユースケース＝CLAUDE.md §1 の想定ユーザー）
 
-- `golden-yokohama-ask/` … ターン 1：**データツールを呼ぶ前に**好み（予算/資産・通勤・災害の
-  許容度）を聞くか（チェックリスト ①）
-- `golden-yokohama-full/` … 好みへの回答後の本走：対象集合 → `build_dataset`
-  （`includeHazard: true`）→ ローカル分析 → 上位 5 駅＋限界・出典（②〜⑧）
+- `golden-yokohama-ask/` … 住宅購入・ターン 1：**データツールを呼ぶ前に**好み（予算/資産・
+  通勤・災害の許容度）を聞くか（チェックリスト ①）
+- `golden-yokohama-full/` … 住宅購入・本走：対象集合 → `build_dataset`
+  （`includeHazard: true`）→ ローカル分析 → 上位 5 駅＋限界・出典（②〜⑧・runs 5）
+- `golden-toyoko-demand/` … 輸送計画（東急東横線）：ダイヤ・断面・混雑を「持っていない」と
+  明言しつつ、回復×将来で駅を分類できるか（runs 3）
+- `golden-cafe-market/` … 出店・商圏（カフェ 3 駅・500m）：按分推計・コロナ影響年・
+  proxy（昼間/競合/賃料）を明示して比較できるか（runs 3）
+
+ローカルランナーは `--scenario housing|transport|market` で同じ 3 本を実走する。
 
 ## 注意
 

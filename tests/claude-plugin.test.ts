@@ -137,6 +137,8 @@ describe('スキルの互換性（claude.ai / Cowork でハードエラーにし
       'hazard-reading',
       'analyze-csv',
       'station-recommendation',
+      'transport-planning',
+      'market-analysis',
     ]) {
       const front = frontmatterOf(`${ROOT}/skills/${skill}/SKILL.md`)
       for (const key of Object.keys(front)) {
@@ -148,7 +150,7 @@ describe('スキルの互換性（claude.ai / Cowork でハードエラーにし
   })
 
   it('コマンド型スキルは argument-hint を持ち、name がディレクトリ名と一致', () => {
-    for (const skill of ['station', 'rank', 'recommend']) {
+    for (const skill of ['station', 'rank', 'recommend', 'demand', 'market']) {
       const front = frontmatterOf(`${ROOT}/skills/${skill}/SKILL.md`)
       expect(front['name']).toBe(skill)
       expect((front['argument-hint'] ?? '').length).toBeGreaterThan(0)
@@ -167,6 +169,25 @@ describe('スキルの互換性（claude.ai / Cowork でハードエラーにし
     expect(skill).toContain('代表点')
     expect(skill).toContain('出典')
     expect(skill).toContain('uncovered')
+  })
+
+  it('輸送計画の方法論に「持っていないデータへの踏み込み禁止」が明文化されている', () => {
+    const skill = readFileSync(`${ROOT}/skills/transport-planning/SKILL.md`, 'utf-8')
+    expect(skill).toContain('断面輸送量')
+    expect(skill).toContain('混雑率')
+    expect(skill).toContain('持っていない')
+    expect(skill).toContain('断定しない')
+    expect(skill).toContain('出典')
+  })
+
+  it('商圏分析の方法論に「推計と proxy の明示」が明文化されている', () => {
+    const skill = readFileSync(`${ROOT}/skills/market-analysis/SKILL.md`, 'utf-8')
+    expect(skill).toContain('按分')
+    expect(skill).toContain('コロナ影響')
+    expect(skill).toContain('賃料ではない')
+    expect(skill).toContain('昼間')
+    expect(skill).toContain('店舗数そのものではない')
+    expect(skill).toContain('出典')
   })
 
   it('災害の言い方の核（安全と言わない・限界を削らない）がスキルに明文化されている', () => {

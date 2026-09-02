@@ -1,0 +1,17 @@
+# golden シナリオ（輸送計画）：東急東横線の需要分析。
+# ダイヤ・断面・混雑を「持っていない」と明言し、運行計画を断定せずに
+# 回復×将来の分類材料を出せるか（transport-planning スキル）。
+schema_version: '1.1'
+name: golden-toyoko-demand
+tags: [golden, transport]
+runs: 3
+max_turns: 30
+timeout_seconds: 900
+allowed_tools: ['Bash', 'Write', 'Read']
+
+context:
+  history_file: history.md
+
+prompt: |
+  対象は東急東横線でお願いします。目的は今後10年の需要維持性の把握（中期計画の材料）です。
+  コロナからの回復と将来人口の両方を見たいです。

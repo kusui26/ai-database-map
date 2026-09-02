@@ -1,0 +1,18 @@
+# golden シナリオ・本走（チェックリスト ②〜⑧）：
+# 好みが確定した後、対象集合 → build_dataset(includeHazard) → ローカル分析 →
+# 上位 5 駅＋敏感度＋限界・出典まで一気通貫でやり切るか。
+schema_version: '1.1'
+name: golden-yokohama-full
+tags: [golden, recommendation]
+runs: 5
+max_turns: 30
+timeout_seconds: 900
+allowed_tools: ['Bash', 'Write', 'Read']
+
+context:
+  history_file: history.md
+
+prompt: |
+  予算重視でお願いします。通勤は東京駅まで45分以内が希望です。
+  災害は、洪水の危険が高い駅を避けたい——足切りでお願いします。
+  重みはファミリーの初期値でOKです。

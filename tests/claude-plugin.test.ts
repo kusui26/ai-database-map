@@ -132,7 +132,12 @@ describe('スキルの互換性（claude.ai / Cowork でハードエラーにし
   ])
 
   it('知識型スキルは標準フィールドだけ（アップロード互換）', () => {
-    for (const skill of ['station-analysis', 'hazard-reading', 'analyze-csv']) {
+    for (const skill of [
+      'station-analysis',
+      'hazard-reading',
+      'analyze-csv',
+      'station-recommendation',
+    ]) {
       const front = frontmatterOf(`${ROOT}/skills/${skill}/SKILL.md`)
       for (const key of Object.keys(front)) {
         expect(STANDARD_KEYS.has(key), `${skill}: ${key}`).toBe(true)
@@ -143,11 +148,25 @@ describe('スキルの互換性（claude.ai / Cowork でハードエラーにし
   })
 
   it('コマンド型スキルは argument-hint を持ち、name がディレクトリ名と一致', () => {
-    for (const skill of ['station', 'rank']) {
+    for (const skill of ['station', 'rank', 'recommend']) {
       const front = frontmatterOf(`${ROOT}/skills/${skill}/SKILL.md`)
       expect(front['name']).toBe(skill)
       expect((front['argument-hint'] ?? '').length).toBeGreaterThan(0)
     }
+  })
+
+  it('おすすめ駅の方法論に §11 チェックリストの核が明文化されている', () => {
+    const skill = readFileSync(`${ROOT}/skills/station-recommendation/SKILL.md`, 'utf-8')
+    // ①好みを先に聞く ④正規化 ⑤ハザード非線形・「安全」禁止 ⑥敏感度 ⑦限界（代理・代表点）と出典
+    expect(skill).toContain('ツールより先')
+    expect(skill).toContain('正規化')
+    expect(skill).toContain('線形')
+    expect(skill).toContain('「安全です」とは書かない')
+    expect(skill).toContain('±20%')
+    expect(skill).toContain('マンション価格そのものではない')
+    expect(skill).toContain('代表点')
+    expect(skill).toContain('出典')
+    expect(skill).toContain('uncovered')
   })
 
   it('災害の言い方の核（安全と言わない・限界を削らない）がスキルに明文化されている', () => {

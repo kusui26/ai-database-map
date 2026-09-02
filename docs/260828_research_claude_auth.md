@@ -763,6 +763,34 @@ Claude : [list_stations: 横浜市 → 約150駅] [build_dataset: 150駅×14列 
 > 総合/5 グループのレベル・避難・標高・nearby/uncovered フラグ×5。トークンに hazard フラグ・
 > 旧トークン互換）。プラグイン **0.4.0**（analyze-csv／station-analysis／data-analyst に導線）。
 
+> **✅ PR-7 完了（2026-09-03）。** 方法論スキル **`station-recommendation`**＋
+> **`/ai-database-map:recommend`**＋golden シナリオ受け入れテスト（§11 の本丸）。
+> **スキル**：§5.4 の 9 作法を明文化し、実走で得た運用規範を 3 つ足した——
+> ①確認は最初の 1 回だけ（残る曖昧さは**合理的な既定を宣言して同じ応答で完走**。
+> 「予算重視×ファミリー初期値」の軽い矛盾は調整案を明示採用）②所要時間データは持たない＝
+> **通勤条件は路線近似**と先に言う ③routes/operators は**まとめて 1 回**で渡す。
+> 重みプリセットは plan_house_hunting §3 の 3 種を「例として提示し、必ず確認」。
+> **evals**：公式 `claude plugin eval` フォーマット（case.yaml＋graders 9 本・runs 5・
+> ask/full の 2 ケース）で `plugins/ai-database-map/evals/` に同梱。plugin eval は
+> early access 未有効のため、**同一シナリオ・同一判定のローカルランナー**
+> `pipeline/eval_recommend.py`（`claude -p --plugin-dir`＝セッション限定ロード・
+> グローバル状態不変・決定的グレーダ＋haiku 判定・`--mcp-url` でローカル検証可）で実走。
+> **実走が本物のバグを 2 件炙り出した**：
+> ①（プロダクト・重大）**Claude Code の MCP クライアントは `structuredContent` があると
+> content の text をモデルに見せない**——パネルなしツール（list/build/一括）が
+> **空の `{"panels":[],"mapActions":[]}`** に見えていた（#115 以来の潜在バグ。モデルは
+> 空データで捏造を拒否＝設計どおりの健全動作で発覚）。`structuredContent.result` に
+> LLM 向け要約を同梱して修正（`mcp-tools.ts`・全クライアントで同じ答えに）。
+> ②（採点）『「安全です」**とは言えません**』という模範的な否定を正規表現が誤検知→
+> 断定形（文末）のみ弾く形に修正。
+> **受け入れ実測**：調整 3 周（0/1→1/1→2/5→**5 回連続 5/5 合格**）。sonnet 実走・
+> 1 走 ~$0.6・MCP 呼び出し 3〜7 回/走（get_station_detail 0 回・ローカル pandas 分析）。
+> 合格応答の質（実物）：東京駅直通 7 駅へ近似→**横浜・保土ヶ谷を critical で足切り**（明示）→
+> min-max 正規化を脚注明記→±20% 敏感度→各駅に弱点行（**東戸塚の土砂 danger を正直に指摘**）→
+> 限界 6 項目＋出典 5 群。プラグイン **0.5.0**。
+> ⚠ structuredContent 修正は**マージ後のデプロイで本番反映**——それまで Claude Code からの
+> 実利用は空応答のまま（Inspector/API 直は無傷）。
+
 ---
 
 ## 11. 検証計画

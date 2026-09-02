@@ -282,9 +282,14 @@ function registerSpec<Schema extends z.ZodTypeAny, Out>(
       try {
         const parsed = spec.inputSchema.parse(input)
         const { effects, forLlm } = await spec.run(parsed, { origin })
+        // ⚠ result を structuredContent にも入れる（260903・PR-7 の実走 eval で発見）。
+        // Claude Code の MCP クライアントは structuredContent があると content の text を
+        // モデルに見せない。パネルだけを入れていた頃は、パネルなしツール（list/build/一括）が
+        // **空の {"panels":[],"mapActions":[]} に見えて**いた——どのクライアントでも
+        // 同じ答えになるよう、LLM 向け要約を両方に載せる。
         return {
           content: [{ type: 'text', text: JSON.stringify(forLlm) }],
-          structuredContent: structuredContentFor(effects),
+          structuredContent: { result: forLlm, ...structuredContentFor(effects) },
         }
       } catch (error) {
         if (spec.errorFallbackJa === null) throw error

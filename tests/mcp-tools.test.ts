@@ -133,8 +133,13 @@ describe('registerMcpTools（登録の網羅と中身）', () => {
       { origin: 'http://localhost:3000' },
     )
     expect(firstText(result)).toBe(JSON.stringify(viaSpec.forLlm))
-    // 副産物なしのツールは structuredContent も空の protocol 形。
-    expect(result.structuredContent).toEqual({ panels: [], mapActions: [] })
+    // structuredContent にも result（LLM 向け要約）を載せる——structuredContent を優先する
+    // クライアント（Claude Code）でも空に見えないように（260903 の実走 eval で発見）。
+    expect(result.structuredContent).toEqual({
+      result: viaSpec.forLlm,
+      panels: [],
+      mapActions: [],
+    })
   })
 
   it('入力は Spec と同一の Zod で検証される（未知の形は実行前に弾く）', async () => {

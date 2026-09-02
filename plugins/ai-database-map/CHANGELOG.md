@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.0 — 2026-09-03
+
+- 方法論スキル `station-recommendation` を追加：「〇〇市で住むのにおすすめの駅は？」の作法
+  （要件を先に聞く→対象集合→CSV→正規化・重み合成→±20% 敏感度→上位 5 駅＋限界・出典。
+  災害は線形加点しない・「安全」と言わない）
+- コマンド `/ai-database-map:recommend <エリア>` を追加
+- golden シナリオ受け入れテスト（`evals/`・`claude plugin eval` で採点）を同梱
+- 修正：MCP ツール結果の `structuredContent` に `result`（LLM 向け要約）を同梱。
+  structuredContent を優先するクライアント（Claude Code）で、パネルなしツールの結果が
+  空に見えていた問題を解消（実走 eval で発見）
+
 ## 0.4.0 — 2026-09-03
 
 - `get_hazard_summary` を追加：全 9,273 駅の水害・土砂災害サマリ（事前計算・順序尺度）を

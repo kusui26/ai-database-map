@@ -1,0 +1,11 @@
+# golden シナリオ・ターン 1（チェックリスト ①）：
+# 重み付け・データ取得の前に、好み（予算/資産・通勤・災害の許容度）を聞くか。
+schema_version: '1.1'
+name: golden-yokohama-ask
+tags: [golden, recommendation]
+runs: 5
+max_turns: 4
+timeout_seconds: 300
+
+prompt: |
+  横浜市で中古マンションを買おうと思っています。おすすめの駅はどこですか？

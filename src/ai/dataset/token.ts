@@ -43,6 +43,8 @@ export const datasetQuerySchema = z
     selector: datasetSelectorSchema.optional(),
     keys: z.array(z.string()).min(1),
     shape: z.enum(['wide', 'long']),
+    /** 駅別ハザードサマリ（事前計算）を hazard_ 列として結合する（260903 PR-6）。 */
+    hazard: z.boolean().optional(),
   })
   .refine((query) => (query.grps === undefined) !== (query.selector === undefined), {
     message: 'grps と selector はどちらか一方',

@@ -105,6 +105,7 @@ describe('完全修飾ツール名（打ち間違いは静かに壊れる）', (
       'rank_stations',
       'get_metrics_catalog',
       'build_dataset',
+      'get_hazard_summary',
     ]) {
       expect(referenced.has(key), key).toBe(true)
     }

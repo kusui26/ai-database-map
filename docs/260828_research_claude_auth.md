@@ -738,6 +738,31 @@ Claude : [list_stations: 横浜市 → 約150駅] [build_dataset: 150駅×14列 
 > だけが増える（得る機能ゼロ）。それまでは「サイドカー＋ローダ hard-fail」が正。統合方向も
 > `.ipynb` に足すのではなく **notebook を `pipeline/` スクリプト群へ寄せる**既定方針に従う。
 
+> **✅ PR-6 完了（2026-09-03・G3 解消）。** 上の方針どおりに実装した。
+> **パイプライン**：`hazardPointAt` を追加分離した `assembleHazardPoint`（組み立て 1 か所・
+> API 不変）を、`pipeline/build_station_hazard.ts`（tsx）が全 9,273 駅にオフライン実行
+> （メッシュ＋公式タイル・**浸水ナビなし**・1 次メッシュ順で LRU が効く・並列 2・再開可能）。
+> **実測 48 分（3.2 駅/秒）**で完走。射影は `domain/hazard/summary.ts` → 形は
+> `shared/hazard-summary.ts`（version 1・DB/jsonl/応答/CSV の単一の真実）。
+> **実バグを 1 件発見・修正**：広島湾岸の高潮タイルだけ**パレット PNG（カラータイプ 3）**で
+> 配信されており、自前デコーダが読めず 72 駅が失敗（＝本番 `/api/hazard/point` でも同じ駅で
+> 1 レイヤ欠けていた）。`shared/png.ts` に PLTE＋tRNS 対応を追加（fail-fast は維持・
+> `tests/png-palette.test.ts`）。修正後、大竹#0 は**高潮浸水域内**と正しく判定される。
+> **DB**：migration `20260903150000`（`station_hazard`・RPC `station_hazard_summaries` ≤500）
+> 適用済み・独立ローダ `load_station_hazard.py`（**全駅揃わなければ失敗**・フルロード非同梱）で
+> **9,273 行投入済み**。分布：none 2,570／caution 657／warning 2,416／danger 1,686／
+> **critical 1,944**。避難の目安：立退き 3,630・垂直 3,067・その場 1,611・判定不能 965。
+> uncovered（図なし）：内水 6,046・高潮 5,160・津波 3,022——**整備状況の偏りが数字で見える**
+> （「none＝安全」と読ませない設計が全国規模で効く）。
+> **§11 データ整合（実測）**：系統抽出 48 駅で、ライブ（浸水ナビ込み）との**厳密フィールド
+> （レベル・避難・nearby/uncovered・標高）完全一致 48/48**（ナビ込み比較 36 駅・上流不安定で
+> 区分値のみ比較 12 駅）。`worstJa` の言い方差 2 駅＝ナビの実測 m 表記（想定どおり・
+> レベルは不変）。検証は `pipeline/check_station_hazard.ts`（再実行可能）。
+> **ツール**：`get_hazard_summary`（12 本目・grps ≤500・limitations と出典を必ず同梱・
+> **Gemini には出さない** §5.6）＋ `build_dataset` の **`includeHazard`**（`hazard_` 18 列＝
+> 総合/5 グループのレベル・避難・標高・nearby/uncovered フラグ×5。トークンに hazard フラグ・
+> 旧トークン互換）。プラグイン **0.4.0**（analyze-csv／station-analysis／data-analyst に導線）。
+
 ---
 
 ## 11. 検証計画

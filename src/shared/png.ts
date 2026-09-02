@@ -9,12 +9,15 @@
  * そのためだけに画像ライブラリを足すのは重いので、**実際に配信されている形式に絞った**
  * デコーダをここに置く。配信タイルを全レイヤ実測して確かめた前提は次のとおり。
  *
- * | 前提 | 実測（2026-08-26・全 15 レイヤ） |
+ * | 前提 | 実測（2026-08-26・全 15 レイヤ／2026-09-03 追補） |
  * |---|---|
  * | 256×256・ビット深度 8 | 全レイヤで一致 |
- * | カラータイプ 6（RGBA）または 2（RGB） | ハザード 11 種は RGBA、地形 1 種が RGB |
+ * | カラータイプ 6（RGBA）・2（RGB）・**3（パレット）** | ハザード 11 種は RGBA、地形 1 種が RGB。**高潮の一部地域（広島湾岸で実測）だけパレット形式** |
  * | インタレースなし | 全レイヤで 0 |
  * | IDAT が複数に分かれることがある | あり（地形レイヤ）。連結してから展開する |
+ *
+ * パレット（カラータイプ 3）は PLTE を RGB に展開し、tRNS があれば透明度も適用する
+ * （タイルの「塗られていない」＝α0 の判定が成立するために必須）。
  *
  * **前提を外れた PNG は読まずに throw する。** 静かに間違った色を返すと、
  * 「地図は白いのにカードは浸水域」より悪い——**間違った浸水深を断定してしまう**。
@@ -36,27 +39,46 @@ export type DecodedImage = {
 }
 
 const SIGNATURE = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
-/** カラータイプ → 1 画素のチャンネル数（対応するのはこの 2 つだけ）。 */
+/**
+ * カラータイプ → 1 画素のバイト数（フィルタ復元の単位）。
+ * 3＝パレット（1 バイト＝パレット索引。RGB への展開は書き出し時に行う）。
+ */
 const CHANNELS: ReadonlyMap<number, number> = new Map([
   [2, 3],
+  [3, 1],
   [6, 4],
 ])
 const SUPPORTED_BIT_DEPTH = 8
 const CHUNK_HEADER_BYTES = 8
 const CHUNK_CRC_BYTES = 4
 const IHDR_BYTES = 13
+const PALETTE_COLOR_TYPE = 3
+/** PLTE の 1 色ぶん（R, G, B）。 */
+const PALETTE_ENTRY_BYTES = 3
 
 type Header = {
   readonly width: number
   readonly height: number
+  readonly colorType: number
   readonly channels: number
 }
 
-/** PNG のチャンク列から IHDR と IDAT を取り出す（他のチャンクは読み飛ばす）。 */
-function readChunks(bytes: Uint8Array): { header: Uint8Array; data: Uint8Array[] } {
+type Chunks = {
+  readonly header: Uint8Array
+  readonly data: Uint8Array[]
+  /** PLTE（RGB の並び）。パレット形式でなければ null。 */
+  readonly palette: Uint8Array | null
+  /** tRNS（パレット索引ごとの α。無い索引は不透明）。 */
+  readonly alpha: Uint8Array | null
+}
+
+/** PNG のチャンク列から IHDR・IDAT・PLTE・tRNS を取り出す（他のチャンクは読み飛ばす）。 */
+function readChunks(bytes: Uint8Array): Chunks {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
   const data: Uint8Array[] = []
   let header: Uint8Array | null = null
+  let palette: Uint8Array | null = null
+  let alpha: Uint8Array | null = null
   let offset = SIGNATURE.length
   while (offset + CHUNK_HEADER_BYTES <= bytes.length) {
     const length = view.getUint32(offset)
@@ -64,11 +86,13 @@ function readChunks(bytes: Uint8Array): { header: Uint8Array; data: Uint8Array[]
     const body = bytes.subarray(offset + CHUNK_HEADER_BYTES, offset + CHUNK_HEADER_BYTES + length)
     if (type === 'IHDR') header = body
     if (type === 'IDAT') data.push(body)
+    if (type === 'PLTE') palette = body
+    if (type === 'tRNS') alpha = body
     if (type === 'IEND') break
     offset += CHUNK_HEADER_BYTES + length + CHUNK_CRC_BYTES
   }
   if (header === null) throw new Error('PNG に IHDR チャンクがありません')
-  return { header, data }
+  return { header, data, palette, alpha }
 }
 
 /** IHDR を読み、**対応できない形式ならここで落とす**（静かに間違えない）。 */
@@ -82,10 +106,10 @@ function readHeader(ihdr: Uint8Array): Header {
   if (depth !== SUPPORTED_BIT_DEPTH || channels === undefined || interlace !== 0) {
     throw new Error(
       `対応していない PNG です（ビット深度 ${depth} / カラータイプ ${colorType} / インタレース ${interlace}）。` +
-        'ビット深度 8・カラータイプ 2 か 6・インタレースなしのみ読めます',
+        'ビット深度 8・カラータイプ 2・3・6・インタレースなしのみ読めます',
     )
   }
-  return { width: view.getUint32(0), height: view.getUint32(4), channels }
+  return { width: view.getUint32(0), height: view.getUint32(4), colorType, channels }
 }
 
 /** zlib（PNG の IDAT）を展開する。ブラウザと Node のどちらでも同じ実装が動く。 */
@@ -148,14 +172,45 @@ function writeLine(rgba: Uint8Array, line: Uint8Array, row: number, header: Head
 }
 
 /**
+ * パレット形式の走査線を RGBA8 へ展開する（PLTE の索引 → RGB・tRNS → α）。
+ * **範囲外の索引は throw**——壊れたタイルから間違った色を作らない。
+ */
+function writePaletteLine(
+  rgba: Uint8Array,
+  line: Uint8Array,
+  row: number,
+  header: Header,
+  palette: Uint8Array,
+  alpha: Uint8Array | null,
+): void {
+  const entries = Math.floor(palette.length / PALETTE_ENTRY_BYTES)
+  for (let column = 0; column < header.width; column += 1) {
+    const index = line[column] ?? 0
+    if (index >= entries) {
+      throw new Error(`PNG のパレット索引が範囲外です（${index}/${entries} 色）`)
+    }
+    const from = index * PALETTE_ENTRY_BYTES
+    const to = (row * header.width + column) * 4
+    rgba[to] = palette[from] ?? 0
+    rgba[to + 1] = palette[from + 1] ?? 0
+    rgba[to + 2] = palette[from + 2] ?? 0
+    // tRNS は先頭の索引ぶんだけ持てる（無い索引は不透明・PNG 仕様 11.3.2）。
+    rgba[to + 3] = alpha === null || index >= alpha.length ? 0xff : (alpha[index] ?? 0xff)
+  }
+}
+
+/**
  * PNG を RGBA8 に展開する。**対応外の形式・壊れたデータは文脈付きで throw**。
  */
 export async function decodePng(bytes: Uint8Array): Promise<DecodedImage> {
   if (bytes.length < SIGNATURE.length || SIGNATURE.some((byte, i) => bytes[i] !== byte)) {
     throw new Error(`PNG のシグネチャがありません（先頭 ${bytes.length} バイト）`)
   }
-  const { header: ihdr, data } = readChunks(bytes)
+  const { header: ihdr, data, palette, alpha } = readChunks(bytes)
   const header = readHeader(ihdr)
+  if (header.colorType === PALETTE_COLOR_TYPE && palette === null) {
+    throw new Error('パレット形式（カラータイプ 3）なのに PLTE チャンクがありません')
+  }
   const raw = await inflate(data)
   const stride = header.width * header.channels
   const expected = (stride + 1) * header.height
@@ -168,7 +223,11 @@ export async function decodePng(bytes: Uint8Array): Promise<DecodedImage> {
     const at = row * (stride + 1)
     const filtered = raw.subarray(at + 1, at + 1 + stride)
     const line = unfilterLine(raw[at] ?? 0, filtered, previous, header.channels)
-    writeLine(rgba, line, row, header)
+    if (header.colorType === PALETTE_COLOR_TYPE && palette !== null) {
+      writePaletteLine(rgba, line, row, header, palette, alpha)
+    } else {
+      writeLine(rgba, line, row, header)
+    }
     previous = line
   }
   return { width: header.width, height: header.height, rgba }

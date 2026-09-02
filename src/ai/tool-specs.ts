@@ -50,6 +50,13 @@ import {
   type DatasetQuery,
   type DatasetSelector,
 } from './dataset/token'
+import {
+  HAZARD_DATASET_COLUMNS,
+  hazardCsvCells,
+  SUMMARY_HAZARD_GROUPS,
+  type HazardGroupSummary,
+} from '@/shared/hazard-summary'
+import { HAZARD_SUMMARY_LIMITATIONS_JA, hazardSummarySources } from '@/domain/hazard/summary'
 import { evacuationDisasterKeySchema, EVACUATION_DISASTERS } from '@/shared/evacuation'
 import {
   datasetRows,
@@ -58,8 +65,10 @@ import {
   searchStations,
   stationBundle,
   stationByGrp,
+  stationHazardSummaries,
   scatterPoints,
   type ListStationsFilter,
+  type StationHazardRow,
 } from '@/db/queries'
 import { buildStationDetail } from '@/domain/stations/presenter'
 import { buildRanking } from '@/domain/ranking/presenter'
@@ -189,6 +198,8 @@ const NEAR_MAX_RADIUS_M = 100_000
 const DATASET_MAX_GRPS = 500
 /** build_dataset のセレクタ既定上限（対象集合は原則全件＝RPC 上限まで）。 */
 const DATASET_DEFAULT_STATION_LIMIT = LIST_MAX_LIMIT
+/** get_hazard_summary の grps 上限（RPC 側 limit と同値・§5.3 ③）。 */
+const HAZARD_SUMMARY_MAX_GRPS = 500
 
 /**
  * 対象集合セレクタ（listStations と buildDataset.stations で**同一**・§5.3 の共通化）。
@@ -375,6 +386,88 @@ function columnsError(result: DatasetColumnsError): {
   return { error: result.error, hint: result.hint, didYouMean: result.didYouMean }
 }
 
+/** include_hazard の結合結果（事前計算テーブル由来・欠けは missing に列挙）。 */
+type HazardJoin = {
+  readonly cellsByGrp: ReadonlyMap<string, Readonly<Record<string, string | number>>>
+  readonly missing: readonly string[]
+  readonly version: number | null
+  readonly computedAt: string | null
+}
+
+/** 駅別ハザードサマリを CSV セルの形で引く（≤2000 駅・RPC は 500 件ずつ合流）。 */
+async function hazardJoinFor(stations: readonly StationListItem[]): Promise<HazardJoin> {
+  const grps = stations.map((station) => station.grp)
+  const rows = await stationHazardSummaries(grps)
+  const cellsByGrp = new Map(rows.map((row) => [row.grp, hazardCsvCells(row.summary)]))
+  return {
+    cellsByGrp,
+    missing: grps.filter((grp) => !cellsByGrp.has(grp)),
+    version: rows[0]?.version ?? null,
+    computedAt: rows[0]?.computedAt ?? null,
+  }
+}
+
+/** 指標の値にハザード列を継ぎ足す（未計算の駅はハザード列だけ空欄になる）。 */
+function withHazardValues(values: DatasetValues, hazard: HazardJoin): DatasetValues {
+  const merged: Record<string, Record<string, string | number>> = {}
+  for (const [grp, cells] of hazard.cellsByGrp) {
+    merged[grp] = { ...(values[grp] ?? {}), ...cells }
+  }
+  return { ...values, ...merged }
+}
+
+/** include_hazard の注意書き（黙って合成させない・§5.3 ③）。 */
+function hazardJoinNotes(hazard: HazardJoin): readonly string[] {
+  const notes = [
+    `ハザード列（hazard_*）は事前計算（version ${hazard.version ?? '?'}・${hazard.computedAt ?? '?'} 時点）。レベルは順序尺度で足し算できない。none は図上の該当なし・*_uncovered=1 は区域図なし（安全とは言えない）。`,
+  ]
+  if (hazard.missing.length > 0) {
+    notes.push(`ハザード未計算の駅 ${hazard.missing.length} 件（該当列は空欄）`)
+  }
+  return notes
+}
+
+/** グループ要約 → LLM 向けの圧縮形（該当なし・近接なし・図ありは省く＝500 駅でも軽く）。 */
+function compactGroupForLlm(
+  each: HazardGroupSummary,
+): { level: string; worstJa?: string; nearby?: true; uncovered?: true } | undefined {
+  if (each.level === 'none' && !each.nearby && !each.uncovered) return undefined
+  return {
+    level: each.level,
+    ...(each.worstJa === null ? {} : { worstJa: each.worstJa }),
+    ...(each.nearby ? { nearby: true as const } : {}),
+    ...(each.uncovered ? { uncovered: true as const } : {}),
+  }
+}
+
+/** 駅別ハザード一括 → LLM 向けの要約（限界と出典を**必ず**同梱・§5.3 ③）。 */
+function hazardSummaryBulkForLlm(requested: readonly string[], rows: readonly StationHazardRow[]) {
+  const found = new Set(rows.map((row) => row.grp))
+  const missing = requested.filter((grp) => !found.has(grp))
+  return {
+    version: rows[0]?.version ?? null,
+    computedAt: rows[0]?.computedAt ?? null,
+    count: rows.length,
+    ...(missing.length > 0 ? { missingCount: missing.length, missing: missing.slice(0, 20) } : {}),
+    stations: rows.map(({ summary }) => {
+      const hazards: Record<string, NonNullable<ReturnType<typeof compactGroupForLlm>>> = {}
+      for (const group of SUMMARY_HAZARD_GROUPS) {
+        const compact = compactGroupForLlm(summary.groups[group])
+        if (compact !== undefined) hazards[group] = compact
+      }
+      return {
+        grp: summary.grp,
+        level: summary.level,
+        evacuation: summary.evacuation,
+        elevM: summary.elevationM,
+        ...(Object.keys(hazards).length > 0 ? { hazards } : {}),
+      }
+    }),
+    limitationsJa: HAZARD_SUMMARY_LIMITATIONS_JA,
+    sources: hazardSummarySources(),
+  }
+}
+
 /**
  * データセット生成 → LLM 向けの要約（**スキーマとプレビューだけ**・値は URL の CSV に・§5.3）。
  * notes に「既定で埋めた事実」「欠損・フラグ」「見つからない grp」を全部載せる——黙って使わせない。
@@ -383,34 +476,50 @@ function buildDatasetForLlm(args: {
   stations: readonly StationListItem[]
   values: DatasetValues
   resolved: DatasetColumnsOk
+  hazard: HazardJoin | null
   shape: DatasetShape
   urls: { url: string; metaUrl: string; expiresAtMs: number }
   truncated: boolean
   extraNotes: readonly string[]
 }) {
-  const { stations, values, resolved, shape } = args
+  const { stations, values, resolved, hazard, shape } = args
+  const hazardColumns = hazard === null ? [] : HAZARD_DATASET_COLUMNS
+  const csvColumns = [...resolved.columns, ...hazardColumns]
   return {
     stationCount: stations.length,
-    rowCount: datasetRowCount(stations, values, resolved.columns, shape),
+    rowCount: datasetRowCount(stations, values, csvColumns, shape),
     shape,
     truncated: args.truncated,
     url: args.urls.url,
     metaUrl: args.urls.metaUrl,
     expiresAt: new Date(args.urls.expiresAtMs).toISOString(),
-    columns: resolved.columns.map((column) => ({
-      key: column.key,
-      role: column.role,
-      label: column.labelJa,
-      unit: column.unit,
-      year: column.year,
-      yearBase: column.yearBase,
-      radiusM: column.radiusM,
-      flag: column.reliabilityFlagKey,
-    })),
-    preview: datasetPreview(stations, values, resolved.columns, shape),
+    columns: [
+      ...resolved.columns.map((column) => ({
+        key: column.key,
+        role: column.role,
+        label: column.labelJa,
+        unit: column.unit,
+        year: column.year,
+        yearBase: column.yearBase,
+        radiusM: column.radiusM,
+        flag: column.reliabilityFlagKey,
+      })),
+      ...hazardColumns.map((column) => ({
+        key: column.key,
+        role: column.role,
+        label: column.labelJa,
+        unit: column.unit,
+        year: null,
+        yearBase: null,
+        radiusM: null,
+        flag: null,
+      })),
+    ],
+    preview: datasetPreview(stations, values, csvColumns, shape),
     notes: [
       ...resolved.notes,
-      ...datasetNotes(stations, values, resolved.columns),
+      ...datasetNotes(stations, values, csvColumns),
+      ...(hazard === null ? [] : hazardJoinNotes(hazard)),
       ...args.extraNotes,
     ],
   }
@@ -600,7 +709,7 @@ function escapeSummaryForLlm(escape: HazardEscapeResponse) {
 }
 
 /**
- * 9 ツールの純粋定義。キーは Gemini のツール名（camelCase）。
+ * 全ツールの純粋定義。キーは Gemini のツール名（camelCase）。
  * ⚠ MCP のツール名（snake_case・ASCII 制約）への写像は PR-2 のアダプタが持つ——
  * ここに二重の名前を置かない。
  */
@@ -658,7 +767,8 @@ export const TOOL_SPECS = {
       '複数駅の比較・スコアリング・相関などの分析は getStationDetail の繰り返しではなくこれを使い、CSV をローカル（pandas 等）で分析する。' +
       'stations（listStations と同じセレクタ）か grps のどちらか一方で対象を指定。' +
       `metrics はカタログキー（例 pop_2020_1km）でも指標ファミリ（例 pop, pop_gr, lp_med, rate_covid）でもよく、ファミリは radiusM / years で確定（既定 1km・直近。値列は最大 ${DATASET_MAX_VALUE_COLUMNS}）。` +
-      '値列の信頼性フラグ列（1=注意）は自動で同伴する。応答は列スキーマ・先頭 5 行・注意だけで、値は url の CSV に、列の意味・単位・出典は meta_url にある。URL の有効期限は約 24 時間。',
+      '値列の信頼性フラグ列（1=注意）は自動で同伴する。includeHazard: true で駅別ハザードサマリ（事前計算・順序尺度）を hazard_ 接頭辞の列として結合できる（線形加点しない・meta の limitations を読む）。' +
+      '応答は列スキーマ・先頭 5 行・注意だけで、値は url の CSV に、列の意味・単位・出典は meta_url にある。URL の有効期限は約 24 時間。',
     inputSchema: z.object({
       stations: stationSelectorSchema
         .optional()
@@ -689,10 +799,14 @@ export const TOOL_SPECS = {
         .enum(['wide', 'long'])
         .optional()
         .describe('wide=1 駅 1 行×指標列（既定）/ long=grp,key,value の縦持ち'),
+      includeHazard: z
+        .boolean()
+        .optional()
+        .describe('true で駅別ハザードサマリ（事前計算・hazard_ 列）を結合'),
     }),
     errorFallbackJa: 'データセットの生成に失敗しました',
     run: async (
-      { stations: selector, grps, metrics, radiusM, years, shape },
+      { stations: selector, grps, metrics, radiusM, years, shape, includeHazard },
       ctx,
     ): Promise<
       ToolRunResult<
@@ -761,19 +875,66 @@ export const TOOL_SPECS = {
         listed.map((station) => station.grp),
         allKeys,
       )
-      const signed = signDatasetToken(tokenQuery, { secret: datasetSecret(), now: Date.now() })
+      const hazard = includeHazard === true ? await hazardJoinFor(listed) : null
+      const merged = hazard === null ? values : withHazardValues(values, hazard)
+      const signed = signDatasetToken(
+        { ...tokenQuery, ...(includeHazard === true ? { hazard: true } : {}) },
+        { secret: datasetSecret(), now: Date.now() },
+      )
       const url = `${ctx.origin}/api/dataset?t=${signed.token}`
       return pure(
         buildDatasetForLlm({
           stations: listed,
-          values,
+          values: merged,
           resolved: resolvedColumns,
+          hazard,
           shape: resolvedShape,
           urls: { url, metaUrl: `${url}&kind=meta`, expiresAtMs: signed.expiresAtMs },
           truncated,
           extraNotes,
         }),
       )
+    },
+  }),
+
+  /** 駅別ハザードの一括取得（事前計算から読む・§5.3 ③）。 */
+  getHazardSummary: defineSpec({
+    name: 'getHazardSummary',
+    description:
+      '多数の駅（grps・最大 500）の水害・土砂災害リスクの要約を、事前計算テーブルから一括で返す。' +
+      '「浸水リスクの低い駅に絞りたい」のような対象集合のスクリーニングに使う（1 駅ずつ getHazardAtPoint を繰り返さない）。' +
+      '返るのは静的な想定（想定最大規模の「もし起きたら」）の順序尺度レベル（none<caution<warning<danger<critical）で、いまの警報ではない。' +
+      'none は「区域図の上で該当なし」で、uncovered=true の駅は区域図が無い（安全とは言えない）。' +
+      'レベルは足し算・平均ができない——合成するなら足切りか段階減点にし、「安全」とは書かない。' +
+      '河川別の実測浸水深・到達時間は含まない（個別の駅は getHazardAtPoint で確認）。',
+    inputSchema: z.object({
+      grps: z
+        .array(z.string())
+        .min(1)
+        .max(HAZARD_SUMMARY_MAX_GRPS)
+        .describe(
+          `駅 grp の配列（最大 ${HAZARD_SUMMARY_MAX_GRPS}・listStations / searchStations で得る）`,
+        ),
+    }),
+    errorFallbackJa: 'ハザードサマリの取得に失敗しました',
+    run: async ({
+      grps,
+    }): Promise<ToolRunResult<HintErrorJa | ReturnType<typeof hazardSummaryBulkForLlm>>> => {
+      const unique = [...new Set(nonEmptyNames(grps))]
+      if (unique.length === 0) {
+        return pure({
+          error: '駅が指定されていません',
+          hint: 'grps に listStations / searchStations が返した grp を入れてください。',
+        })
+      }
+      const rows = await stationHazardSummaries(unique)
+      if (rows.length === 0) {
+        return pure({
+          error: '事前計算データが見つかりません',
+          hint: 'grp を searchStations / listStations で取り直してください。個別の駅は getHazardAtPoint でも確認できます。',
+        })
+      }
+      return pure(hazardSummaryBulkForLlm(unique, rows))
     },
   }),
 
@@ -1189,6 +1350,7 @@ export const TOOL_SPEC_NAMES = [
   'searchStations',
   'listStations',
   'buildDataset',
+  'getHazardSummary',
   'getStationDetail',
   'rankStations',
   'compareGrowth',

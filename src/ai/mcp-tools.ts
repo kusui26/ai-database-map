@@ -114,6 +114,14 @@ export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
     // CSV 生成は 1 回で重いクエリ＋短命 URL の発行なので、検索系より絞る（§4.4）。
     perMinute: 10,
   },
+  getHazardSummary: {
+    mcpName: 'get_hazard_summary',
+    titleJa: '駅別ハザード一括（事前計算）',
+    descriptionEn:
+      'Precomputed static hazard summaries (ordinal levels, assumed-maximum scenarios) for up to 500 stations in one call. Not current alerts.',
+    maxResultSizeChars: 80_000,
+    perMinute: 20,
+  },
   getStationDetail: {
     mcpName: 'get_station_detail',
     titleJa: '駅の詳細',
@@ -305,6 +313,7 @@ export function registerMcpTools(
   registerSpec(server, 'searchStations', s.searchStations, origin, options)
   registerSpec(server, 'listStations', s.listStations, origin, options)
   registerSpec(server, 'buildDataset', s.buildDataset, origin, options)
+  registerSpec(server, 'getHazardSummary', s.getHazardSummary, origin, options)
   registerSpec(server, 'getStationDetail', s.getStationDetail, origin, options)
   registerSpec(server, 'rankStations', s.rankStations, origin, options)
   registerSpec(server, 'compareGrowth', s.compareGrowth, origin, options)

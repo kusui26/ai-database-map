@@ -5,6 +5,7 @@
 
 import { z } from 'zod'
 import { type StationListItem, type StationRow, type StationSummary } from '@/shared/api'
+import { stationHazardSummarySchema, type StationHazardSummary } from '@/shared/hazard-summary'
 import { db, DbError } from './client'
 
 async function rpc(fn: string, args: Record<string, unknown>): Promise<unknown> {
@@ -141,6 +142,49 @@ export async function datasetRows(
 ): Promise<Record<string, Record<string, number>>> {
   if (grps.length === 0 || keys.length === 0) return {}
   return datasetValuesSchema.parse(await rpc('dataset_rows', { grps: [...grps], keys: [...keys] }))
+}
+
+// --- 駅別ハザードサマリ（事前計算・260903 PR-6） -------------------------
+const hazardSummaryRowSchema = z.object({
+  grp: z.string(),
+  version: z.number(),
+  computed_at: z.string(),
+  summary: z.unknown(),
+})
+
+export type StationHazardRow = {
+  readonly grp: string
+  readonly version: number
+  readonly computedAt: string
+  readonly summary: StationHazardSummary
+}
+
+/** RPC 側の 1 回あたり上限（migration の limit と同値）。 */
+const HAZARD_SUMMARY_CHUNK = 500
+
+/**
+ * 駅別ハザードサマリを取る（`station_hazard_summaries` RPC）。
+ * RPC は 500 件ずつなので、build_dataset（≤2000 駅）向けにここで分割して合流する。
+ * summary は Zod（shared/hazard-summary）で検証してから返す（DB 形状ドリフトの防御）。
+ */
+export async function stationHazardSummaries(grps: readonly string[]): Promise<StationHazardRow[]> {
+  const out: StationHazardRow[] = []
+  for (let index = 0; index < grps.length; index += HAZARD_SUMMARY_CHUNK) {
+    const rows = await rpcRows(
+      'station_hazard_summaries',
+      { grps: grps.slice(index, index + HAZARD_SUMMARY_CHUNK) },
+      hazardSummaryRowSchema,
+    )
+    for (const row of rows) {
+      out.push({
+        grp: row.grp,
+        version: row.version,
+        computedAt: row.computed_at,
+        summary: stationHazardSummarySchema.parse(row.summary),
+      })
+    }
+  }
+  return out
 }
 
 export async function searchStations(q: string): Promise<StationSummary[]> {

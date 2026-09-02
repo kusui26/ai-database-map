@@ -9,9 +9,16 @@
  */
 
 import { type StationListItem } from '@/shared/api'
-import { type DatasetColumn } from './columns'
+import { type DatasetColumnRole } from './columns'
 
 export type DatasetShape = 'wide' | 'long'
+
+/**
+ * CSV 組み立てに要る最小の列情報（key と役割だけ）。
+ * カタログ由来の `DatasetColumn` も、ハザードの `HazardDatasetColumn`（260903 PR-6）も
+ * この形を満たす——組み立ては列の**出自を知らない**。
+ */
+export type DatasetCsvColumn = { readonly key: string; readonly role: DatasetColumnRole }
 
 /** 駅の識別列（wide の先頭）。municipality_code は他の市区町村統計との結合キー。 */
 export const DATASET_ID_HEADERS = [
@@ -27,8 +34,11 @@ export const DATASET_ID_HEADERS = [
 /** long 形式の列。 */
 export const DATASET_LONG_HEADERS = ['grp', 'station_name', 'prefecture', 'key', 'value'] as const
 
-/** grp → { key → value }（`dataset_rows` RPC の返り）。 */
-export type DatasetValues = Readonly<Record<string, Readonly<Record<string, number>>>>
+/**
+ * grp → { key → value }（`dataset_rows` RPC の返り＝数値。ハザードサマリの結合列
+ * （順序尺度の文字列・260903 PR-6）も同じ地図で運ぶため、値は number | string）。
+ */
+export type DatasetValues = Readonly<Record<string, Readonly<Record<string, number | string>>>>
 
 /** RFC 4180 のフィールド引用。 */
 function csvField(raw: string): string {
@@ -36,8 +46,9 @@ function csvField(raw: string): string {
 }
 
 /** セル値（欠損：値列＝空欄・フラグ列＝0）。undefined を返したら「行ごと出さない」（long）。 */
-function cellFor(column: DatasetColumn, value: number | undefined): string | undefined {
-  if (value !== undefined) return String(value)
+function cellFor(column: DatasetCsvColumn, value: number | string | undefined): string | undefined {
+  if (typeof value === 'number') return String(value)
+  if (typeof value === 'string' && value.length > 0) return value
   return column.role === 'flag' ? '0' : undefined
 }
 
@@ -57,7 +68,7 @@ function idCells(station: StationListItem): readonly string[] {
 function wideRow(
   station: StationListItem,
   values: DatasetValues,
-  columns: readonly DatasetColumn[],
+  columns: readonly DatasetCsvColumn[],
 ): readonly string[] {
   const row = values[station.grp] ?? {}
   return [...idCells(station), ...columns.map((column) => cellFor(column, row[column.key]) ?? '')]
@@ -66,7 +77,7 @@ function wideRow(
 function longRows(
   station: StationListItem,
   values: DatasetValues,
-  columns: readonly DatasetColumn[],
+  columns: readonly DatasetCsvColumn[],
 ): readonly (readonly string[])[] {
   const row = values[station.grp] ?? {}
   return columns.flatMap((column) => {
@@ -80,7 +91,7 @@ function longRows(
 function tableFor(
   stations: readonly StationListItem[],
   values: DatasetValues,
-  columns: readonly DatasetColumn[],
+  columns: readonly DatasetCsvColumn[],
   shape: DatasetShape,
 ): readonly (readonly string[])[] {
   if (shape === 'wide') {
@@ -99,7 +110,7 @@ function tableFor(
 export function buildDatasetCsv(
   stations: readonly StationListItem[],
   values: DatasetValues,
-  columns: readonly DatasetColumn[],
+  columns: readonly DatasetCsvColumn[],
   shape: DatasetShape,
 ): string {
   const lines = tableFor(stations, values, columns, shape).map((row) => row.map(csvField).join(','))
@@ -111,7 +122,7 @@ export function buildDatasetCsv(
 export function datasetRowCount(
   stations: readonly StationListItem[],
   values: DatasetValues,
-  columns: readonly DatasetColumn[],
+  columns: readonly DatasetCsvColumn[],
   shape: DatasetShape,
 ): number {
   return tableFor(stations, values, columns, shape).length - 1
@@ -129,7 +140,7 @@ export const DATASET_PREVIEW_ROWS = 5
 export function datasetPreview(
   stations: readonly StationListItem[],
   values: DatasetValues,
-  columns: readonly DatasetColumn[],
+  columns: readonly DatasetCsvColumn[],
   shape: DatasetShape,
 ): DatasetPreview {
   const table = tableFor(stations, values, columns, shape)
@@ -154,7 +165,7 @@ function topMissing(missingByKey: ReadonlyMap<string, number>): string {
 export function datasetNotes(
   stations: readonly StationListItem[],
   values: DatasetValues,
-  columns: readonly DatasetColumn[],
+  columns: readonly DatasetCsvColumn[],
 ): readonly string[] {
   const notes: string[] = []
   const missingByKey = new Map<string, number>()
@@ -176,9 +187,10 @@ export function datasetNotes(
   if (flagColumns.length > 0) {
     const flagged = flagColumns
       .map((column) => {
-        const count = stations.filter(
-          (station) => ((values[station.grp] ?? {})[column.key] ?? 0) >= 1,
-        ).length
+        const count = stations.filter((station) => {
+          const value = (values[station.grp] ?? {})[column.key]
+          return typeof value === 'number' && value >= 1
+        }).length
         return { key: column.key, count }
       })
       .filter((item) => item.count > 0)

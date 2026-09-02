@@ -33,7 +33,9 @@ AI Database Map の MCP ツール（`station-data` サーバ）で駅周辺の�
 7. **出典を落とさない**：応答の `sources` / 出典情報を最後に列挙する（詳細は
    [references/sources.md](references/sources.md)）。
 8. **水害・災害に触れるときは** [hazard-reading](../hazard-reading/SKILL.md) の作法に従う
-   （「安全」と言わない・時制を明示・limitations を全部伝える）。
+   （「安全」と言わない・時制を明示・limitations を全部伝える）。多数の駅の一括スクリーニングは
+   `mcp__plugin_ai-database-map_station-data__get_hazard_summary`（≤500 駅・事前計算・順序尺度）。
+   none は「区域図の上で該当なし」で、`uncovered` の駅を安全と読まない。
 
 ## してはいけないこと
 

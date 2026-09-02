@@ -17,6 +17,8 @@ description: AI Database Map の build_dataset で駅×指標の CSV を作り�
    `stations`（list_stations と同じセレクタ）か `grps` と、`metrics`（ファミリ名で足りる。
    例 `["pax", "rate_covid", "pop", "pop_gr", "lp_med", "lp_gr", "bus_n", "estab_n"]`）を渡す。
    応答は**列スキーマとプレビューだけ**で、値は `url` の CSV・列の意味と出典は `meta_url` にある。
+   災害を条件に使うなら `includeHazard: true` で `hazard_` 列（順序尺度）を結合するか、
+   `mcp__plugin_ai-database-map_station-data__get_hazard_summary`（≤500 駅・事前計算）を使う。
 3. **取得**：pandas は URL を直接読める。**meta も必ず読む**（単位・年次・半径・出典・注意）。
 
    ```python

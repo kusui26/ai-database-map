@@ -36,21 +36,38 @@ export type HazardPointRequest = {
 export type HazardPointResult = {
   readonly point: HazardPointResponse
   readonly complete: boolean
+  /**
+   * この地域に区域図が無かったレイヤ（応答の coverageNotesJa は文になっているため、
+   * 事前計算（PR-6）の射影がキーのまま受け取れるようここにも残す。API 応答は不変）。
+   */
+  readonly uncoveredLayerKeys: readonly string[]
 }
 
-/** 地点のハザードを 1 つの意味づけ済みの形にまとめる。 */
-export async function hazardPointAt(request: HazardPointRequest): Promise<HazardPointResult> {
-  const { lon, lat, baseUrl, now } = request
-  const [mesh, tile, navi] = await Promise.all([
-    meshReadings(lon, lat, baseUrl),
-    tileReadings(lon, lat),
-    suibouNaviRivers(lon, lat, now),
-  ])
+/** 集めた読み取り一式（オンライン経路とバッチ（PR-6）で同じ組み立てを通すための束）。 */
+export type HazardPointInputs = {
+  readonly mesh: Awaited<ReturnType<typeof meshReadings>>
+  readonly tile: Awaited<ReturnType<typeof tileReadings>>
+  readonly navi: {
+    readonly rivers: readonly HazardPointResponse['rivers'][number][]
+    readonly noteJa: string | null
+  }
+}
+
+/**
+ * 読み取り一式 → 意味づけ済みの形（**組み立てはここ 1 か所**）。
+ * 事前計算パイプライン（浸水ナビを含めない・`docs/260828_research_claude_auth.md` §10 PR-6）も
+ * この同じ関数を通る——組み立てを二重に書かない。
+ */
+export function assembleHazardPoint(
+  request: Pick<HazardPointRequest, 'lon' | 'lat' | 'placeJa'>,
+  inputs: HazardPointInputs,
+): HazardPointResult {
+  const { mesh, tile, navi } = inputs
   const notesJa = [mesh.noteJa, tile.noteJa, navi.noteJa].filter((note) => note !== null)
   const point = pointHazard(
     {
-      lon,
-      lat,
+      lon: request.lon,
+      lat: request.lat,
       placeJa: request.placeJa ?? DEFAULT_PLACE_JA,
       mesh: mesh.mesh,
       tile: tile.tile,
@@ -63,5 +80,16 @@ export async function hazardPointAt(request: HazardPointRequest): Promise<Hazard
     },
     hazardLayersWithPointAnswer(),
   )
-  return { point, complete: notesJa.length === 0 }
+  return { point, complete: notesJa.length === 0, uncoveredLayerKeys: tile.uncoveredLayerKeys }
+}
+
+/** 地点のハザードを 1 つの意味づけ済みの形にまとめる。 */
+export async function hazardPointAt(request: HazardPointRequest): Promise<HazardPointResult> {
+  const { lon, lat, baseUrl, now } = request
+  const [mesh, tile, navi] = await Promise.all([
+    meshReadings(lon, lat, baseUrl),
+    tileReadings(lon, lat),
+    suibouNaviRivers(lon, lat, now),
+  ])
+  return assembleHazardPoint(request, { mesh, tile, navi })
 }

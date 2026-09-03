@@ -868,6 +868,48 @@ Claude : [list_stations: 横浜市 → 約150駅] [build_dataset: 150駅×14列 
 > 危険度チップ・免責・⚠ すべて描画・console エラー 0）。テスト 759 件全緑。
 > ⚠ ホスト実機（Claude.ai/Desktop）での描画確認は手動：コネクタ追加済みの Claude で
 > 「横浜駅の詳細を見せて」（パネル）と「map_probe を実行して」（判定表）。
+> → **実機確認済み（2026-09-03・claude.ai）**：パネル iframe 描画 OK・map_probe **4/4 OK**
+> （blob Worker 往復成功／WebGL 2.0／OffscreenCanvas／GSI タイル HTTP 200＝connectDomains 実効）。
+> **MapLibre 本実装に進める判定**となり、PR-9b を実施した（次項）。
+
+> **✅ PR-9b 完了（2026-09-03・MapLibre 本実装）。** probe の 4/4 を受けて、
+> **地図つきビューア `ui://ai-database-map/map-panels.html`（約 1.16MB）** を新設し、
+> `structuredContent.mapActions` を **Web UI（`useApplyMapActions`＋map/…Source）と同じ意味論**で
+> MapLibre に描く。**座標（またはレイヤ）を持つ操作を返す 5 ツール**
+> （get_station_detail・get_hazard_at_point・get_hazard_alerts・find_evacuation_sites・
+> find_escape_direction）だけが参照し（`mapUi`）、**rank／growth は軽量版のまま**
+> （grp のみで座標なし——1.1MB を地図に描くものが無いツールに配らない）。
+> `panel-app.ts` はテンプレート化し、パネルの描き方は軽量版と**同じ部品**（二重に持たない）。
+> **設計判断**：
+> ① **MapLibre（v5.24.0）はインライン同梱**——`node_modules` の配布ファイルをサーバ側で
+> 実行時に読んで埋める（コピーを持たない＝版ズレしない。Vercel へは
+> `outputFileTracingIncludes` で同送）。外部 script 読込（CSP `resourceDomains` → script-src）は
+> 仕様上は可能だがホスト実装が未実証のため採らず、**実機証明済みの経路**
+> （インライン script＋`connectDomains`）に限定。仕様にサイズ上限は無い（逐語確認済み）。
+> ② **タイルは実行時に外部から**：ベース＝地理院 淡色ラスタ。ハザードは
+> **カタログ（shared/hazard）の射影を埋め込み**（URL・zoom・base/overlay・地形・出典）、
+> CSP の `connectDomains` も**カタログから算出**（disaportaldata.gsi.go.jp／www.jma.go.jp／
+> cyberjapandata.gsi.go.jp の 3 オリジン。手書きリスト禁止＝レイヤ追加に自動追随）。
+> ③ **地図の意味論は Web UI と同一**：showPoint＝起点の印（アクセント）／highlightPoints＝
+> 緑の番号丸（行き先・一覧と同番号）／flyTo＋selectStation＝半径円＋中心点／
+> setHazardLayers＝base 先・overlay 後・地形×0.7・**キキクルは timesUrl の最新を差し込んでから**
+> （解決できないレイヤは載せない＝「白い地図＝安全」を作らない §7.5-1）＋「10 分毎更新」注記／
+> highlightStations は**座標を持たないため描かない**（コードに明記）／clearOverlays＝畳む。
+> マーカーは **DOM**（symbol レイヤ不使用＝グリフの外部ホストを増やさない）。出典は
+> source の attribution で自動追随。全画面は `ui/request-display-mode`（ベストエフォート）。
+> 地図の失敗はパネルを道連れにしない（try/catch で地図だけ畳む）。
+> **検証**：ユニット 767 全緑（**mapAction 全 7 型**の扱い網羅・カタログ埋め込みの網羅・
+> **MapLibre 版数の package.json 同期**・CSP 算出の一致）。E2E（ローカル本番ビルド）＝
+> リソース 4 本・csp `_meta` 3 オリジン・ツール振り分け（5→地図版／2→軽量版／4→なし）・
+> regression get_station_detail の mapActions（flyTo＋selectStation r1000）。
+> **Playwright 実レンダリング 4 ケース**（タイルを route で偽 PNG 化しネットワーク実測）：
+> ①地点ハザード＝起点マーカー・ハザード面・キキクル注記・出典 3 系統、②避難先＝緑番号 1〜3、
+> ③駅詳細＝半径円＋中心点＋パネル 2 枚、④座標なし＝地図を畳む。タイル取得実測
+> base20／防災12／jma times1＋tile1・console エラー 0。
+> **レンダリングテストが実バグを 1 件検出**：キキクル URL の埋め残し検査が `{z}/{x}/{y}` まで
+> 弾いて全キキクルが消えていた → domain と同じ「時刻 3 プレースホルダのみ検査」に修正。
+> ⚠ ホスト実機（claude.ai）の描画は手動確認：「横浜駅周辺の洪水リスクを調べて」
+> （地図＋ハザード面）・「横浜駅の近くの避難場所は？」（番号マーカー）。
 
 ---
 

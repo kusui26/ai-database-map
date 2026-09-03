@@ -19,8 +19,15 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { type CallToolResult, type ReadResourceResult } from '@modelcontextprotocol/server'
 import { z } from 'zod'
-import { MAP_PROBE_URI, MAP_TILE_ORIGIN, MCP_APP_MIME_TYPE, PANEL_APP_URI } from './mcp-app/meta'
+import {
+  MAP_PANEL_APP_URI,
+  MAP_PROBE_URI,
+  MAP_TILE_ORIGIN,
+  MCP_APP_MIME_TYPE,
+  PANEL_APP_URI,
+} from './mcp-app/meta'
 import { PANEL_APP_HTML } from './mcp-app/panel-app'
+import { MAP_CONNECT_ORIGINS, MAP_PANEL_APP_HTML } from './mcp-app/map-panel-app'
 import { MAP_PROBE_HTML } from './mcp-app/map-probe'
 import { type MapAction, type Panel } from '@/shared/protocol'
 import { checkRateLimit } from './rate-limit'
@@ -95,6 +102,12 @@ export type McpToolConfig = {
    * 対応ホスト（Claude.ai / Desktop）だけが描画し、Claude Code はテキストにフォールバック。
    */
   readonly panelUi?: boolean
+  /**
+   * mapActions が**座標（またはレイヤ）を持つ**ツールは、MapLibre 同梱の地図つきビューアを
+   * 参照する（PR-9b）。ランキング等（grp のみで座標なし）は軽量版のまま——約 1.1MB の
+   * HTML を、地図に描くものが無いツールに配らない。
+   */
+  readonly mapUi?: boolean
 }
 
 export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
@@ -138,6 +151,7 @@ export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
     maxResultSizeChars: 60_000,
     perMinute: 30,
     panelUi: true,
+    mapUi: true, // flyTo＋selectStation（半径円）
   },
   rankStations: {
     mcpName: 'rank_stations',
@@ -164,6 +178,7 @@ export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
     maxResultSizeChars: 60_000,
     perMinute: 15,
     panelUi: true,
+    mapUi: true, // showPoint＋setHazardLayers（当たった区域の面）
   },
   getHazardAlerts: {
     mcpName: 'get_hazard_alerts',
@@ -173,6 +188,7 @@ export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
     maxResultSizeChars: 40_000,
     perMinute: 10,
     panelUi: true,
+    mapUi: true, // showPoint＋setHazardLayers（キキクル・警戒モード）
   },
   findEvacuationSites: {
     mcpName: 'find_evacuation_sites',
@@ -183,6 +199,7 @@ export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
     maxResultSizeChars: 60_000,
     perMinute: 10,
     panelUi: true,
+    mapUi: true, // showPoint＋highlightPoints（起点と行き先の印）
   },
   findEscapeDirection: {
     mcpName: 'find_escape_direction',
@@ -192,6 +209,7 @@ export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
     maxResultSizeChars: 40_000,
     perMinute: 10,
     panelUi: true,
+    mapUi: true, // showPoint＋highlightPoints（区域の外に出る目標セル）
   },
   getMetricsCatalog: {
     mcpName: 'get_metrics_catalog',
@@ -282,7 +300,10 @@ function registerSpec<Schema extends z.ZodTypeAny, Out>(
       _meta: {
         'anthropic/maxResultSizeChars': config.maxResultSizeChars,
         // MCP Apps（ext-apps 2026-01-26）：対応ホストはこの ui:// リソースを iframe に描く。
-        ...(config.panelUi === true ? { ui: { resourceUri: PANEL_APP_URI } } : {}),
+        // 座標つきの mapActions を返すツールは地図つき版（PR-9b）、それ以外は軽量版。
+        ...(config.panelUi === true || config.mapUi === true
+          ? { ui: { resourceUri: config.mapUi === true ? MAP_PANEL_APP_URI : PANEL_APP_URI } }
+          : {}),
       },
     },
     async (input) => {
@@ -382,6 +403,29 @@ export function registerMcpTools(
     },
     async (uri) => ({
       contents: [{ uri: uri.href, mimeType: MCP_APP_MIME_TYPE, text: PANEL_APP_HTML }],
+    }),
+  )
+  // 地図つきパネル・ビューア（PR-9b）：MapLibre 同梱。タイル（地理院・ハザードマップポータル・
+  // 気象庁）を実行時に取るため、接続先を CSP（connectDomains）に宣言する——
+  // 宣言リストは**ハザード・カタログから算出**（手書きしない・レイヤ追加に自動追随）。
+  server.registerResource(
+    'map-panel-app',
+    MAP_PANEL_APP_URI,
+    {
+      title: '地図つきパネル・ビューア（MCP Apps）',
+      description:
+        'ツール結果のパネルに加えて、地図操作（地点・半径円・避難先・ハザードの面）を MapLibre で描く。/ EN: Renders panels plus map actions with MapLibre.',
+      mimeType: MCP_APP_MIME_TYPE,
+    },
+    async (uri) => ({
+      contents: [
+        {
+          uri: uri.href,
+          mimeType: MCP_APP_MIME_TYPE,
+          text: MAP_PANEL_APP_HTML,
+          _meta: { ui: { csp: { connectDomains: [...MAP_CONNECT_ORIGINS] } } },
+        },
+      ],
     }),
   )
   // MapLibre 可否プローブ：blob Worker・WebGL・タイル接続を実測する（判定は画面の表）。

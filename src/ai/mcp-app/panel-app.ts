@@ -1,8 +1,12 @@
 /**
- * パネル・ビューア（MCP Apps・PR-9 スパイク）。
+ * パネル・ビューア（MCP Apps・PR-9 / PR-9b・`docs/260828_research_claude_auth.md` §4.6）。
  *
  * ツール結果の `structuredContent.panels`（GUI Chat Protocol）を、対応ホスト
  * （Claude.ai / Claude Desktop 等）の sandboxed iframe に描く**単一 HTML**。
+ *
+ * PR-9b でテンプレート化した：軽量版（`PANEL_APP_HTML`・外部接続ゼロ）と、
+ * MapLibre を同梱する地図つき版（`map-panel-app.ts`）が**同じ部品**（CSS・レンダラ JS）を
+ * 使う。パネルの描き方を二重に持たない（.claude/CLAUDE.md §2 と同じ思想）。
  *
  * 設計判断：
  * - **依存ゼロ・ビルドなし**：チャートは手書き SVG。既定 CSP（外部接続ゼロ）のまま動く。
@@ -15,12 +19,8 @@
  * - 危険度の配色はアプリの HAZARD_LEVEL_COLORS と同じ値（変えるときは両方）
  */
 
-export const PANEL_APP_HTML = /* html */ `<!doctype html>
-<html lang="ja">
-<head>
-<meta charset="utf-8" />
-<title>AI Database Map パネル</title>
-<style>
+/** 共通スタイル（軽量版・地図つき版の両方が使う）。 */
+export const VIEWER_CSS = /* css */ `
   :root { color-scheme: light; }
   * { box-sizing: border-box; margin: 0; }
   body { font: 13px/1.6 system-ui, -apple-system, "Hiragino Sans", sans-serif;
@@ -47,11 +47,15 @@ export const PANEL_APP_HTML = /* html */ `<!doctype html>
   .notes { background: #f8fafc; border-radius: 8px; padding: 8px 10px; margin-top: 8px;
            font-size: 11px; color: #475569; }
   pre { white-space: pre-wrap; word-break: break-word; font-size: 12px; }
-</style>
-</head>
-<body>
-<div id="root" aria-live="polite"><p class="muted">結果を待っています…</p></div>
-<script>
+`
+
+/**
+ * ビューア本体の JS（ハンドシェイク＋パネル描画）。
+ *
+ * 地図つき版は同じスコープに `window.renderMapActions` を**先に**定義しておくと、
+ * `render()` がパネルの前に地図へ反映する。軽量版では未定義なので何もしない。
+ */
+export const VIEWER_JS = /* js */ `
 'use strict';
 // --- 最小の JSON-RPC（ext-apps 2026-01-26） ------------------------------
 var nextId = 1;
@@ -63,7 +67,7 @@ window.addEventListener('message', function (event) {
   if (data.id === 1) post({ method: 'ui/notifications/initialized' }); // initialize の応答が来た
 });
 post({ id: nextId++, method: 'ui/initialize',
-       params: { appCapabilities: { availableDisplayModes: ['inline'] } } });
+       params: { appCapabilities: { availableDisplayModes: ['inline', 'fullscreen'] } } });
 
 // --- DOM ヘルパ（createElement / textContent だけで組む＝XSS 安全） ------
 function el(tag, cls, text) {
@@ -332,9 +336,14 @@ function appendSources(box, sources) {
 
 // --- ルート描画 ----------------------------------------------------------
 function render(result) {
+  var sc = result.structuredContent || {};
+  // 地図つき版だけが renderMapActions を定義している（軽量版では何もしない）。
+  if (typeof window.renderMapActions === 'function') {
+    try { window.renderMapActions(sc); }
+    catch (e) { console.error('地図の反映に失敗しました', e); }
+  }
   var root = document.getElementById('root');
   root.textContent = '';
-  var sc = result.structuredContent || {};
   var panels = Array.isArray(sc.panels) ? sc.panels : [];
   if (!panels.length) {
     // フォールバック：パネルなし → テキストをそのまま（§4.6・Claude Code と同じ内容）
@@ -354,6 +363,47 @@ function render(result) {
     root.appendChild(box);
   });
 }
-</script>
-</body>
-</html>`
+`
+
+/** ビューア HTML の組み立てオプション（地図つき版が差分を注入する）。 */
+export type ViewerHtmlOptions = {
+  readonly title: string
+  /** `VIEWER_CSS` に足すスタイル（MapLibre の CSS など）。 */
+  readonly extraCss?: string
+  /** `#root` の**前**に置く HTML（地図コンテナなど。静的マークアップのみ）。 */
+  readonly bodyPrefixHtml?: string
+  /**
+   * ビューア本体（`VIEWER_JS`）の**前**に置く script 群
+   * （MapLibre 本体 → 埋め込みデータ → 地図モジュールの順で渡す）。
+   */
+  readonly preludeScripts?: readonly string[]
+}
+
+/** script 本文を 1 ブロックに包む。 */
+function scriptTag(body: string): string {
+  return `<script>\n${body}\n</script>`
+}
+
+/** 部品からビューア HTML を組み立てる（軽量版・地図つき版で共用）。 */
+export function buildViewerHtml(options: ViewerHtmlOptions): string {
+  const parts: string[] = [
+    '<!doctype html>',
+    '<html lang="ja">',
+    '<head>',
+    '<meta charset="utf-8" />',
+    `<title>${options.title}</title>`,
+    `<style>${VIEWER_CSS}${options.extraCss ?? ''}</style>`,
+    '</head>',
+    '<body>',
+    options.bodyPrefixHtml ?? '',
+    '<div id="root" aria-live="polite"><p class="muted">結果を待っています…</p></div>',
+    ...(options.preludeScripts ?? []).map(scriptTag),
+    scriptTag(VIEWER_JS),
+    '</body>',
+    '</html>',
+  ]
+  return parts.filter((part) => part.length > 0).join('\n')
+}
+
+/** 軽量版（外部接続ゼロ・パネルのみ）。`panelUi` のツールが参照する。 */
+export const PANEL_APP_HTML = buildViewerHtml({ title: 'AI Database Map パネル' })

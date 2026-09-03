@@ -11,6 +11,12 @@
 /** パネル・ビューア（GUI Chat Protocol の panels を描く・外部接続ゼロ）。 */
 export const PANEL_APP_URI = 'ui://ai-database-map/panels.html'
 
+/**
+ * 地図つきパネル・ビューア（PR-9b）。MapLibre を同梱し、`structuredContent.mapActions` を
+ * Web UI と同じ意味論で描く。**座標を持つ操作を返すツールだけ**が参照する（`mapUi`）。
+ */
+export const MAP_PANEL_APP_URI = 'ui://ai-database-map/map-panels.html'
+
 /** MapLibre 可否プローブ（blob Worker / WebGL / タイル到達を実測して表に出す）。 */
 export const MAP_PROBE_URI = 'ui://ai-database-map/map-probe.html'
 

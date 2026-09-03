@@ -102,7 +102,7 @@ describe('名前と設定（Claude の制約・審査基準）', () => {
 })
 
 describe('registerMcpTools（登録の網羅と中身）', () => {
-  it('12 ツール＋プローブ＋3 リソースを、Spec と同じスキーマで登録する', () => {
+  it('12 ツール＋プローブ＋4 リソースを、Spec と同じスキーマで登録する', () => {
     const { tools, resources, server } = fakeServer()
     registerMcpTools(server, 'http://localhost:3000')
 
@@ -113,6 +113,7 @@ describe('registerMcpTools（登録の網羅と中身）', () => {
     expect(resources).toEqual([
       'catalog://metrics',
       'ui://ai-database-map/panels.html',
+      'ui://ai-database-map/map-panels.html', // MapLibre 同梱（PR-9b）
       'ui://ai-database-map/map-probe.html',
     ])
 
@@ -129,9 +130,12 @@ describe('registerMcpTools（登録の網羅と中身）', () => {
       expect(tool.config._meta['anthropic/maxResultSizeChars'], key).toBe(
         MCP_TOOL_CONFIGS[key].maxResultSizeChars,
       )
-      // MCP Apps（PR-9）：パネルを返すツールだけがビューアを参照する。
+      // MCP Apps（PR-9/9b）：座標つきの mapActions を返すツールは地図つき版、
+      // パネルだけのツールは軽量版、どちらでもなければ付けない。
       const uri = uiResourceUriOf(tool.config._meta)
-      if (MCP_TOOL_CONFIGS[key].panelUi === true) {
+      if (MCP_TOOL_CONFIGS[key].mapUi === true) {
+        expect(uri, key).toBe('ui://ai-database-map/map-panels.html')
+      } else if (MCP_TOOL_CONFIGS[key].panelUi === true) {
         expect(uri, key).toBe('ui://ai-database-map/panels.html')
       } else {
         expect(uri, key).toBeNull()
@@ -145,6 +149,20 @@ describe('registerMcpTools（登録の網羅と中身）', () => {
       'getHazardSummary',
     ] as const) {
       expect(MCP_TOOL_CONFIGS[key].panelUi, key).not.toBe(true)
+    }
+    // 座標を持つ操作（flyTo・showPoint・highlightPoints・setHazardLayers）を返す 5 ツール
+    // だけが地図つき版。ランキング・散布（grp のみ／座標なし）は約 1.1MB を配らない。
+    for (const key of [
+      'getStationDetail',
+      'getHazardAtPoint',
+      'getHazardAlerts',
+      'findEvacuationSites',
+      'findEscapeDirection',
+    ] as const) {
+      expect(MCP_TOOL_CONFIGS[key].mapUi, key).toBe(true)
+    }
+    for (const key of ['rankStations', 'compareGrowth'] as const) {
+      expect(MCP_TOOL_CONFIGS[key].mapUi, key).not.toBe(true)
     }
   })
 

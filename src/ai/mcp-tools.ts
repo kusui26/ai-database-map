@@ -18,7 +18,10 @@
 
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { type CallToolResult, type ReadResourceResult } from '@modelcontextprotocol/server'
-import { type z } from 'zod'
+import { z } from 'zod'
+import { MAP_PROBE_URI, MAP_TILE_ORIGIN, MCP_APP_MIME_TYPE, PANEL_APP_URI } from './mcp-app/meta'
+import { PANEL_APP_HTML } from './mcp-app/panel-app'
+import { MAP_PROBE_HTML } from './mcp-app/map-probe'
 import { type MapAction, type Panel } from '@/shared/protocol'
 import { checkRateLimit } from './rate-limit'
 import {
@@ -87,6 +90,11 @@ export type McpToolConfig = {
   readonly maxResultSizeChars: number
   /** 1 分あたりの上限（IP×ツール）。上流を叩くものは厳しく。 */
   readonly perMinute: number
+  /**
+   * パネル（GUI Chat Protocol）を返すツールに MCP Apps のビューアを付ける（PR-9）。
+   * 対応ホスト（Claude.ai / Desktop）だけが描画し、Claude Code はテキストにフォールバック。
+   */
+  readonly panelUi?: boolean
 }
 
 export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
@@ -129,6 +137,7 @@ export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
       'Aggregated open-data metrics (ridership, population, land price, …) around one station for a chosen radius.',
     maxResultSizeChars: 60_000,
     perMinute: 30,
+    panelUi: true,
   },
   rankStations: {
     mcpName: 'rank_stations',
@@ -136,6 +145,7 @@ export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
     descriptionEn: 'Rank stations by a catalog metric, filtered by prefecture/operator/route.',
     maxResultSizeChars: 60_000,
     perMinute: 30,
+    panelUi: true,
   },
   compareGrowth: {
     mcpName: 'compare_growth',
@@ -143,6 +153,7 @@ export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
     descriptionEn: 'Scatter stations on two metrics with deterministic clustering.',
     maxResultSizeChars: 60_000,
     perMinute: 30,
+    panelUi: true,
   },
   getHazardAtPoint: {
     mcpName: 'get_hazard_at_point',
@@ -152,6 +163,7 @@ export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
     // 公式タイル・浸水ナビ（上流）を読む → やや厳しめ。
     maxResultSizeChars: 60_000,
     perMinute: 15,
+    panelUi: true,
   },
   getHazardAlerts: {
     mcpName: 'get_hazard_alerts',
@@ -160,6 +172,7 @@ export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
     // 気象庁・逆ジオ（上流）を毎回叩く → いちばん厳しく。
     maxResultSizeChars: 40_000,
     perMinute: 10,
+    panelUi: true,
   },
   findEvacuationSites: {
     mcpName: 'find_evacuation_sites',
@@ -169,6 +182,7 @@ export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
     // 国土地理院タイル（上流）→ 厳しめ。
     maxResultSizeChars: 60_000,
     perMinute: 10,
+    panelUi: true,
   },
   findEscapeDirection: {
     mcpName: 'find_escape_direction',
@@ -177,6 +191,7 @@ export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
       'Nearest direction/distance out of the assumed flood zone (flood / inland flood only). Not routing.',
     maxResultSizeChars: 40_000,
     perMinute: 10,
+    panelUi: true,
   },
   getMetricsCatalog: {
     mcpName: 'get_metrics_catalog',
@@ -264,7 +279,11 @@ function registerSpec<Schema extends z.ZodTypeAny, Out>(
       description: mcpDescription(key),
       inputSchema: spec.inputSchema,
       annotations: { readOnlyHint: true },
-      _meta: { 'anthropic/maxResultSizeChars': config.maxResultSizeChars },
+      _meta: {
+        'anthropic/maxResultSizeChars': config.maxResultSizeChars,
+        // MCP Apps（ext-apps 2026-01-26）：対応ホストはこの ui:// リソースを iframe に描く。
+        ...(config.panelUi === true ? { ui: { resourceUri: PANEL_APP_URI } } : {}),
+      },
     },
     async (input) => {
       const ip = mcpIpStore.getStore() ?? 'unknown'
@@ -347,5 +366,81 @@ export function registerMcpTools(
         },
       ],
     }),
+  )
+
+  // --- MCP Apps（PR-9 スパイク・§4.6） -----------------------------------
+  // パネル・ビューア：panelUi のツール結果（structuredContent.panels）を描く単一 HTML。
+  // 外部接続ゼロ（既定 CSP のまま）。Claude Code など非対応ホストはテキストへフォールバック。
+  server.registerResource(
+    'panel-app',
+    PANEL_APP_URI,
+    {
+      title: 'パネル・ビューア（MCP Apps）',
+      description:
+        'ツール結果のパネル（GUI Chat Protocol）をチャート・表として描く。/ EN: Renders panels from tool results.',
+      mimeType: MCP_APP_MIME_TYPE,
+    },
+    async (uri) => ({
+      contents: [{ uri: uri.href, mimeType: MCP_APP_MIME_TYPE, text: PANEL_APP_HTML }],
+    }),
+  )
+  // MapLibre 可否プローブ：blob Worker・WebGL・タイル接続を実測する（判定は画面の表）。
+  // 接続検査のため、地理院タイルのホストだけを CSP（connectDomains）に宣言する。
+  server.registerResource(
+    'map-probe',
+    MAP_PROBE_URI,
+    {
+      title: 'MapLibre 可否プローブ（MCP Apps）',
+      description:
+        '地図描画に必要な iframe 能力（blob: Worker・WebGL・タイル接続）を実測する。/ EN: Probes iframe capabilities for MapLibre.',
+      mimeType: MCP_APP_MIME_TYPE,
+    },
+    async (uri) => ({
+      contents: [
+        {
+          uri: uri.href,
+          mimeType: MCP_APP_MIME_TYPE,
+          text: MAP_PROBE_HTML,
+          _meta: { ui: { csp: { connectDomains: [MAP_TILE_ORIGIN] } } },
+        },
+      ],
+    }),
+  )
+  // プローブの入口ツール（ホストは tool 呼び出し経由でしか app を描かないため）。
+  // ToolSpec には載せない——Gemini・スキルの対象外で、対応ホストでだけ意味を持つデバッグ用途。
+  server.registerTool(
+    'map_probe',
+    {
+      title: '地図描画の可否プローブ（MCP Apps）',
+      description:
+        'MCP Apps 対応ホストで、地図（MapLibre）描画に必要な条件（blob: Web Worker・WebGL・タイルホスト接続）を実測して表に出す。非対応ホストではこのテキストだけが返る。\nEN: Probes iframe capabilities required for MapLibre inside MCP Apps hosts.',
+      inputSchema: z.object({}),
+      annotations: { readOnlyHint: true },
+      _meta: { 'anthropic/maxResultSizeChars': 2_000, ui: { resourceUri: MAP_PROBE_URI } },
+    },
+    async () => {
+      const ip = mcpIpStore.getStore() ?? 'unknown'
+      const now = options.now ?? Date.now
+      const limited = checkRateLimit(`mcp:${ip}:map_probe`, {
+        limit: 10,
+        windowMs: TOOL_WINDOW_MS,
+        now: now(),
+      })
+      if (!limited.ok) {
+        return {
+          content: [{ type: 'text', text: rateLimitedJa('map_probe', limited.retryAfterMs) }],
+          isError: true,
+        }
+      }
+      return {
+        content: [
+          {
+            type: 'text',
+            text: 'MapLibre 可否プローブの UI を表示しました。結果は画面の表を読んでください（MCP Apps 非対応のホストでは検査できません）。',
+          },
+        ],
+        structuredContent: { result: { shown: true }, panels: [], mapActions: [] },
+      }
+    },
   )
 }

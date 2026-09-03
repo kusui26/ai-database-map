@@ -34,6 +34,13 @@ type RegisteredTool = {
   callback: (input: unknown) => Promise<McpToolResult>
 }
 
+/** _meta.ui.resourceUri を型ガードで取り出す（as キャスト禁止）。 */
+function uiResourceUriOf(meta: Record<string, unknown>): string | null {
+  const ui = meta['ui']
+  if (typeof ui !== 'object' || ui === null || !('resourceUri' in ui)) return null
+  return typeof ui.resourceUri === 'string' ? ui.resourceUri : null
+}
+
 /** 先頭の content からテキストを取り出す（型ガード。共用体を黙って潰さない）。 */
 function firstText(result: McpToolResult): string {
   const item = result.content[0]
@@ -95,14 +102,19 @@ describe('名前と設定（Claude の制約・審査基準）', () => {
 })
 
 describe('registerMcpTools（登録の網羅と中身）', () => {
-  it('12 ツール＋カタログ resource を、Spec と同じスキーマで登録する', () => {
+  it('12 ツール＋プローブ＋3 リソースを、Spec と同じスキーマで登録する', () => {
     const { tools, resources, server } = fakeServer()
     registerMcpTools(server, 'http://localhost:3000')
 
-    expect(tools.map((tool) => tool.name)).toEqual(
-      TOOL_SPEC_NAMES.map((key) => MCP_TOOL_CONFIGS[key].mcpName),
-    )
-    expect(resources).toEqual(['catalog://metrics'])
+    expect(tools.map((tool) => tool.name)).toEqual([
+      ...TOOL_SPEC_NAMES.map((key) => MCP_TOOL_CONFIGS[key].mcpName),
+      'map_probe', // MCP Apps のプローブ（Spec 外・PR-9）
+    ])
+    expect(resources).toEqual([
+      'catalog://metrics',
+      'ui://ai-database-map/panels.html',
+      'ui://ai-database-map/map-probe.html',
+    ])
 
     for (const [index, key] of TOOL_SPEC_NAMES.entries()) {
       const tool = tools[index]
@@ -117,6 +129,22 @@ describe('registerMcpTools（登録の網羅と中身）', () => {
       expect(tool.config._meta['anthropic/maxResultSizeChars'], key).toBe(
         MCP_TOOL_CONFIGS[key].maxResultSizeChars,
       )
+      // MCP Apps（PR-9）：パネルを返すツールだけがビューアを参照する。
+      const uri = uiResourceUriOf(tool.config._meta)
+      if (MCP_TOOL_CONFIGS[key].panelUi === true) {
+        expect(uri, key).toBe('ui://ai-database-map/panels.html')
+      } else {
+        expect(uri, key).toBeNull()
+      }
+    }
+    // 一覧・CSV・一括などパネルなしのツールにはビューアを付けない（誤って空 UI を開かせない）。
+    for (const key of [
+      'searchStations',
+      'listStations',
+      'buildDataset',
+      'getHazardSummary',
+    ] as const) {
+      expect(MCP_TOOL_CONFIGS[key].panelUi, key).not.toBe(true)
     }
   })
 

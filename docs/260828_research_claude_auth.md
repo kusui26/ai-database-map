@@ -841,6 +841,34 @@ Claude : [list_stations: 横浜市 → 約150駅] [build_dataset: 150駅×14列 
 > ⚠ Codex CLI が手元に無いため**実導入は未検証**（スキーマ準拠のみ・README に注記なし＝
 > 動かない報告が来たら Issue で追う）。プラグイン **0.7.0**。
 
+> **✅ PR-9 完了（2026-09-03・MCP Apps スパイク）。** 仕様は ext-apps **2026-01-26**
+> （SEP-1865）を逐語で突き合わせ（`_meta.ui.resourceUri`・mimeType
+> `text/html;profile=mcp-app`・CSP は contents[].`_meta.ui.csp`・`ui/initialize` →
+> `ui/notifications/initialized` → `ui/notifications/tool-result`・サーバ側の宣言は不要＝
+> クライアントが extensions で交渉）。
+> **① パネル・ビューア `ui://ai-database-map/panels.html`**：GUI Chat Protocol の
+> **全 10 パネル型**（stationCard／trendChart〔折れ線・null 切断・積み上げ＋totals〕／
+> statTable／barChart／rankingTable／scatter〔クラスタ色〕／hazardCard〔危険度チップ・
+> 免責必須〕／evacuationList／escapeDirection／markdown）を描く**単一 HTML・15.9KB・依存ゼロ**
+> （チャートは手書き SVG）。設計判断：Chart.js／React の同梱はサイズと CSP の都合で見送り、
+> ハンドシェイクは SDK（バンドラ前提）でなく仕様どおり自前の最小 JSON-RPC。XSS 安全
+> （createElement/textContent のみ）・**外部接続ゼロ＝既定 CSP のまま**・パネルなしは
+> テキストへフォールバック。`_meta.ui` は**パネルを返す 7 ツールだけ**に付与
+> （一覧・CSV・一括には付けない——空 UI を開かせない）。Claude Code は従来どおり
+> テキスト（回帰 E2E 済み）。
+> **② MapLibre 可否判定**：本体同梱（~800KB）はサイズで不適のため、**必要条件を実測する
+> プローブ app**（blob: Web Worker・WebGL・OffscreenCanvas・地理院タイルへの fetch＝CSP
+> `connectDomains` の実効確認）＋入口ツール **`map_probe`**（Spec 外のデバッグ用・13 本目）を
+> 用意。対応ホストで呼べば判定表が出る——全 OK なら次段で MapLibre 本実装へ、NG（特に
+> blob Worker）なら §4.6 どおり PNG フォールバック路線。
+> **検証**：ユニット（protocol にパネル型を足すとビューアの描き忘れで落ちる網羅テスト・
+> ハンドシェイク・サイズ<150k・https 参照ゼロ）＋E2E（resources 3 本・mimeType・probe の
+> csp _meta・_meta.ui の付与/非付与・map_probe 呼び出し・既存ツール回帰）＋
+> **headless 実レンダリング**（偽 tool-result を postMessage 注入 → 9 パネル・SVG 3・
+> 危険度チップ・免責・⚠ すべて描画・console エラー 0）。テスト 759 件全緑。
+> ⚠ ホスト実機（Claude.ai/Desktop）での描画確認は手動：コネクタ追加済みの Claude で
+> 「横浜駅の詳細を見せて」（パネル）と「map_probe を実行して」（判定表）。
+
 ---
 
 ## 11. 検証計画

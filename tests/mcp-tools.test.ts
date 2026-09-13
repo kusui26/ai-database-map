@@ -18,7 +18,9 @@ import { TOOL_SPECS, TOOL_SPEC_NAMES } from '@/ai/tool-specs'
  * ②説明・スキーマの本体が Spec と**同一**であること（言うことを割らない）、
  * ③全ツールが読み取り専用として登録されること（確認なし実行・審査基準）、
  * ④上流（気象庁・国土地理院）を叩くツールのレート制限が他より厳しいこと、
- * ⑤登録の網羅とレート制限の実挙動（IP ごとに独立・再試行の案内つき）。
+ * ⑤登録の網羅とレート制限の実挙動（IP ごとに独立・再試行の案内つき）、
+ * ⑥**MCP Apps（iframe）を出さない**こと——PR-11 で撤収した（`docs/260912_gui_chat_protocol.md`
+ * 決定 11）。`ui://` リソースも `_meta.ui` も `map_probe` も戻ってこないことを固定する。
  */
 
 /** 偽サーバ：登録内容を記録するだけ。`McpToolRegistry` をそのまま実装（キャスト不要）。 */
@@ -34,12 +36,8 @@ type RegisteredTool = {
   callback: (input: unknown) => Promise<McpToolResult>
 }
 
-/** _meta.ui.resourceUri を型ガードで取り出す（as キャスト禁止）。 */
-function uiResourceUriOf(meta: Record<string, unknown>): string | null {
-  const ui = meta['ui']
-  if (typeof ui !== 'object' || ui === null || !('resourceUri' in ui)) return null
-  return typeof ui.resourceUri === 'string' ? ui.resourceUri : null
-}
+/** `_meta.ui`（MCP Apps のビューア指定）の有無。撤収済みなので**常に無い**のが不変条件。 */
+const hasUiMeta = (meta: Record<string, unknown>): boolean => 'ui' in meta
 
 /** 先頭の content からテキストを取り出す（型ガード。共用体を黙って潰さない）。 */
 function firstText(result: McpToolResult): string {
@@ -102,20 +100,14 @@ describe('名前と設定（Claude の制約・審査基準）', () => {
 })
 
 describe('registerMcpTools（登録の網羅と中身）', () => {
-  it('12 ツール＋プローブ＋4 リソースを、Spec と同じスキーマで登録する', () => {
+  it('12 ツールとカタログ resource だけを、Spec と同じスキーマで登録する', () => {
     const { tools, resources, server } = fakeServer()
     registerMcpTools(server, 'http://localhost:3000')
 
-    expect(tools.map((tool) => tool.name)).toEqual([
-      ...TOOL_SPEC_NAMES.map((key) => MCP_TOOL_CONFIGS[key].mcpName),
-      'map_probe', // MCP Apps のプローブ（Spec 外・PR-9）
-    ])
-    expect(resources).toEqual([
-      'catalog://metrics',
-      'ui://ai-database-map/panels.html',
-      'ui://ai-database-map/map-panels.html', // MapLibre 同梱（PR-9b）
-      'ui://ai-database-map/map-probe.html',
-    ])
+    expect(tools.map((tool) => tool.name)).toEqual(
+      TOOL_SPEC_NAMES.map((key) => MCP_TOOL_CONFIGS[key].mcpName),
+    )
+    expect(resources).toEqual(['catalog://metrics'])
 
     for (const [index, key] of TOOL_SPEC_NAMES.entries()) {
       const tool = tools[index]
@@ -130,40 +122,18 @@ describe('registerMcpTools（登録の網羅と中身）', () => {
       expect(tool.config._meta['anthropic/maxResultSizeChars'], key).toBe(
         MCP_TOOL_CONFIGS[key].maxResultSizeChars,
       )
-      // MCP Apps（PR-9/9b）：座標つきの mapActions を返すツールは地図つき版、
-      // パネルだけのツールは軽量版、どちらでもなければ付けない。
-      const uri = uiResourceUriOf(tool.config._meta)
-      if (MCP_TOOL_CONFIGS[key].mapUi === true) {
-        expect(uri, key).toBe('ui://ai-database-map/map-panels.html')
-      } else if (MCP_TOOL_CONFIGS[key].panelUi === true) {
-        expect(uri, key).toBe('ui://ai-database-map/panels.html')
-      } else {
-        expect(uri, key).toBeNull()
-      }
     }
-    // 一覧・CSV・一括などパネルなしのツールにはビューアを付けない（誤って空 UI を開かせない）。
-    for (const key of [
-      'searchStations',
-      'listStations',
-      'buildDataset',
-      'getHazardSummary',
-    ] as const) {
-      expect(MCP_TOOL_CONFIGS[key].panelUi, key).not.toBe(true)
+  })
+
+  it('MCP Apps は撤収済み——`_meta.ui` も `ui://` も `map_probe` も出さない', () => {
+    const { tools, resources, server } = fakeServer()
+    registerMcpTools(server, 'http://localhost:3000')
+
+    for (const tool of tools) {
+      expect(hasUiMeta(tool.config._meta), tool.name).toBe(false)
     }
-    // 座標を持つ操作（flyTo・showPoint・highlightPoints・setHazardLayers）を返す 5 ツール
-    // だけが地図つき版。ランキング・散布（grp のみ／座標なし）は約 1.1MB を配らない。
-    for (const key of [
-      'getStationDetail',
-      'getHazardAtPoint',
-      'getHazardAlerts',
-      'findEvacuationSites',
-      'findEscapeDirection',
-    ] as const) {
-      expect(MCP_TOOL_CONFIGS[key].mapUi, key).toBe(true)
-    }
-    for (const key of ['rankStations', 'compareGrowth'] as const) {
-      expect(MCP_TOOL_CONFIGS[key].mapUi, key).not.toBe(true)
-    }
+    expect(tools.some((tool) => tool.name === 'map_probe')).toBe(false)
+    expect(resources.some((uri) => uri.startsWith('ui://'))).toBe(false)
   })
 
   it('カタログツールは実行でき、text は Gemini と同じ要約 JSON', async () => {
@@ -179,8 +149,10 @@ describe('registerMcpTools（登録の網羅と中身）', () => {
       { origin: 'http://localhost:3000' },
     )
     expect(firstText(result)).toBe(JSON.stringify(viaSpec.forLlm))
-    // structuredContent にも result（LLM 向け要約）を載せる——structuredContent を優先する
-    // クライアント（Claude Code）でも空に見えないように（260903 の実走 eval で発見）。
+    // structuredContent は**残す**——MCP Apps の iframe は撤収したが、パネルと地図操作は
+    // 母艦のプレゼンタ／ビューア・プラグインが読む「型つきデータ」そのもの（決定 12）。
+    // result（LLM 向け要約）も載せる——structuredContent を優先するクライアント
+    // （Claude Code）でも空に見えないように（260903 の実走 eval で発見）。
     expect(result.structuredContent).toEqual({
       result: viaSpec.forLlm,
       panels: [],

@@ -1,7 +1,11 @@
 # ユーザー自身の Claude サブスクリプションで、当アプリのデータ分析を支援させる（調査）
 
 作成日：2026-08-28（2026-09-01 に §5「高度なデータ分析支援」を追記） ／ 対象：AI Database Map（Step2 の次・「AI ネイティブ」の外部展開）
-**状態：§9 の決定 1〜10 は 2026-09-01 に推奨どおり合意済み。実装（§10 の段取り）に入ってよい。**
+**状態：§10 の梯子 PR-1〜PR-9b（#113〜#125）まで完走。以降の正は [`260912_gui_chat_protocol.md`](./260912_gui_chat_protocol.md)。**
+本書は §9 の決定 1〜10（2026-09-01 合意）と、そこまでの実装記録として残す。
+**⚠ 決定 4（MCP Apps の導入）は 2026-09-12 に覆り、PR-11 で撤収した**——`_meta.ui`・`ui://`
+リソース 3 本・`map_probe` は本番から消え、パネル描画と地図操作の意味論は純 TS
+（`src/shared/viewer/*`・`src/domain/map/scene.ts`）へ移した。他の決定（1〜3・5〜10）は有効。
 関連：[`.claude/CLAUDE.md`](../.claude/CLAUDE.md) §2（API こそがプロダクト）・
 [`architecture.md`](./architecture.md) §4（GUI Chat Protocol）§5（スキーマ）§6（共通API）§10（LLM 方針）・
 [`plan_house_hunting.md`](./plan_house_hunting.md)（おすすめ駅・§9 の 5 決定）・

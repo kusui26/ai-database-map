@@ -1,0 +1,23 @@
+# 母艦（Canvas）での本走（PR-14・docs/260912_gui_chat_protocol.md §4.5）：
+# 図を出しつつ**意味を落とさない**か。要件はフォームで聞き、チャートはサーバの option を
+# そのまま、地図は render_map → 保存 → presentHtml、結論・限界・出典は文書に。
+#
+# ⚠ このケースは **presentForm / presentChart / presentHtml / presentDocument** を持つ
+# ホストでしか成立しない。公式ランナーでそれらが無い環境では、ローカルランナーの
+# `python3 pipeline/eval_recommend.py --scenario canvas --runs 3` を使う
+# （`pipeline/canvas_stub_mcp.mjs` が同じ名前・同じ引数のプレゼンタを差し込む）。
+schema_version: '1.1'
+name: golden-yokohama-canvas
+tags: [golden, recommendation, canvas]
+runs: 3
+max_turns: 30
+timeout_seconds: 900
+allowed_tools: ['Bash', 'Write', 'Read']
+
+context:
+  history_file: history.md
+
+prompt: |
+  予算重視でお願いします。通勤は東京駅まで45分以内が希望です。
+  災害は、洪水の危険が高い駅を避けたい——足切りでお願いします。
+  重みはファミリーの初期値でOKです。図も見たいです。

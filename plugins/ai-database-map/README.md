@@ -19,6 +19,26 @@
 claude mcp add --transport http ai-database-map https://ai-database-map.vercel.app/api/mcp
 ```
 
+### MulmoTerminal / MulmoClaude（図も出したいとき）
+
+`presentChart` / `presentForm` / `presentHtml` を持つホストでは、表と文章に加えて
+**チャートと地図**を出します。図が無い環境でも答えは変わりません（劣化しません）。
+
+1. **MCP サーバを足す**——MulmoTerminal は Settings → MCP servers に
+   `{ "id": "station-data", "url": "https://ai-database-map.vercel.app/api/mcp" }`
+   （プロジェクトのセルでは `.mcp.json` か `claude mcp add`）。
+   MulmoClaude は Settings → MCP Servers タブに同じ URL（HTTP）。
+2. **Canvas を有効にする**——MulmoTerminal は起動フォームの **Canvas** を ON。
+3. **スキルはこのプラグインのまま**（Claude Code に導入済みならそのまま効きます）。
+   MulmoClaude でスキルが読まれない場合は `<workspace>/.claude/skills/` にコピーしてください。
+4. **地図を出すなら**：`render_map` が返す URL は HTML です。保存してから `presentHtml` に
+   パスを渡します（`curl -sL '<url>' -o artifacts/html/map.html`。リポジトリを持っているなら
+   `python3 scripts/fetch_map.py '<url>' --out artifacts/html/map.html` でも同じ）。
+   MulmoTerminal は既定で外部の画像を読めるので、そのままタイルが出ます。
+   MulmoClaude は既定で読めないので、地図が白いときは `<workspace>/config/csp.json` に
+   `{"img-src": ["https://cyberjapandata.gsi.go.jp", "https://disaportaldata.gsi.go.jp", "https://www.jma.go.jp"]}`
+   を足してください（ホスト名だけ・パスやワイルドカードは受け付けません）。
+
 ### Claude.ai / Claude Cowork
 
 Settings › Connectors › **Add custom connector** に
@@ -33,6 +53,10 @@ Cowork では Customize › Plugins › **Add from a repository** に `kusui26/A
 「神奈川県で人口が伸びていて地価が上がっていない駅は？」
 「大阪駅の水害リスクと近くの避難場所を教えて」
 ```
+
+図を出せる環境では、そのまま「横浜市で中古マンション、おすすめの駅は？」と聞くと、
+要件をフォームで聞き → CSV を 1 回作って分析 → チャートと地図を Canvas に出し →
+結論・限界・出典を文書にする、という流れになります。
 
 長い調査は `data-analyst` サブエージェントに任せられます（結果だけが本体の文脈に返ります）。
 

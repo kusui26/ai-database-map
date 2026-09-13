@@ -280,8 +280,8 @@ CLAUDE.md §2 の図に「ユーザーの Claude」が並ぶ前身 §4.1 の構�
 | 母艦の検出 | tools に `presentChart`／`presentForm`／`presentHtml`（接頭辞は問わない）があれば **Canvas モード**。作法：要件はフォーム／数値は `present:"echarts"`→`presentChart`／地図は `render_map`→保存→`presentHtml({path})`／結論・表・限界・出典は `presentDocument`。無ければ現行の Markdown 出力 |
 | 成果物の保存規約 | 母艦：`<workspace>/artifacts/`（CSV・meta・スクリプト・地図 HTML・レポート）。Claude Code 単体：`./data/`。**再現可能**（同じ CSV とスクリプトで同じ表が出る） |
 | 禁じ手の維持 | `presentChart` のタイトル・凡例に「安全」「危険度スコア」を書かない／ハザードはチャート化しない／出典と限界を Canvas の文書に必ず載せる（`instructions` にも同梱） |
-| `data-analyst` サブエージェント | `tools:` の固定名を論理名解決に合わせる（環境ごとの実名をフロントマターで列挙できないため、プラグイン用と `claude mcp add` 用の 2 通りを用意） |
-| evals | golden に **Canvas 版**（`golden-yokohama-canvas`）を追加：①フォームで聞く ②`list_stations`→`build_dataset` 1 回 ③`presentChart` ≥1 ④`render_map`→`presentHtml` ⑤限界・出典を `presentDocument` に。ローカルランナーは MulmoTerminal のセッションでは動かせないので、**手動 5 回**＋MCP 呼び出しログで判定（§10） |
+| `data-analyst` サブエージェント | `tools:` に 2 通りの綴り（プラグイン用と `claude mcp add` 用）を並べる。加えて **CSV をローカルで解析する道具**（`Bash`/`Read`/`Write`/`Glob`/`Grep`）を持たせ、**図は出さず親に返す**——Canvas は親のセッションのもので、プレゼンタの実名はフロントマターに書けない。報告の**限界・出典・正規化の脚注は要約させない**（親がそのまま使う） |
+| evals | golden に **Canvas 版**（`golden-yokohama-canvas`）を追加：①フォームで聞く ②`list_stations`→`build_dataset` 1 回 ③`presentChart` ≥1 ④`render_map`→`presentHtml` ⑤限界・出典を `presentDocument` に。ローカルランナーは MulmoTerminal を起動できないが、**プレゼンタだけを模した stdio MCP**（`pipeline/canvas_stub_mcp.mjs`・実機と同じ名前・引数・`required`）を `--mcp-config` で差し込めば**自動で実走・採点できる**（`--scenario canvas`）。実機の手動確認は §10 のとおり別途 |
 
 ### 4.6 配布と導入（母艦別）
 
@@ -392,7 +392,7 @@ Claude : [list_stations 横浜市 → 137 駅] [build_dataset 137 駅×20 列（
 | **PR-11** | **MCP Apps 撤収＋ビューア部品の TS 化**：`_meta.ui`／`ui://` 3 リソース／`map_probe`／ハンドシェイクを外す。文字列 JS を**純 TS**へ——パネル描画は `src/shared/viewer/{vnode,charts,panels,styles}.ts`（protocol → VNode → HTML・DOM 非依存）、地図の意味論は `src/domain/map/scene.ts`（mapActions → 描くもの。ハザードの順序・不透明度・出典は既存 domain を再利用）。旧テストを移植 | — | tools/list に `_meta.ui` も `map_probe` も無い（本番ビルド実測）／ビューア網羅テスト緑／`pnpm build` 緑／claude.ai で iframe が出ずテキストに戻る（実機） |
 | **PR-12** | **T1 プレゼンタ・アダプタ**：`present:"echarts"`（MCP 層の `extend`）＋`src/shared/presenters/echarts.ts`（trendChart／barChart／scatter／rankingTable）＋テスト（パネル型網羅・関数を含まない・単位/年次/⚠ の反映） | PR-11 | `present` 無しの結果が**バイト同一**（回帰）／option を ECharts に食わせて描ける（Playwright・cdnjs の ECharts で実レンダ） |
 | **PR-13** | **T1 地図 `render_map`**：`MapAction[]` 入力・Leaflet 同梱・カタログ由来のタイル/出典/不透明度・署名 URL（`token.ts` 再利用）・`scripts/fetch_map.py`＋curl 手順・レート制限 | PR-11 | HTML に fetch/XHR が無い（静的検査）／`sandbox allow-scripts; connect-src 'none'; img-src https:` を模した iframe で Playwright 実レンダ（タイル `<img>` 取得・マーカー・半径円・面）／410/429 実測 |
-| **PR-14** | **スキル母艦対応＋evals**：論理名解決・Canvas 検出・`presentForm` 要件・成果物規約・`data-analyst`・golden Canvas 版・プラグイン 0.8.0（CHANGELOG・README） | PR-12・13 | MulmoTerminal 実走（§10）5/5／Claude Code 単体の golden 3 本が回帰しない（既存ランナー 11/11） |
+| **PR-14** | **スキル母艦対応＋evals**：論理名解決・Canvas 検出・`presentForm` 要件・成果物規約・`data-analyst`・golden Canvas 版・プラグイン 0.8.0（CHANGELOG・README） | PR-12・13 | **達成**：Canvas 実走 3/3（プレゼンタのスタブ）＋ Claude Code 単体の golden 11/11（housing 5・transport 3・market 3）＝**14/14**。母艦の実機確認は §10 に残る |
 | **PR-15** | **導入・配布**：README/LP「母艦で使う」節（MulmoTerminal／MulmoClaude／Codex）・`.mcp.json` 雛形・`csp.json` 案内・MulmoClaude **カタログ PR**（外部）・Codex 実導入検証 | PR-14 | 手順どおりに新規マシンで再現／カタログ PR を提出 |
 | **PR-16** | **T2 プラグイン**：`packages/gui-chat-plugin`（`definePlugin`・`stationArea` action 判別・`tools/list` からの定義生成＋版同期テスト・Vue View＝共通レンダラ＋MapLibre（Shadow DOM）・Preview・i18n） | PR-11 | `mulmoclaude --dev-plugin` で全 action の描画（地図・パネル・免責）／`vue-tsc`・lint 緑／`npm pack` 可 |
 | **PR-17** | **T2 配布**：npm publish・MulmoClaude ledger 手順・MulmoTerminal `plugins.json` 同梱提案 PR（外部）・スキルの `stationArea` 優先規則の実走 | PR-16 | MulmoClaude で「横浜駅の詳細を見せて」→ Canvas に地図＋パネル（実機） |
@@ -532,6 +532,83 @@ PR-11〜13 は独立に着手可（12 と 13 は並行）。**T1 は PR-14 で�
 > 「保存して presentHtml などに渡すか、ブラウザで開く」と言う。ツールは 12 → **13 本**
 > （README・`/ai`・Codex プラグインの表記も更新）。Gemini には出さない——アプリは自前の地図を
 > 持っているので、HTML の地図ページを渡す相手がいない。
+
+> **✅ PR-14 完了（2026-09-14）。** スキルを**母艦でも Claude Code 単体でも同じ答えが出る**形にした。
+> T1 はこれで完成。図は**足し算**であって、言葉の置き換えではない。
+>
+> **ツール名を論理名に**：スキル本文から完全修飾名（`mcp__plugin_ai-database-map_station-data__…`）を
+> 全部外し、**末尾一致で解決する**規則を骨格（`station-analysis`）と SessionStart の 1 文に置いた。
+> 接頭辞は 5 通り以上ある（プラグイン／`claude mcp add`／母艦の `userMcpServers`／プロジェクト・セルの
+> `mulmoterminal-render`／ワークスペースの `mt`）うえ、**Codex は区切りがハイフンで id の `-` が `_` になる**
+> （`mcp-station_data-build_dataset`。母艦の README で確認）。列挙は不可能なので `allowed-tools` は
+> **列挙できるものだけ**に残した——`/station`・`/rank` は 2 通りの綴りを併記、分析 3 コマンド
+> （`/recommend`・`/demand`・`/market`）は**外した**（ローカル解析の `Bash` と、名前が環境依存の
+> プレゼンタが要るため）。`data-analyst` も同じ理由でローカル解析の道具を持ち、
+> **図は出さず親に返す**（Canvas は親のセッションのもの）。
+>
+> **Canvas の作法**：`station-analysis` に「図を出せる環境では図も出す」節と
+> `references/canvas.md`（検出・何をどれで見せるか・引数の形・地図 3 手・禁じ手・置き場所）。
+> 線引きは **「サーバから取れる図はサーバに作らせる／自分で計算した値（合成スコア等）は
+> 自分で option を書いてよい、ただし単位・年次・正規化の脚注と ⚠ を自分で添える」**。
+> `hazard-reading` には**ハザードをチャートにしない**（順序尺度・免責と時制が落ちる）を明文化した。
+>
+> **引数の形は実機の定義に合わせた**——npm から 4 つのプレゼンタ・プラグインを取り、
+> `TOOL_DEFINITION` を逐語で読んだ（`@mulmoclaude/chart-plugin@3.0.1` ほか）。
+> `presentDocument` は **`title` が必須**で、`filenamePrefix` が無いと保存名が `document` に落ちて
+> 後から探せない。`presentHtml` は `path`（本文を貼り直すと母艦では**複製**になる）。
+> スキル・スタブ・グレーダの 3 つを同じ形に揃えた。
+>
+> **受け入れテストを自動化した**：母艦はヘッドレスで動かせないが、**プレゼンタだけを模した
+> stdio MCP**（`pipeline/canvas_stub_mcp.mjs`・依存ゼロ・実機と同じ名前／引数／`required`／
+> **プロパティの説明文まで**）を `--mcp-config` で差し込めば、「何をどの順で、どんな引数で
+> 呼んだか」は stream-json に残る。§4.5 が「手動 5 回」としていたところを `--scenario canvas` の
+> 実走に置き換えた（決定的グレーダ 7 本：フォームで聞く／チャート／地図＋`presentHtml`（path で・
+> `html` に貼り直さない）／文書（`title`＋`filenamePrefix`）／**ハザードをチャートにしていない**）。
+>
+> **実走が設計の穴を出した**——どれも机上では出ない。**スキル側**：
+> ① 薄いコマンドカードの「**この段階ではツールを呼ばない**」が `presentForm` まで禁じていた。
+> ターン 1 で読まれるのは**カードだけ**（骨格も方法論もロードされない）なので、カードに
+> 書いていないことは起きない。「**データツール**は呼ばない」に直した。
+> ② `data-analyst` に `Bash` を持たせたら**丸ごと任せられるようになり**、親が報告を要約するときに
+> **出典を落とした**。能力を上げたら受け渡しが弱点になった——サブエージェント側に
+> 「限界・出典・正規化の脚注は要約しない（親がそのまま使う）」を書いた。
+> ③ 正規化の方法を**図の副題にだけ書いて文章から消した**回があった（canvas.md の禁じ手そのもの）。
+> `presentDocument` の必須項目に**スコアの作り方（正規化・重み）**を明記し、
+> 「副題に書いたから文章では省く」を禁じ手に足した。
+>
+> **そして、いちばん効いた発見**：**スキルが 1 つもロードされない回がある**。ターン 1 でも本走でも
+> 起きる（実測）。そのとき残る文脈は **SessionStart の 1 文だけ**なので、そこに置くものを
+> 「守られないと答えが間違う／無駄が出る」ものに絞って書き直した（573 字）——カタログで
+> キーを確認・単位/半径/年次・**対象集合は 1 回**（路線は配列でまとめる）・**正規化してから合成し
+> 方法と重みを 1 行**・災害の時制と「安全」禁止・**最後に限界と出典（要約でも削らない）**・
+> ツール名は末尾一致・要件は先に 1 回（`presentForm` があればフォーム）・Canvas の 3 手。
+> 上の ①〜③ は**スキルを読めば分かること**だったが、読まれない回があるのだから、
+> 読まれなくても壊れない最小限は 1 文の側に要る。
+>
+> **測り方の穴も 3 つ**——スキルではなくハーネスが間違っていた。
+> ④ スタブが**実機より情報の少ないスキーマ**だった。本物は各プロパティに説明を持ち、
+> `filenamePrefix` には「これが保存ファイルを見つけられるようにする」と書いてある。
+> 省いたまま測るのは実機より不利な条件での採点なので、説明文も写した。
+> ⑤ 「ハザードをチャートにしない」の判定が、**注記の言葉**まで数えていた。3 回とも副題に
+> 「洪水 `hazard_flood_level` が danger 以上の 3 駅は除外」と**正しく書いていて落ちた**
+> （3 回ぶん無駄にした）。判定を**描かれる次元**（系列・`dataset`・軸・凡例）だけに絞り、
+> 境目を `pipeline/eval_graders_test.py` で固定した——**正しい応答を落とすグレーダは、
+> 見逃すグレーダと同じくらい悪い**。
+> ⑥ `render_map` を「データ往復」に数えていたので、**図を出す環境だけ予算が 1 本狭かった**。
+> `get_metrics_catalog` と同じ理由（データセットを取り直さない）で除外した。
+>
+> **検証**：typecheck・lint・**ユニット 848 全緑**（プラグイン検査を 14 → 24 件に。実走で見つけた
+> 退行はすべてテストで固定した）・`claude plugin validate --strict`・グレーダ自体の検査
+> （`pipeline/eval_graders_test.py`）。**実走は最終ツリーで 14/14**——Canvas **3/3**（22 判定すべて
+> 3 回とも通過）／Claude Code 単体の回帰は housing **5/5**・transport **3/3**・market **3/3**
+> （§11 の受け入れ条件どおり）。母艦の**実機**（MulmoTerminal / MulmoClaude の Canvas ON）での
+> 手動確認は §10 のとおり**残っている**——スタブは名前・引数・`required`・説明文まで写したが、
+> 実際に描かれる絵と CSP は実機でしか見られない。
+>
+> **CSP の実機差**：MulmoTerminal の `presentHtml` は `img-src 'self' <CDN> data: blob: https:` なので
+> 地図タイルは**そのまま出る**。MulmoClaude の既定には `https:` が無いので `config/csp.json` に
+> `img-src` を足す（`https://ホスト名` だけ・パスもワイルドカードも受け付けない——`sanitizeCspExtra`）。
+> README をこの差に合わせた。
 
 ---
 

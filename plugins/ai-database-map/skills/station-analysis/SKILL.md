@@ -7,19 +7,26 @@ description: AI Database Map の駅×半径オープンデータ（乗降客数�
 
 AI Database Map の MCP ツール（`station-data` サーバ）で駅周辺の統計を扱うときは、必ずこの作法に従う。
 
+> **ツール名**：このスキルは `build_dataset` のように**短い名前**で書く。実際の名前には
+> 環境ごとの接頭辞が付く（プラグイン導入なら `mcp__plugin_…_station-data__build_dataset`、
+> `claude mcp add` や母艦の設定なら `mcp__station-data__build_dataset` など）。
+> **末尾が一致するものを使う**（Codex は区切りがハイフンで、id の `-` が `_` になる——
+> `mcp-station_data-build_dataset`）。
+> 見つからないときは、使えるツールの一覧から `build_dataset` で終わる名前を探す。
+
 ## 基本の作法
 
-1. **駅の特定**：駅名は `mcp__plugin_ai-database-map_station-data__search_stations` で解決し、
+1. **駅の特定**：駅名は `search_stations` で解決し、
    返った `grp` を以後のツールに渡す。同名駅（例：三田・府中）は候補の都道府県で確認する。
    「横浜市の駅」のような**地域から対象集合を作る**ときは
-   `mcp__plugin_ai-database-map_station-data__list_stations`（municipality は前方一致・
+   `list_stations`（municipality は前方一致・
    「横浜市」で全区を束ねる）。
 2. **多数の駅を比べる・合成するなら CSV**：おおむね 10 駅を超える比較・スコアリング・相関は
-   `mcp__plugin_ai-database-map_station-data__build_dataset` で駅×指標の CSV（短命 URL）を
+   `build_dataset` で駅×指標の CSV（短命 URL）を
    1 回で作り、ローカルの pandas で分析する（実務は [analyze-csv](../analyze-csv/SKILL.md)）。
    `get_station_detail` を駅数ぶん繰り返さない。
 3. **指標キーはカタログが唯一の真実**：指標名を推測で書かない。
-   `mcp__plugin_ai-database-map_station-data__get_metrics_catalog` で正確なキー・ラベル・単位・
+   `get_metrics_catalog` で正確なキー・ラベル・単位・
    利用可能な半径と年次を引いてから `rank_stations` / `compare_growth` に渡す。
    キーの形は `{接頭辞}_{年}_{半径}`（例 `pop_gr_2020_2015_1km`）。ファミリ名
    （例 `pop_gr`, `lp_gr`, `lp_med`, `bus_n`, `rate_covid`）でも渡せるが、半径・年の既定
@@ -34,7 +41,7 @@ AI Database Map の MCP ツール（`station-data` サーバ）で駅周辺の�
    [references/sources.md](references/sources.md)）。
 8. **水害・災害に触れるときは** [hazard-reading](../hazard-reading/SKILL.md) の作法に従う
    （「安全」と言わない・時制を明示・limitations を全部伝える）。多数の駅の一括スクリーニングは
-   `mcp__plugin_ai-database-map_station-data__get_hazard_summary`（≤500 駅・事前計算・順序尺度）。
+   `get_hazard_summary`（≤500 駅・事前計算・順序尺度）。
    none は「区域図の上で該当なし」で、`uncovered` の駅を安全と読まない。
 
 ## 分析の型（意思決定支援の 8 段）
@@ -43,7 +50,9 @@ AI Database Map の MCP ツール（`station-data` サーバ）で駅周辺の�
 必ずこの型に従う。用途別レシピ（住宅・輸送計画・出店）は、この型に**用途の質問リスト・
 指標プリセット・固有の限界の語彙**を差し込むだけの薄いカードにしてある。
 
-1. **要件を先に聞く（ツールより先・1 回だけ）**：初回の応答では分析を始めない。依頼文に
+1. **要件を先に聞く（データツールより先・1 回だけ）**：初回の応答では分析を始めない。
+   **`presentForm` が使えるなら質問リストをフォーム 1 枚で聞く**（回答は次のターンに届く）。
+   無ければ文章で聞く。依頼文に
    対象・目的の一部が書かれていても復唱に留め、レシピの質問リストの残りを確認する
    （すべて明示済み・「確認不要」とある場合だけ即実行してよい）。回答をもらったら、
    残る曖昧さは**聞き直さず、合理的な既定を宣言して**同じ応答の中で最後まで実行する
@@ -68,10 +77,30 @@ AI Database Map の MCP ツール（`station-data` サーバ）で駅周辺の�
 7. **出力の形**：比較・分類の表（実値＋単位・年次・半径。脚注にスコアの作り方）＋
    各対象に「効いた要因 1〜2 行」と「弱点 1 行」（弱点ゼロは無い）。**少数（〜5 件）の
    並記比較**は `build_dataset` 応答の preview と meta から直接組んでよい。多数・合成は
-   CSV をローカル（pandas 等）で。
+   CSV をローカル（pandas 等）で。**図を出せる環境なら図も出す**（次項）。
 8. **限界と出典（末尾に必ず・削らない）**：集計は**駅の代表点**基準の半径円（生活圏・
    商圏・駅勢圏そのものではない）・年次はデータごとに違う・**レシピの用途固有の限界**・
    **出典**（meta の `sources`。災害を使ったら `hazard.sources` も）。
+
+## 図を出せる環境では図も出す（Canvas）
+
+使えるツールに **`presentChart` / `presentForm` / `presentHtml` / `presentDocument`**
+（接頭辞は環境で変わる——**末尾の名前で見分ける**）があれば、表と文章に加えて図を出す。
+
+- **サーバから取れる図はサーバに作らせる**：`get_station_detail` / `rank_stations` /
+  `compare_growth` に **`present: "echarts"`** を足すと、`structuredContent.presenters.echarts` に
+  `presentChart` の `document` がそのまま入る。**転記せずそのまま渡す**（単位・年次・⚠ が落ちない）。
+  **自分で計算した値**（合成スコア等）の図は自分で書いてよい——単位・年次・正規化の脚注を自分で添える
+- **地図は 3 手**：`mapActions` を `render_map` に渡す → 返った URL を保存
+  （`curl -sL '<url>' -o artifacts/html/map.html`）→ `presentHtml` にそのパスを渡す。
+  **自分で選んだ駅**は `[{"type":"highlightStations","grps":[…]}]` を組んで渡してよい（座標はサーバが引く）
+- **結論・表・スコアの作り方（正規化・重み）・限界・出典は `presentDocument` に必ず書く**
+  ——図は本文から切り離して共有される。**図の副題に書いたから文章では省く、をしない**
+  （`title` は必須。`filenamePrefix` に英小文字ハイフンの名前を付ける＝後から探せる形で残す）
+- 無い環境では `present` を**付けない**（応答が重くなるだけ）。図が無くても答えは変わらない
+- 作った CSV・スクリプト・地図は残す（母艦は `artifacts/`、Claude Code 単体は `./data/`）
+
+詳しくは [references/canvas.md](references/canvas.md)。
 
 ## してはいけないこと
 
@@ -80,6 +109,10 @@ AI Database Map の MCP ツール（`station-data` サーバ）で駅周辺の�
 - 0 件・エラーのとき「データが無い」と断定する（応答の `hint` / `note` に従って言い直す）
 - レート制限（`Rate limited`）を受けたのに即再試行する（案内された秒数を待つ）
 - 型の 1（要件）を飛ばして分析を始める／敏感度に触れずに順位を断定する
+- `present: "echarts"` が返した option を**書き直す**（単位・年次・⚠ が落ちる）／
+  自分で書いた図に単位・年次・脚注を付けない
+- **ハザードをチャートにする**（順序尺度・免責と時制が落ちる）／図のタイトルに「安全」と書く
+- 図を出したことを理由に、限界・出典・表を省く
 
 ## 用途別レシピ（該当したらそちらの差し込みを使う）
 
@@ -92,3 +125,4 @@ AI Database Map の MCP ツール（`station-data` サーバ）で駅周辺の�
 - [references/metrics.md](references/metrics.md) — 指標キーの規約・半径・年次・信頼性フラグ
 - [references/hazard.md](references/hazard.md) — 災害データの意味と言い方
 - [references/sources.md](references/sources.md) — 出典・ライセンスの扱い
+- [references/canvas.md](references/canvas.md) — 図を出せる環境（母艦）での見せ方と禁じ手

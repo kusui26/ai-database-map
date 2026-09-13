@@ -1,15 +1,17 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { type z } from 'zod'
+import { z } from 'zod'
 import {
   MCP_TOOL_CONFIGS,
   mcpDescription,
   mcpIpStore,
+  presentersFor,
   registerMcpTools,
   type McpToolRegistry,
   type McpToolResult,
 } from '@/ai/mcp-tools'
 import { resetRateLimitStore } from '@/ai/rate-limit'
 import { TOOL_SPECS, TOOL_SPEC_NAMES } from '@/ai/tool-specs'
+import { PANEL_FIXTURES, panelFixture } from './fixtures/panels'
 
 /**
  * **MCP アダプタ**（`docs/260828_research_claude_auth.md` §4.2 PR-2）。
@@ -21,6 +23,8 @@ import { TOOL_SPECS, TOOL_SPEC_NAMES } from '@/ai/tool-specs'
  * ⑤登録の網羅とレート制限の実挙動（IP ごとに独立・再試行の案内つき）、
  * ⑥**MCP Apps（iframe）を出さない**こと——PR-11 で撤収した（`docs/260912_gui_chat_protocol.md`
  * 決定 11）。`ui://` リソースも `_meta.ui` も `map_probe` も戻ってこないことを固定する。
+ * ⑦表示用パラメータ `present`（PR-12）が**数値パネルを返すツールにだけ**広告され、
+ * **ドメインには届かない**こと。指定しなければ応答は従来と 1 バイトも変わらない。
  */
 
 /** 偽サーバ：登録内容を記録するだけ。`McpToolRegistry` をそのまま実装（キャスト不要）。 */
@@ -38,6 +42,12 @@ type RegisteredTool = {
 
 /** `_meta.ui`（MCP Apps のビューア指定）の有無。撤収済みなので**常に無い**のが不変条件。 */
 const hasUiMeta = (meta: Record<string, unknown>): boolean => 'ui' in meta
+
+/** Zod オブジェクトの持つキー（`as` を使わず型ガードで取り出す）。 */
+function shapeKeysOf(schema: z.ZodTypeAny): readonly string[] {
+  if (!(schema instanceof z.ZodObject)) throw new Error('ZodObject ではありません')
+  return Object.keys(schema.shape)
+}
 
 /** 先頭の content からテキストを取り出す（型ガード。共用体を黙って潰さない）。 */
 function firstText(result: McpToolResult): string {
@@ -113,8 +123,16 @@ describe('registerMcpTools（登録の網羅と中身）', () => {
       const tool = tools[index]
       expect(tool, key).toBeDefined()
       if (tool === undefined) continue
-      // スキーマは Spec と**同一の参照**（Gemini と MCP でずれない）。
-      expect(tool.config.inputSchema, key).toBe(TOOL_SPECS[key].inputSchema)
+      // ドメインの引数は Spec と同じ。`chartable` のツールだけ、表示用の `present` が 1 つ増える。
+      if (MCP_TOOL_CONFIGS[key].chartable === true) {
+        expect(shapeKeysOf(tool.config.inputSchema), key).toEqual([
+          ...shapeKeysOf(TOOL_SPECS[key].inputSchema),
+          'present',
+        ])
+      } else {
+        // それ以外は**同一の参照**（Gemini と MCP でずれない）。
+        expect(tool.config.inputSchema, key).toBe(TOOL_SPECS[key].inputSchema)
+      }
       expect(tool.config.description, key).toBe(mcpDescription(key))
       expect(tool.config.title, key).toBe(MCP_TOOL_CONFIGS[key].titleJa)
       // 全ツール読み取り専用（Claude が確認なしで実行できる・審査基準）。
@@ -134,6 +152,34 @@ describe('registerMcpTools（登録の網羅と中身）', () => {
     }
     expect(tools.some((tool) => tool.name === 'map_probe')).toBe(false)
     expect(resources.some((uri) => uri.startsWith('ui://'))).toBe(false)
+  })
+
+  it('表示用 `present` は、数値パネルを返す 3 ツールにだけ広告される', () => {
+    const chartable = TOOL_SPEC_NAMES.filter((key) => MCP_TOOL_CONFIGS[key].chartable === true)
+    expect(chartable).toEqual(['getStationDetail', 'rankStations', 'compareGrowth'])
+    // ハザード系・一覧・CSV には付けない（チャートにできるものが無い／危険度は図にしない）。
+    for (const key of ['getHazardAtPoint', 'listStations', 'buildDataset'] as const) {
+      expect(MCP_TOOL_CONFIGS[key].chartable, key).not.toBe(true)
+    }
+  })
+
+  it('`present` はドメインへ届かない（Spec の Zod が落とす）', () => {
+    const parsed: unknown = TOOL_SPECS.rankStations.inputSchema.parse({
+      metric: 'pop_gr',
+      present: 'echarts',
+    })
+    expect(parsed).not.toHaveProperty('present')
+  })
+
+  it('チャートにならないツールでは `present` を指定しても応答が変わらない', async () => {
+    const { tools, server } = fakeServer()
+    registerMcpTools(server, 'http://localhost:3000')
+    const catalog = tools.find((tool) => tool.name === 'get_metrics_catalog')
+    if (catalog === undefined) throw new Error('get_metrics_catalog が登録されていない')
+    const plain = await catalog.callback({})
+    const asked = await catalog.callback({ present: 'echarts' })
+    expect(asked.structuredContent).toEqual(plain.structuredContent)
+    expect(asked.structuredContent).not.toHaveProperty('presenters')
   })
 
   it('カタログツールは実行でき、text は Gemini と同じ要約 JSON', async () => {
@@ -202,5 +248,24 @@ describe('registerMcpTools（登録の網羅と中身）', () => {
     const other = await mcpIpStore.run('203.0.113.2', () => catalog.callback({}))
     expect(blocked.isError).toBe(true)
     expect(other.isError).toBeUndefined()
+  })
+})
+
+describe('presentersFor（表示用プレゼンタの出口・PR-12）', () => {
+  it('要求されていなければ何も足さない（既定の応答は従来どおり）', () => {
+    expect(presentersFor(null, PANEL_FIXTURES)).toBeNull()
+  })
+
+  it('チャートが 1 枚も作れなければ足さない（空の図を開かせない）', () => {
+    expect(presentersFor('echarts', [])).toBeNull()
+    expect(presentersFor('echarts', [panelFixture('hazardCard')])).toBeNull()
+  })
+
+  it('作れるときは `echarts` の document を足す（presentChart にそのまま渡せる形）', () => {
+    const presenters = presentersFor('echarts', [panelFixture('rankingTable')])
+    expect(presenters).not.toBeNull()
+    if (presenters === null) return
+    expect(presenters.echarts.charts.length).toBe(1)
+    expect(presenters.echarts.charts[0]?.type).toBe('bar')
   })
 })

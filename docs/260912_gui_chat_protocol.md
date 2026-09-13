@@ -247,7 +247,7 @@ CLAUDE.md §2 の図に「ユーザーの Claude」が並ぶ前身 §4.1 の構�
 
 - `mcp-tools.ts` の登録時に、**ToolSpec の inputSchema を `extend({ present: z.enum(['echarts']).optional() })` で包む**（ToolSpec 本体・Gemini 側は無改変）。アダプタが `present` を剥がして `spec.run` を呼び、結果の panels を純関数 `toEChartsOptions(panels)`（`src/shared/presenters/echarts.ts`）で option 配列に変換し、`structuredContent.presenters.echarts` に載せる
 - 対象は**数値パネルだけ**：`trendChart`（折れ線・`stacked` は積み上げ棒・null は途切れ・`totals` は上書き値）・`barChart`（横棒・`emphasis`）・`scatter`（クラスタ色・`clusterCount`）・`rankingTable`（横棒 Top-N）・`statTable`（表は Markdown に任せる＝変換しない）。**`hazardCard`・`evacuationList`・`escapeDirection` は変換しない**（チャートにすると危険度・免責・時制が落ちる——`instructions` と Markdown で運ぶ）
-- option は**関数を含まない JSON**（`axisLabel.formatter` は文字列テンプレート・単位はカタログの `unit`・年次はタイトル）。信頼性フラグ ⚠ は系列名に付ける。出典は `graphic`/subtitle に 1 行
+- option は**関数を含まない JSON**（ラベルは ECharts の文字列テンプレート・単位は軸名・年次はタイトル）。信頼性フラグ ⚠ は副題とラベルに出す。⚠ **出典は数値パネルが持っていない**（protocol の `sources` はハザード系 3 型だけ）ので、副題に載せるのは単位・⚠・注記で、出典は**周辺の文書**（`presentDocument`）で述べる——スキルの仕事（PR-14）
 - 既定 OFF（結果サイズを増やさない）。スキルが「Canvas があるときだけ `present:"echarts"` を付け、返った option を**そのまま** `presentChart` に渡す」と教える（転記ミスをゼロに）
 - Claude Code は structuredContent を LLM に見せる（PR-7 の発見）ので、option は LLM の目に入り、そのまま次のツール呼び出しに転記できる
 
@@ -440,6 +440,56 @@ PR-11〜13 は独立に着手可（12 と 13 は並行）。**T1 は PR-14 で�
 > ⚠ **残る手動確認**：claude.ai で iframe が消えてテキストに戻ること。ホストが
 > 「ツール→UI リソース」対応をコネクタ単位でキャッシュするので、**コネクタを削除→再追加**してから見る
 > （§1.2 の運用の罠。これが最後の 1 回になる）。
+
+> **✅ PR-12 完了（2026-09-14）。** 母艦の `presentChart` に**そのまま渡せる** ECharts の option を
+> サーバが組んで返すようにした（T1 の半分）。
+>
+> **足したもの**：`src/shared/presenters/echarts.ts`（パネル → option・純関数）と、MCP アダプタの
+> 表示用パラメータ **`present:"echarts"`**。指定すると `structuredContent.presenters.echarts` に
+> `{ title, charts: [{ title, type, option }] }` が入る——`presentChart` の `document` の形そのもの。
+> 受けるのは**数値のパネルを返す 3 ツールだけ**（`get_station_detail`・`rank_stations`・
+> `compare_growth`）で、説明は**ツール説明ではなく Zod の `describe`** に置いた（使わない
+> クライアントに毎回課金しないため）。
+>
+> **設計**：①option は**サーバが組む**——エージェントに組ませると単位・年次・⚠・欠損の扱いが
+> 会話ごとに揺れる。②**JSON だけ**を型（`JsonValue`）で強制したので、関数を書くとコンパイルが
+> 通らない。③変換するのは `trendChart`（折れ線／積み上げ）・`barChart`・`rankingTable`・`scatter`
+> の 4 型で、**`hazardCard`・`evacuationList`・`escapeDirection` は変換しない**（危険度は順序尺度・
+> 免責と時制が落ちる）。④整形済み文字列（`formatted`）は ECharts の文字列テンプレートとして
+> **そのままラベルに出す**ので、桁区切りも符号も Web UI と一致する。⑤積み上げの**合計は
+> 内訳の丸め和ではなく `totals`** を点線＋ラベルで重ねる（`docs/sales.md` §4.5 の食い違いを図で消す）。
+>
+> **`present` なしの応答は 1 バイトも変わらない**（`run` に届かないことを Zod の strip が保証。
+> 本番ビルドで `rank_stations` の有無を突き合わせ、`result`・`panels`・`mapActions` が
+> **バイト同一**であることを実測）。
+>
+> **本物の ECharts（cdnjs 6.1.0）で描かせて 4 件の実問題を見つけた**——どれも静的検査では出ない：
+> ① ランキングのツールチップに **`10.8000001907349`**（`float4` 保存に由来する見せかけの桁・
+> `docs/260816_supabase_restart.md`）。ECharts の整形は関数でしかできないので、**図に置く値を
+> 有効数字 7 桁へ丸める**ようにした（棒の長さは変わらず、読めない桁だけ消える）。
+> ② 散布の y 軸名（長い日本語）が**副題と重なる** → 回転（`nameRotate: 90`）＋左余白 64px。
+> ③ 点を `[x, y, 駅名]` の配列にすると option は **45% 小さくなる**（1,400 点で 56KB → 29KB）が、
+> ツールチップが「2.4,70.5,ゆめが丘」と駅名を重ねて出す。次元を指す記法（`{@[0]}` / `{c0}`）は
+> `series.data` でも `dataset` でも**解決しないことを実機で確かめた**ので、
+> **`{ name, value: [x, y] }` を採る**（大きさより「どの駅か読める」を優先）。
+> ④ 年が 2 つだけの積み上げ棒が画面の半分を占める → `barMaxWidth: 48`。
+>
+> **検証側の欠陥も 1 つ**：最初の実レンダはアニメーション中のフレームを測っていて、積み上げ棒を
+> 「描けた」と数えながら**実際には棒が無かった**。`chart.on('finished')` を待ってから測る形に直したら
+> 描画画素が 11,426 → 176,988 に変わった。**待たない測定は嘘をつく**——次に実レンダを書くときも同じ。
+>
+> **検証**：typecheck・lint・**ユニット 812 全緑**（`presenters-echarts` 24 件を新設。見本は
+> `tests/fixtures/panels.ts` に出して `viewer-panels` と共有——パネル型を足すと両方が同時に落ちる）・
+> `pnpm build` 緑。本番ビルドで 5 系統を実測（ランキング 12 件／人口の推移 3 系列／売上の積み上げ＋
+> 半径別の棒／散布 328 点／散布 1,400 点）、**すべて console の error・warning ゼロで描画**、
+> 系列色も全部画面に出た。ツールチップは「12. 鈴木町 10.8」「2016 小売 1,469.2 …合計 1,902.3」
+> 「ゆめが丘 2.4, 70.5」。
+>
+> ⚠ **大きさの性質**：散布の option は駅数に比例する（328 点 14KB／1,400 点 56KB）。応答自体も
+> パネルで同じだけ大きいので、**広い範囲の散布は `present` を付ける前に対象を絞る**——
+> 分析の型（§2 対象集合）で既に言っていることを、PR-14 のレシピで明示する。
+> `maxResultSizeChars` は既定のまま触っていない（上限を上げても超えるときは超えるので、
+> ホストの退避に任せる）。
 
 ---
 

@@ -51,6 +51,9 @@ const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i
 const safeColor = (value: string | undefined, fallback: string): string =>
   value !== undefined && HEX_COLOR.test(value) ? value : fallback
 
+/** 棒の色（ビューアの CSS `.bar-fill` と ECharts のプレゼンタで共有する）。 */
+export const CHART_BAR_COLOR = '#6366f1'
+
 /** 軸線の色（本文の罫線と揃える）。 */
 const AXIS_COLOR = '#cbd5e1'
 /** 軸ラベルの色。 */

@@ -5,18 +5,23 @@
  * CSV を再生成する。Blob 等のストアを増やさず、値は常にアプリ・Layer 1 ツールと一致する
  * （§11 の「データ整合」を構造で満たす）。
  *
- * - 形式: `base64url(deflateRaw(JSON payload)) . base64url(HMAC-SHA256)`
- * - exp（既定 24 時間）を過ぎたら 410——build_dataset を呼び直してもらう
- * - 秘密鍵は `DATASET_URL_SECRET`（本番必須。サーバレスは水平スケールするため
- *   プロセス乱数では別インスタンスで検証できない）
+ * 署名・圧縮・鍵は `ai/signed-url.ts` と共有し（`render_map` も同じ土台を使う）、
+ * ここが持つのは**何を載せるか**（payload の形）と期限の判定だけ。
+ * exp（既定 24 時間）を過ぎたら 410——build_dataset を呼び直してもらう。
  */
 
-import { createHmac, timingSafeEqual } from 'node:crypto'
-import { deflateRawSync, inflateRawSync } from 'node:zlib'
 import { z } from 'zod'
+import {
+  openPayload,
+  signPayload,
+  signedUrlSecret,
+  SIGNED_URL_TTL_MS,
+  type SignedUrlFailure,
+  type SignedUrlToken,
+} from '../signed-url'
 
 /** URL の有効期間（24 時間＝分析セッション 1 回ぶん。恒久 API 化させない）。 */
-export const DATASET_URL_TTL_MS = 24 * 60 * 60 * 1000
+export const DATASET_URL_TTL_MS = SIGNED_URL_TTL_MS
 
 /**
  * 対象駅のセレクタ（`ListStationsFilter` と同形・listStations と同じ語彙）。
@@ -57,11 +62,7 @@ const payloadSchema = z.object({
   q: datasetQuerySchema,
 })
 
-function signatureOf(secret: string, body: string): string {
-  return createHmac('sha256', secret).update(body).digest('base64url')
-}
-
-export type SignedDatasetToken = { readonly token: string; readonly expiresAtMs: number }
+export type SignedDatasetToken = SignedUrlToken
 
 /** クエリ定義に署名する（`now`・`secret` 注入で純粋にテスト可能）。 */
 export function signDatasetToken(
@@ -69,59 +70,32 @@ export function signDatasetToken(
   options: { readonly secret: string; readonly now: number; readonly ttlMs?: number },
 ): SignedDatasetToken {
   const expiresAtMs = options.now + (options.ttlMs ?? DATASET_URL_TTL_MS)
-  const payload = JSON.stringify({ v: 1, exp: expiresAtMs, q: query })
-  const body = deflateRawSync(Buffer.from(payload, 'utf-8')).toString('base64url')
-  return { token: `${body}.${signatureOf(options.secret, body)}`, expiresAtMs }
+  return {
+    token: signPayload({ v: 1, exp: expiresAtMs, q: query }, options.secret),
+    expiresAtMs,
+  }
 }
 
 export type DatasetTokenVerification =
   | { readonly ok: true; readonly query: DatasetQuery; readonly expiresAtMs: number }
-  | { readonly ok: false; readonly reason: 'malformed' | 'signature' | 'expired' }
+  | { readonly ok: false; readonly reason: SignedUrlFailure }
 
 /** トークンを検証する（署名 → 展開 → 形 → 期限の順。失敗理由を区別して返す）。 */
 export function verifyDatasetToken(
   token: string,
   options: { readonly secret: string; readonly now: number },
 ): DatasetTokenVerification {
-  const at = token.lastIndexOf('.')
-  if (at <= 0 || at === token.length - 1) return { ok: false, reason: 'malformed' }
-  const body = token.slice(0, at)
-  const given = Buffer.from(token.slice(at + 1), 'utf-8')
-  const expected = Buffer.from(signatureOf(options.secret, body), 'utf-8')
-  if (given.length !== expected.length || !timingSafeEqual(given, expected)) {
-    return { ok: false, reason: 'signature' }
-  }
-  try {
-    const raw = inflateRawSync(Buffer.from(body, 'base64url')).toString('utf-8')
-    const parsed = payloadSchema.safeParse(JSON.parse(raw))
-    if (!parsed.success) return { ok: false, reason: 'malformed' }
-    if (options.now >= parsed.data.exp) return { ok: false, reason: 'expired' }
-    return { ok: true, query: parsed.data.q, expiresAtMs: parsed.data.exp }
-  } catch {
-    return { ok: false, reason: 'malformed' }
-  }
+  const opened = openPayload(token, options.secret)
+  if (!opened.ok) return { ok: false, reason: opened.reason }
+  const parsed = payloadSchema.safeParse(opened.payload)
+  if (!parsed.success) return { ok: false, reason: 'malformed' }
+  if (options.now >= parsed.data.exp) return { ok: false, reason: 'expired' }
+  return { ok: true, query: parsed.data.q, expiresAtMs: parsed.data.exp }
 }
 
-let warnedDevSecret = false
-
 /**
- * 署名の秘密鍵。本番（NODE_ENV=production）では `DATASET_URL_SECRET` を必須にし、
- * 未設定なら**文脈つきで失敗**する（黙って弱い鍵で動かない）。開発は固定の代替値。
+ * 署名の秘密鍵（`signed-url.ts` と同じ 1 本。名前は呼び出し側の読みやすさのため残す）。
  */
 export function datasetSecret(): string {
-  const secret = process.env.DATASET_URL_SECRET
-  if (secret !== undefined && secret.length > 0) return secret
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error(
-      'DATASET_URL_SECRET が未設定です（build_dataset の署名 URL に必要）。' +
-        '`openssl rand -hex 32` で生成し、環境変数（Vercel / .env）に設定してください。',
-    )
-  }
-  if (!warnedDevSecret) {
-    console.warn(
-      '[dataset] DATASET_URL_SECRET 未設定のため開発用の固定鍵で署名します（本番では必須）',
-    )
-    warnedDevSecret = true
-  }
-  return 'aidb-dev-dataset-url-secret'
+  return signedUrlSecret()
 }

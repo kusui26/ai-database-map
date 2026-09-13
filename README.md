@@ -42,7 +42,7 @@ flowchart TB
 
 ## あなたの Claude で使う（Step2・リモート MCP）
 
-共通 API を**リモート MCP サーバ（12 ツール・読み取り専用・認証不要）**として公開しています。
+共通 API を**リモート MCP サーバ（13 ツール・読み取り専用・認証不要）**として公開しています。
 ユーザー自身の Claude サブスクリプション（**API キー不要・追加費用なし**）で、住宅購入・鉄道の輸送計画・出店の商圏分析などの分析グレードの支援ができます。
 **導入ページ：<https://ai-database-map.vercel.app/ai>**
 
@@ -58,7 +58,7 @@ flowchart TB
 
 ### 入っているもの
 
-- **ツール 12 本**：駅検索・一覧（市区町村/会社/路線/範囲）・**`build_dataset`**（駅×指標 CSV を短命 URL で 1 回生成・災害列の結合可）・**`get_hazard_summary`**（全駅事前計算の災害サマリ ≤500 駅一括）・駅詳細・ランキング・散布・地点ハザード・警報・避難場所・脱出方向・自己記述カタログ
+- **ツール 13 本**：駅検索・一覧（市区町村/会社/路線/範囲）・**`build_dataset`**（駅×指標 CSV を短命 URL で 1 回生成・災害列の結合可）・**`render_map`**（結果を地図にした HTML ページを短命 URL で生成）・**`get_hazard_summary`**（全駅事前計算の災害サマリ ≤500 駅一括）・駅詳細・ランキング・散布・地点ハザード・警報・避難場所・脱出方向・自己記述カタログ
 - **スキル**（Claude Code / Cowork / Codex）：分析の型（`station-analysis`）＋用途別レシピ——住宅 `/ai-database-map:recommend`・輸送計画 `:demand`・出店 `:market`——＋ `analyze-csv`・`hazard-reading`
 - **golden 受け入れテスト**：`plugins/ai-database-map/evals/`（`claude plugin eval` 形式・3 ユースケースの実走で 5/5・3/3・3/3 合格済み）
 
@@ -179,4 +179,4 @@ Vercel に接続し、`main` へのマージで本番デプロイされます。
 
 ## ステータス
 
-**Step1（データ刷新＋公開）・Step2（AI ネイティブ化）完了。** アプリ内 Gemini チャットに加え、リモート MCP（12 ツール）＋ Claude Code / Codex プラグイン＋分析スキル（3 ユースケースの golden 受け入れテストつき）を公開済み。経緯と設計判断は [`docs/260828_research_claude_auth.md`](docs/260828_research_claude_auth.md) を参照。
+**Step1（データ刷新＋公開）・Step2（AI ネイティブ化）完了。** アプリ内 Gemini チャットに加え、リモート MCP（13 ツール）＋ Claude Code / Codex プラグイン＋分析スキル（3 ユースケースの golden 受け入れテストつき）を公開済み。経緯と設計判断は [`docs/260828_research_claude_auth.md`](docs/260828_research_claude_auth.md)（Step2 まで）と [`docs/260912_gui_chat_protocol.md`](docs/260912_gui_chat_protocol.md)（以降）を参照。

@@ -18,11 +18,12 @@ import { createCollector, type ToolEffect } from '@/ai/types'
  */
 
 describe('TOOL_SPECS（登録の網羅）', () => {
-  it('12 ツールが揃っている（増減したら MCP 側の写しも見直す）', () => {
+  it('13 ツールが揃っている（増減したら MCP 側の写しも見直す）', () => {
     expect(TOOL_SPEC_NAMES).toEqual([
       'searchStations',
       'listStations',
       'buildDataset',
+      'renderMap',
       'getHazardSummary',
       'getStationDetail',
       'rankStations',
@@ -56,10 +57,15 @@ describe('TOOL_SPECS（登録の網羅）', () => {
 
 describe('Gemini のツール表面 ＝ Spec（同一の参照・ずれない）', () => {
   const tools = createTools(createCollector(), 'http://localhost:3000')
+  /** アプリ内チャットには出さないツール（理由は下のテストに書いてある）。 */
+  const GEMINI_EXCLUDED = ['buildDataset', 'getHazardSummary', 'renderMap'] as const
+  const isExcluded = (
+    key: (typeof TOOL_SPEC_NAMES)[number],
+  ): key is (typeof GEMINI_EXCLUDED)[number] => GEMINI_EXCLUDED.some((each) => each === key)
 
-  it('全ツールの説明とスキーマが Spec と同じ物体（Layer 2 の 2 本は §5.6 で除外）', () => {
+  it('全ツールの説明とスキーマが Spec と同じ物体（アプリ内で出せない 3 本は除外）', () => {
     for (const key of TOOL_SPEC_NAMES) {
-      if (key === 'buildDataset' || key === 'getHazardSummary') continue
+      if (isExcluded(key)) continue
       const spec = TOOL_SPECS[key]
       const built = tools[key]
       expect(built.description, key).toBe(spec.description)
@@ -67,10 +73,11 @@ describe('Gemini のツール表面 ＝ Spec（同一の参照・ずれない）
     }
   })
 
-  it('buildDataset / getHazardSummary は Gemini に出さない（Layer 2・§5.6）', () => {
-    expect('buildDataset' in tools).toBe(false)
-    expect('getHazardSummary' in tools).toBe(false)
-    expect(Object.keys(tools)).toHaveLength(TOOL_SPEC_NAMES.length - 2)
+  it('buildDataset / getHazardSummary / renderMap は Gemini に出さない', () => {
+    // 前 2 本は Layer 2（§5.6・アプリ内にコード実行環境が無い）。renderMap は PR-13——
+    // アプリは自前の地図を持っているので、HTML の地図ページを渡す相手がいない。
+    for (const key of GEMINI_EXCLUDED) expect(key in tools, key).toBe(false)
+    expect(Object.keys(tools)).toHaveLength(TOOL_SPEC_NAMES.length - GEMINI_EXCLUDED.length)
   })
 })
 

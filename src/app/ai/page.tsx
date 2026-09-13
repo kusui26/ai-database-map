@@ -2,7 +2,7 @@
  * 導入ページ（PR-8・`docs/260828_research_claude_auth.md` §6）。
  *
  * ユーザー自身の Claude（Claude Code / Claude.ai / Cowork）や他の MCP クライアントから、
- * このアプリの共通 API（リモート MCP・12 ツール）を**本人のサブスクリプションで**使うための
+ * このアプリの共通 API（リモート MCP・13 ツール）を**本人のサブスクリプションで**使うための
  * 入口。コマンド・導入リンク・プラン別の注意（枠の消費）をここに集約する。
  */
 
@@ -13,7 +13,7 @@ import { CopyButton } from '@/components/CopyButton'
 export const metadata: Metadata = {
   title: 'Claude で使う（MCP・プラグイン導入）',
   description:
-    'AI Database Map をあなたの Claude（Claude Code / Claude.ai / Cowork）や MCP 対応クライアントから使うための導入ページ。駅×半径のオープンデータ 12 ツールと分析スキルを、コマンド 2 行で導入できます。',
+    'AI Database Map をあなたの Claude（Claude Code / Claude.ai / Cowork）や MCP 対応クライアントから使うための導入ページ。駅×半径のオープンデータ 13 ツールと分析スキルを、コマンド 2 行で導入できます。',
 }
 
 const MCP_URL = 'https://ai-database-map.vercel.app/api/mcp'
@@ -49,6 +49,7 @@ const TOOLS: readonly { name: string; desc: string }[] = [
     desc: '駅の特定・対象集合（市区町村/会社/路線/範囲）',
   },
   { name: 'build_dataset', desc: '駅×指標の CSV を 1 回で生成（短命 URL・ハザード結合可）' },
+  { name: 'render_map', desc: '結果を地図にした HTML ページを生成（短命 URL・保存して開く）' },
   { name: 'get_hazard_summary', desc: '全駅事前計算の災害サマリを最大 500 駅一括' },
   { name: 'get_station_detail / rank_stations / compare_growth', desc: '駅詳細・ランキング・散布' },
   { name: 'get_hazard_at_point / get_hazard_alerts', desc: '地点の想定リスク・いまの警報' },
@@ -75,7 +76,7 @@ export default function AiIntroPage() {
         <p className="text-slate-600">
           AI Database Map は、全国 9,273 駅 ×
           半径のオープンデータ（乗降客数・人口・地価・売上・災害リスク…）を
-          <span className="font-medium">リモート MCP サーバ（12 ツール）</span>
+          <span className="font-medium">リモート MCP サーバ（13 ツール）</span>
           として公開しています。あなた自身の Claude
           サブスクリプションから、住宅購入・輸送計画・出店の商圏分析といった
           <span className="font-medium">高度なデータ分析</span>
@@ -146,7 +147,7 @@ export default function AiIntroPage() {
         </p>
       </Section>
 
-      <Section title="できること（12 ツール）">
+      <Section title="できること（13 ツール）">
         <ul className="space-y-1.5 text-sm">
           {TOOLS.map((tool) => (
             <li key={tool.name} className="flex gap-2">

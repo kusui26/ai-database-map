@@ -19,8 +19,8 @@
   },
   "interface": {
     "displayName": "AI Database Map",
-    "shortDescription": "駅×半径の日本のオープンデータ分析（12 ツール＋分析スキル）",
-    "longDescription": "全国 9,273 駅×半径のオープンデータ（乗降客数・人口・地価・売上・バス・事業所・従業者・水害/土砂リスク）を 12 の MCP ツールで照会し、住宅購入・鉄道の輸送計画・出店の商圏分析をデータで支援します。多数駅の比較は build_dataset が CSV（短命 URL）を 1 回で生成し、ローカルの pandas で分析します。読み取り専用・認証不要。",
+    "shortDescription": "駅×半径の日本のオープンデータ分析（13 ツール＋分析スキル）",
+    "longDescription": "全国 9,273 駅×半径のオープンデータ（乗降客数・人口・地価・売上・バス・事業所・従業者・水害/土砂リスク）を 13 の MCP ツールで照会し、住宅購入・鉄道の輸送計画・出店の商圏分析をデータで支援します。多数駅の比較は build_dataset が CSV（短命 URL）を 1 回で生成し、ローカルの pandas で分析します。読み取り専用・認証不要。",
     "developerName": "kusui26",
     "category": "Productivity",
     "capabilities": ["Read"],

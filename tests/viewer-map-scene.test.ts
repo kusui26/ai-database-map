@@ -198,3 +198,48 @@ describe('カメラと接続先', () => {
     )
   })
 })
+
+describe('駅の座標を渡したとき（サーバだけができること・PR-13）', () => {
+  const STATIONS = new Map([
+    ['横浜#0', { lon: 139.622, lat: 35.466, nameJa: '横浜駅' }],
+    ['川崎#0', { lon: 139.697, lat: 35.531, nameJa: '川崎駅' }],
+  ])
+
+  it('highlightStations が点になる（ランキングの結果も地図にできる）', () => {
+    const scene = mapScene([{ type: 'highlightStations', grps: ['横浜#0', '川崎#0'] }], {
+      stations: STATIONS,
+    })
+    expect(scene.points.map((point) => [point.kind, point.labelJa])).toEqual([
+      ['station', '横浜駅'],
+      ['station', '川崎駅'],
+    ])
+    expect(scene.drawable).toBe(true)
+    expect(scene.unresolvedGrps).toEqual([])
+  })
+
+  it('引けなかった駅は黙って消さず残す（一覧で読んでもらうため）', () => {
+    const scene = mapScene([{ type: 'highlightStations', grps: ['横浜#0', '無い駅#9'] }], {
+      stations: STATIONS,
+    })
+    expect(scene.points.length).toBe(1)
+    expect(scene.unresolvedGrps).toEqual(['無い駅#9'])
+  })
+
+  it('flyTo が無くても、selectStation の grp から半径円の中心を決められる', () => {
+    const scene = mapScene([{ type: 'selectStation', grp: '横浜#0', radiusM: 1000 }], {
+      stations: STATIONS,
+    })
+    expect(scene.circle).toEqual({ lon: 139.622, lat: 35.466, radiusM: 1000 })
+    // 中心の印も置き、引けた駅名を添える（円だけだとどの駅か読めない）。
+    expect(scene.points).toEqual([
+      { lon: 139.622, lat: 35.466, labelJa: '横浜駅', kind: 'origin', index: null },
+    ])
+  })
+
+  it('渡さなければ従来どおり（座標の無い操作は描かない）', () => {
+    const scene = mapScene([{ type: 'highlightStations', grps: ['横浜#0'] }])
+    expect(scene.points).toEqual([])
+    expect(scene.drawable).toBe(false)
+    expect(scene.unresolvedGrps).toEqual(['横浜#0'])
+  })
+})

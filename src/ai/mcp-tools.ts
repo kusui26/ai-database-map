@@ -162,6 +162,15 @@ export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
     // CSV 生成は 1 回で重いクエリ＋短命 URL の発行なので、検索系より絞る（§4.4）。
     perMinute: 10,
   },
+  renderMap: {
+    mcpName: 'render_map',
+    titleJa: '地図レポート（HTML の短命 URL）',
+    descriptionEn:
+      'Render the given mapActions as a self-contained HTML map page and return a short-lived URL. Leaflet is inlined and tiles load as <img>, so the page works inside a sandboxed iframe with connect-src none.',
+    maxResultSizeChars: 8_000,
+    // 駅の座標を DB から引き、URL を発行する。検索系より絞る（上流は GET 時に叩く）。
+    perMinute: 10,
+  },
   getHazardSummary: {
     mcpName: 'get_hazard_summary',
     titleJa: '駅別ハザード一括（事前計算）',
@@ -393,6 +402,7 @@ export function registerMcpTools(
   registerSpec(server, 'searchStations', s.searchStations, origin, options)
   registerSpec(server, 'listStations', s.listStations, origin, options)
   registerSpec(server, 'buildDataset', s.buildDataset, origin, options)
+  registerSpec(server, 'renderMap', s.renderMap, origin, options)
   registerSpec(server, 'getHazardSummary', s.getHazardSummary, origin, options)
   registerSpec(server, 'getStationDetail', s.getStationDetail, origin, options)
   registerSpec(server, 'rankStations', s.rankStations, origin, options)

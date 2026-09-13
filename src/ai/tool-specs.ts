@@ -31,6 +31,10 @@ import {
   type RankingResponse,
   type StationListItem,
 } from '@/shared/api'
+import { signedUrlSecret } from './signed-url'
+import { defaultTitleJa, reportNotesJa, sceneFor } from './map-report/build'
+import { MAP_MAX_ACTIONS, mapQuerySchema, signMapToken } from './map-report/token'
+import { mapActionSchema } from '@/shared/protocol'
 import {
   DATASET_MAX_VALUE_COLUMNS,
   resolveDatasetColumns,
@@ -134,6 +138,23 @@ function defineSpec<Schema extends z.ZodTypeAny, Out>(
 /** 副産物なしの返り値（検索・カタログ照会・構造化エラー）。 */
 function pure<Out>(forLlm: Out): ToolRunResult<Out> {
   return { effects: [], forLlm }
+}
+
+/** `renderMap` が LLM へ返す形（HTML は載せない——URL と「何を描いたか」だけ）。 */
+type MapReportForLlm = {
+  readonly url: string
+  readonly expiresAt: string
+  readonly title: string
+  readonly drew: {
+    readonly points: number
+    readonly stations: number
+    readonly destinations: number
+    readonly radiusM: number | null
+  }
+  readonly layers: readonly { key: string; labelJa: string; sourceJa: string }[]
+  readonly unresolvedGrps: readonly string[]
+  readonly notesJa: readonly string[]
+  readonly howToJa: string
 }
 
 /** 構造化エラー（次の一手つき）。例外ではなく `forLlm` として返す正常な応答。 */
@@ -909,6 +930,100 @@ export const TOOL_SPECS = {
     },
   }),
 
+  /**
+   * 地図レポート（母艦の `presentHtml` に渡せる 1 ページ・PR-13・
+   * `docs/260912_gui_chat_protocol.md` §4.3(b)）。
+   *
+   * **HTML は応答に載せない**——短命 URL だけを返し、中身は開いたときにサーバが組む。
+   * ランキングのように **grp しか無い操作**もサーバが座標を引いて描けるのが、
+   * ブラウザのビューアとの違い。
+   */
+  renderMap: defineSpec({
+    name: 'renderMap',
+    description:
+      '直前のツール結果の mapActions（structuredContent.mapActions）をそのまま渡すと、その内容を描いた地図の HTML ページを作り、短命 URL で返す。' +
+      '駅の半径円・起点の印・避難先の番号つきマーカー・ハザードの面を、アプリの地図と同じ意味で描く。' +
+      'grp だけの操作（highlightStations＝ランキング等の上位駅）も、サーバが座標を引いて点にする。' +
+      'HTML は応答に含めない（大きいため）——URL を保存して、HTML を表示できるツール（presentHtml など）に渡すか、ブラウザで開く。' +
+      '約 24 時間で失効する。失効したら呼び直す。地図が描けない入力（座標もレイヤも無い）のときは URL を作らずに理由を返す。',
+    inputSchema: z.object({
+      mapActions: z
+        .array(mapActionSchema)
+        .min(1)
+        .max(MAP_MAX_ACTIONS)
+        .describe(
+          'ツール結果の structuredContent.mapActions を**そのまま**渡す（作り直さない）。' +
+            `最大 ${MAP_MAX_ACTIONS} 件。`,
+        ),
+      title: z
+        .string()
+        .min(1)
+        .max(160)
+        .optional()
+        .describe('ページの見出し（省略時は内容から決める）'),
+    }),
+    errorFallbackJa: '地図レポートを作成できませんでした',
+    run: async (
+      { mapActions, title },
+      ctx,
+    ): Promise<ToolRunResult<HintErrorJa | MapReportForLlm>> => {
+      const query = mapQuerySchema.safeParse({ actions: mapActions, title })
+      if (!query.success) {
+        return pure({
+          error: query.error.issues.map((issue) => issue.message).join(' / '),
+          hint: '地図操作は直前のツール結果の structuredContent.mapActions をそのまま渡してください。多すぎるときは対象を絞ってから呼び直します。',
+        })
+      }
+      const scene = await sceneFor(mapActions)
+      if (!scene.drawable) {
+        return pure({
+          error: '渡された地図操作から描けるものがありませんでした',
+          hint:
+            scene.unresolvedGrps.length > 0
+              ? '駅の grp が見つかりませんでした。searchStations / listStations が返した grp をそのまま渡してください。'
+              : '座標を持つ操作（flyTo・showPoint・highlightPoints）かハザードのレイヤ（setHazardLayers）を含む mapActions を渡してください。',
+        })
+      }
+      const signed = signMapToken(query.data, { secret: signedUrlSecret(), now: Date.now() })
+      const notes = [
+        ...reportNotesJa({
+          scene,
+          // 時刻の差し込みは URL を開いたときに行う（ここでは未解決として扱う）。
+          layers: scene.layers.map((layer) => ({
+            key: layer.key,
+            labelJa: layer.labelJa,
+            timeLabelJa: null,
+          })),
+          dropped: [],
+        }),
+        ...(scene.hasTimedLayer
+          ? ['キキクル（危険度分布）は URL を開いた時点の最新の面になります（10 分毎に更新）。']
+          : []),
+      ]
+      return pure({
+        url: `${ctx.origin}/api/map?t=${signed.token}`,
+        expiresAt: new Date(signed.expiresAtMs).toISOString(),
+        title: query.data.title ?? defaultTitleJa(scene),
+        drew: {
+          points: scene.points.length,
+          stations: scene.points.filter((point) => point.kind === 'station').length,
+          destinations: scene.points.filter((point) => point.kind === 'destination').length,
+          radiusM: scene.circle?.radiusM ?? null,
+        },
+        layers: scene.layers.map((layer) => ({
+          key: layer.key,
+          labelJa: layer.labelJa,
+          sourceJa: layer.attribution,
+        })),
+        unresolvedGrps: scene.unresolvedGrps,
+        notesJa: notes,
+        howToJa:
+          'URL は HTML の 1 ページです。保存してから HTML を表示できるツール（presentHtml など）に渡すか、ブラウザで開いてください。' +
+          '応答には HTML を含めません（大きいため）。本文の凡例・出典・注意はそのまま伝えてください。',
+      })
+    },
+  }),
+
   /** 駅別ハザードの一括取得（事前計算から読む・§5.3 ③）。 */
   getHazardSummary: defineSpec({
     name: 'getHazardSummary',
@@ -1362,6 +1477,7 @@ export const TOOL_SPEC_NAMES = [
   'searchStations',
   'listStations',
   'buildDataset',
+  'renderMap',
   'getHazardSummary',
   'getStationDetail',
   'rankStations',

@@ -30,7 +30,7 @@
 | **T2** 自前ビューア | `@…/gui-chat-plugin`（1 ツール・action 判別・Vue View＝共通レンダラ＋MapLibre） | — | **型つきデータをそのまま地図＋パネルで描く** | — |
 | T1′ Artifacts（任意） | スキル `report` | **claude.ai 上の HTML レポート**（Pro/Max 可・タイル地図は不可） | — | — |
 
-**決定の要点（§8 に表）**：決定 4（MCP Apps 導入）を**覆して却下**、決定 1〜3・5〜10 は維持。新規は決定 11〜18——撤収の範囲／GUI 契約＝GCP／T1 先行／地図の T1 実装（Leaflet 同梱の `<img>` タイル）／T2 プラグインと配布先／スキルの母艦対応／MulmoClaude MCP カタログ掲載 PR／Artifacts。
+**決定の要点（§8 に表）**：決定 4（MCP Apps 導入）を**覆して却下**、決定 1〜3・5〜10 は維持。新規の決定 11〜19（撤収の範囲／GUI 契約＝GCP／T1 先行／地図の T1 実装＝Leaflet 同梱の `<img>` タイル／T2 プラグインと配布先／スキルの母艦対応／MulmoClaude MCP カタログ掲載 PR／Artifacts／npm 名）は **2026-09-13 に推奨どおり合意済み**——以後はこの表がコードより先に来る。
 
 ---
 
@@ -366,9 +366,9 @@ Claude : [list_stations 横浜市 → 137 駅] [build_dataset 137 駅×20 列（
 | 5 | ディレクトリ掲載は見送り | 維持（母艦の **MCP カタログ**は別枠＝決定 17） |
 | 6〜10 | Gemini 残す／分析グレード 3 本／生 SQL 出さない／ハザード事前計算／市区町村列 | **維持** |
 
-### 8.2 新しく決めること（2026-09-12・推奨を併記。合意後に着手）
+### 8.2 新しく決めたこと（2026-09-12 提案・**2026-09-13 に推奨どおり合意済み**）
 
-| # | 論点 | **推奨** | 代替 |
+| # | 論点 | **決定** | 見送った代替 |
 |--:|---|---|---|
 | 11 | MCP Apps 撤収の範囲 | `_meta.ui`・`ui://` 3 リソース・`map_probe`・ハンドシェイクを**本番から外す**。レンダラと mapActions 意味論は **TS モジュール化して残す**（T1/T2 の部品） | env フラグで温存（保守が残る・却下の意図に反する） |
 | 12 | GUI の契約 | **GUI Chat Protocol（型つきデータ→登録ビューア）**。母艦＝MulmoTerminal／MulmoClaude | 自前チャット UI（規約・工数で不採用） |
@@ -381,6 +381,7 @@ Claude : [list_stations 横浜市 → 137 駅] [build_dataset 137 駅×20 列（
 | 19 | npm スコープ／パッケージ名 | `@kusui26/ai-database-map-gui-plugin`（要 npm アカウント）または無スコープ | — |
 
 > 覆したくなったら、コードより先にこの表を書き換える（前身と同じ作法）。
+> 合意（2026-09-13）を受けて **PR-11 から着手する**。
 
 ---
 
@@ -388,7 +389,7 @@ Claude : [list_stations 横浜市 → 137 駅] [build_dataset 137 駅×20 列（
 
 | | 内容 | 依存 | 受け入れ |
 |---|---|---|---|
-| **PR-11** | **MCP Apps 撤収＋ビューア部品の TS 化**：`_meta.ui`／`ui://`／`map_probe` を外す。`VIEWER_JS` を `src/shared/viewer/{render,charts,mapSemantics}.ts`（純関数・DOM は引数）に切り出し、旧テストを移植。`docs`・README・`/ai` の MCP Apps 記述を削除 | — | tools/list に `_meta.ui` も `map_probe` も無い（E2E）／ビューア網羅テスト緑／`pnpm build` 緑／claude.ai で iframe が出ずテキストに戻る（実機） |
+| **PR-11** | **MCP Apps 撤収＋ビューア部品の TS 化**：`_meta.ui`／`ui://` 3 リソース／`map_probe`／ハンドシェイクを外す。文字列 JS を**純 TS**へ——パネル描画は `src/shared/viewer/{vnode,charts,panels,styles}.ts`（protocol → VNode → HTML・DOM 非依存）、地図の意味論は `src/domain/map/scene.ts`（mapActions → 描くもの。ハザードの順序・不透明度・出典は既存 domain を再利用）。旧テストを移植 | — | tools/list に `_meta.ui` も `map_probe` も無い（本番ビルド実測）／ビューア網羅テスト緑／`pnpm build` 緑／claude.ai で iframe が出ずテキストに戻る（実機） |
 | **PR-12** | **T1 プレゼンタ・アダプタ**：`present:"echarts"`（MCP 層の `extend`）＋`src/shared/presenters/echarts.ts`（trendChart／barChart／scatter／rankingTable）＋テスト（パネル型網羅・関数を含まない・単位/年次/⚠ の反映） | PR-11 | `present` 無しの結果が**バイト同一**（回帰）／option を ECharts に食わせて描ける（Playwright・cdnjs の ECharts で実レンダ） |
 | **PR-13** | **T1 地図 `render_map`**：`MapAction[]` 入力・Leaflet 同梱・カタログ由来のタイル/出典/不透明度・署名 URL（`token.ts` 再利用）・`scripts/fetch_map.py`＋curl 手順・レート制限 | PR-11 | HTML に fetch/XHR が無い（静的検査）／`sandbox allow-scripts; connect-src 'none'; img-src https:` を模した iframe で Playwright 実レンダ（タイル `<img>` 取得・マーカー・半径円・面）／410/429 実測 |
 | **PR-14** | **スキル母艦対応＋evals**：論理名解決・Canvas 検出・`presentForm` 要件・成果物規約・`data-analyst`・golden Canvas 版・プラグイン 0.8.0（CHANGELOG・README） | PR-12・13 | MulmoTerminal 実走（§10）5/5／Claude Code 単体の golden 3 本が回帰しない（既存ランナー 11/11） |
@@ -398,6 +399,47 @@ Claude : [list_stations 横浜市 → 137 駅] [build_dataset 137 駅×20 列（
 | **PR-18** | Artifacts レポート（`/ai-database-map:report`）——任意 | PR-14 | Pro/Max セッションで Artifact が公開される |
 
 PR-11〜13 は独立に着手可（12 と 13 は並行）。**T1 は PR-14 で完成**、T2 は PR-16/17。運用（Vercel WAF・Spend Management）は前身のまま。
+
+> **✅ PR-11 完了（2026-09-13）。** MCP Apps を本番から外し、価値のある部分だけを純 TS にした。
+>
+> **外したもの**：全ツールの `_meta.ui`／`ui://` リソース 3 本（`panels.html`・`map-panels.html`・
+> `map-probe.html`）／`map_probe`（13 → **12 ツール**）／ext-apps のハンドシェイク／
+> `MCP_APP_MIME_TYPE`／`McpToolConfig` の `panelUi`・`mapUi`／`src/ai/mcp-app/` 4 ファイル
+> （文字列に埋めた JS・HTML が約 1,900 行）／`next.config.ts` の `outputFileTracingIncludes`
+> （MapLibre を実行時に読まなくなったため。`maplibre-gl` は Web UI の依存として残る）。
+>
+> **残したもの**（文字列 JS → 型のついた純関数）：
+> `src/shared/viewer/vnode.ts`（DOM を持たない木＋HTML 直列化。**エスケープをここの責務に固定**）／
+> `charts.ts`（手書き SVG：欠損で線を切る・積み上げは `totals` を優先・クラスタ色）／
+> `panels.ts`（**判別ユニオンを網羅する switch**——protocol にパネル型を足すと型エラーで落ちる）／
+> `styles.ts`（CSS。クラスの対応はテストが固定）／
+> `src/domain/map/scene.ts`（mapActions →点・通し番号・半径円・レイヤ・矩形・接続先）。
+>
+> **層の分け方**：markup は protocol にしか依存しないので `shared`、地図の意味（描画順・不透明度・
+> 出典）はハザード・カタログに依存するので `domain`。**`shared` → `domain` の逆流を作らない**
+> （この分割のために 1 ファイルを 2 か所へ置いた）。
+>
+> **重複の解消が最大の利得**：旧ビューアは `LEVEL_COLORS`／`levelLabel`／`evacLabel`／パレット／
+> `fmtNum`／`drawOrder`／不透明度の丸め／円の近似を**文字列 JS に複製**し「変えるときは両方」と
+> 注記していた。すべて `shared/constants`・`shared/format`・`domain/hazard/*` の実体に置き換わり、
+> 注記ごと消えた。ついでに危険度を**色＋記号＋テキストの 3 要素**へ揃えた（`260824_flood.md` §7.6）。
+>
+> **テストが弱点を 1 件検出**：`series.color` は**サーバ由来のまま** `style` 属性に書かれていた。
+> T2 のビューアは（当アプリとは限らない）MCP サーバの応答も描きうるので、`#hex` だけを受理する
+> ガードを足した（合わない色は予備色へ落とす）。
+>
+> **検証**：typecheck・lint・**ユニット 782 全緑**（`viewer-panels` 14＋`viewer-map-scene` 16 を新設し、
+> 旧 `mcp-app` の 16 件を移植）・`pnpm build` 緑。**ローカル本番ビルドで実測**——tools/list は 12 本で
+> `_meta.ui` ゼロ、resources は `catalog://metrics` のみ、`map_probe` は `-32602 Tool not found`、
+> `get_station_detail` の `structuredContent` は `{result, panels, mapActions}` のまま（回帰なし）。
+> さらに**本番データで実レンダ**：4 ツールの実応答（駅詳細・地点ハザード・ランキング・避難場所）を
+> 新モジュールに通し、6 パネル型と地図シーン（半径円 1km／ハザード 4 層が base→overlay 順／
+> 避難先 6 点）を描画。`<script` ゼロ・CSS クラスの欠落ゼロ・**免責と網羅性注記と理由の 15 文が
+> すべて出力に残る**ことを確かめた（安全側の文言が抽出で落ちていない）。
+>
+> ⚠ **残る手動確認**：claude.ai で iframe が消えてテキストに戻ること。ホストが
+> 「ツール→UI リソース」対応をコネクタ単位でキャッシュするので、**コネクタを削除→再追加**してから見る
+> （§1.2 の運用の罠。これが最後の 1 回になる）。
 
 ---
 
@@ -443,4 +485,4 @@ PR-11〜13 は独立に着手可（12 と 13 は並行）。**T1 は PR-14 で�
 - 前身の参考（規約・MCP・mcp-handler・ext-apps SEP-1865・Supabase OAuth・PostHog 方式）— [`260828_research_claude_auth.md`](./260828_research_claude_auth.md) §13
 
 **当アプリ**
-- `src/shared/protocol.ts`（Map Edition）／`src/ai/mcp-tools.ts`（アダプタ・`structuredContent`）／`src/ai/mcp-app/{panel-app,map-panel-app,map-probe,meta}.ts`（撤収対象と再利用部品）／`src/ai/dataset/token.ts`（署名 URL）／`plugins/ai-database-map/`（スキル・evals）
+- `src/shared/protocol.ts`（Map Edition）／`src/ai/mcp-tools.ts`（アダプタ・`structuredContent`）／**`src/shared/viewer/{vnode,charts,panels,styles}.ts`**（パネル → VNode → HTML）／**`src/domain/map/scene.ts`**（mapActions → 描くもの）／`src/ai/dataset/token.ts`（署名 URL）／`plugins/ai-database-map/`（スキル・evals）。撤収した `src/ai/mcp-app/*` は PR-11 以前の履歴にある

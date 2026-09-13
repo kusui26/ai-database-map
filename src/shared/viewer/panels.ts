@@ -15,6 +15,7 @@
  */
 
 import {
+  ACCENT_COLOR,
   EVACUATION_LABELS_JA,
   HAZARD_LEVEL_COLORS,
   HAZARD_LEVEL_ICONS,
@@ -166,7 +167,7 @@ function barChartNode(panel: BarChartPanel): VNode {
                 cls: 'bar-fill',
                 style: {
                   width: bar.value === null ? '0%' : `${Math.max(2, (bar.value / max) * 100)}%`,
-                  ...(bar.emphasis === true ? { background: '#4f46e5' } : {}),
+                  ...(bar.emphasis === true ? { background: ACCENT_COLOR } : {}),
                 },
               }),
             ],

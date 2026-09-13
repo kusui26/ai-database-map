@@ -19,6 +19,10 @@
  * 描画部品自体は `shared/viewer/*`（パネル → VNode）と `domain/map/scene.ts`
  * （mapActions → 描くもの）に純 TS で残してある。
  *
+ * **母艦のプレゼンタ向けの出口**（PR-12・§4.3(a)）：数値のパネルを返すツールは表示用パラメータ
+ * `present:"echarts"` を受け、`structuredContent.presenters.echarts` に ECharts の option を足す。
+ * `run`（＝ドメイン）には渡らないので、Gemini・Web UI・既定の応答は 1 バイトも変わらない。
+ *
  * 登録は `tools.ts` と同じ流儀で**ツールごとに具象のまま**ヘルパをツール数ぶん呼ぶ——
  * ユニオンでループすると `run` の入力型が交差型に潰れて呼べなくなるため。
  */
@@ -26,6 +30,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { type CallToolResult, type ReadResourceResult } from '@modelcontextprotocol/server'
 import { z } from 'zod'
+import { toEChartsDocument, type EChartsDocument } from '@/shared/presenters/echarts'
 import { type MapAction, type Panel } from '@/shared/protocol'
 import { checkRateLimit } from './rate-limit'
 import {
@@ -94,6 +99,42 @@ export type McpToolConfig = {
   readonly maxResultSizeChars: number
   /** 1 分あたりの上限（IP×ツール）。上流を叩くものは厳しく。 */
   readonly perMinute: number
+  /**
+   * 数値のパネルを返すツールか（PR-12）。true のとき入力スキーマに表示用の `present` が 1 つ増え、
+   * `present:"echarts"` なら結果に `structuredContent.presenters.echarts` が足される。
+   * **`run` には渡らない**ので、指定しなければ応答は従来と同一。
+   */
+  readonly chartable?: boolean
+}
+
+/**
+ * 表示用パラメータ `present`（**MCP だけ・ドメインには渡らない**）。
+ * 説明は Zod の `describe` に置く——ツール説明に足すと、使わないクライアントにも毎回課金される。
+ */
+const PRESENT_FIELD = z
+  .enum(['echarts'])
+  .optional()
+  .describe(
+    'チャート定義も返すか（既定：返さない）。"echarts" を指定すると structuredContent.presenters.echarts に ' +
+      'ECharts の option（JSON のみ・単位と年次と ⚠ を反映済み）が入るので、Canvas を持つホストでは ' +
+      'その document をそのまま presentChart に渡せる。持たないホストでは指定しないこと。 / ' +
+      'EN: Set "echarts" to also receive ECharts options (JSON only) under ' +
+      'structuredContent.presenters.echarts, ready to hand to a presentChart-style tool.',
+  )
+
+/** 広告用の入力スキーマ（`chartable` のツールにだけ `present` を足す。Spec 本体は無改変）。 */
+function advertisedSchema(schema: z.ZodTypeAny, chartable: boolean): z.ZodTypeAny {
+  if (!chartable || !(schema instanceof z.ZodObject)) return schema
+  return schema.extend({ present: PRESENT_FIELD })
+}
+
+/**
+ * 生の入力から `present` を読む（型ガード）。
+ * Spec の Zod は未知のキーを落とす（`strip` が既定）ので、`run` へ渡る入力には残らない。
+ */
+function presentOf(input: unknown): 'echarts' | null {
+  if (typeof input !== 'object' || input === null || !('present' in input)) return null
+  return input.present === 'echarts' ? 'echarts' : null
 }
 
 export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
@@ -136,6 +177,7 @@ export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
       'Aggregated open-data metrics (ridership, population, land price, …) around one station for a chosen radius.',
     maxResultSizeChars: 60_000,
     perMinute: 30,
+    chartable: true, // trendChart / barChart
   },
   rankStations: {
     mcpName: 'rank_stations',
@@ -143,6 +185,7 @@ export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
     descriptionEn: 'Rank stations by a catalog metric, filtered by prefecture/operator/route.',
     maxResultSizeChars: 60_000,
     perMinute: 30,
+    chartable: true, // rankingTable
   },
   compareGrowth: {
     mcpName: 'compare_growth',
@@ -150,6 +193,7 @@ export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
     descriptionEn: 'Scatter stations on two metrics with deterministic clustering.',
     maxResultSizeChars: 60_000,
     perMinute: 30,
+    chartable: true, // scatter
   },
   getHazardAtPoint: {
     mcpName: 'get_hazard_at_point',
@@ -197,6 +241,20 @@ export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
 /** MCP に出す説明（本文＝Spec の日本語そのまま・英語 1 文を併記）。 */
 export function mcpDescription(specKey: SpecKey): string {
   return `${TOOL_SPECS[specKey].description}\nEN: ${MCP_TOOL_CONFIGS[specKey].descriptionEn}`
+}
+
+/**
+ * 表示用プレゼンタの出口（PR-12）。**要求されていて、かつチャートが作れるときだけ**足す。
+ * 作れないのに器だけ返すと、ホストが空の図を開いてしまう。
+ * 将来プレゼンタが増えたら（表計算など）、この 1 か所にキーが増える。
+ */
+export function presentersFor(
+  present: 'echarts' | null,
+  panels: readonly Panel[],
+): { readonly echarts: EChartsDocument } | null {
+  if (present === null) return null
+  const echarts = toEChartsDocument(panels)
+  return echarts === null ? null : { echarts }
 }
 
 /** 副産物 → GUI Chat Protocol のパネル（`assemble.ts` の既存ビルダを 1 か所で束ねる）。 */
@@ -269,7 +327,7 @@ function registerSpec<Schema extends z.ZodTypeAny, Out>(
     {
       title: config.titleJa,
       description: mcpDescription(key),
-      inputSchema: spec.inputSchema,
+      inputSchema: advertisedSchema(spec.inputSchema, config.chartable === true),
       annotations: { readOnlyHint: true },
       // `ui`（MCP Apps の iframe ビューア）は**付けない**——PR-11 で撤収した（決定 11）。
       // 描画は母艦のプレゼンタ／ビューア・プラグインが structuredContent から行う。
@@ -289,6 +347,8 @@ function registerSpec<Schema extends z.ZodTypeAny, Out>(
         }
       }
       try {
+        // `present` は表示用なので、ドメインへ渡る入力からは落ちる（Zod の strip）。
+        const present = config.chartable === true ? presentOf(input) : null
         const parsed = spec.inputSchema.parse(input)
         const { effects, forLlm } = await spec.run(parsed, { origin })
         // ⚠ result を structuredContent にも入れる（260903・PR-7 の実走 eval で発見）。
@@ -296,9 +356,15 @@ function registerSpec<Schema extends z.ZodTypeAny, Out>(
         // モデルに見せない。パネルだけを入れていた頃は、パネルなしツール（list/build/一括）が
         // **空の {"panels":[],"mapActions":[]} に見えて**いた——どのクライアントでも
         // 同じ答えになるよう、LLM 向け要約を両方に載せる。
+        const structured = structuredContentFor(effects)
+        const presenters = presentersFor(present, structured.panels)
         return {
           content: [{ type: 'text', text: JSON.stringify(forLlm) }],
-          structuredContent: { result: forLlm, ...structuredContentFor(effects) },
+          structuredContent: {
+            result: forLlm,
+            ...structured,
+            ...(presenters === null ? {} : { presenters }),
+          },
         }
       } catch (error) {
         if (spec.errorFallbackJa === null) throw error

@@ -10,6 +10,8 @@
  * **`:root` や `body` に依存しない**——外側の見た目は消費側が決める。
  */
 
+import { CHART_BAR_COLOR } from './charts'
+
 export const VIEWER_CSS = /* css */ `
 .panel { border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; margin-bottom: 10px;
          font: 13px/1.6 system-ui, -apple-system, "Hiragino Sans", sans-serif; color: #0f172a;
@@ -29,7 +31,7 @@ export const VIEWER_CSS = /* css */ `
 .bar-row { display: grid; grid-template-columns: 7em 1fr 6.5em; gap: 8px; align-items: center;
            font-size: 12px; margin: 3px 0; }
 .bar-track { background: #f1f5f9; border-radius: 4px; height: 12px; }
-.bar-fill { background: #6366f1; border-radius: 4px; height: 12px; }
+.bar-fill { background: ${CHART_BAR_COLOR}; border-radius: 4px; height: 12px; }
 .level { display: inline-block; border-radius: 999px; padding: 1px 10px; color: #fff;
          font-size: 12px; font-weight: 600; }
 .items { padding-left: 0; margin: 6px 0; }

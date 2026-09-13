@@ -11,9 +11,12 @@ compatibility: ローカルでコードを実行できる環境（Claude Code / 
 「需要側の材料」に徹し、増発・減便など**運行計画そのものを断定しない**。
 
 **型**：[station-analysis の「分析の型」](../station-analysis/SKILL.md)に従う——
-①要件はツールより先に 1 回・回答後は既定を宣言して完走 ②集合はまとめ呼び（0 件 note）
+①要件はデータツールより先に 1 回・回答後は既定を宣言して完走 ②集合はまとめ呼び（0 件 note）
 ③`build_dataset` は 1 回・カタログは category 単位 ④欠損・フラグ明示 ⑤正規化を脚注に明記
 ⑥±20% ⑦分類表＋根拠 ⑧限界＋出典。以下は**この用途の差し込み**だけ。
+**図を出せる環境**（`presentChart` / `presentForm` / `presentHtml` がある母艦）では、
+型の「Canvas」節に従って図も出す——チャートは `present: "echarts"` の option を**そのまま**、
+地図は `render_map` → 保存 → `presentHtml`、結論・限界・出典は `presentDocument` に。
 
 ## 聞くこと（型①の質問リスト）
 

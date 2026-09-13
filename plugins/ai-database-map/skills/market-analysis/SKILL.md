@@ -9,11 +9,14 @@ compatibility: ローカルでコードを実行できる環境（Claude Code / 
 需要（人・カネの集積）と競合（同業の集積）を**駅×半径**で比べる。
 
 **型**：[station-analysis の「分析の型」](../station-analysis/SKILL.md)に従う——
-①要件はツールより先に 1 回（業種・候補が書かれていても**対応区分の確認**として復唱し、
+①要件はデータツールより先に 1 回（業種・候補が書かれていても**対応区分の確認**として復唱し、
 残り——特に商圏半径と重視軸——を聞く）・回答後は既定を宣言して完走 ②候補駅は
 `search_stations` で grp 解決（エリアなら `list_stations`） ③`build_dataset` は 1 回
 ④欠損・フラグ明示 ⑤正規化を脚注に明記 ⑥±20% ⑦比較表＋強み/弱み（**少数駅は preview
 直組み可**） ⑧限界＋出典。以下は**この用途の差し込み**だけ。
+**図を出せる環境**（`presentChart` / `presentForm` / `presentHtml` がある母艦）では、
+型の「Canvas」節に従って図も出す——チャートは `present: "echarts"` の option を**そのまま**、
+地図は `render_map` → 保存 → `presentHtml`、結論・限界・出典は `presentDocument` に。
 
 ## 聞くこと（型①の質問リスト）
 

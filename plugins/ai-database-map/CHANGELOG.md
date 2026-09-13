@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.8.0 — 2026-09-14
+
+- **母艦（Canvas）対応**：`presentChart` / `presentForm` / `presentHtml` / `presentDocument` を
+  持つホスト（MulmoTerminal・MulmoClaude）で、表と文章に加えて**図**を出す作法を追加。
+  - チャートは**自分で書かない**——`get_station_detail` / `rank_stations` / `compare_growth` に
+    `present: "echarts"` を足すと `presentChart` の document がそのまま返る（単位・年次・⚠ 込み）
+  - 地図は `render_map` → URL を保存 → `presentHtml`（ランキングの上位駅もそのまま地図になる）
+  - 要件の聞き取りは `presentForm` 1 枚（無ければ従来どおり文章で聞く）
+  - 引数の形は**実機の定義**に合わせた——`presentDocument` は `title` 必須＋`filenamePrefix`
+    （無いと保存名が `document` に落ちる）、`presentHtml` は `path`（本文を貼り直さない）
+  - 詳細は `skills/station-analysis/references/canvas.md`。**図が無い環境でも答えは変わらない**
+- **ツール名の可搬性**：スキルは短い名前（`build_dataset` など）で書き、接頭辞は環境ごとに
+  末尾一致で解決する。`data-analyst` と `/station`・`/rank` は 2 通りの綴りを両方許可
+- `/recommend`・`/demand`・`/market` から `allowed-tools` を外した——ローカル解析（Bash）と
+  母艦のプレゼンタ（名前が環境依存）を使うため、セッションの許可に委ねる
+- `data-analyst` は CSV をローカルで解析する道具（`Bash` / `Read` / `Write` / `Glob` / `Grep`）を
+  持つようにし、**図は親のセッションに返す**（Canvas は親のもの・プレゼンタ名は列挙できない）。
+  報告の**限界・出典・正規化の脚注は要約しない**（親がそのまま使うため）
+- 災害は**チャートにしない**（順序尺度・免責と時制が落ちる）を `hazard-reading` に明文化
+- 成果物の置き場所を規約化：母艦は `artifacts/`、Claude Code 単体は `./data/`
+- SessionStart の 1 文を書き直した——**スキルが 1 つもロードされない回がある**（実走で確認）ので、
+  守られないと答えが間違う作法だけをここに置く：対象集合は 1 回・正規化してから合成し方法と重みを
+  1 行・最後に限界と出典（要約でも削らない）・要件は先に聞く・Canvas の 3 手
+- golden に Canvas 版（`golden-yokohama-canvas`）を追加。ローカルランナーは
+  `--scenario canvas` で**プレゼンタのスタブ**を差し込んで実走できる。
+  受け入れは実走 **14/14**（住宅 5/5・輸送計画 3/3・出店 3/3・Canvas 3/3）
+
 ## 0.7.0 — 2026-09-03
 
 - **Codex 対応**：`.codex-plugin/plugin.json`（同じ skills/ と本番 MCP を参照）＋

@@ -6,8 +6,11 @@
   housing   … station-recommendation（横浜の家探し・§11 の golden。既定）
   transport … transport-planning（東急東横線の需要分析・ダイヤ検討材料）
   market    … market-analysis（カフェ出店の 3 駅商圏比較）
+  canvas    … 母艦（MulmoTerminal / MulmoClaude）での見せ方（PR-14）。
+              プレゼンタ（presentForm / presentChart / presentHtml / presentDocument）を
+              `pipeline/canvas_stub_mcp.mjs` のスタブで差し込み、Canvas の作法を実走で測る
 
-いずれも 2 ターン：ターン1 で「ツールより先に要件を聞くか」、ターン2 で本走
+いずれも 2 ターン：ターン1 で「データツールより先に要件を聞くか」、ターン2 で本走
 （対象集合 → build_dataset → ローカル分析 → 表＋限界・出典）を採点する。
 
 実行は `claude -p --plugin-dir plugins/ai-database-map`（セッション限定ロード・
@@ -18,7 +21,7 @@
     python3 pipeline/eval_recommend.py --scenario market --runs 3
     （--mcp-url http://localhost:3120/api/mcp でデプロイ前検証）
 
-受け入れ条件：housing は 5/5（§11）・transport / market は 3/3。
+受け入れ条件：housing は 5/5（§11）・transport / market / canvas は 3/3。
 """
 
 from __future__ import annotations
@@ -34,6 +37,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_DIR = ROOT / "plugins" / "ai-database-map"
 RESULTS_BASE = PLUGIN_DIR / "evals" / "results-local"
+CANVAS_STUB = ROOT / "pipeline" / "canvas_stub_mcp.mjs"
+
+
+def presenter_mcp_config() -> str:
+    """母艦のプレゼンタだけを模した stdio MCP（`--mcp-config` にそのまま渡す JSON）。"""
+    return json.dumps(
+        {"mcpServers": {"canvas": {"command": "node", "args": [str(CANVAS_STUB)]}}},
+        ensure_ascii=False,
+    )
+
+
+def is_presenter(name: str, short: str) -> bool:
+    """プレゼンタは接頭辞が環境で変わるので**末尾一致**で数える（スキルの規約と同じ）。"""
+    return name.startswith("mcp__") and name.endswith(f"__{short}")
 
 
 # --plugin-dir 読み込みでは MCP ツール名が `mcp__station-data__<tool>`、
@@ -48,9 +65,14 @@ def is_any_station_tool(name: str) -> bool:
 
 
 # 「少数回」の判定はデータ往復（list/build/detail/hazard…）だけを数える。
-# get_metrics_catalog は軽量なメタ照会（self-describing API の推奨経路）なので除外する。
+# get_metrics_catalog は軽量なメタ照会（self-describing API の推奨経路）なので除外し、
+# render_map も**描画のための 1 往復**（データセットを取り直さない）なので除外する
+# ——数えると、図を出す環境だけ予算が 1 本ぶん狭くなる。
+NOT_DATA_ROUND_TRIPS = ("__get_metrics_catalog", "__render_map")
+
+
 def is_data_tool(name: str) -> bool:
-    return is_any_station_tool(name) and not name.endswith("__get_metrics_catalog")
+    return is_any_station_tool(name) and not name.endswith(NOT_DATA_ROUND_TRIPS)
 
 
 # 断定形だけを弾く。『「安全です」とは言えません』のような**正しい否定・引用**を
@@ -138,7 +160,75 @@ JSON だけを出力: {"pass": true/false, "reason": "1文"}""",
         "require_bash": False,
         "forbidden": None,
     },
+    "canvas": {
+        # 母艦（Canvas あり）で、図を出しつつ**意味を落とさない**か（PR-14）。
+        # プレゼンタは pipeline/canvas_stub_mcp.mjs のスタブ。中身は描かないが、
+        # 「何をどの順で、どんな引数で呼んだか」は stream-json に残るので実走で測れる。
+        "turn1": "横浜市で中古マンションを買おうと思っています。おすすめの駅はどこですか？",
+        "turn2": (
+            "予算重視でお願いします。通勤は東京駅まで45分以内が希望です。"
+            "災害は、洪水の危険が高い駅を避けたい——足切りでお願いします。"
+            "重みはファミリーの初期値でOKです。図も見たいです。"
+        ),
+        "ask_criteria": """あなたは受け入れテストの採点者。以下はアシスタントのターン1の応答と、
+フォームを出していればその項目。合格条件（全部満たすときだけ pass）:
+- 「おすすめの駅」の順位付き提案をまだ出していない
+- 好みを聞いている：①予算重視か資産価値重視か ②通勤先/路線 ③災害リスクの許容度（種別と、足切りか減点か）のうち、③を含む少なくとも3点中2点以上
+- 質問はフォームの項目でも本文でもよい
+JSON だけを出力: {"pass": true/false, "reason": "1文"}""",
+        "full_checks": {
+            "c_units": "数値に単位・年次が添えられている",
+            "c_normalized": "正規化（z-score/min-max/パーセンタイル等）してから合成したと分かる",
+            "c_hazard": "洪水は足切りで扱い、災害レベルを線形加点していない",
+            "c_sensitivity": "重みを振った敏感度（±20%等）に触れている",
+            "c_limits": "限界（地価は代理・駅の代表点・ハザードは想定）に触れている",
+            "c_not_only_figures": "図を出したことで済ませず、結論・表・限界・出典が文章（または presentDocument の本文）にある",
+        },
+        "build_needs_hazard": True,
+        "require_list": True,
+        "require_search": False,
+        "require_bash": True,
+        "forbidden": FORBIDDEN_SAFETY,
+        # ここからが Canvas 固有（決定的に測れるもの）。
+        "presenters": True,
+    },
 }
+
+# ハザードを「描いた」と言えるのは、系列・データセット・軸・凡例に出たとき。
+# レベル語（none/warning/danger/critical）が**カテゴリ**として並ぶのも同じ扱い。
+HAZARD_PLOTTED = re.compile(r"hazard_[a-z_]*level|危険度|ハザード|\bcritical\b|\bdanger\b")
+
+# 軸は配列でも単体でも書ける（ECharts の仕様）。見るのは name と data だけ。
+AXIS_KEYS = ("xAxis", "yAxis", "radiusAxis", "angleAxis")
+
+
+def axis_text(option: dict) -> list[str]:
+    out: list[str] = []
+    for key in AXIS_KEYS:
+        axis = option.get(key)
+        for one in axis if isinstance(axis, list) else [axis]:
+            if isinstance(one, dict):
+                out.append(json.dumps({k: one[k] for k in ("name", "data") if k in one}, ensure_ascii=False))
+    return out
+
+
+def plotted_text(chart_call: dict) -> str:
+    """presentChart の引数から、**実際に描かれる次元**だけを文字列にする。
+
+    タイトル・副題・注記は足切りの事実を書く場所（方法論 §5）なので含めない。
+    """
+    charts = (chart_call["input"].get("document") or {}).get("charts") or []
+    parts: list[str] = []
+    for chart in charts:
+        option = chart.get("option") or {}
+        if not isinstance(option, dict):
+            continue
+        parts += [
+            json.dumps(option[key], ensure_ascii=False) for key in ("series", "dataset", "legend") if key in option
+        ]
+        parts += axis_text(option)
+    return " ".join(parts)
+
 
 MCP_MAX_CALLS = 10
 DETAIL_MAX_CALLS = 3
@@ -155,11 +245,17 @@ def run_claude(
     resume: str | None,
     timeout_s: int,
     raw_out: Path,
+    mcp_config: str | None = None,
 ) -> dict:
     """1 ターン実行し、{session_id, text, tools:[{name,input}], cost} を返す。"""
-    cmd = [
-        "claude",
-        "-p",
+    # ⚠ `--mcp-config` は**可変長**（`<configs...>`）で、後ろの引数を飲み込む。
+    # 必ず**別のフラグの直前**に置く（末尾に置くとプロンプトを設定ファイル名と解釈して落ちる）。
+    # プラグイン同梱の station-data はプラグイン経由で入るので、ここは**足すだけ**
+    # （`--strict-mcp-config` は付けない＝両方が見える）。
+    cmd = ["claude", "-p"]
+    if mcp_config:
+        cmd += ["--mcp-config", mcp_config]
+    cmd += [
         "--plugin-dir",
         str(PLUGIN_DIR),
         "--dangerously-skip-permissions",
@@ -247,7 +343,16 @@ def grade_run(scenario: dict, turn1: dict, turn2: dict, judge_model: str) -> dic
     t1_build = tool_count(turn1["tools"], "build_dataset")
     t1_list = tool_count(turn1["tools"], "list_stations")
     add("ask/no-data-tools", t1_build == 0 and t1_list == 0, f"build={t1_build} list={t1_list}")
-    ask_judge = judge(scenario["ask_criteria"], turn1["text"], judge_model)
+    ask_body = turn1["text"]
+    if scenario.get("presenters"):
+        # 母艦では質問がフォームの項目になる。判定にはフォームの中身も渡す。
+        forms = [t for t in turn1["tools"] if is_presenter(t["name"], "presentForm")]
+        add("canvas/ask-with-form", len(forms) >= 1, f"presentForm={len(forms)}")
+        if forms:
+            ask_body += "\n\n[フォームの項目]\n" + json.dumps(
+                forms[0]["input"].get("fields", []), ensure_ascii=False
+            )
+    ask_judge = judge(scenario["ask_criteria"], ask_body, judge_model)
     add("ask/asks-requirements", ask_judge.get("pass", False), str(ask_judge.get("reason", "")))
 
     # --- ターン2：本走 ---
@@ -275,14 +380,48 @@ def grade_run(scenario: dict, turn1: dict, turn2: dict, judge_model: str) -> dic
     mcp_calls = sum(1 for t in turn2["tools"] if is_data_tool(t["name"]))
     add("full/few-mcp-calls", mcp_calls <= MCP_MAX_CALLS, f"data-tool calls={mcp_calls}")
     forbidden = scenario["forbidden"]
+    body = turn2["text"]
+    if scenario.get("presenters"):
+        # --- Canvas：図を出したか・意味を落としていないか（PR-14・§4.5） ---
+        charts = [t for t in turn2["tools"] if is_presenter(t["name"], "presentChart")]
+        maps = [t for t in turn2["tools"] if is_station_tool(t["name"], "render_map")]
+        htmls = [t for t in turn2["tools"] if is_presenter(t["name"], "presentHtml")]
+        docs = [t for t in turn2["tools"] if is_presenter(t["name"], "presentDocument")]
+        add("canvas/chart", len(charts) >= 1, f"presentChart={len(charts)}")
+        add("canvas/map", len(maps) >= 1 and len(htmls) >= 1, f"render_map={len(maps)} presentHtml={len(htmls)}")
+        add("canvas/document", len(docs) >= 1, f"presentDocument={len(docs)}")
+        # 地図は保存したパスで開く（HTML 本文を貼り直さない＝母艦では複製になる）。
+        by_path = all("path" in t["input"] and "html" not in t["input"] for t in htmls)
+        add("canvas/html-by-path", by_path, "presentHtml は path で渡す（html に貼り直さない）")
+        # 母艦の presentDocument は title が必須で、filenamePrefix が無いと保存名が
+        # `document` に落ちて後から探せない（実機のスキーマに合わせた判定）。
+        savable = all(
+            str(t["input"].get("title", "")).strip() != ""
+            and (t["input"].get("filenamePrefix") or t["input"].get("path"))
+            for t in docs
+        )
+        add("canvas/document-savable", bool(docs) and savable, "title 必須・filenamePrefix で探せる形")
+        # 図にしてはいけないもの：ハザードのレベルを**描いて**いないか。
+        # タイトル・副題・注記に「洪水 danger 以上は除外」と書くのは**要求されている**
+        # （足切りの明示）ので、見るのは描かれる次元（系列・dataset・軸・凡例）だけ。
+        plotted = " ".join(plotted_text(chart) for chart in charts)
+        add(
+            "canvas/no-hazard-chart",
+            not HAZARD_PLOTTED.search(plotted),
+            "ハザードを系列・軸・凡例にしない（注記に書くのは可）",
+        )
+        # 文章の判定はプレゼンタの本文も含める（結論が presentDocument にある場合がある）。
+        body = turn2["text"] + "\n\n" + "\n\n".join(
+            str(t["input"].get("markdown", "")) for t in docs
+        )
     if forbidden is not None:
-        add("full/no-safety-claim", forbidden.search(turn2["text"]) is None, "")
-    add("full/cites-sources", "出典" in turn2["text"], "")
+        add("full/no-safety-claim", forbidden.search(body) is None, "")
+    add("full/cites-sources", "出典" in body, "")
 
     tool_summary = ", ".join(sorted({t["name"].split("__")[-1] for t in turn2["tools"]}))
     full_judge = judge(
         full_judge_prompt(scenario["full_checks"]),
-        f"[使ったツール] {tool_summary}\n\n[最終応答]\n{turn2['text']}",
+        f"[使ったツール] {tool_summary}\n\n[最終応答]\n{body}",
         judge_model,
     )
     for key in scenario["full_checks"]:
@@ -326,8 +465,15 @@ def main() -> int:
         work = out / f"run-{run_no}" / "work"
         work.mkdir(parents=True, exist_ok=True)
         print(f"--- run {run_no}/{args.runs} ---")
+        mcp_config = presenter_mcp_config() if scenario.get("presenters") else None
         turn1 = run_claude(
-            scenario["turn1"], work, args.model, None, 600, out / f"run-{run_no}" / "turn1.jsonl"
+            scenario["turn1"],
+            work,
+            args.model,
+            None,
+            600,
+            out / f"run-{run_no}" / "turn1.jsonl",
+            mcp_config,
         )
         print(f"  turn1: tools={len(turn1['tools'])} cost=${turn1['cost']:.2f}")
         turn2 = run_claude(
@@ -337,6 +483,7 @@ def main() -> int:
             turn1["session_id"],
             1800,
             out / f"run-{run_no}" / "turn2.jsonl",
+            mcp_config,
         )
         print(f"  turn2: tools={len(turn2['tools'])} cost=${turn2['cost']:.2f} text={len(turn2['text'])}字")
         verdicts = grade_run(scenario, turn1, turn2, args.judge_model)

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.8.1 — 2026-09-15
+
+- **母艦の導入手順を訂正**（実機で判明・`docs/260912_gui_chat_protocol.md` §4.6.1）。
+  手順どおりにやっても動かない箇所が 3 つあった。
+  - **MulmoClaude はプラグインを読まない**——走査するのは `~/.claude/skills/` と
+    `<workspace>/.claude/skills/` だけ。「読まれない場合はコピー」ではなく**常に必須**で、
+    コピーより**相対 symlink**（Docker サンドボックスでも解決し、`/plugin` 更新に追随する）
+  - **MulmoClaude の MCP 登録は必須**——登録済みのサーバしか許可されないため、
+    プラグイン同梱の MCP 定義は使えない
+  - **MulmoTerminal は `WORKSPACE` のセルを選ぶ**——「Canvas を ON」は推奨経路には無い操作で、
+    ワークスペースではスイッチ自体が表示されない
+- 地図タイルの CSP は**ホスト名だけ**・**再起動不要**であることを明記
+- 導入ページ `/ai` にも母艦の節を追加（リンクと CSP の 1 行コマンド）
+
 ## 0.8.0 — 2026-09-14
 
 - **母艦（Canvas）対応**：`presentChart` / `presentForm` / `presentHtml` / `presentDocument` を

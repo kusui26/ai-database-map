@@ -22,6 +22,25 @@ const MARKETPLACE_ADD = '/plugin marketplace add kusui26/AI-Database-Map'
 const PLUGIN_INSTALL = '/plugin install ai-database-map@ai-database-map'
 const CODEX_ADD = 'codex plugin marketplace add kusui26/AI-Database-Map'
 
+// 母艦（MulmoTerminal / MulmoClaude）の設定。MulmoClaude は**プラグインを読まない**ので、
+// スキルは相対 symlink で置く（Docker サンドボックスの中でも解決する形）。
+const MULMO_MCP_ENTRY = `{ "id": "station-data", "url": "${MCP_URL}" }`
+const MULMO_SKILLS = [
+  'station-analysis',
+  'station-recommendation',
+  'transport-planning',
+  'market-analysis',
+  'analyze-csv',
+  'hazard-reading',
+].join(' ')
+const MULMO_SKILL_LINK = `mkdir -p ~/mulmoclaude/.claude/skills && cd ~/mulmoclaude/.claude/skills && for s in ${MULMO_SKILLS}; do ln -s "../../../.claude/plugins/marketplaces/ai-database-map/plugins/ai-database-map/skills/$s" "$s"; done`
+const MAP_TILE_HOSTS = [
+  'https://cyberjapandata.gsi.go.jp',
+  'https://disaportaldata.gsi.go.jp',
+  'https://www.jma.go.jp',
+]
+const MULMO_CSP = `mkdir -p ~/mulmoclaude/config && printf '%s' '${JSON.stringify({ 'img-src': MAP_TILE_HOSTS })}' > ~/mulmoclaude/config/csp.json`
+
 /** コマンド 1 行＋コピー（横スクロール可・折返さない）。 */
 function Command({ text }: { text: string }) {
   return (
@@ -100,6 +119,43 @@ export default function AiIntroPage() {
           敏感度まで実行します。更新は <code>/plugin</code> › Marketplaces
           から（第三者マーケットプレイスの自動更新は既定 OFF）。
         </p>
+      </Section>
+
+      <Section title="MulmoTerminal / MulmoClaude（図も出す）">
+        <p className="text-sm text-slate-600">
+          <code>presentChart</code> / <code>presentForm</code> / <code>presentHtml</code>{' '}
+          を持つホストでは、要件をフォームで聞き、チャートと
+          <span className="font-medium">地図</span>を Canvas
+          に出します。図が無い環境でも答えは変わりません。
+        </p>
+
+        <h3 className="text-sm font-semibold text-slate-900">MulmoTerminal</h3>
+        <ul className="list-disc space-y-1 pl-5 text-sm text-slate-600">
+          <li>
+            Settings の <code>userMcpServers</code> に <code>{MULMO_MCP_ENTRY}</code>{' '}
+            を足します（反映は次のセッションから）。
+          </li>
+          <li>
+            セルは候補チップの <span className="font-medium">WORKSPACE</span>{' '}
+            を選びます。図のツールが付くのはこのセルだけです。
+          </li>
+          <li>
+            Canvas
+            のスイッチは要りません（ワークスペースでは表示されません）。スキルはプラグインのまま効きます。
+          </li>
+        </ul>
+
+        <h3 className="text-sm font-semibold text-slate-900">MulmoClaude</h3>
+        <p className="text-sm text-slate-600">
+          MulmoClaude は<span className="font-medium">プラグインを読みません</span>。Settings › MCP
+          servers に同じ URL を足したうえで、スキルのリンクを 1 回張ってください。 どちらが欠けても
+          <span className="font-medium">エラーは出ず</span>、答えの質だけが落ちます。
+        </p>
+        <Command text={MULMO_SKILL_LINK} />
+        <p className="text-xs text-slate-500">
+          地図のタイルは既定で読めないので、次も 1 回だけ実行します（再起動は不要）。
+        </p>
+        <Command text={MULMO_CSP} />
       </Section>
 
       <Section title="Claude.ai（web / デスクトップ / モバイル）">

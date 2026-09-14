@@ -19,25 +19,70 @@
 claude mcp add --transport http ai-database-map https://ai-database-map.vercel.app/api/mcp
 ```
 
-### MulmoTerminal / MulmoClaude（図も出したいとき）
+### MulmoTerminal で使う（図も出したいとき）
 
 `presentChart` / `presentForm` / `presentHtml` を持つホストでは、表と文章に加えて
 **チャートと地図**を出します。図が無い環境でも答えは変わりません（劣化しません）。
 
-1. **MCP サーバを足す**——MulmoTerminal は Settings → MCP servers に
-   `{ "id": "station-data", "url": "https://ai-database-map.vercel.app/api/mcp" }`
-   （プロジェクトのセルでは `.mcp.json` か `claude mcp add`）。
-   MulmoClaude は Settings → MCP Servers タブに同じ URL（HTTP）。
-2. **Canvas を有効にする**——MulmoTerminal は起動フォームの **Canvas** を ON。
-3. **スキルはこのプラグインのまま**（Claude Code に導入済みならそのまま効きます）。
-   MulmoClaude でスキルが読まれない場合は `<workspace>/.claude/skills/` にコピーしてください。
-4. **地図を出すなら**：`render_map` が返す URL は HTML です。保存してから `presentHtml` に
-   パスを渡します（`curl -sL '<url>' -o artifacts/html/map.html`。リポジトリを持っているなら
-   `python3 scripts/fetch_map.py '<url>' --out artifacts/html/map.html` でも同じ）。
-   MulmoTerminal は既定で外部の画像を読めるので、そのままタイルが出ます。
-   MulmoClaude は既定で読めないので、地図が白いときは `<workspace>/config/csp.json` に
-   `{"img-src": ["https://cyberjapandata.gsi.go.jp", "https://disaportaldata.gsi.go.jp", "https://www.jma.go.jp"]}`
-   を足してください（ホスト名だけ・パスやワイルドカードは受け付けません）。
+1. **ワークスペースにしたいディレクトリで起動**します。`npx mulmoterminal@latest` は
+   **コマンドを打ったディレクトリ**をワークスペースにします。
+2. **MCP サーバを足す**——Settings の `userMcpServers` に
+   `{ "id": "station-data", "url": "https://ai-database-map.vercel.app/api/mcp" }`。
+   反映は**次のセッションから**です。
+3. **セルは候補チップの `WORKSPACE` を選ぶ**（Agent は Claude）。図のツールを受け取れるのは
+   **このセルだけ**です。プロジェクトのディレクトリを選ぶと、図のツールも 2 の MCP も届きません。
+   **Canvas のスイッチは探さないでください**——ワークスペースでは表示されず、
+   「GUI ツールはすでに全部使える」という 1 行に置き換わります。
+4. **スキルはこのプラグインのまま**効きます。追加の作業はありません。
+
+地図のタイルはそのまま表示されます。CSP の設定は要りません。
+
+### MulmoClaude で使う
+
+MulmoClaude は**プラグインを読みません**。スキルと MCP を自分で置く必要があります。
+どちらが欠けても**エラーは出ず**、作法を知らないまま答えの質だけが落ちます。
+
+1. **MCP サーバを足す**——Settings → **MCP servers** に HTTP で追加します
+   （id は `station-data`、URL は上と同じ）。実体は `<workspace>/config/mcp.json` です。
+   MulmoClaude は**登録済みのサーバしか許可しない**ので、これは必須です。
+2. **スキルを置く**——ワークスペース（既定 `~/mulmoclaude`）に 1 回だけリンクを張ります。
+
+   ```bash
+   mkdir -p ~/mulmoclaude/.claude/skills && cd ~/mulmoclaude/.claude/skills
+   for s in station-analysis station-recommendation transport-planning \
+            market-analysis analyze-csv hazard-reading; do
+     ln -s "../../../.claude/plugins/marketplaces/ai-database-map/plugins/ai-database-map/skills/$s" "$s"
+   done
+   ```
+
+   **相対リンクにしてください**——Docker サンドボックスの中でも解決します（絶対パスは切れます）。
+   リンク先はマーケットプレイスの複製なので、`/plugin` で更新すると**自動で追随**します。
+
+3. **地図のタイルを許可する**——`<workspace>/config/csp.json` を作ります。**再起動は不要**です。
+
+   ```json
+   {
+     "img-src": [
+       "https://cyberjapandata.gsi.go.jp",
+       "https://disaportaldata.gsi.go.jp",
+       "https://www.jma.go.jp"
+     ]
+   }
+   ```
+
+   受け付けるのは `https://ホスト名` だけです。パスやワイルドカードは黙って無視されます。
+
+### 地図の出し方（母艦に共通）
+
+`render_map` が返すのは HTML ページの短命 URL です。**保存してから** `presentHtml` に
+パスで渡します（本文を貼り直すとページが複製されます）。
+
+```bash
+curl -sL '<url>' -o artifacts/html/map.html
+```
+
+リポジトリを持っているなら `python3 scripts/fetch_map.py '<url>' --out artifacts/html/map.html`
+でも同じです。
 
 ### Claude.ai / Claude Cowork
 

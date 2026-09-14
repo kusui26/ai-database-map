@@ -1,6 +1,6 @@
 {
   "name": "ai-database-map",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "駅×半径の日本のオープンデータ分析（乗降客数・人口・地価・売上・災害リスク）。Station-area open-data analysis for Japan from Codex.",
   "author": {
     "name": "kusui26",

@@ -39,13 +39,26 @@ claude mcp add --transport http ai-database-map https://ai-database-map.vercel.a
 
 ### MulmoClaude で使う
 
-MulmoClaude は**プラグインを読みません**。スキルと MCP を自分で置く必要があります。
-どちらが欠けても**エラーは出ず**、作法を知らないまま答えの質だけが落ちます。
+MulmoClaude は既定で **Docker サンドボックス**の中でエージェントを動かします。そのとき
+**Claude Code のプラグインが丸ごと読み込まれません**——スキルもスラッシュコマンドも MCP もフックも
+届かず、しかも**エラーが出ません**。作法を知らないまま、答えの質だけが落ちます。
 
-1. **MCP サーバを足す**——Settings → **MCP servers** に HTTP で追加します
+原因はパスの不一致です。プラグインの場所を記録している台帳がホストの絶対パス（`/Users/…`）を持つ一方、
+コンテナの中のホームは `/home/node` なので、その場所が存在しません。upstream に報告済みです
+（[receptron/mulmoclaude#3186](https://github.com/receptron/mulmoclaude/issues/3186)）。
+
+設定は 3 つです。**2 はサンドボックスを使うときだけ**必要で、#3186 が直れば要らなくなります。
+`npx mulmoclaude --disable-sandbox` で動かす場合は 2 を飛ばせますが、エージェントがホストで
+直接動くようになります（サンドボックスの保護は外れます）。
+
+1. **MCP サーバを足す**（必須）——Settings → **MCP servers** に HTTP で追加します
    （id は `station-data`、URL は上と同じ）。実体は `<workspace>/config/mcp.json` です。
-   MulmoClaude は**登録済みのサーバしか許可しない**ので、これは必須です。
-2. **スキルを置く**——ワークスペース（既定 `~/mulmoclaude`）に 1 回だけリンクを張ります。
+   MulmoClaude がエージェントに渡す許可リストは**ここに登録したサーバから作られる**ので、
+   登録しないとツールを呼べません。サンドボックスを使う場合は、そもそもプラグイン同梱の
+   MCP 定義が読み込まれないため、なおさら必要です。
+2. **スキルを置く**（サンドボックスを使う場合）——ワークスペース（既定 `~/mulmoclaude`）に
+   1 回だけリンクを張ります。Claude Code は作業ディレクトリの `.claude/skills/` を自分で読むので、
+   ここに置けばサンドボックスの中からでも届きます。
 
    ```bash
    mkdir -p ~/mulmoclaude/.claude/skills && cd ~/mulmoclaude/.claude/skills
@@ -58,7 +71,7 @@ MulmoClaude は**プラグインを読みません**。スキルと MCP を自�
    **相対リンクにしてください**——Docker サンドボックスの中でも解決します（絶対パスは切れます）。
    リンク先はマーケットプレイスの複製なので、`/plugin` で更新すると**自動で追随**します。
 
-3. **地図のタイルを許可する**——`<workspace>/config/csp.json` を作ります。**再起動は不要**です。
+3. **地図のタイルを許可する**（必須）——`<workspace>/config/csp.json` を作ります。**再起動は不要**です。
 
    ```json
    {

@@ -59,7 +59,7 @@ flowchart TB
 ### 入っているもの
 
 - **ツール 13 本**：駅検索・一覧（市区町村/会社/路線/範囲）・**`build_dataset`**（駅×指標 CSV を短命 URL で 1 回生成・災害列の結合可）・**`render_map`**（結果を地図にした HTML ページを短命 URL で生成）・**`get_hazard_summary`**（全駅事前計算の災害サマリ ≤500 駅一括）・駅詳細・ランキング・散布・地点ハザード・警報・避難場所・脱出方向・自己記述カタログ
-- **スキル**（Claude Code / Cowork / Codex）：分析の型（`station-analysis`）＋用途別レシピ——住宅 `/ai-database-map:recommend`・輸送計画 `:demand`・出店 `:market`——＋ `analyze-csv`・`hazard-reading`。**図を出せるホスト**（MulmoTerminal / MulmoClaude の Canvas）では、要件をフォームで聞き、チャートと地図も出します（無い環境では従来どおりの表と文章）。**MulmoClaude はプラグインを読まない**ので、スキルと MCP を手で置く必要があります——手順は [プラグインの README](plugins/ai-database-map/README.md#mulmoclaude-で使う)
+- **スキル**（Claude Code / Cowork / Codex）：分析の型（`station-analysis`）＋用途別レシピ——住宅 `/ai-database-map:recommend`・輸送計画 `:demand`・出店 `:market`——＋ `analyze-csv`・`hazard-reading`。**図を出せるホスト**（MulmoTerminal / MulmoClaude の Canvas）では、要件をフォームで聞き、チャートと地図も出します（無い環境では従来どおりの表と文章）。**MulmoClaude は既定の Docker サンドボックス内でプラグインを読み込めない**ので、スキルと MCP を手で置く必要があります（[報告済み](https://github.com/receptron/mulmoclaude/issues/3186)）——手順は [プラグインの README](plugins/ai-database-map/README.md#mulmoclaude-で使う)
 - **golden 受け入れテスト**：`plugins/ai-database-map/evals/`（`claude plugin eval` 形式・4 シナリオの実走で **14/14** 合格済み——住宅 5/5・輸送計画 3/3・出店 3/3・母艦の Canvas 3/3）
 
 ### プラン・利用枠の注意

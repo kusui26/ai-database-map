@@ -326,32 +326,55 @@ CLAUDE.md §2 の図に「ユーザーの Claude」が並ぶ前身 §4.1 の構�
 |---|---|---|
 | Claude Code 単体 | 既存：`/plugin marketplace add kusui26/AI-Database-Map` → install | プラグイン更新（0.8.0） |
 | **MulmoTerminal**（Claude/Codex） | ①**ワークスペースにしたいディレクトリで** `npx mulmoterminal@latest`（`npx` 起動では**そこが WORKSPACE**。直接起動なら `~/mulmoclaude`）。②Settings → `userMcpServers` に `{ id: "station-data", url: https://ai-database-map.vercel.app/api/mcp }`（**次のセッションから**有効）。③セルは候補チップの **WORKSPACE** を選ぶ＋Agent は Claude。④プラグインは Claude Code に **user scope** で導入済みであること。**Canvas のスイッチは触らない**——ワークスペースでは表示されず、GUI ツールは自動で付く（§4.6.1） | README/LP に「母艦で使う」節・スクリーンショット・`.mcp.json` 雛形 |
-| **MulmoClaude** | ①Settings → **MCP servers** に HTTP を追加（`<workspace>/config/mcp.json`）——**必須**。登録しないとツールが 1 つも呼べない。②スキルを `<workspace>/.claude/skills/` に**相対 symlink** で置く——**必須**。プラグインのスキルは走査されない。③地図を出すなら `<workspace>/config/csp.json` に `img-src`（再起動不要）。④T2：`plugins/` に tgz＋`plugins.json` に 1 行（**利用者が自分で**・同梱は無い＝§4.4.1）（①〜③は §4.6.1） | 導入ページ・**MCP カタログ掲載 PR**（`src/config/mcpCatalog.ts`：`type:"http"`・`riskLevel:"low"`・認証なし・i18n 8 ロケール・決定 17）・**upstream 要望**（プラグインのスキルも走査してほしい） |
+| **MulmoClaude** | ①Settings → **MCP servers** に HTTP を追加（`<workspace>/config/mcp.json`）——**必須**。登録しないとツールが 1 つも呼べない。②スキルを `<workspace>/.claude/skills/` に**相対 symlink** で置く——**Docker サンドボックスを使うときだけ必須**（既定は使う）。サンドボックス内では Claude Code がプラグインを解決できない（`receptron/mulmoclaude#3186`）。③地図を出すなら `<workspace>/config/csp.json` に `img-src`（再起動不要）。④T2：`plugins/` に tgz＋`plugins.json` に 1 行（**利用者が自分で**・同梱は無い＝§4.4.1）（①〜③は §4.6.1） | 導入ページ・**MCP カタログ掲載 PR**（`src/config/mcpCatalog.ts`：`type:"http"`・`riskLevel:"low"`・認証なし・i18n 8 ロケール・決定 17）・**upstream 要望**（プラグインのスキルも走査してほしい） |
 | Codex（MulmoTerminal） | codex セル＋`.codex-plugin`／`codex mcp add` | **実導入検証**（前回未検証のまま） |
 | claude.ai / Cowork | 既存コネクタ（テキスト） | `_meta.ui` 撤収後に「コネクタ再追加」案内（最後の 1 回） |
 
 ### 4.6.1 実機で分かったこと（2026-09-14／15 実走・MulmoTerminal 4.21 / MulmoClaude 1.16）
 
-母艦は「同じ Claude Code を動かすもの」と括れない。**スキルをどこから読むか**と
+母艦は「同じ Claude Code を動かすもの」と括れない。**プラグインがそもそも読み込まれるか**と
 **どのツールを許可するか**が別物で、そこが導入手順の実体になる。以下は
-パッケージのソースを逐語で読み、実機で確かめた事実。
+パッケージのソースを逐語で読み、実機で確かめた事実（① は 2026-09-15 に原因を訂正した）。
 
-**① MulmoClaude はプラグインのスキルを読まない。** 走査するのは `~/.claude/skills/` と
-`<workspace>/.claude/skills/` の 2 つだけで（`server/workspace/skills/discovery.ts`）、
-`~/.claude/plugins/` は対象外。**症状が無言**なのが厄介で、エラーも警告も出ないまま
-作法を知らないエージェントが自己流で答える。実走では**結果を出してからフォームを出し**
-（型①の逆）、`render_map` も `presentHtml` も一度も呼ばれず、`artifacts/html/` は空のままだった。
-「読まれない場合はコピー」という条件付きの案内は誤りで、**常に必須の手順**。
+**① Docker サンドボックスの中で、Claude Code がプラグインを解決できない。**
+MulmoClaude は既定で Docker サンドボックスの中にエージェントを置く。そのとき**プラグインが
+丸ごと不活性**になる——スキル・スラッシュコマンド・MCP サーバ・SessionStart フックのすべてが届かない。
+**症状が無言**なのが厄介で、エラーも警告も出ないまま、作法を知らないエージェントが自己流で答える。
+実走では**結果を出してからフォームを出し**（型①の逆）、`render_map` も `presentHtml` も一度も呼ばれず、
+`artifacts/html/` は空のままだった。
 
-**対処は `<workspace>/.claude/skills/` への相対 symlink。** discovery は `lstat` ではなく
-`stat` を使い、**意図的に symlink をたどる**（コメントに他人のスキル置き場へのリンクが例示されている）。
-相対にする理由は Docker サンドボックス：ワークスペースは `/home/node/mulmoclaude`、
-`~/.claude` は `/home/node/.claude` にマウントされ、**ホームからの相対位置がホストと一致する**。
-だから 3 階層上がる相対リンクは両方で解決し、絶対パスはコンテナ内で切れる。
-実イメージ `mulmoclaude-sandbox` の中で 6/6 解決することを確かめた。
+> ⚠ **2026-09-15 訂正。** ここには当初「MulmoClaude がプラグインのスキルを走査しないから」と書いていた。
+> `server/workspace/skills/discovery.ts` の走査ルートが 2 つだけなのは事実だが、**それは症状の原因ではない**。
+> MulmoClaude は**エージェントに渡すスキル一覧を自前で組み立てていない**——本物の `claude` CLI を spawn し、
+> `--allowedTools` に裸の `Skill`（＝全スキル許可）を渡すだけで、発見は CLI の仕事。`discoverSkills()` が
+> 供給しているのは一覧 UI・`manageSkills`・ブリッジの `/help`・スケジューラ・表示用の後付けだけ。
+> 誤りの指摘は upstream から（`receptron/mulmoclaude#3175`）。**観測（`Skill` 0 件）と機構（なぜ 0 件か）を
+> 確かめずに結びつけた**のが原因で、symlink で直ったことが誤った説明の裏づけに見えていた。
+
+**真因はパスの不一致（実測）。** Claude Code の台帳が**ホストの絶対パス**を持つ一方、
+コンテナのホームは `/home/node`（MulmoClaude が `HOME=/home/node` を明示的に渡す）。
+
+| 台帳 | キー |
+| --- | --- |
+| `~/.claude/plugins/known_marketplaces.json` | `installLocation` |
+| `~/.claude/plugins/installed_plugins.json` | `installPath` |
+
+コンテナ内の `claude plugin list` は `✘ failed to load / Marketplace … cache-miss` と言う。
+**両方を書き換えないと直らない**——`installLocation` だけだと `plugin list` は `✔ enabled` になるのに
+エージェントには届かず、`installPath` だけだと `cache-miss` のまま。両方直すとコマンド・スキル・フックが
+戻る。影響は当プラグインに限らず、`claude-plugins-official` を含む登録済みマーケットプレイス全部。
+upstream に報告済み（`receptron/mulmoclaude#3186`）。**サンドボックスを使わなければ何も要らない。**
+
+**回避策は `<workspace>/.claude/skills/` への相対 symlink。** これが効くのは、CLI が**作業ディレクトリの
+`.claude/skills/` を自分で読む**から（MulmoClaude の discovery とは無関係）。
+相対にする理由は、ワークスペースが `/home/node/mulmoclaude`、`~/.claude` が `/home/node/.claude` に
+マウントされ、**ホームからの相対位置がホストと一致する**こと。だから 3 階層上がる相対リンクは両方で解決し、
+絶対パスはコンテナ内で切れる。実イメージ `mulmoclaude-sandbox` の中で 6/6 解決することを確かめた。
 リンク先は**マーケットプレイスの複製**（`~/.claude/plugins/marketplaces/…`）にする——
 パスに版番号が入らないので `/plugin` 更新にそのまま追随する。キャッシュ側
 （`…/cache/<name>/<version>/`）は更新のたびに切れる。
+なお #3184（2026-09-15 マージ・未リリース）で MulmoClaude はプラグインのスキルも走査するようになったが、
+それは**一覧に見えるようになるだけ**で、エージェントが呼ぶかどうかは変わらない。
 
 置くのは**方法論の 6 本だけ**（`station-analysis`・`station-recommendation`・`transport-planning`・
 `market-analysis`・`analyze-csv`・`hazard-reading`）。コマンド版 5 本は置かない——`$0` が展開されず
@@ -486,6 +509,7 @@ Claude : [list_stations 横浜市 → 137 駅] [build_dataset 137 駅×20 列（
 | **PR-14** | **スキル母艦対応＋evals**：論理名解決・Canvas 検出・`presentForm` 要件・成果物規約・`data-analyst`・golden Canvas 版・プラグイン 0.8.0（CHANGELOG・README） | PR-12・13 | **達成**：Canvas 実走 3/3（プレゼンタのスタブ）＋ Claude Code 単体の golden 11/11（housing 5・transport 3・market 3）＝**14/14**。母艦の実機確認は §10 に残る |
 | **PR-15a** | **導入手順の訂正**（追加ではなく**修正**——実機で 3 か所の誤りが判明・§4.6.1）：プラグイン README と `/ai` の母艦節を書き直す。MulmoClaude は**スキルの symlink と MCP 登録が必須**（現状は「読まれない場合はコピー」と条件付きで、そのままでは動かない）／MulmoTerminal は **WORKSPACE のセル**を選ぶ（「Canvas を ON」は推奨経路に存在しない操作）／`csp.json` はホスト名のみ・再起動不要 | PR-14 | 手順どおりに**まっさらなワークスペースで**再現できる／文言をテストで固定 |
 | **PR-15b** | **配布（外部依存）**：MulmoClaude **MCP カタログ掲載 PR**（`src/config/mcpCatalog.ts`：`type:"http"`・`riskLevel:"low"`・認証なし・i18n 8 ロケール・決定 17）・**upstream 要望**（プラグインのスキルも走査してほしい＝手作業の symlink を全員ぶん不要にする）・Codex 実導入検証 | PR-15a | カタログ PR を提出／要望を起票／**Codex は CLI 導入後**（現在ブロック） |
+| **PR-15c** | **原因の訂正**：`§4.6.1 ①` とプラグイン README・`/ai`・ルート README の因果を差し替える（走査ルートの話ではなく **Docker サンドボックス内でプラグインが解決できない**）。symlink が要る条件を**サンドボックス使用時だけ**に限定し、`#3186` を参照。プラグイン 0.8.2 | PR-15a | 誤った因果が残っていない（テストで否定を固定）／条件つきの手順になっている |
 | **PR-16** | **T2 プラグイン**：`packages/gui-chat-plugin`（`definePlugin`・`stationArea` action 判別・`tools/list` からの定義生成＋版同期テスト・Vue View＝共通レンダラ＋MapLibre（Shadow DOM）・Preview・i18n） | PR-11 | `mulmoclaude --dev-plugin` で全 action の描画（地図・パネル・免責）／`vue-tsc`・lint 緑／`npm pack` 可 |
 | **PR-17** | **T2 配布**：npm publish・利用者向けの ledger 導入手順・スキルの `stationArea` 優先規則の実走。**同梱提案 PR は削除**（前提が成り立たない・§4.4.1） | PR-16 | MulmoClaude で「横浜駅の詳細を見せて」→ Canvas に地図＋パネル（実機） |
 | **PR-18** | Artifacts レポート（`/ai-database-map:report`）——任意 | PR-14 | Pro/Max セッションで Artifact が公開される |
@@ -736,7 +760,7 @@ PR-11〜13 は独立に着手可（12 と 13 は並行）。**T1 は PR-14 で�
 - **E2E（ローカル本番ビルド）**：tools/list 13 本（`map_probe` 無し）・`_meta.ui` 無し・`present` 有無の結果差分・`render_map` の 200/410/429
 - **実レンダ（Playwright）**：ECharts option を cdnjs の ECharts で描画／地図 HTML を **母艦と同じ CSP**（`sandbox allow-scripts; default-src 'none'; connect-src 'none'; img-src https:`）の iframe で描画し、タイル `<img>` の取得数・マーカー・面を実測（PR-9b の偽タイル route を流用）
 - **母艦・実機（MulmoTerminal）**：✅ **確認済み（2026-09-14）**——WORKSPACE のセル＋`userMcpServers` で横浜 golden を実走し、フォーム → チャート → **地図** → 文書まで描画。Canvas スイッチは不要だった（§4.6.1 ③）。⏳ 残り：Codex セル（**Codex CLI 未導入でブロック**）／プロジェクト・ディレクトリのセル（`.mcp.json`＋Canvas スイッチ・`userMcpServers` は合流しない経路）
-- **母艦・実機（MulmoClaude）**：✅ **確認済み（2026-09-15）**——`config/mcp.json` 登録＋`.claude/skills/` への相対 symlink 6 本＋`config/csp.json` で地図まで描画。**symlink 無しでは作法が 1 つも届かず地図に到達しない**ことも実測（§4.6.1 ①）。⏳ 残り：T2 を `--dev-plugin` で全 action
+- **母艦・実機（MulmoClaude）**：✅ **確認済み（2026-09-15）**——`config/mcp.json` 登録＋`.claude/skills/` への相対 symlink 6 本＋`config/csp.json` で地図まで描画。**サンドボックスを使うと symlink 無しでは作法が 1 つも届かず地図に到達しない**こと、**サンドボックスを外せば symlink 無しでも届く**ことを実測（§4.6.1 ①）。⏳ 残り：T2 を `--dev-plugin` で全 action
 - **回帰**：Claude Code 単体の golden 11/11（既存ランナー）・Gemini eval（既存）・claude.ai コネクタで iframe が消えテキストが出る
 
 ---

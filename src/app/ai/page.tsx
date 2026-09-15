@@ -22,8 +22,10 @@ const MARKETPLACE_ADD = '/plugin marketplace add kusui26/AI-Database-Map'
 const PLUGIN_INSTALL = '/plugin install ai-database-map@ai-database-map'
 const CODEX_ADD = 'codex plugin marketplace add kusui26/AI-Database-Map'
 
-// 母艦（MulmoTerminal / MulmoClaude）の設定。MulmoClaude は**プラグインを読まない**ので、
-// スキルは相対 symlink で置く（Docker サンドボックスの中でも解決する形）。
+// 母艦（MulmoTerminal / MulmoClaude）の設定。MulmoClaude は既定の Docker サンドボックス内で
+// Claude Code がプラグインを解決できない（台帳がホストの絶対パスを持つ・receptron/mulmoclaude#3186）。
+// 回避策として、スキルを相対 symlink で置く——相対にするのは、ホームからの相対位置がホストと
+// コンテナで一致し、絶対パスだとコンテナ内で切れるため。
 const MULMO_MCP_ENTRY = `{ "id": "station-data", "url": "${MCP_URL}" }`
 const MULMO_SKILLS = [
   'station-analysis',
@@ -40,6 +42,8 @@ const MAP_TILE_HOSTS = [
   'https://www.jma.go.jp',
 ]
 const MULMO_CSP = `mkdir -p ~/mulmoclaude/config && printf '%s' '${JSON.stringify({ 'img-src': MAP_TILE_HOSTS })}' > ~/mulmoclaude/config/csp.json`
+// サンドボックス内で Claude Code がプラグインを解決できない件（台帳がホストの絶対パスを持つ）。
+const MULMO_SANDBOX_ISSUE = 'https://github.com/receptron/mulmoclaude/issues/3186'
 
 /** コマンド 1 行＋コピー（横スクロール可・折返さない）。 */
 function Command({ text }: { text: string }) {
@@ -147,13 +151,25 @@ export default function AiIntroPage() {
 
         <h3 className="text-sm font-semibold text-slate-900">MulmoClaude</h3>
         <p className="text-sm text-slate-600">
-          MulmoClaude は<span className="font-medium">プラグインを読みません</span>。Settings › MCP
-          servers に同じ URL を足したうえで、スキルのリンクを 1 回張ってください。 どちらが欠けても
-          <span className="font-medium">エラーは出ず</span>、答えの質だけが落ちます。
+          MulmoClaude は既定で <span className="font-medium">Docker サンドボックス</span>
+          の中で動き、そのとき
+          <span className="font-medium">Claude Code のプラグインが読み込まれません</span>
+          （エラーは出ないまま、答えの質だけが落ちます）。Settings › MCP servers に同じ URL
+          を足したうえで、スキルのリンクを 1 回張ってください。
         </p>
         <Command text={MULMO_SKILL_LINK} />
         <p className="text-xs text-slate-500">
-          地図のタイルは既定で読めないので、次も 1 回だけ実行します（再起動は不要）。
+          リンクが要るのはサンドボックスを使うときだけです（
+          <a
+            href={MULMO_SANDBOX_ISSUE}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline underline-offset-2"
+          >
+            報告済みの不具合
+          </a>
+          が直れば不要になります）。地図のタイルは既定で読めないので、次も 1
+          回だけ実行します（再起動は不要）。
         </p>
         <Command text={MULMO_CSP} />
       </Section>

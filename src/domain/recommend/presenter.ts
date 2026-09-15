@@ -83,6 +83,7 @@ function metricViews(run: RecommendRunOk, used: readonly ScoredMetric[]): Recomm
         key: entry.key,
         baseMetric: entry.baseMetric,
         labelJa: entry.labelJa,
+        shortLabelJa: run.labels[entry.key] ?? entry.labelJa,
         unit: entry.unit,
         format: entry.format,
         radiusM: entry.radiusM,

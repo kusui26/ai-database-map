@@ -65,9 +65,10 @@ export function hazardPolicyJa(policy: HazardPolicy, penalty: HazardPenaltyId): 
 
 /** 絞り込みの日本語（「横浜市（東海道線・根岸線）」）。 */
 export function areaLabelJa(filter: ListStationsFilter): string {
+  // 住所と同じ順（広い → 狭い）で並べる。「横浜市・神奈川県」は読みにくい。
   const places = [
-    ...(filter.municipality === undefined ? [] : [filter.municipality]),
     ...(filter.prefectures ?? []),
+    ...(filter.municipality === undefined ? [] : [filter.municipality]),
     ...(filter.bbox === undefined ? [] : ['地図の表示範囲']),
   ]
   const lines = [

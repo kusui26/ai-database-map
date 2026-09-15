@@ -81,6 +81,17 @@ describe('解決できないとき', () => {
   })
 })
 
+describe('レシピが付けた短い名前', () => {
+  it('解決した key に、プリセットの見出し語が紐づく', () => {
+    const { metrics, labels } = resolveMetrics(RECOMMEND_PRESETS.budget.metrics, RADIUS_M)
+    // カタログのラベルは年と半径まで入った長い名前。凡例には短い方を使う。
+    const first = metrics[0]?.key ?? ''
+    expect(labels[first]).toBe('将来人口')
+    expect(getEntry(first)?.labelJa).toContain('将来人口増減率')
+    expect(Object.keys(labels)).toHaveLength(metrics.length)
+  })
+})
+
 describe('値を引く列', () => {
   it('指標と信頼性フラグの両方を含み、重複は畳む', () => {
     const { metrics } = resolveMetrics([spec('lp_med'), spec('lp_gr')], RADIUS_M)

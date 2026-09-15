@@ -22,6 +22,12 @@ import type { ScoredMetric } from './types'
 
 export type ResolvedMetrics = {
   readonly metrics: readonly ScoredMetric[]
+  /**
+   * 解決した key → **レシピが付けた短い名前**（「将来人口」）。
+   * カタログのラベルは年と半径まで入った長いもの（「将来人口増減率（2020→2040年・R6推計・1km圏）」）で、
+   * 凡例に並べると読めない。長い方は注記に出るので、見出しには短い方を使う。
+   */
+  readonly labels: Readonly<Record<string, string>>
   /** 埋めた既定（半径・年）。本文の脚注にそのまま使う。 */
   readonly notes: readonly string[]
   /** カタログに無くて解決できなかった指定。 */
@@ -90,6 +96,7 @@ function resolveOne(
  */
 export function resolveMetrics(specs: readonly PresetMetric[], radiusM: number): ResolvedMetrics {
   const metrics: ScoredMetric[] = []
+  const labels: Record<string, string> = {}
   const notes: string[] = []
   const unresolved: string[] = []
   for (const spec of specs) {
@@ -99,9 +106,10 @@ export function resolveMetrics(specs: readonly PresetMetric[], radiusM: number):
       continue
     }
     metrics.push(resolved.metric)
+    labels[resolved.metric.key] = spec.labelJa
     if (resolved.note !== null) notes.push(resolved.note)
   }
-  return { metrics, notes, unresolved }
+  return { metrics, labels, notes, unresolved }
 }
 
 /** 値の取得に要る列（指標＋その信頼性フラグ）。重複は畳む。 */

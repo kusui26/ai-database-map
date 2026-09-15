@@ -9,7 +9,7 @@ import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { usePrefetchOnIdle } from '@/hooks/usePrefetchOnIdle'
 // 初期バンドルから外す：ダイアログ（散布は Chart.js を含む）は初回オープンまで読み込まない。
 // 遅延ロードの定義は共通モジュールに置く（Suspense 境界の付け忘れを 1 か所に閉じ込めるため）。
-import { DIALOG_LOADERS, RankingDialog, ScatterDialog } from './lazyDialogs'
+import { DIALOG_LOADERS, RankingDialog, RecommendDialog, ScatterDialog } from './lazyDialogs'
 import { cn } from '@/lib/utils'
 
 /** FAB とチャットパネルのあいだの余白。 */
@@ -46,6 +46,19 @@ function ScatterIcon() {
       <circle cx="12" cy="9" r="1.4" />
       <circle cx="16" cy="12" r="1.4" />
       <circle cx="18" cy="7" r="1.4" />
+    </svg>
+  )
+}
+
+function StarIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden className="size-4">
+      <path
+        d="M12 3.5l2.6 5.3 5.9.85-4.25 4.15 1 5.85L12 16.9l-5.25 2.75 1-5.85L3.5 9.65l5.9-.85L12 3.5Z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
     </svg>
   )
 }
@@ -99,15 +112,17 @@ function FabButton({
 }
 
 /**
- * 左下 FAB（現在地＝Phase 2／ランキング＝P6a／散布図＝P6b）。
+ * 左下 FAB（現在地＝Phase 2／ランキング＝P6a／散布図＝P6b／おすすめ＝W4）。
  * ダイアログは初回オープンで初めてマウント（遅延ロード）。
  */
 export function Fab() {
   const [rankingOpen, setRankingOpen] = useState(false)
   const [scatterOpen, setScatterOpen] = useState(false)
+  const [recommendOpen, setRecommendOpen] = useState(false)
   // 一度開いたら以後もマウントし続ける（初回のみチャンク取得・状態は保持）。
   const [rankingSeen, setRankingSeen] = useState(false)
   const [scatterSeen, setScatterSeen] = useState(false)
+  const [recommendSeen, setRecommendSeen] = useState(false)
   // デスクトップでチャットを開くと FAB が左パネルに隠れるため右へ寄せる（位置はパネル幅から算出）。
   const chatOpen = useChatStore((state) => state.open)
   const isDesktop = useIsDesktop()
@@ -151,9 +166,19 @@ export function Fab() {
             setScatterOpen(true)
           }}
         />
+        <FabButton
+          icon={<StarIcon />}
+          label="おすすめ"
+          title="エリアの中でおすすめの駅を出す"
+          onClick={() => {
+            setRecommendSeen(true)
+            setRecommendOpen(true)
+          }}
+        />
       </div>
       {rankingSeen && <RankingDialog open={rankingOpen} onOpenChange={setRankingOpen} />}
       {scatterSeen && <ScatterDialog open={scatterOpen} onOpenChange={setScatterOpen} />}
+      {recommendSeen && <RecommendDialog open={recommendOpen} onOpenChange={setRecommendOpen} />}
     </>
   )
 }

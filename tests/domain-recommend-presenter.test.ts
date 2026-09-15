@@ -101,7 +101,10 @@ function present(raw: Record<string, unknown> = {}) {
   if (!built.ok) throw new Error(built.messageJa)
   const { stations, candidates } = fixture()
   // `runRecommendation` と同じ順（解決 → 合成）。プリセットを変えると重みと向きが変わる。
-  const { metrics, notes, unresolved } = resolveMetrics(built.input.specs, built.input.radiusM)
+  const { metrics, labels, notes, unresolved } = resolveMetrics(
+    built.input.specs,
+    built.input.radiusM,
+  )
   const result = recommendStations(candidates, {
     metrics,
     method: built.input.method,
@@ -113,6 +116,7 @@ function present(raw: Record<string, unknown> = {}) {
     kind: 'ok',
     result,
     metrics,
+    labels,
     gathered: {
       candidates,
       stations,
@@ -147,6 +151,13 @@ describe('何を候補にしたかを隠さない（W2 の知見）', () => {
     expect(response.area.labelJa).toContain('横浜市')
     expect(response.candidateCount).toBe(6)
     expect(response.notesJa[0]).toContain('6 駅を候補にしました')
+  })
+
+  it('エリアの名前は住所と同じ順（広い → 狭い）', () => {
+    const response = present({ prefecture: ['神奈川県'], municipality: '横浜市' })
+    expect(response.area.labelJa.indexOf('神奈川県')).toBeLessThan(
+      response.area.labelJa.indexOf('横浜市'),
+    )
   })
 
   it('限界に「候補が変われば順位も変わる」が必ず入る', () => {
@@ -221,6 +232,13 @@ describe('表がそのまま描ける', () => {
     expect(top?.lon).toBeGreaterThan(139)
     expect(top?.breakdown).toHaveLength(METRICS.length)
     expect(top?.breakdown[0]?.formatted.length).toBeGreaterThan(0)
+  })
+
+  it('凡例に使う短い名前が付く（カタログの長いラベルとは別に）', () => {
+    const [metric] = present().metrics
+    expect(metric?.shortLabelJa).toBe('将来人口')
+    expect(metric?.labelJa).toContain('1km圏')
+    expect(metric?.labelJa.length).toBeGreaterThan(metric?.shortLabelJa.length ?? 0)
   })
 
   it('列（metrics）と内訳（breakdown）の key が一致する', () => {

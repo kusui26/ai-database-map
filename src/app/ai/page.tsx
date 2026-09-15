@@ -13,7 +13,16 @@ import { CopyButton } from '@/components/CopyButton'
 export const metadata: Metadata = {
   title: 'Claude で使う（MCP・プラグイン導入）',
   description:
-    'AI Database Map をあなたの Claude（Claude Code / Claude.ai / Cowork）や MCP 対応クライアントから使うための導入ページ。駅×半径のオープンデータ 13 ツールと分析スキルを、コマンド 2 行で導入できます。',
+    '全国 9,273 駅の駅×半径オープンデータ（乗降客数・人口・地価・売上・災害リスク）を、あなたの Claude から日本語で聞けます。API キー不要・読み取り専用のリモート MCP サーバ。Claude Code なら 2 行で導入。',
+  alternates: { canonical: '/ai' },
+  openGraph: {
+    type: 'article',
+    locale: 'ja_JP',
+    url: '/ai',
+    title: 'あなたの Claude で、駅×半径のオープンデータを使う',
+    description:
+      '全国 9,273 駅の乗降客数・人口・地価・売上・災害リスクを、日本語で聞くだけで分析できます。API キー不要。',
+  },
 }
 
 const MCP_URL = 'https://ai-database-map.vercel.app/api/mcp'
@@ -83,6 +92,89 @@ const TOOLS: readonly { name: string; desc: string }[] = [
   { name: 'get_metrics_catalog', desc: '自己記述カタログ（806 列の正確なキー・単位・年次）' },
 ]
 
+/** 冒頭に置く実例。**実際の受け入れテストの応答から抜粋**した値で、作文ではない
+ *  （`plugins/ai-database-map/evals/` の golden を 2026-09 に実走した結果）。 */
+const EXAMPLE_QUESTION = '横浜市で中古マンションを買おうと思っています。おすすめの駅はどこですか？'
+
+const EXAMPLE_STEPS: readonly string[] = [
+  '予算重視か資産価値重視か・通勤先・災害リスクの許容度を先に聞く（データはまだ取らない）',
+  '東京駅へ直通する路線の 17 駅を候補にし、駅×指標の CSV を 1 回だけ作る',
+  '想定最大規模の洪水で danger 以上の 3 駅を足切りし、残り 14 駅を min-max 正規化して重み付き合成',
+  '重みを ±20% 振って、順位が頑健か僅差かを確かめる',
+  '上位駅の表・効いた要因と弱点・限界・出典を出す',
+]
+
+interface ExampleRow {
+  readonly station: string
+  readonly pax: string
+  readonly future: string
+  readonly landPrice: string
+  readonly flood: string
+}
+
+const EXAMPLE_ROWS: readonly ExampleRow[] = [
+  { station: '戸塚', pax: '241,674', future: '+6.4%', landPrice: '454,000', flood: 'warning' },
+  { station: '東神奈川', pax: '69,094', future: '+4.9%', landPrice: '457,000', flood: 'none' },
+  { station: '山手', pax: '33,896', future: '+8.4%', landPrice: '355,500', flood: 'none' },
+]
+
+interface UseCase {
+  readonly who: string
+  readonly question: string
+}
+
+const USE_CASES: readonly UseCase[] = [
+  { who: '住まい探し', question: '横浜市で中古マンション、おすすめの駅は？' },
+  { who: '鉄道の輸送計画', question: '東急東横線の駅ごとの需要トレンドを分析して' },
+  { who: '出店・商圏', question: '武蔵小杉駅 500m 圏でカフェの商圏分析をして' },
+]
+
+/** 利用者が打つ文そのもの。ページの主役なので引用として見せる。 */
+function Ask({ children }: { children: string }) {
+  return (
+    <p className="rounded-xl border-l-4 border-indigo-300 bg-indigo-50/60 px-4 py-3 text-sm text-slate-800">
+      「{children}」
+    </p>
+  )
+}
+
+function ExampleTable() {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[34rem] border-collapse text-left text-xs">
+        <thead className="text-slate-500">
+          <tr>
+            <th className="border-b border-slate-200 py-1.5 pr-3 font-medium">駅</th>
+            <th className="border-b border-slate-200 py-1.5 pr-3 font-medium">
+              乗降客数 2024（人/日）
+            </th>
+            <th className="border-b border-slate-200 py-1.5 pr-3 font-medium">
+              将来人口 2020→2040
+            </th>
+            <th className="border-b border-slate-200 py-1.5 pr-3 font-medium">
+              地価中央値 2026（円/㎡）
+            </th>
+            <th className="border-b border-slate-200 py-1.5 font-medium">想定洪水区域</th>
+          </tr>
+        </thead>
+        <tbody className="text-slate-700">
+          {EXAMPLE_ROWS.map((row) => (
+            <tr key={row.station}>
+              <td className="border-b border-slate-100 py-1.5 pr-3 font-medium">{row.station}</td>
+              <td className="border-b border-slate-100 py-1.5 pr-3 tabular-nums">{row.pax}</td>
+              <td className="border-b border-slate-100 py-1.5 pr-3 tabular-nums">{row.future}</td>
+              <td className="border-b border-slate-100 py-1.5 pr-3 tabular-nums">
+                {row.landPrice}
+              </td>
+              <td className="border-b border-slate-100 py-1.5">{row.flood}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 export default function AiIntroPage() {
   return (
     <main className="mx-auto max-w-3xl space-y-10 px-4 py-10">
@@ -97,15 +189,76 @@ export default function AiIntroPage() {
         </p>
         <h1 className="text-2xl font-bold text-slate-900">あなたの Claude で、このデータを使う</h1>
         <p className="text-slate-600">
-          AI Database Map は、全国 9,273 駅 ×
-          半径のオープンデータ（乗降客数・人口・地価・売上・災害リスク…）を
-          <span className="font-medium">リモート MCP サーバ（13 ツール）</span>
-          として公開しています。あなた自身の Claude
-          サブスクリプションから、住宅購入・輸送計画・出店の商圏分析といった
-          <span className="font-medium">高度なデータ分析</span>
-          ができます。API キーは不要・追加費用はかかりません（あなたの Claude の利用枠を使います）。
+          全国 9,273 駅について、
+          <span className="font-medium">半径を指定して集めたオープンデータ</span>
+          （乗降客数・人口・地価・売上・災害リスク）を、あなたの Claude から日本語で聞けます。
+          <span className="font-medium">API キーは要りません。</span>
+          追加費用もかかりません（推論はあなた自身の Claude の利用枠を使います）。
+        </p>
+        <p className="text-sm text-slate-500">
+          実体は読み取り専用のリモート MCP サーバ（13 ツール）です。Claude Code・Claude.ai・Cowork・
+          MulmoTerminal / MulmoClaude・その他の MCP 対応クライアントから使えます。
         </p>
       </header>
+
+      <Section title="こう聞くと、こう返ってきます">
+        <Ask>{EXAMPLE_QUESTION}</Ask>
+        <p className="text-sm text-slate-600">
+          言われたとおりに検索するのではなく、
+          <span className="font-medium">先に条件を聞いてから</span>
+          データを取りに行きます。この質問だと、次の順に進みます。
+        </p>
+        <ol className="list-decimal space-y-1 pl-5 text-sm text-slate-600">
+          {EXAMPLE_STEPS.map((step) => (
+            <li key={step}>{step}</li>
+          ))}
+        </ol>
+        <ExampleTable />
+        <div className="space-y-1.5 text-sm text-slate-600">
+          <p>
+            表には<span className="font-medium">単位と年次</span>が必ず付きます。各駅には
+            「効いた要因」と<span className="font-medium">弱点</span>が 1 行ずつ添えられます——
+            たとえば東神奈川は「災害面が最も無難。ただし乗降客数・事業所数は横浜駅周辺に比べ小さく、繁華性は限定的」。
+          </p>
+          <p>
+            最後に必ず限界が並びます。 「地価は
+            <span className="font-medium">地価公示（土地の価格）</span>
+            であり、中古マンション価格そのものの代理指標です」「通勤条件は
+            <span className="font-medium">所要時間データを持たないため直通路線で近似</span>
+            しました」のように、答えの弱いところを自分から言います。
+          </p>
+        </div>
+        <p className="text-xs text-slate-500">
+          上の数値と文言は、リポジトリに入っている受け入れテスト（golden）を 2026-09 に実走した
+          <span className="font-medium">実際の応答からの抜粋</span>
+          です。重みは質問者の条件に合わせて
+          その都度決まるので、順位が固定されているわけではありません。
+        </p>
+      </Section>
+
+      <Section title="3 つの使い方">
+        <p className="text-sm text-slate-600">
+          コマンドを覚える必要はありません。<span className="font-medium">日本語で聞くだけ</span>
+          です。
+        </p>
+        <ul className="space-y-2 text-sm">
+          {USE_CASES.map((useCase) => (
+            <li
+              key={useCase.who}
+              className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-3"
+            >
+              <span className="shrink-0 rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                {useCase.who}
+              </span>
+              <span className="text-slate-600">「{useCase.question}」</span>
+            </li>
+          ))}
+        </ul>
+        <p className="text-xs text-slate-500">
+          長い調査は <code>data-analyst</code>{' '}
+          サブエージェントに任せられます（結果だけが本体の文脈に返ります）。
+        </p>
+      </Section>
 
       <Section title="Claude Code（おすすめ・分析スキル込み）">
         <p className="text-sm text-slate-600">
@@ -219,7 +372,7 @@ export default function AiIntroPage() {
         </p>
       </Section>
 
-      <Section title="できること（13 ツール）">
+      <Section title="扱えるデータ（13 ツール）">
         <ul className="space-y-1.5 text-sm">
           {TOOLS.map((tool) => (
             <li key={tool.name} className="flex gap-2">

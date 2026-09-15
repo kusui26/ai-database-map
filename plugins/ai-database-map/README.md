@@ -131,5 +131,6 @@ Cowork では Customize › Plugins › **Add from a repository** に `kusui26/A
 
 ## データとアプリ
 
+- **導入ページ：https://ai-database-map.vercel.app/ai** （実際のやりとりの例・全クライアントの導入手順）
 - アプリ本体：https://ai-database-map.vercel.app （出典・ライセンス一覧はアプリ内 ⓘ）
 - リポジトリ：https://github.com/kusui26/AI-Database-Map

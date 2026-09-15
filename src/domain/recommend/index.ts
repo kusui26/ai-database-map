@@ -159,5 +159,7 @@ export function recommendStations(
 
 export { DEFAULT_TOP_N } from './sensitivity'
 export { RECOMMEND_PRESETS, PRESET_IDS, weightSum } from './presets'
+export { resolveMetrics, columnsFor } from './metrics'
+export type { ResolvedMetrics } from './metrics'
 export type { PresetId, PresetMetric, RecommendPreset } from './presets'
 export * from './types'

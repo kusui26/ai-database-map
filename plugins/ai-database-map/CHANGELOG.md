@@ -1,9 +1,24 @@
 # Changelog
 
+## 0.8.2 — 2026-09-15
+
+- **MulmoClaude が動かない理由の説明を訂正**（0.8.1 の説明は誤りだった）。
+  手順と回避策は正しかったが、**因果が違った**。
+  - 誤：MulmoClaude がプラグインのスキルを走査しないから
+  - 正：**既定の Docker サンドボックスの中で、Claude Code がプラグインを解決できない**から。
+    台帳（`known_marketplaces.json` / `installed_plugins.json`）がホストの絶対パスを持つ一方、
+    コンテナのホームは `/home/node` で、そのパスが存在しない。スキルだけでなく
+    スラッシュコマンド・MCP サーバ・フックも落ちる。upstream に報告済み
+    （receptron/mulmoclaude#3186）
+- **symlink が要る条件を限定**：サンドボックスを使うときだけ。`--disable-sandbox` で動かすなら不要。
+  #3186 が直れば手順そのものが要らなくなる
+- `/ai` とルート README も同じ訂正を反映
+
 ## 0.8.1 — 2026-09-15
 
 - **母艦の導入手順を訂正**（実機で判明・`docs/260912_gui_chat_protocol.md` §4.6.1）。
   手順どおりにやっても動かない箇所が 3 つあった。
+  （⚠ このうち MulmoClaude の**原因の説明は誤り**だった。手順は正しい。**0.8.2 で訂正**）
   - **MulmoClaude はプラグインを読まない**——走査するのは `~/.claude/skills/` と
     `<workspace>/.claude/skills/` だけ。「読まれない場合はコピー」ではなく**常に必須**で、
     コピーより**相対 symlink**（Docker サンドボックスでも解決し、`/plugin` 更新に追随する）

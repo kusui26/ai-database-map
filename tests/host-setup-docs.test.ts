@@ -33,12 +33,27 @@ function linkedSkillsInIntroPage(): string[] {
 }
 
 describe('母艦の導入手順（実機と一致しているか）', () => {
-  it('MulmoClaude は「プラグインを読まない」と言い切っている（条件付きにしない）', () => {
-    expect(README).toContain('MulmoClaude は**プラグインを読みません**')
-    // 旧版の誤り：条件付きの案内だと、動かない状態のまま放置される。
+  it('MulmoClaude が動かない理由を、正しい原因で説明している', () => {
+    // 真因は Docker サンドボックス内で Claude Code がプラグインを解決できないこと
+    // （台帳がホストの絶対パスを持つ）。upstream: receptron/mulmoclaude#3186。
+    expect(README).toContain('Docker サンドボックス')
+    expect(README).toContain('プラグインが丸ごと読み込まれません')
+    expect(README).toContain('mulmoclaude/issues/3186')
+    // 旧版の誤り 1：条件付きの案内だと、動かない状態のまま放置される。
     expect(README).not.toContain('スキルが読まれない場合')
+    // 旧版の誤り 2：MulmoClaude の走査ルートを原因として書いていた。エージェントの
+    // スキル発見は claude CLI の仕事なので、これは症状の原因ではない。
+    expect(README).not.toContain('MulmoClaude は**プラグインを読みません**')
     // 登録が任意に見えると省略される。理由まで書く。
-    expect(README).toContain('登録済みのサーバしか許可しない')
+    expect(README).toContain('許可リストは**ここに登録したサーバから作られる**')
+  })
+
+  it('symlink が要る条件を限定している（サンドボックスを使うときだけ）', () => {
+    // 無条件に書くと、サンドボックスを外している人にも不要な作業をさせる。
+    // #3186 が直れば、この手順自体が要らなくなる。
+    expect(README).toContain('サンドボックスを使うときだけ')
+    expect(README).toContain('--disable-sandbox')
+    expect(INTRO_PAGE).toContain('サンドボックスを使うときだけ')
   })
 
   it('MulmoTerminal は WORKSPACE のセルを選ばせる（Canvas の ON ではない）', () => {
@@ -94,6 +109,6 @@ describe('母艦の導入手順（実機と一致しているか）', () => {
     expect(INTRO_PAGE).toContain('MulmoTerminal / MulmoClaude')
     expect(INTRO_PAGE).toContain('MULMO_SKILL_LINK')
     expect(INTRO_PAGE).toContain('MULMO_CSP')
-    expect(INTRO_PAGE).toContain('プラグインを読みません')
+    expect(INTRO_PAGE).toContain('プラグインが読み込まれません')
   })
 })

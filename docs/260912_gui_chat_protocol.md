@@ -268,9 +268,46 @@ CLAUDE.md §2 の図に「ユーザーの Claude」が並ぶ前身 §4.1 の構�
 - **1 パッケージ＝1 ツール** `stationArea({ action, …args })`（GCP の慣例：`manageAccounting`／`manageCollection` と同じ action 判別・`ToolResult.action` に写す）。`action` は当アプリのツール名（`get_station_detail`／`rank_stations`／`compare_growth`／`get_hazard_at_point`／`get_hazard_alerts`／`find_evacuation_sites`／`find_escape_direction`／`search_stations`…）。**TOOL_DEFINITION は当アプリの `tools/list` からビルド時に生成**（`oneOf` で action 別スキーマ・版同期テストで乖離を落とす）——定義を二重に書かない
 - **execute（母艦のサーバ側）＝当アプリ `/api/mcp` への薄い MCP クライアント**（`tools/call` を `runtime.fetchJson(parse: Zod)` で）。返す `ToolResult`：`message`＝content の text、`jsonData`＝`result`、`data`＝`{ panels, mapActions, action }`、`instructions`＝`limitationsJa`／免責（ハザード系）。**当アプリのサーバは無改変**（ドメインもプロトコルも）
 - **View（Vue SFC）**＝薄い枠：PR-11 で TS 化した共通レンダラ（`renderPanels(root, panels)`）を mount し、`mapActions` があれば **MapLibre**（npm 依存・Web UI と同じ版）を Shadow DOM 内に描く（母艦は chart/form の CSS を `?inline` で shadow に注入する流儀）。**Preview**＝1 行要約（駅名・危険度チップ）。ハザードの色・語彙は共通定数
-- 配布：npm publish（`files: dist`・peer `gui-chat-protocol ^2.0`・`vue ^3.5`）。**MulmoClaude**：`~/mulmoclaude/plugins/` ledger（tgz＋`plugins.json`）・開発は `mulmoclaude --dev-plugin ./packages/gui-chat-plugin`。**MulmoTerminal**：`plugins/plugins.json` への追加を upstream PR で提案（決定 15。受け入れられるまでは MulmoClaude 専用）
+- 配布：npm publish（`files: dist`・peer `gui-chat-protocol ^2.0`・`vue ^3.5`）。導入は **ユーザーが自分で**——`~/mulmoclaude/plugins/` に tgz を置き `plugins.json` に 1 行（開発は `mulmoclaude --dev-plugin ./packages/gui-chat-plugin`）。**同梱（プリセット）は提案しない**——`PRESET_PLUGINS` は**全員に対して空**で、それが設計上の現状だから（§4.4.1・決定 15 改）
 - **スキルとの整合**：母艦に `stationArea` があるときはそれを使い、無ければ `station-data` の MCP ツールを使う（§4.5 の解決規則）。二重に呼ばない
 - 置き場：当リポジトリの pnpm workspace に `packages/gui-chat-plugin/`（Next アプリと依存を分離・Vue はここだけ）。React 版（`ToolPluginReact`）は当面作らない（母艦が Vue）
+
+### 4.4.1 T2 の配布先は「同梱」ではない（2026-09-15・先方のドキュメントで確認）
+
+当初 §4.4 と決定 15 は「MulmoTerminal の `plugins/plugins.json` に同梱してもらう PR を出す」を
+前提にしていた。**この前提は成り立たない。** 先方の `docs/plugin-runtime.md` に書かれている事実。
+
+| 供給源 | 置き場所 | 管理者 |
+| --- | --- | --- |
+| **プリセット（同梱）** | `server/plugins/preset-list.ts` | リポジトリのコミッタ |
+| **ユーザー導入** | `~/mulmoclaude/plugins/<pkg>.tgz` ＋ `plugins.json` | 利用者本人 |
+
+**`PRESET_PLUGINS` は空**で、「枠組みはあるが既定で同梱されるプリセットは無い」と明記されている。
+理由も書かれている——`@gui-chat-plugin/weather` をプリセットにしたところ、ledger からも導入していた
+利用者の環境で毎回「名前が衝突している」警告が出た。その二重状態を綺麗に扱えるまでプリセットは空のまま。
+つまり**同梱は特定の誰かに閉じているのではなく、いま全員に対して閉じている**。
+
+**ビルトインのほうも外部には開いていない**：`src/plugins/<name>/` に `meta.ts` を置く＝先方の
+リポジトリにコードをマージすることであり、外部からの PR は受け付けない方針（§4.6.1 の経緯）。
+
+### カタログの物差しはここには効かない（こちらの推測の訂正）
+
+「特定の国のデータセットは同梱リストに載せない」という #3176 の判断が T2 にも及ぶ、と一度考えたが
+**誤り**だった。先方のドキュメントが「最初に入れてみるのに良い」として挙げている例が
+`@gui-chat-plugin/weather`——**気象庁の日本限定データ**のプラグインで、発行者は中島さんと有元さん本人。
+同スコープには `google-map`・`mindmap`・`camera`・`present3d` など 8 本が並ぶ。
+ランタイム・プラグインは**そもそも審査されない**ので、地域限定かどうかは判断軸に入らない。
+
+### 結論
+
+- **同梱の提案はしない**（PR-17 から削除）。配布は **npm 公開＋利用者の ledger 導入**のみ
+- 命名は既存の慣行 `@gui-chat-plugin/*` に寄せる
+- **着手は導入 CLI（Phase D＝`yarn plugin:install`）が出てから**。同ドキュメントに「Phase D は未出荷、
+  それまで導入は手作業」とある。tgz を置いて ledger を手で編集する手間を越えて届く相手は、
+  母艦を使い・当プラグインを使い・さらにもう 1 段の手作業を厭わない層に限られる。
+  T1 は既に両方の母艦で地図とチャートを出せているので、T2 の上積みは「HTML を経由しない・
+  もう少し綺麗」であって機能の有無ではない。**同じ労力なら、CLI が出てからのほうが届く範囲が広い**
+- この確認に **issue は使っていない**（公開ドキュメントとコードだけで確定した）。先方の時間を使わない
 
 ### 4.5 スキルの母艦対応
 
@@ -289,7 +326,7 @@ CLAUDE.md §2 の図に「ユーザーの Claude」が並ぶ前身 §4.1 の構�
 |---|---|---|
 | Claude Code 単体 | 既存：`/plugin marketplace add kusui26/AI-Database-Map` → install | プラグイン更新（0.8.0） |
 | **MulmoTerminal**（Claude/Codex） | ①**ワークスペースにしたいディレクトリで** `npx mulmoterminal@latest`（`npx` 起動では**そこが WORKSPACE**。直接起動なら `~/mulmoclaude`）。②Settings → `userMcpServers` に `{ id: "station-data", url: https://ai-database-map.vercel.app/api/mcp }`（**次のセッションから**有効）。③セルは候補チップの **WORKSPACE** を選ぶ＋Agent は Claude。④プラグインは Claude Code に **user scope** で導入済みであること。**Canvas のスイッチは触らない**——ワークスペースでは表示されず、GUI ツールは自動で付く（§4.6.1） | README/LP に「母艦で使う」節・スクリーンショット・`.mcp.json` 雛形 |
-| **MulmoClaude** | ①Settings → **MCP servers** に HTTP を追加（`<workspace>/config/mcp.json`）——**必須**。登録しないとツールが 1 つも呼べない。②スキルを `<workspace>/.claude/skills/` に**相対 symlink** で置く——**必須**。プラグインのスキルは走査されない。③地図を出すなら `<workspace>/config/csp.json` に `img-src`（再起動不要）。④T2：`plugins/` ledger に tgz（いずれも §4.6.1） | 導入ページ・**MCP カタログ掲載 PR**（`src/config/mcpCatalog.ts`：`type:"http"`・`riskLevel:"low"`・認証なし・i18n 8 ロケール・決定 17）・**upstream 要望**（プラグインのスキルも走査してほしい） |
+| **MulmoClaude** | ①Settings → **MCP servers** に HTTP を追加（`<workspace>/config/mcp.json`）——**必須**。登録しないとツールが 1 つも呼べない。②スキルを `<workspace>/.claude/skills/` に**相対 symlink** で置く——**必須**。プラグインのスキルは走査されない。③地図を出すなら `<workspace>/config/csp.json` に `img-src`（再起動不要）。④T2：`plugins/` に tgz＋`plugins.json` に 1 行（**利用者が自分で**・同梱は無い＝§4.4.1）（①〜③は §4.6.1） | 導入ページ・**MCP カタログ掲載 PR**（`src/config/mcpCatalog.ts`：`type:"http"`・`riskLevel:"low"`・認証なし・i18n 8 ロケール・決定 17）・**upstream 要望**（プラグインのスキルも走査してほしい） |
 | Codex（MulmoTerminal） | codex セル＋`.codex-plugin`／`codex mcp add` | **実導入検証**（前回未検証のまま） |
 | claude.ai / Cowork | 既存コネクタ（テキスト） | `_meta.ui` 撤収後に「コネクタ再追加」案内（最後の 1 回） |
 
@@ -427,7 +464,8 @@ Claude : [list_stations 横浜市 → 137 駅] [build_dataset 137 駅×20 列（
 | 12 | GUI の契約 | **GUI Chat Protocol（型つきデータ→登録ビューア）**。母艦＝MulmoTerminal／MulmoClaude | 自前チャット UI（規約・工数で不採用） |
 | 13 | 段階 | **T1（プレゼンタ合成）を先に**、T2（自前ビューア）は地図に限って後追い | T2 から着手（配布が未成熟で価値が出るまで長い） |
 | 14 | 地図の T1 実装 | **Leaflet 同梱**（`<img>` タイル・パン/ズーム・約 150KB・`leaflet` を依存に追加） | 依存ゼロの静的スリッピーマップ（小さいが操作不可） |
-| 15 | T2 プラグインと配布先 | **作る**（`packages/gui-chat-plugin`・npm 公開・MulmoClaude ledger で先行・MulmoTerminal は同梱 PR を提案） | 作らない（地図が母艦で二級のまま） |
+| 15 | T2 プラグインと配布先（**→ 15′ で改定**） | **作る**（`packages/gui-chat-plugin`・npm 公開・MulmoClaude ledger で先行・MulmoTerminal は同梱 PR を提案） | 作らない（地図が母艦で二級のまま） |
+| 15′ | ↑の**改定**（2026-09-15・§4.4.1） | **同梱 PR は出さない**（プリセットは全員に対して空）。配布は npm 公開＋利用者の ledger 導入のみ。**着手は導入 CLI（Phase D）が出てから**——いまは手作業導入で届く相手が狭く、T1 が両方の母艦で地図とチャートを出せている | 予定どおり PR-16/17 に着手する |
 | 16 | スキルの母艦対応 | 論理名解決・Canvas 検出・フォーム聞き取り・成果物規約・golden Canvas 版 | 母艦専用スキルを別に作る（二重保守） |
 | 17 | MulmoClaude MCP カタログへの掲載 PR（外部貢献） | **出す**（認証なし・低リスク・カタログ基準「built-in で代替不能」を満たす）。i18n 8 ロケールは当方で書く | 出さない（導入は手動のまま） |
 | 18 | Artifacts（T1′） | スキル 1 枚の**最小対応**（優先度低・PR-18） | やらない |
@@ -449,7 +487,7 @@ Claude : [list_stations 横浜市 → 137 駅] [build_dataset 137 駅×20 列（
 | **PR-15a** | **導入手順の訂正**（追加ではなく**修正**——実機で 3 か所の誤りが判明・§4.6.1）：プラグイン README と `/ai` の母艦節を書き直す。MulmoClaude は**スキルの symlink と MCP 登録が必須**（現状は「読まれない場合はコピー」と条件付きで、そのままでは動かない）／MulmoTerminal は **WORKSPACE のセル**を選ぶ（「Canvas を ON」は推奨経路に存在しない操作）／`csp.json` はホスト名のみ・再起動不要 | PR-14 | 手順どおりに**まっさらなワークスペースで**再現できる／文言をテストで固定 |
 | **PR-15b** | **配布（外部依存）**：MulmoClaude **MCP カタログ掲載 PR**（`src/config/mcpCatalog.ts`：`type:"http"`・`riskLevel:"low"`・認証なし・i18n 8 ロケール・決定 17）・**upstream 要望**（プラグインのスキルも走査してほしい＝手作業の symlink を全員ぶん不要にする）・Codex 実導入検証 | PR-15a | カタログ PR を提出／要望を起票／**Codex は CLI 導入後**（現在ブロック） |
 | **PR-16** | **T2 プラグイン**：`packages/gui-chat-plugin`（`definePlugin`・`stationArea` action 判別・`tools/list` からの定義生成＋版同期テスト・Vue View＝共通レンダラ＋MapLibre（Shadow DOM）・Preview・i18n） | PR-11 | `mulmoclaude --dev-plugin` で全 action の描画（地図・パネル・免責）／`vue-tsc`・lint 緑／`npm pack` 可 |
-| **PR-17** | **T2 配布**：npm publish・MulmoClaude ledger 手順・MulmoTerminal `plugins.json` 同梱提案 PR（外部）・スキルの `stationArea` 優先規則の実走 | PR-16 | MulmoClaude で「横浜駅の詳細を見せて」→ Canvas に地図＋パネル（実機） |
+| **PR-17** | **T2 配布**：npm publish・利用者向けの ledger 導入手順・スキルの `stationArea` 優先規則の実走。**同梱提案 PR は削除**（前提が成り立たない・§4.4.1） | PR-16 | MulmoClaude で「横浜駅の詳細を見せて」→ Canvas に地図＋パネル（実機） |
 | **PR-18** | Artifacts レポート（`/ai-database-map:report`）——任意 | PR-14 | Pro/Max セッションで Artifact が公開される |
 
 PR-11〜13 は独立に着手可（12 と 13 は並行）。**T1 は PR-14 で完成**、T2 は PR-16/17。運用（Vercel WAF・Spend Management）は前身のまま。
@@ -712,6 +750,7 @@ PR-11〜13 は独立に着手可（12 と 13 は並行）。**T1 は PR-14 で�
 - **ドメイン・プロトコル・ToolSpec・既存 API の改変**（`present` はアダプタ層、`render_map` は MCP 専用の純加算）
 - **生 SQL・サーバ側おすすめスコア API・ハザードの指標化・Gemini チャット廃止**（前身どおり）
 - **T1 の地図に MapLibre**（`connect-src 'none'` で動かないことが分かっている）
+- **T2 の同梱（プリセット）を先方に提案すること**——`PRESET_PLUGINS` は全員に対して空で、それが設計上の現状（§4.4.1）。配布は npm 公開＋利用者の ledger 導入に限る
 
 ---
 

@@ -20,15 +20,25 @@ import type {
   ScoredMetric,
 } from './types'
 
-/** 重みの合計を 1 に揃える。合計 0（全部 0）は割れないので均等にする。 */
+/**
+ * 重みの合計を 1 に揃える（負は 0 として扱う）。合計 0（全部 0）は割れないので均等にする。
+ *
+ * 配列で受けるのは、**画面のスライダも同じ関数で割合を出せる**ようにするため。
+ * 同じ重みなのに画面と応答で違う % が出る、という食い違いを作らない。
+ */
+export function shareOfWeights(weights: readonly number[]): readonly number[] {
+  const clamped = weights.map((weight) => Math.max(weight, 0))
+  const total = clamped.reduce((sum, weight) => sum + weight, 0)
+  const even = 1 / weights.length
+  return clamped.map((weight) => (total > 0 ? weight / total : even))
+}
+
+/** 指標ごとの重みを合計 1 に揃える（key → 割合）。 */
 export function normalizeWeights(
   metrics: readonly ScoredMetric[],
 ): Readonly<Record<string, number>> {
-  const total = metrics.reduce((sum, metric) => sum + Math.max(metric.weight, 0), 0)
-  const even = 1 / metrics.length
-  return Object.fromEntries(
-    metrics.map((metric) => [metric.key, total > 0 ? Math.max(metric.weight, 0) / total : even]),
-  )
+  const shares = shareOfWeights(metrics.map((metric) => metric.weight))
+  return Object.fromEntries(metrics.map((metric, index) => [metric.key, shares[index] ?? 0]))
 }
 
 /** その駅で値が無い指標の key（空なら全部そろっている）。 */

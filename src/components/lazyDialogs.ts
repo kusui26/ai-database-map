@@ -21,12 +21,17 @@ import dynamic from 'next/dynamic'
 
 const loadRankingDialog = () => import('./ranking/RankingDialog')
 const loadScatterDialog = () => import('./scatter/ScatterDialog')
+const loadRecommendDialog = () => import('./recommend/RecommendDialog')
 
 export const RankingDialog = dynamic(() => loadRankingDialog().then((m) => m.RankingDialog), {
   loading: () => null,
 })
 
 export const ScatterDialog = dynamic(() => loadScatterDialog().then((m) => m.ScatterDialog), {
+  loading: () => null,
+})
+
+export const RecommendDialog = dynamic(() => loadRecommendDialog().then((m) => m.RecommendDialog), {
   loading: () => null,
 })
 
@@ -38,4 +43,5 @@ export const ScatterDialog = dynamic(() => loadScatterDialog().then((m) => m.Sca
 export const DIALOG_LOADERS: readonly (() => Promise<unknown>)[] = [
   loadRankingDialog,
   loadScatterDialog,
+  loadRecommendDialog,
 ]

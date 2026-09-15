@@ -47,6 +47,8 @@ export type RecommendRunOk = {
   readonly result: RecommendResult
   /** 解決後の指標（表の列順）。半径・年はここで確定している。 */
   readonly metrics: readonly ScoredMetric[]
+  /** key → レシピが付けた短い名前（見出し用）。 */
+  readonly labels: Readonly<Record<string, string>>
   /** 集めたもの（駅の素性・災害サマリ）。表と地図と脚注がここから作れる。 */
   readonly gathered: GatheredCandidates
   /** 半径・年の既定を埋めた記録（脚注へ）。 */
@@ -60,7 +62,7 @@ export type RecommendRun =
 
 /** 解決 → 取得 → 合成を 1 回で。DB を読むので非純粋。 */
 export async function runRecommendation(input: RecommendRunInput): Promise<RecommendRun> {
-  const { metrics, notes, unresolved } = resolveMetrics(input.specs, input.radiusM)
+  const { metrics, labels, notes, unresolved } = resolveMetrics(input.specs, input.radiusM)
   const gathered = await gatherCandidates(input.filter, metrics, {
     includeHazard: input.hazard.mode !== 'off',
     maxStations: input.maxStations,
@@ -73,5 +75,5 @@ export async function runRecommendation(input: RecommendRunInput): Promise<Recom
     ...(input.flagged === undefined ? {} : { flagged: input.flagged }),
     ...(input.topN === undefined ? {} : { topN: input.topN }),
   })
-  return { kind: 'ok', result, metrics, gathered, notes, unresolved }
+  return { kind: 'ok', result, metrics, labels, gathered, notes, unresolved }
 }

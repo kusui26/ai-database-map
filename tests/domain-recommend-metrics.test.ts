@@ -99,6 +99,50 @@ describe('値を引く列', () => {
   })
 })
 
+describe('増減率は「何年ぶんの変化か」で選ぶ', () => {
+  it('将来人口は 20 年先を選ぶ（いちばん遠い 2070 年ではない）', () => {
+    const { metrics } = resolveMetrics([spec('pop_gr_pred', { spanYears: 20 })], RADIUS_M)
+    expect(metrics[0]?.key).toBe('pop_gr_pred_2024_2040_1km')
+  })
+
+  it('地価トレンドは 5 年ぶんを選ぶ（いちばん短い 1 年ではない）', () => {
+    const { metrics } = resolveMetrics([spec('lp_gr', { spanYears: 5 })], RADIUS_M)
+    expect(metrics[0]?.key).toBe('lp_gr_2026_2021_1km')
+  })
+
+  it('期間を言わないと「いちばん新しい」になり、同じ規則が逆の意味になる', () => {
+    // 将来人口は終点年が動くので**最も遠い年**、地価は起点年が動くので**最も短い期間**が選ばれる。
+    expect(resolveMetrics([spec('pop_gr_pred')], RADIUS_M).metrics[0]?.key).toBe(
+      'pop_gr_pred_2024_2070_1km',
+    )
+    expect(resolveMetrics([spec('lp_gr')], RADIUS_M).metrics[0]?.key).toBe('lp_gr_2026_2025_1km')
+  })
+
+  it('その期間が無ければ落とさずに新しい順へ倒す（notes に選んだ key が出る）', () => {
+    const { metrics, notes, unresolved } = resolveMetrics(
+      [spec('lp_gr', { spanYears: 7 })],
+      RADIUS_M,
+    )
+    expect(unresolved).toEqual([])
+    expect(metrics).toHaveLength(1)
+    expect(notes[0]).toContain(metrics[0]?.key ?? '')
+  })
+})
+
+describe('スキルと同じ列に解決する（入口が違うだけで別の答えにしない）', () => {
+  it('予算重視・1km 圏は、スキルの実走と同じ 6 列になる', () => {
+    const { metrics } = resolveMetrics(RECOMMEND_PRESETS.budget.metrics, RADIUS_M)
+    expect(metrics.map((metric) => metric.key)).toEqual([
+      'pop_gr_pred_2024_2040_1km',
+      'pop_gr_2020_2015_1km',
+      'lp_gr_2026_2021_1km',
+      'lp_med_2026_1km',
+      'rate_covid',
+      'pax_2024',
+    ])
+  })
+})
+
 describe('プリセットは 4 つとも解決できる', () => {
   it('どのプリセットも、全指標がカタログに実在する', () => {
     for (const preset of Object.values(RECOMMEND_PRESETS)) {

@@ -19,13 +19,23 @@
 
 import type { HazardLevel } from '@/shared/constants'
 import type { StationHazardSummary, SummaryHazardGroup } from '@/shared/hazard-summary'
+import type {
+  DegenerateReason,
+  FlaggedPolicy,
+  MetricDirection,
+  NormalizeMethod,
+} from '@/shared/recommend'
 
-/** 正規化の方法。**混ぜない**（1 回の合成では 1 つだけ）。 */
-export const NORMALIZE_METHODS = ['percentile', 'minmax', 'zscore'] as const
-export type NormalizeMethod = (typeof NORMALIZE_METHODS)[number]
-
-/** 指標の「良い方向」。用途で変わるのでレシピが指定する。 */
-export type MetricDirection = 'higher' | 'lower'
+/**
+ * 選択肢そのもの（正規化の方法・向き・⚠ の扱い）は `@/shared/recommend` にある。
+ * ここから再輸出するのは、この層だけを読む人が語彙を辿れるようにするため。
+ */
+export type {
+  FlaggedPolicy,
+  MetricDirection,
+  NormalizeMethod,
+  HazardPolicyMode,
+} from '@/shared/recommend'
 
 /** 合成に使う指標 1 件。 */
 export type ScoredMetric = {
@@ -67,9 +77,6 @@ export type HazardPolicy =
       readonly group: SummaryHazardGroup
       readonly steps: Readonly<Record<HazardLevel, number>>
     }
-
-/** ⚠（信頼性フラグ）が立った値の扱い。どちらも「黙って使う」ではない。 */
-export type FlaggedPolicy = 'exclude' | 'annotate'
 
 export type RecommendOptions = {
   readonly metrics: readonly ScoredMetric[]
@@ -135,7 +142,7 @@ export type Sensitivity = {
 /** 正規化が効かなかった指標（全駅同値など）。**黙って 0.5 にしない**ために返す。 */
 export type DegenerateMetric = {
   readonly key: string
-  readonly reason: 'no-spread' | 'too-few'
+  readonly reason: DegenerateReason
 }
 
 export type RecommendResult = {

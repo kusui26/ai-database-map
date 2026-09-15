@@ -22,21 +22,20 @@ import { describe, expect, it } from 'vitest'
 import { recommendStations } from '@/domain/recommend'
 import { gatherCandidates } from '@/domain/recommend/gather'
 import { resolveMetrics } from '@/domain/recommend/metrics'
-import type { PresetMetric } from '@/domain/recommend/presets'
+import { MAX_CANDIDATE_STATIONS } from '@/domain/recommend/request'
+import { RECOMMEND_PRESETS, type PresetMetric } from '@/domain/recommend/presets'
 import type { HazardPolicy } from '@/domain/recommend/types'
 
 const ENABLED = process.env.RECOMMEND_LIVE === '1'
 const TIMEOUT_MS = 60_000
 
-/** 実走が採った重みと key（`docs/260912_gui_chat_protocol.md` §13.7 W2）。 */
-const SPECS: readonly PresetMetric[] = [
-  { metric: 'pop_gr_pred_2024_2040_1km', labelJa: '将来人口', direction: 'higher', weight: 0.25 },
-  { metric: 'pop_gr_2020_2015_1km', labelJa: '実績人口', direction: 'higher', weight: 0.2 },
-  { metric: 'lp_gr_2026_2021_1km', labelJa: '地価トレンド', direction: 'higher', weight: 0.1 },
-  { metric: 'lp_med_2026_1km', labelJa: '地価水準', direction: 'lower', weight: 0.15 },
-  { metric: 'rate_covid', labelJa: '乗降回復', direction: 'higher', weight: 0.15 },
-  { metric: 'pax_2024', labelJa: '乗降水準', direction: 'higher', weight: 0.15 },
-]
+/**
+ * 実走が採ったレシピ。**プリセットをそのまま使う**（W3）——重みだけでなく、
+ * 半径・年の解決まで含めて「画面の既定 ＝ スキルの実走」であることを、ここで確かめる。
+ * 実走が使った 6 列（`pop_gr_pred_2024_2040_1km` など）に解決されることは
+ * `tests/domain-recommend-metrics.test.ts` が DB 無しで固定している。
+ */
+const SPECS: readonly PresetMetric[] = RECOMMEND_PRESETS.budget.metrics
 
 /** 実走が挟んだ判断——ドメインには持たせない（§13.7 の注記）。 */
 const JUDGED_OUT = '羽沢横浜国大'
@@ -53,7 +52,7 @@ async function runYokohama() {
   const gathered = await gatherCandidates(
     { municipality: '横浜市', routes: ['東海道線', '根岸線', '横須賀線'] },
     metrics,
-    { includeHazard: true },
+    { includeHazard: true, maxStations: MAX_CANDIDATE_STATIONS },
   )
   const candidates = gathered.candidates.filter((station) => station.name !== JUDGED_OUT)
   return {

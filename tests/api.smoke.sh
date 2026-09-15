@@ -256,6 +256,65 @@ get "$BASE/api/ranking" "metric=pop_lowbase_2020_1km"
 get "$BASE/api/stations/__nope__"
 [ "$HTTP" = 404 ] && ok "未存在の駅 → 404" || ng "missing station should 404"
 
+# 18) recommend（おすすめ駅・260912 §13 W3）
+#     順位そのものは重み次第なので**見ない**。見るのは「順位と一緒に必ず出るもの」——
+#     候補集合・正規化の方法・重み・除外理由・敏感度・限界・出典（§13.4 の規範 6 項目）。
+#     ここが欠けた応答は、数字が正しくても読めない。
+get "$BASE/api/recommend" "municipality=横浜市" "routes=東海道線,根岸線,横須賀線" \
+  "preset=budget" "method=minmax" "hazardAtOrAbove=danger"
+REC="$BODY"
+{ [ "$HTTP" = 200 ] && [ "$(echo "$REC" | jq '.candidateCount')" -gt 0 ] &&
+  [ "$(echo "$REC" | jq '.rows | length')" -gt 0 ] &&
+  [ "$(echo "$REC" | jq -r '.area.labelJa | contains("横浜市")')" = true ]; } &&
+  ok "recommend（横浜市 $(echo "$REC" | jq '.candidateCount') 駅 → 上位 $(echo "$REC" | jq '.rows | length') 件）" ||
+  ng "recommend"
+
+# 18a) 方法・重み・敏感度が必ず付いてくる（重みの合計は 1 に正規化されている）
+{ [ "$(echo "$REC" | jq -r '.methodJa | length > 0')" = true ] &&
+  [ "$(echo "$REC" | jq '[.metrics[].weight] | add | (. > 0.999 and . < 1.001)')" = true ] &&
+  [ "$(echo "$REC" | jq -r '.sensitivity.verdictJa | test("頑健|僅差")')" = true ]; } &&
+  ok "recommend：方法・重み・敏感度が付く（$(echo "$REC" | jq -r '.sensitivity.verdictJa')）" ||
+  ng "recommend method/weights/sensitivity"
+
+# 18b) 外した駅には必ず理由がある／限界と出典が末尾に付く
+{ [ "$(echo "$REC" | jq '[.excluded[] | select(.reasonJa == "")] | length')" -eq 0 ] &&
+  [ "$(echo "$REC" | jq '.limitationsJa | length')" -ge 3 ] &&
+  [ "$(echo "$REC" | jq '.sources | length')" -gt 0 ] &&
+  [ "$(echo "$REC" | jq -r '[.limitationsJa[] | select(contains("候補が変われば"))] | length')" -gt 0 ]; } &&
+  ok "recommend：除外理由・限界・出典が揃う（除外 $(echo "$REC" | jq '.excludedCounts.total') 駅）" ||
+  ng "recommend limitations/sources"
+
+# 18c) 危険度の「不明」を「想定区域外」と言い換えない
+{ [ "$(echo "$REC" | jq '[.rows[] | select(.hazard.level == null and (.hazard.levelJa | contains("不明") | not))] | length')" -eq 0 ]; } &&
+  ok "recommend：判定できない駅を「想定区域外」と言わない" || ng "recommend unknown hazard wording"
+
+# 18d) 異常系：絞り込みが無い → 400（全国 9,273 駅を対象にしない）
+get "$BASE/api/recommend"
+[ "$HTTP" = 400 ] && ok "recommend：絞り込みなし → 400" || ng "recommend no filter should 400"
+
+# 18e) 異常系：半径が 6 段以外 → 400
+get "$BASE/api/recommend" "municipality=横浜市" "radiusM=1234"
+[ "$HTTP" = 400 ] && ok "recommend：半径 1234m → 400" || ng "recommend bad radius should 400"
+
+# 18f) 異常系：知らない指標名の重み → 400（黙って既定で計算しない）
+get "$BASE/api/recommend" "municipality=横浜市" "weights=nope:1"
+[ "$HTTP" = 400 ] && ok "recommend：知らない指標名 → 400" || ng "recommend unknown weight should 400"
+
+# 18g) 異常系：候補が上限を超える → 400（切り詰めない＝言っていない判断を混ぜない）
+get "$BASE/api/recommend" "prefecture=東京都,神奈川県"
+{ [ "$HTTP" = 400 ] && [ "$(echo "$BODY" | jq -r '.error.message | contains("駅を超えました")')" = true ]; } &&
+  ok "recommend：候補が上限超え → 400（頭を切らない）" || ng "recommend over limit should 400"
+
+# 18h) 429（1 分 30 件）。**ローカルだけ**——本番はインスタンスが分かれて固定窓が割れる。
+case "$BASE" in
+  http://localhost* | http://127.0.0.1*)
+    for _ in $(seq 1 31); do get "$BASE/api/recommend"; done
+    { [ "$HTTP" = 429 ] && [ "$(echo "$BODY" | jq -r .error.code)" = RATE_LIMITED ]; } &&
+      ok "recommend：31 回目 → 429" || ng "recommend rate limit should 429"
+    ;;
+  *) echo "  · recommend の 429 はローカルのみ（本番は複数インスタンスで窓が割れる）" ;;
+esac
+
 echo ""
 echo "==== $pass passed / $fail failed ===="
 [ "$fail" = 0 ] && echo "✅ ALL PASS" || echo "❌ FAILED"

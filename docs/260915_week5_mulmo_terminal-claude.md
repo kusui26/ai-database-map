@@ -178,8 +178,16 @@ symlink を張ったら直ったことが、誤った説明の裏づけに見え
 | `installed_plugins.json` | `installPath` | `/Users/<user>/.claude/plugins/cache/<mp>/<plugin>/<ver>` |
 | `known_marketplaces.json` | `installLocation` | `/Users/<user>/.claude/plugins/marketplaces/<mp>` |
 
-**先に失敗するのはマーケットプレイス側**（エラーが `Marketplace … cache-miss` と言っている）。
-`installPath` だけ直しても解決しない可能性が高い。
+**どちらか片方だけでは直らない**（投稿後に切り分けた）。同じコンテナで書き換える対象を変えて比較した。
+
+| 書き換えたもの | `claude plugin list` | エージェント（コマンド・スキル・フック） |
+| --- | --- | --- |
+| `installLocation` だけ | ✔ enabled | **届かない**（コマンド 0・`Skill` 呼び出しなし） |
+| `installPath` だけ | ✘ failed to load（`cache-miss` のまま） | 届かない |
+| **両方** | ✔ enabled | **届く**（コマンド・`Skill`・フックが復活） |
+
+`plugin list` が `enabled` でもエージェントには届かない段がある。**成功判定に `plugin list` を使えない**。
+影響は当プラグインに限らず、`claude-plugins-official` を含む登録済みマーケットプレイス全部に及ぶ。
 
 ### 5.4 追加で分かったこと 2 — 書き換えれば直る（実証済み）
 
@@ -192,6 +200,8 @@ symlink を張ったら直ったことが、誤った説明の裏づけに見え
 
 つまり先方が想定している「Docker モードでの installPath 書き換え（localhost →
 host.docker.internal と同種の処理）」は、**2 ファイルを対象にすれば成立する**。
+`HOME=/home/node` は MulmoClaude が明示的に渡している（`server/agent/config.ts`）ので、
+読み替え先は一意に決まる。
 
 ### 5.5 追加で分かったこと 3 — 失われるのはスキルだけではない
 
@@ -251,6 +261,20 @@ MulmoClaude 本体を `--disable-sandbox` で起動して UI から会話した�
 
 ---
 
+## 6.5 送ったもの（2026-09-15 実施）
+
+| 宛先 | 内容 | リンク |
+| --- | --- | --- |
+| **新 issue #3186** | Docker のパス不一致。冒頭 3 行で要約、切り分け表、再現手順つき | `receptron/mulmoclaude#3186` |
+| **#3175 へコメント** | #3184 への謝意＋切り分けの回答＋#3186 へ誘導＋こちらの理解の誤りの訂正 | `issuecomment-5680616172` |
+| **#3176 へコメント** | 判断を受け入れた旨と謝意。再提案しない | `issuecomment-5680620246` |
+
+投稿の直前に切り分けを 1 段深めたので、#3186 には §5.3 の 3 行表（`installLocation` だけ／
+`installPath` だけ／両方）を載せてある。**`plugin list` を成功判定に使わないほうが良い**という
+注意も添えた。実装の形までは指定せず、封じ込めの線引きは #3184 の判断と整合させてほしい、とだけ書いた。
+
+以下は投稿前の下書き。実際に送った文面はほぼこのままで、#3186 の番号が確定した分だけ差し替えた。
+
 ## 7. 返信の下書き
 
 ### A. #3176（カタログ・クローズへのお礼）
@@ -273,7 +297,7 @@ MulmoClaude 本体を `--disable-sandbox` で起動して UI から会話した�
 >
 > 切り分けのご質問に回答します。**サンドボックス OFF なら `Skill` は呼ばれます。**
 > ご指摘の Docker のパス不一致が真因でした。ledger の書き換えで直るところまで実測できたので、
-> Docker の件として新しい issue（#XXXX）を立てました。
+> Docker の件として新しい issue（#3186）を立てました。
 >
 > また、スキル一覧を自前で組み立てていないという説明で、こちらの理解の誤りがはっきりしました。
 > 手元のドキュメントに誤った原因を書いて公開していたので、そちらも直します。ありがとうございました。

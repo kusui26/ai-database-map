@@ -122,6 +122,7 @@ type MapResponse = {
 | `GET /api/stations/:grp` | 駅詳細（指標・年次推移）| `domain/stations` |
 | `GET /api/ranking?metric=…&prefecture=…` | ランキング | `domain/ranking` |
 | `GET /api/growth?x=…&y=…&prefecture=…` | 増減率散布＋クラスタリング | `domain/growth` |
+| `GET /api/recommend?municipality=…&preset=…` | **おすすめ駅**（正規化 → 重み付き合成・災害の足切り／段階減点・±20% 敏感度）| `domain/recommend` |
 | `POST /api/chat`（**Step2**）| 自然言語 → GUI Chat Protocol | `domain/*` via `ai/tools` |
 
 - **原則**：①生カラム名のパススルー禁止（`metric` は catalog で列挙・検証）、②応答は**意味づけ済み**（label/unit/format 付き）、③各エンドポイントを **Gemini の function calling ツール**として設計（Step2 でそのまま tool 化）。

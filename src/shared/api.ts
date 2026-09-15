@@ -13,7 +13,18 @@ import {
   hazardLevelSchema,
 } from './hazard'
 import { jmaWarningKindSchema } from './jma'
-import { ALERT_LEVELS } from './constants'
+import { summaryHazardGroupSchema } from './hazard-summary'
+import {
+  degenerateReasonSchema,
+  exclusionKindSchema,
+  flaggedPolicySchema,
+  hazardPenaltyIdSchema,
+  hazardPolicyModeSchema,
+  metricDirectionSchema,
+  normalizeMethodSchema,
+  recommendPresetIdSchema,
+} from './recommend'
+import { ALERT_LEVELS, RADII_M } from './constants'
 import { hazardItemSchema, rankingRowSchema, scatterPointSchema, sourceRefSchema } from './protocol'
 import { evacuationDisasterKeySchema } from './evacuation'
 
@@ -536,6 +547,250 @@ export const hazardEscapeResponseSchema = z.object({
   disclaimerJa: z.string(),
 })
 export type HazardEscapeResponse = z.infer<typeof hazardEscapeResponseSchema>
+
+// --- おすすめ駅（GET /api/recommend・260912 §13） --------------------------
+
+/** 重みの上書きは 12 件まで（6 軸＋余白）。URL が長くなりすぎるのも防ぐ。 */
+export const MAX_WEIGHT_ENTRIES = 12
+/** 1 指標の重みの上限。合計は内部で 1 に正規化するので、比だけが意味を持つ。 */
+const MAX_WEIGHT = 100
+
+/** 「pop_gr:0.25,lp_med:0.15」1 件ぶん。指標名はカタログ key かファミリ名。 */
+const WEIGHT_ENTRY = /^([a-z0-9_]+):(\d+(?:\.\d+)?)$/
+
+/**
+ * 重みの上書き（プリセットの値を置き換える）。
+ * **指標名がプリセットに無いときは 400** にするが、その判定はプリセットを知っている domain 側
+ * （`buildRecommendInput`）。ここでは形と件数だけを見る。
+ */
+const weightsParam = z.string().max(400).transform(parseWeights)
+
+function parseWeights(raw: string, ctx: z.RefinementCtx): Record<string, number> {
+  const parts = raw
+    .split(',')
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0)
+  if (parts.length > MAX_WEIGHT_ENTRIES) {
+    ctx.addIssue({ code: 'custom', message: `重みの指定は ${MAX_WEIGHT_ENTRIES} 件までです` })
+    return z.NEVER
+  }
+  const weights: Record<string, number> = {}
+  for (const part of parts) {
+    const matched = WEIGHT_ENTRY.exec(part)
+    const value = Number(matched?.[2] ?? Number.NaN)
+    if (matched === undefined || matched === null || value > MAX_WEIGHT) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `weights は「指標名:重み（0〜${MAX_WEIGHT}）」をカンマで並べます: ${part}`,
+      })
+      return z.NEVER
+    }
+    weights[matched[1] ?? ''] = value
+  }
+  return weights
+}
+
+/** 集約半径。カタログの列がこの 6 段でしか存在しないので、6 段以外は 400 にする。 */
+const radiusParam = z.coerce
+  .number()
+  .int()
+  .refine((value) => RADII_M.some((radius) => radius === value), {
+    message: `半径は ${RADII_M.join(' / ')} m のいずれかです`,
+  })
+
+/**
+ * おすすめ駅の入力。**既定は宣言するが、押しつけない**（§13.4-2）——
+ * どれも応答にそのまま echo されるので、画面は「何が使われたか」を必ず出せる。
+ */
+export const recommendQuerySchema = z.object({
+  // 対象集合（どれか 1 つ以上は必須。判定は domain 側）
+  prefectures: z.array(z.string().min(1)).max(8).default([]),
+  municipality: z.string().min(1).max(40).optional(),
+  operators: z.array(z.string().min(1)).max(20).default([]),
+  routes: z.array(z.string().min(1)).max(20).default([]),
+  routeTypes: z.array(z.number().int().min(1).max(9)).max(9).default([]),
+  bbox: z.string().optional(), // "west,south,east,north"
+  // レシピ
+  preset: recommendPresetIdSchema.default('family'),
+  weights: weightsParam.optional(),
+  radiusM: radiusParam.default(1000),
+  method: normalizeMethodSchema.default('percentile'),
+  // 災害（既定は「洪水が『危険』以上を候補から外す」＝スキルの実走と同じ方針）
+  hazard: hazardPolicyModeSchema.default('exclude'),
+  hazardGroup: summaryHazardGroupSchema.default('flood'),
+  hazardAtOrAbove: hazardLevelSchema.default('danger'),
+  hazardPenalty: hazardPenaltyIdSchema.default('standard'),
+  // ⚠ の扱い・件数
+  flagged: flaggedPolicySchema.default('annotate'),
+  topN: z.coerce.number().int().min(1).max(20).default(5),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+})
+export type RecommendQuery = z.infer<typeof recommendQuerySchema>
+
+/**
+ * **何を候補にしたか。**（W2 の知見：候補集合が 1 駅違えば順位が変わる。
+ * 画面にはその判断をする相手がいないので、絞り込みをそのまま返して見せる）
+ */
+export const recommendAreaSchema = z.object({
+  prefectures: z.array(z.string()),
+  municipality: z.string().nullable(),
+  operators: z.array(z.string()),
+  routes: z.array(z.string()),
+  routeTypes: z.array(z.number()),
+  bbox: z
+    .object({ west: z.number(), south: z.number(), east: z.number(), north: z.number() })
+    .nullable(),
+  /** 「横浜市／東海道線・根岸線・横須賀線」。言い方をサーバが決める（UI と AI で割らない）。 */
+  labelJa: z.string(),
+})
+export type RecommendArea = z.infer<typeof recommendAreaSchema>
+
+/** 合成に使った指標 1 件（ラベル・単位・年・半径まで返す＝表をそのまま描ける）。 */
+export const recommendMetricSchema = z.object({
+  key: z.string(),
+  baseMetric: z.string(),
+  labelJa: z.string(),
+  unit: unitSchema,
+  format: formatSchema,
+  radiusM: z.number().nullable(),
+  year: z.number().nullable(),
+  yearBase: z.number().nullable(),
+  direction: metricDirectionSchema,
+  /** 「高いほど良い」／「低いほど良い」。 */
+  directionJa: z.string(),
+  /** 正規化後の重み（合計 1）。脚注にそのまま出す。 */
+  weight: z.number(),
+  /** 候補内で差が付かなかった指標（黙って引き分けにしていない印）。 */
+  degenerate: degenerateReasonSchema.nullable(),
+})
+export type RecommendMetric = z.infer<typeof recommendMetricSchema>
+
+/** 1 駅 × 1 指標の内訳。 */
+export const recommendContributionSchema = z.object({
+  key: z.string(),
+  value: z.number(),
+  formatted: z.string(),
+  /** 正規化後（向き適用済み＝大きいほど良い）。 */
+  normalized: z.number(),
+  /** 正規化後 × 重み。合計＋減点がスコアになる。 */
+  contribution: z.number(),
+  /** ⚠（低分母など）が立っている値。 */
+  flagged: z.boolean(),
+})
+export type RecommendContribution = z.infer<typeof recommendContributionSchema>
+
+/** 選んだグループの危険度（方針が off のときは返さない）。 */
+export const recommendHazardCellSchema = z.object({
+  /** サマリを取得できなかった駅は `null`＝**不明**（`none`＝想定区域外とは別物）。 */
+  level: hazardLevelSchema.nullable(),
+  /** 「警戒」。`none` は「想定区域外」であって「安全」ではない。 */
+  levelJa: z.string(),
+  worstJa: z.string().nullable(),
+  /** 段階減点（足切りのときは 0）。 */
+  penalty: z.number(),
+  /** 区域図が無い＝**不明**（安全ではない）。 */
+  uncovered: z.boolean(),
+  nearby: z.boolean(),
+})
+
+export const recommendRowSchema = z.object({
+  rank: z.number(),
+  grp: z.string(),
+  name: z.string(),
+  label: z.string(),
+  prefecture: z.string(),
+  municipality: z.string().nullable(),
+  lon: z.number(),
+  lat: z.number(),
+  score: z.number(),
+  breakdown: z.array(recommendContributionSchema),
+  hazard: recommendHazardCellSchema.nullable(),
+})
+export type RecommendRow = z.infer<typeof recommendRowSchema>
+
+/** 候補から外れた駅。**必ず理由が付く**（黙って消さない・§13.4-5）。 */
+export const recommendExcludedSchema = z.object({
+  grp: z.string(),
+  name: z.string(),
+  kind: exclusionKindSchema,
+  /** 「洪水が『極めて危険』のため」「地価水準の値がないため」。 */
+  reasonJa: z.string(),
+})
+export type RecommendExcluded = z.infer<typeof recommendExcludedSchema>
+
+const recommendStationRefSchema = z.object({ grp: z.string(), name: z.string() })
+
+/** ±20% 振ったときの振る舞い（§13.4-4）。 */
+export const recommendSensitivitySchema = z.object({
+  runs: z.number(),
+  stable: z.boolean(),
+  /** 「頑健」／「僅差」の 1 行。 */
+  verdictJa: z.string(),
+  swaps: z.array(z.object({ a: recommendStationRefSchema, b: recommendStationRefSchema })),
+  enteredTop: z.array(recommendStationRefSchema),
+  leftTop: z.array(recommendStationRefSchema),
+})
+export type RecommendSensitivity = z.infer<typeof recommendSensitivitySchema>
+
+/** 災害の扱い（採った方針をそのまま返す）。 */
+export const recommendHazardPolicySchema = z.object({
+  mode: hazardPolicyModeSchema,
+  group: summaryHazardGroupSchema.nullable(),
+  groupJa: z.string().nullable(),
+  /** 足切りの下限（`exclude` のときだけ）。 */
+  atOrAbove: hazardLevelSchema.nullable(),
+  /** 段階減点の強さ（`penalty` のときだけ）。 */
+  penalty: hazardPenaltyIdSchema.nullable(),
+  /** レベル → 減点の**表**（`penalty` のときだけ）。掛け算ではないことが見えるように返す。 */
+  steps: z.record(hazardLevelSchema, z.number()).nullable(),
+  /** 「洪水が『危険』以上の駅を候補から外しました」。 */
+  labelJa: z.string(),
+})
+export type RecommendHazardPolicy = z.infer<typeof recommendHazardPolicySchema>
+
+/**
+ * おすすめ駅の応答。**順位だけを返さない**——採った方法・重み・候補集合・除外・敏感度・
+ * 限界・出典が揃って初めて読める（§13.4）。UI はこの 1 つの形だけを読む。
+ */
+export const recommendResponseSchema = z.object({
+  area: recommendAreaSchema,
+  preset: z.object({
+    id: recommendPresetIdSchema,
+    labelJa: z.string(),
+    noteJa: z.string(),
+    /** 重みを既定から動かしたか。 */
+    customized: z.boolean(),
+  }),
+  method: normalizeMethodSchema,
+  /** 「エリア内パーセンタイル」。**必ず 1 行で表示する**（§13.4-1）。 */
+  methodJa: z.string(),
+  radiusM: z.number(),
+  hazard: recommendHazardPolicySchema,
+  flagged: flaggedPolicySchema,
+  flaggedJa: z.string(),
+  metrics: z.array(recommendMetricSchema),
+  /** 対象集合の駅数（欠損・足切りで減る前）。 */
+  candidateCount: z.number(),
+  /** 順位が付いた駅数（＝候補 − 除外）。`rows` は先頭 `limit` 件だけ。 */
+  rankedCount: z.number(),
+  rows: z.array(recommendRowSchema),
+  /** 除外の代表例（件数は `excludedCounts` が正）。 */
+  excluded: z.array(recommendExcludedSchema),
+  excludedCounts: z.object({
+    missing: z.number(),
+    flagged: z.number(),
+    hazard: z.number(),
+    total: z.number(),
+  }),
+  topN: z.number(),
+  sensitivity: recommendSensitivitySchema,
+  /** 既定で埋めたもの・使えなかった指定・差が付かなかった指標など。 */
+  notesJa: z.array(z.string()),
+  /** **必ず末尾に表示する**（§13.4-6）。 */
+  limitationsJa: z.array(z.string()),
+  sources: z.array(z.object({ source: z.string(), license: z.string() })),
+})
+export type RecommendResponse = z.infer<typeof recommendResponseSchema>
 
 export const healthResponseSchema = z.object({ ok: z.literal(true) })
 export type HealthResponse = z.infer<typeof healthResponseSchema>

@@ -27,6 +27,9 @@ export const SUMMARY_HAZARD_GROUPS = [
 ] as const
 export type SummaryHazardGroup = (typeof SUMMARY_HAZARD_GROUPS)[number]
 
+/** 上の 5 つだけを受ける入力検証用（`hazardGroupSchema` は terrain/realtime も通してしまう）。 */
+export const summaryHazardGroupSchema = z.enum(SUMMARY_HAZARD_GROUPS)
+
 /** 1 グループぶんの要約。 */
 export const hazardGroupSummarySchema = z.object({
   /** グループ内で最も重い危険度（該当なしは 'none'）。 */

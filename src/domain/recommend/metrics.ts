@@ -33,12 +33,31 @@ function newestFirst(a: CatalogEntry, b: CatalogEntry): number {
   return (b.year ?? 0) - (a.year ?? 0) || (b.yearBase ?? 0) - (a.yearBase ?? 0)
 }
 
-/** ファミリ名 → その半径で使えるエントリ（新しい年が先）。 */
-function familyCandidates(family: string, radiusM: number): readonly CatalogEntry[] {
-  return entries
+/** 増減率が見ている期間（年）。水準（`year` だけ）は null。 */
+function spanOf(entry: CatalogEntry): number | null {
+  return entry.year === null || entry.yearBase === null ? null : entry.year - entry.yearBase
+}
+
+/**
+ * ファミリ名 → その半径で使えるエントリ（新しい年が先）。
+ *
+ * 期間の指定があれば**まず期間で絞る**。「いちばん新しい」だけで選ぶと、
+ * 将来人口（終点年が動く）は最も遠い年、地価トレンド（起点年が動く）は最も短い期間、と
+ * **同じ規則が逆の意味になる**。期間を先に見れば、どちらも指定どおりになる。
+ * 指定した期間が無ければ新しい順に倒す（notes に選んだ key が出るので、黙って消えはしない）。
+ */
+function familyCandidates(
+  family: string,
+  radiusM: number,
+  spanYears?: number,
+): readonly CatalogEntry[] {
+  const all = entries
     .filter((entry) => entry.baseMetric === family && entry.kind !== 'flag')
     .filter((entry) => entry.radiusM === radiusM || entry.radiusM === null)
     .sort(newestFirst)
+  if (spanYears === undefined) return all
+  const matched = all.filter((entry) => spanOf(entry) === spanYears)
+  return matched.length > 0 ? matched : all
 }
 
 /** 何を既定で埋めたかを 1 行で。 */
@@ -52,7 +71,7 @@ function resolveOne(
   radiusM: number,
 ): { readonly metric: ScoredMetric; readonly note: string | null } | null {
   const exact = getEntry(spec.metric)
-  const entry = exact ?? familyCandidates(spec.metric, radiusM)[0]
+  const entry = exact ?? familyCandidates(spec.metric, radiusM, spec.spanYears)[0]
   if (entry === undefined) return null
   return {
     metric: {

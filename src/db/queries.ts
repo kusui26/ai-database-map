@@ -93,7 +93,15 @@ function arrayOrNull<T>(values: readonly T[] | undefined): readonly T[] | null {
   return values !== undefined && values.length > 0 ? values : null
 }
 
-/** 対象集合を作る（値は返さない・`list_stations` RPC）。並びは乗降客数の降順。 */
+/**
+ * 対象集合を作る（値は返さない・`list_stations` RPC）。並びは乗降客数の降順。
+ *
+ * ⚠ **1 回の応答は 1,000 行で打ち切られる**（PostgREST の行上限。SQL 側の `lim` は 2,000 まで
+ * 受けるが、それより先に PostgREST が切る・2026-09-16 実測）。`limit` に 1,000 超を渡しても
+ * **1,000 件しか返らず、切られたことは応答から分からない**——多く来る条件で使うときは、
+ * 呼び出し側で「1,000 に達したか」を見るか、上限を 1,000 未満に置いて超過を検出する
+ * （`src/domain/recommend/request.ts` の `MAX_CANDIDATE_STATIONS` はそうしている）。
+ */
 export async function listStations(filter: ListStationsFilter): Promise<StationListItem[]> {
   const rows = await rpcRows(
     'list_stations',

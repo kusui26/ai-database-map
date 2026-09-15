@@ -39,6 +39,23 @@ export function apiError(code: string, message: string, status: number): NextRes
   )
 }
 
+/**
+ * 429（レート制限）。**`Retry-After` を必ず添える**——待つ秒数が分からないと、
+ * 呼び出し側は総当たりで叩き直すしかない。
+ */
+export function rateLimited(retryAfterMs: number): NextResponse {
+  const retryAfterSec = Math.ceil(retryAfterMs / 1000)
+  return NextResponse.json(
+    {
+      error: {
+        code: 'RATE_LIMITED',
+        message: `リクエストが多すぎます。約 ${retryAfterSec} 秒待って再試行してください。`,
+      },
+    },
+    { status: 429, headers: { 'Retry-After': String(retryAfterSec), 'Cache-Control': 'no-store' } },
+  )
+}
+
 /** ハンドラを実行し、例外をエラー封筒（適切な status）へ変換する。 */
 export async function handle(fn: () => Promise<NextResponse>): Promise<NextResponse> {
   try {

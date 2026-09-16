@@ -308,12 +308,44 @@ get "$BASE/api/recommend" "prefecture=東京都,神奈川県"
 # 18h) 429（1 分 30 件）。**ローカルだけ**——本番はインスタンスが分かれて固定窓が割れる。
 case "$BASE" in
   http://localhost* | http://127.0.0.1*)
-    for _ in $(seq 1 31); do get "$BASE/api/recommend"; done
+    # ⚠ 連射は**専用の IP を名乗って**行う。共有のバケツを使い切ると、
+    #   1 分以内に流し直したときに**他の recommend の検査が巻き添えで 429 になる**（実測）。
+    #   ローカルの `next start` は x-real-ip をそのまま信じる（本番では Vercel が上書きする）。
+    BURST_IP="10.255.255.254"
+    for _ in $(seq 1 31); do
+      out=$(curl -s -w $'\n%{http_code}' -H "x-real-ip: $BURST_IP" "$BASE/api/recommend")
+      HTTP="${out##*$'\n'}"
+      BODY="${out%$'\n'*}"
+    done
     { [ "$HTTP" = 429 ] && [ "$(echo "$BODY" | jq -r .error.code)" = RATE_LIMITED ]; } &&
       ok "recommend：31 回目 → 429" || ng "recommend rate limit should 429"
     ;;
   *) echo "  · recommend の 429 はローカルのみ（本番は複数インスタンスで窓が割れる）" ;;
 esac
+
+# 19) キャッシュ指示（260916 G1）
+#     **本番とローカルで見える文字列が違う**——Vercel の CDN は下流へ返すときに
+#     `s-maxage` と `stale-while-revalidate` を落とす。だから「max-age があるか／無いか」だけを見る。
+cache_control() { # url [urlencoded k=v ...]
+  local url="$1"
+  shift
+  local args=(-s -o /dev/null -D - -G)
+  for kv in "$@"; do args+=(--data-urlencode "$kv"); done
+  curl "${args[@]}" "$url" | tr -d '\r' | grep -i '^cache-control:' | head -1
+}
+
+CC=$(cache_control "$BASE/api/stations/geojson")
+{ echo "$CC" | grep -q "max-age=3600"; } &&
+  ok "geojson：ブラウザ向けの寿命が届く（${CC#*: }）" || ng "geojson の max-age（$CC）"
+
+CC=$(cache_control "$BASE/api/ranking" "metric=pop_2020_1km" "limit=5")
+{ echo "$CC" | grep -q "max-age=300"; } &&
+  ok "ranking：ブラウザ向けの寿命が届く（${CC#*: }）" || ng "ranking の max-age（$CC）"
+
+# ⚠ 「いま」の警報は配り置きしない。ここに max-age が付いたら落とす。
+CC=$(cache_control "$BASE/api/hazard/alerts" "lon=139.847" "lat=35.7645")
+{ ! echo "$CC" | grep -qE "(^|[ ,])max-age="; } &&
+  ok "hazard/alerts：ブラウザには持たせない（${CC#*: }）" || ng "alerts に max-age が付いている（$CC）"
 
 echo ""
 echo "==== $pass passed / $fail failed ===="

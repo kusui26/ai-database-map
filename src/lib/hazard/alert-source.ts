@@ -130,20 +130,50 @@ function unresolved(
   }
 }
 
+/**
+ * 逆ジオの結果を**3 つに分ける**。「区域外」と「取れなかった」を混ぜない。
+ *
+ * 混ぜると、上流が一時的に届かなかっただけの地点に
+ * 「海上・国外の可能性があります」と言うことになる（G6・2026-09-16 に本番で起きた）。
+ * どちらも答えは出せないが、**利用者が次に取る行動が違う**——前者は諦める、後者は待つ。
+ */
+type MunicipalityLookup =
+  | { readonly kind: 'found'; readonly code: string }
+  | { readonly kind: 'outside' }
+  | { readonly kind: 'failed' }
+
+/**
+ * 決まらなかったときの言い方。**知らないことを知っているように書かない。**
+ *
+ * ⚠ 上流は**海上・国外でも、壊れているときでも同じ `{}`** を返す（実測）。応答から区別が
+ * つかない以上、`outside` で「海上・国外です」と断定してはいけない。一方 `failed` は
+ * **取得に失敗したと分かっている**ので、そう書ける。
+ */
+const UNRESOLVED_NOTE_JA = {
+  outside:
+    '市区町村を特定できませんでした（海上・国外か、一時的に取得できなかった可能性があります）',
+  failed: '市区町村を取得できませんでした（一時的な不調の可能性があります）',
+} as const satisfies Record<'outside' | 'failed', string>
+
+async function lookupMunicipality(lon: number, lat: number): Promise<MunicipalityLookup> {
+  try {
+    const code = await municipalityCodeAt(lon, lat)
+    return code === null ? { kind: 'outside' } : { kind: 'found', code }
+  } catch {
+    return { kind: 'failed' }
+  }
+}
+
 /** その地点の「今」。**警戒レベル相当までしか言わない**（避難情報は市町村が出すもの・§7.4）。 */
 export async function hazardAlertsAt(request: HazardAlertRequest): Promise<HazardAlertsResponse> {
   const placeJa = request.placeJa ?? DEFAULT_PLACE_JA
-  const [code, map, forecasts] = await Promise.all([
-    municipalityCodeAt(request.lon, request.lat).catch(() => null),
+  const [lookup, map, forecasts] = await Promise.all([
+    lookupMunicipality(request.lon, request.lat),
     jmaWarningMap(request.now).catch(() => null),
     jmaFloodForecasts(request.now).catch(() => []),
   ])
-  if (code === null)
-    return unresolved(
-      request,
-      placeJa,
-      '市区町村を特定できませんでした（海上・国外の可能性があります）',
-    )
+  if (lookup.kind !== 'found') return unresolved(request, placeJa, UNRESOLVED_NOTE_JA[lookup.kind])
+  const code = lookup.code
   const municipality = jmaMunicipality(code)
   if (municipality === undefined) {
     return unresolved(request, placeJa, `気象庁の発表区域に対応がない市区町村です（${code}）`)

@@ -21,7 +21,7 @@ import {
 import { z } from 'zod'
 import { mapResponseSchema } from '@/shared/protocol'
 import { RADII_M } from '@/shared/constants'
-import { apiError } from '@/lib/http'
+import { apiError, clientIp } from '@/lib/http'
 import { stationByGrp } from '@/db/queries'
 import {
   CHAT_TIMEOUT_MS,
@@ -65,14 +65,6 @@ function messageText(message: InboundMessage): string {
     if (texts.length > 0) return texts.join('').trim()
   }
   return (message.content ?? '').trim()
-}
-
-/** リクエスト元 IP。プラットフォームが設定する x-real-ip を優先（XFF 左端は詐称可能）。 */
-function clientIp(request: Request): string {
-  const realIp = request.headers.get('x-real-ip')
-  if (realIp !== null && realIp.length > 0) return realIp
-  const forwarded = request.headers.get('x-forwarded-for')
-  return forwarded?.split(',')[0]?.trim() ?? 'unknown'
 }
 
 /** 会話履歴の合計文字数の上限（500 字ガードを履歴詰め込みで回避されないため・plan_fable §7）。 */
@@ -125,8 +117,10 @@ async function resolveMapContext(selectedGrp?: string, radiusM?: number): Promis
 
 export async function POST(request: Request): Promise<Response> {
   const startedAt = Date.now()
-  // 1) レート制限（IP・固定窓）
-  const limit = rateLimit(clientIp(request), startedAt)
+  // 1) レート制限（IP・固定窓）。鍵に `chat:` を付けるのは、`checkRateLimit` の store が
+  //    **全ルート共通の 1 つの Map** だから——生の IP のままだと、次に誰かが同じ鍵で数えた瞬間に
+  //    バケツを共有してしまう（他の 7 ルートは既に `hazard-point:` のように名前を付けている）。
+  const limit = rateLimit(`chat:${clientIp(request)}`, startedAt)
   if (!limit.ok) {
     const retryAfter = Math.ceil(limit.retryAfterMs / 1000)
     return apiError(

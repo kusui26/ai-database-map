@@ -1,9 +1,11 @@
 /**
- * src/ai の補助（純関数）：レート制限とカタログダイジェスト。
- * どちらも DB/LLM 非依存で、ガードとツール記述の土台を担保する。
+ * src/ai の補助（純関数）：レート制限・カタログダイジェスト・システムプロンプトの約束。
+ * どれも DB/LLM 非依存で、ガードとツール記述の土台を担保する。
  */
 
 import { describe, expect, it } from 'vitest'
+import { RECOMMEND_PRESETS } from '@/domain/recommend/presets'
+import { buildSystemPrompt } from '@/ai/system-prompt'
 import { checkRateLimit, resetRateLimitStore } from '@/ai/rate-limit'
 import {
   baseMetricDetail,
@@ -96,5 +98,38 @@ describe('catalog-digest（カタログ駆動）', () => {
     expect(summary).toContain('[pop_gr｜') // キーではなくファミリ名を提示する
     // 半径非依存で少数のファミリ（意味の異なる指標が同居）はキーを列挙する
     expect(summary).toContain('rate_yoy/rate_covid')
+  })
+})
+
+describe('システムプロンプト：合成スコアの推薦は画面へ引き渡す', () => {
+  /**
+   * チャットが持つのは `rankStations`（**単一指標**）だけ。それで並べたものを「おすすめ」と
+   * 呼ぶと、正規化も重みも災害の扱いも敏感度も無いまま順位が独り歩きし、画面側が W1〜W5 で
+   * 守ってきた規範（260912 §13.4）を同じアプリの別の口が破ることになる。
+   *
+   * 実際の応答は `tests/chat-eval.test.ts` の `refuse-composite-recommend` が見る。
+   * ここで固定するのは**指示が消えていないこと**——プロンプトは足し引きが多く、静かに落ちる。
+   */
+  it('複数指標をまとめた推薦は、自分で順位を作らせない', () => {
+    expect(buildSystemPrompt()).toContain('自分で順位を作らない')
+  })
+
+  it('引き渡し先を名指しする（「できません」で終わらせない）', () => {
+    expect(buildSystemPrompt()).toContain('「おすすめ」ボタン')
+  })
+
+  it('単一指標の順位までは禁じない（規則が広がりすぎていない）', () => {
+    // ここが消えると「乗降客数の多い駅は？」にも答えなくなる。
+    expect(buildSystemPrompt()).toContain('単一指標の問い')
+  })
+
+  it('案内できる軸をプリセットから名指しする（無い指標を案内させない）', () => {
+    // 実測：軸を書かないと「子育て環境」のような**収録していない指標**を案内文に混ぜた。
+    const prompt = buildSystemPrompt()
+    for (const metric of RECOMMEND_PRESETS.family.metrics) {
+      expect(prompt, metric.metric).toContain(metric.labelJa)
+    }
+    expect(prompt).toContain('子育て環境')
+    expect(prompt).toContain('案内文に混ぜない')
   })
 })

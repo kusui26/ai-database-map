@@ -96,9 +96,9 @@ describe('scoreCase: 禁止応答（notContains）', () => {
 })
 
 describe('EVAL_CASES', () => {
-  it('37 問・id 一意・全問に期待あり', () => {
-    expect(EVAL_CASES.length).toBe(37)
-    expect(new Set(EVAL_CASES.map((c) => c.id)).size).toBe(37)
+  it('38 問・id 一意・全問に期待あり', () => {
+    expect(EVAL_CASES.length).toBe(38)
+    expect(new Set(EVAL_CASES.map((c) => c.id)).size).toBe(38)
     for (const testCase of EVAL_CASES) {
       expect(testCase.query.length).toBeGreaterThan(0)
       expect(Object.keys(testCase.expect).length).toBeGreaterThan(0)

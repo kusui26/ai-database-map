@@ -1,5 +1,5 @@
 /**
- * 評価 runner：ゴールデン 37 問を実 /api/chat（SSE）に投げ、score.ts で採点する。
+ * 評価 runner：ゴールデン 38 問を実 /api/chat（SSE）に投げ、score.ts で採点する。
  *
  * 通常の `pnpm test` では **スキップ**（LLM/DB/課金に依存）。実行は：
  *   1) 別端末で dev サーバ起動：`pnpm dev`（.env に GEMINI_API_KEY・SUPABASE_* が必要）
@@ -27,8 +27,11 @@ const BASE_URL = process.env.CHAT_BASE_URL ?? 'http://localhost:3000'
  * 実測（2026-08-28）で **37/37**。以前も 20/20（閾値 16）だったが、問が増えるたびに
  * 閾値を据え置いたので **67% まで緩んでいた**——12 問壊れても通る状態だった。
  * **数問の揺らぎ（無料枠の quota・多段ツールの遅延）だけを許す**線に引き直す。
+ *
+ * 2026-09-16：おすすめの引き渡しを 1 問足して 38 問。**許す揺らぎを 2 問のまま**にするため
+ * 36 へ上げる（問を足して閾値を据え置くと、上と同じ緩み方をする）。
  */
-const PASS_THRESHOLD = Number(process.env.EVAL_PASS ?? '35')
+const PASS_THRESHOLD = Number(process.env.EVAL_PASS ?? '36')
 
 /**
  * **1 問でも落としてはいけない分野。**

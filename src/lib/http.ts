@@ -45,12 +45,26 @@ export class BadRequestError extends Error {}
 /** 404（駅など未検出）。 */
 export class NotFoundError extends Error {}
 
-/** リクエスト元 IP。プラットフォームが設定する x-real-ip を優先（XFF 左端は詐称可能）。 */
+/**
+ * リクエスト元 IP（レート制限の鍵）。
+ *
+ * **Vercel 上では 3 つとも同じ値で、どれもプラットフォームが上書きする**——クライアントが
+ * `x-forwarded-for` を送っても転送されない（IP 詐称の防止・公式の記述）。だから詐称の心配は無い。
+ * それでも順番を決めてあるのは、**Vercel の上にさらにプロキシを置いたとき**に
+ * `x-forwarded-for` だけが書き換わりうるため。書き換わらない方から順に見る。
+ *
+ * ⚠ **ローカル（`next start`）では、この 3 つはクライアントが自由に送れる。**
+ * アプリ内のレート制限はローカルでは意味を持たない（検査スクリプトはこれを利用して、
+ * 連射の影響を他の検査から切り離している・`tests/api.smoke.sh`）。
+ */
 export function clientIp(request: Request): string {
-  const realIp = request.headers.get('x-real-ip')
-  if (realIp !== null && realIp.length > 0) return realIp
-  const forwarded = request.headers.get('x-forwarded-for')
-  return forwarded?.split(',')[0]?.trim() ?? 'unknown'
+  const headers = ['x-vercel-forwarded-for', 'x-real-ip', 'x-forwarded-for']
+  for (const name of headers) {
+    // 複数ホップのときは左端が最初のクライアント。
+    const value = request.headers.get(name)?.split(',')[0]?.trim()
+    if (value !== undefined && value.length > 0) return value
+  }
+  return 'unknown'
 }
 
 export function json<T>(data: T, cacheControl: string): NextResponse {

@@ -60,3 +60,13 @@ export function resetRateLimitStore(): void {
 export function rateLimit(key: string, now: number): RateLimitResult {
   return checkRateLimit(key, { limit: RATE_LIMIT, windowMs: RATE_WINDOW_MS, now })
 }
+
+/**
+ * 「1 分あたり N 回」の判定（ルートごとに上限だけ変えたいときの入口）。
+ *
+ * **Response は組み立てない。** ここを framework 非依存のまま保つと、`now` を注入した純関数として
+ * 検査できる。429 の封筒は `lib/http.ts` の `rateLimited()` が作る（層を跨がせない）。
+ */
+export function limitPerMinute(key: string, limit: number, now = Date.now()): RateLimitResult {
+  return checkRateLimit(key, { limit, windowMs: RATE_WINDOW_MS, now })
+}

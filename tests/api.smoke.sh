@@ -323,6 +323,34 @@ case "$BASE" in
   *) echo "  · recommend の 429 はローカルのみ（本番は複数インスタンスで窓が割れる）" ;;
 esac
 
+# 18i) ハザードのルートが上流を守っているか（260916 G5）。
+#      **上流には触れずに**測る——座標を欠いたクエリは検証で 400 になるが、
+#      レート制限はその**手前**にあるので窓は減る。だから連射しても気象庁・国土地理院は叩かない。
+#      ローカルだけ（本番は Vercel が IP を上書きするので、実利用者を巻き込む）。
+case "$BASE" in
+  http://localhost* | http://127.0.0.1*)
+    for route_limit in "point:31" "alerts:21" "evacuation:21" "escape:21"; do
+      route="${route_limit%%:*}"
+      tries="${route_limit##*:}"
+      # ルートごとに別の IP を名乗る（バケツを分け、他の検査を巻き込まない）。
+      ip="10.254.0.$(echo "${route}" | wc -c | tr -d ' ')"
+      for _ in $(seq 1 "$tries"); do
+        out=$(curl -s -w $'\n%{http_code}' -H "x-real-ip: $ip" "$BASE/api/hazard/${route}?placeJa=x")
+        HTTP="${out##*$'\n'}"
+        BODY="${out%$'\n'*}"
+      done
+      { [ "$HTTP" = 429 ] && [ "$(echo "$BODY" | jq -r .error.code)" = RATE_LIMITED ]; } &&
+        ok "hazard/${route}：上限を超えると 429（上流には行かない）" ||
+        ng "hazard/${route} の上限（http=$HTTP）"
+    done
+
+    # カタログは上流を叩かないので制限しない（守るものが無い）。
+    for _ in $(seq 1 25); do get "$BASE/api/hazard/catalog"; done
+    [ "$HTTP" = 200 ] && ok "hazard/catalog：静的なので制限しない" || ng "hazard/catalog が制限されている"
+    ;;
+  *) echo "  · ハザードの上限はローカルのみ（本番は実利用者を巻き込む）" ;;
+esac
+
 # 19) キャッシュ指示（260916 G1）
 #     **本番とローカルで見える文字列が違う**——Vercel の CDN は下流へ返すときに
 #     `s-maxage` と `stale-while-revalidate` を落とす。だから「max-age があるか／無いか」だけを見る。

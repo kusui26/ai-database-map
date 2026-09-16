@@ -42,6 +42,7 @@ import { StationHazardTab } from '@/components/hazard/StationHazardTab'
 import { type HazardTarget } from '@/components/hazard/useHazardPoint'
 import { TAB_FADE_WIDTH_PX, tabStripScrollLeft } from '@/lib/tab-strip'
 import { cn } from '@/lib/utils'
+import { messageJaOf } from '@/lib/fetch-json'
 
 /**
  * 詳細タブ（表示順）。所得は「そこに住む人の稼ぎ」、売上は「そこで落ちるお金」なので、
@@ -315,7 +316,7 @@ function DetailBody({
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         {error !== undefined ? (
           <div className="rounded-xl bg-amber-50 p-4 text-sm text-amber-700 ring-1 ring-amber-200">
-            詳細を取得できませんでした。時間をおいて再度お試しください。
+            {messageJaOf(error, '詳細を取得できませんでした。時間をおいて再度お試しください。')}
           </div>
         ) : detail === undefined ? (
           <div className="grid h-40 place-items-center text-sm text-slate-400">読み込み中…</div>

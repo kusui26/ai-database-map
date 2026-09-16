@@ -18,6 +18,7 @@ import { RankingTable } from '@/components/panels/RankingTable'
 import { useStationFilters } from '@/components/metrics/useStationFilters'
 import { MetricPicker } from './MetricPicker'
 import { useRanking } from './useRanking'
+import { messageJaOf } from '@/lib/fetch-json'
 
 const DEFAULT_CATEGORY: Category = getEntry(DEFAULT_RANKING_KEY)?.category ?? 'population'
 
@@ -85,7 +86,10 @@ export function RankingBody({
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
         {error !== undefined ? (
           <div className="rounded-xl bg-amber-50 p-4 text-sm text-amber-700 ring-1 ring-amber-200">
-            ランキングを取得できませんでした。時間をおいて再度お試しください。
+            {messageJaOf(
+              error,
+              'ランキングを取得できませんでした。時間をおいて再度お試しください。',
+            )}
           </div>
         ) : ranking === undefined ? (
           <div className="grid h-full place-items-center text-sm text-slate-400">

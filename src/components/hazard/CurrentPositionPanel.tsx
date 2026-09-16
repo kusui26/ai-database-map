@@ -23,6 +23,7 @@ import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { PanelRenderer } from '@/components/panels/PanelRenderer'
 import { useCurrentPositionHazard } from './useCurrentPositionHazard'
 import { cn } from '@/lib/utils'
+import { messageJaOf } from '@/lib/fetch-json'
 
 /** デスクトップでチャットを開いているときの左端（FAB と同じ規則）。 */
 const LEFT_WITH_CHAT_PX = PANEL_GAP_PX + PANEL_WIDTH_PX + 8
@@ -78,7 +79,7 @@ function PanelBody({ onClose }: { onClose: () => void }) {
   const status = useGeoStore((state) => state.status)
   const errorJa = useGeoStore((state) => state.errorJa)
   const requestFlyTo = useMapStore((state) => state.requestFlyTo)
-  const { point, isLoading } = useCurrentPositionHazard(position)
+  const { point, isLoading, error } = useCurrentPositionHazard(position)
 
   // 開いてから**最初の 1 点だけ**地図を寄せる。GPS が揺れるたびに動かすと地図が使えない。
   const flown = useRef(false)
@@ -102,7 +103,9 @@ function PanelBody({ onClose }: { onClose: () => void }) {
           <Unavailable status={status} errorJa={errorJa} />
         ) : point === undefined ? (
           <p className="py-6 text-center text-sm text-slate-400">
-            {isLoading ? '災害リスクを調べています…' : '結果を取得できませんでした。'}
+            {isLoading
+              ? '災害リスクを調べています…'
+              : messageJaOf(error, '結果を取得できませんでした。')}
           </p>
         ) : (
           <PanelRenderer panel={hazardCardPanel(point, 'compact')} />

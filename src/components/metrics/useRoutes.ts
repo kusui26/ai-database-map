@@ -4,19 +4,16 @@
 
 import useSWR from 'swr'
 import { type Route, routesResponseSchema } from '@/shared/api'
+import { fetchJson } from '@/lib/fetch-json'
 
 const FETCH_TIMEOUT_MS = 10_000
 
 async function fetchRoutes(url: string): Promise<readonly Route[]> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
-  try {
-    const response = await fetch(url, { signal: controller.signal })
-    if (!response.ok) throw new Error(`路線の取得に失敗しました (HTTP ${response.status})`)
-    return routesResponseSchema.parse(await response.json()).routes
-  } finally {
-    clearTimeout(timer)
-  }
+  const response = await fetchJson(url, routesResponseSchema, {
+    timeoutMs: FETCH_TIMEOUT_MS,
+    fallbackJa: '路線を取得できませんでした',
+  })
+  return response.routes
 }
 
 export type RoutesState = {

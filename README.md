@@ -165,7 +165,7 @@ tests/            ドメイン純関数の単体テスト（Vitest）
 
 ## デプロイ
 
-Vercel に接続し、`main` へのマージで本番デプロイされます。`vercel.json` の Cron（毎日 03:00 UTC → `/api/health`）が DB に 1 クエリ投げ、Supabase 無料枠の自動停止を防ぎます。本番の環境変数（`SUPABASE_URL` / `SUPABASE_ANON_KEY` / `NEXT_PUBLIC_SITE_URL`）は Vercel ダッシュボードで設定します。
+Vercel に接続し、`main` へのマージで本番デプロイされます。`vercel.json` の Cron（毎日 03:00 UTC → `/api/health`）が DB に 1 クエリ投げます——**本番から DB へ届くことの日次確認**です（失敗を知らせる仕組みは用意していません。元は Supabase 無料枠の自動停止対策でしたが、Pro では不要になりました）。本番の環境変数（`SUPABASE_URL` / `SUPABASE_ANON_KEY` / `NEXT_PUBLIC_SITE_URL`）は Vercel ダッシュボードで設定します。
 
 ---
 

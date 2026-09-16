@@ -7,10 +7,35 @@ import { NextResponse } from 'next/server'
 import { ZodError } from 'zod'
 import { DbError } from '@/db/client'
 
-/** キャッシュポリシー（CDN が吸収）。 */
+/**
+ * キャッシュポリシー（`s-maxage` は CDN 向け、`max-age` はブラウザ向け）。
+ *
+ * ## `max-age` が要る理由（`docs/260916_ops_guard.md` G1）
+ *
+ * Vercel の CDN は、下流へ返すときに **`s-maxage` と `stale-while-revalidate` を落とす**
+ * （公式の挙動）。`max-age` は落とさない。つまり `s-maxage` だけ書いていると、
+ * ブラウザに届く指示は `public` **だけ**になる。
+ *
+ * そこに `ETag` も `Last-Modified` も無い（実測）ので、ブラウザは鮮度を判断する材料を
+ * 1 つも持たず、**毎回そのまま取り直す**。`/api/stations/geojson` は **227 KB（gzip）**あり、
+ * 地図を開くたびにこれが流れていた。ここが最大の転送項目である。
+ *
+ * ## ブラウザの寿命は CDN より短くする
+ *
+ * **CDN はパージできるが、ブラウザのキャッシュは消せない。** データを差し替えたときに
+ * 取り残される時間を短くするため、`max-age` は `s-maxage` の 1/12〜1/24 に置く。
+ *
+ * ## `short` には足さない
+ *
+ * ここには `/api/hazard/alerts`（いまの警報）と、外部が欠けたときの `/api/hazard/point` がいる。
+ * **古い警報を「今」として見せない**ことのほうが転送量より重い（`docs/260824_flood.md` §7.4）。
+ *
+ * ⚠ 面ごとに指示を分けたくなったら、Vercel は `CDN-Cache-Control` /
+ * `Vercel-CDN-Cache-Control` を受ける。いまは 1 本で足りるので使っていない。
+ */
 export const CACHE: Readonly<Record<'day' | 'hour' | 'short' | 'none', string>> = {
-  day: 'public, s-maxage=86400, stale-while-revalidate=3600',
-  hour: 'public, s-maxage=3600, stale-while-revalidate=600',
+  day: 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=3600',
+  hour: 'public, max-age=300, s-maxage=3600, stale-while-revalidate=600',
   short: 'public, s-maxage=30, stale-while-revalidate=60',
   none: 'no-store',
 }

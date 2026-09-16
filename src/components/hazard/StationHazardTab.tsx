@@ -48,6 +48,7 @@ import { useEscapeDirection } from './useEscapeDirection'
 import { useEvacuationSites, type EvacuationTarget } from './useEvacuationSites'
 import { useHazardAlerts } from './useHazardAlerts'
 import { useHazardPoint, type HazardTarget } from './useHazardPoint'
+import { messageJaOf } from '@/lib/fetch-json'
 
 /** 段の見出し。**主語**（時制・どの災害の話か）を必ず添える（見出しだけでは伝わらない）。 */
 function SectionHeading({ titleJa, noteJa }: { titleJa: string; noteJa: string }) {
@@ -119,7 +120,7 @@ function NowSection({ target }: { target: HazardTarget }) {
     ? 'オフラインのため、いまの発表は取れません（端末に保存していないデータです）。'
     : error === undefined
       ? 'いまの発表を確認しています…'
-      : 'いまの発表を取得できませんでした。'
+      : messageJaOf(error, 'いまの発表を取得できませんでした。')
   return (
     <section>
       <SectionHeading titleJa={HAZARD_TENSE_NOW_JA} noteJa={HAZARD_TENSE_NOW_NOTE_JA} />
@@ -138,13 +139,17 @@ function NowSection({ target }: { target: HazardTarget }) {
 
 /** ②「もし起きたら」。バッジと同じ地点・同じキーなので、追加の通信は起きない。 */
 function AssumedSection({ target }: { target: HazardTarget }) {
-  const { point, isLoading } = useHazardPoint(target)
+  const { point, isLoading, error } = useHazardPoint(target)
   return (
     <section className="border-t border-slate-100 pt-4">
       <SectionHeading titleJa={HAZARD_TENSE_ASSUMED_JA} noteJa={HAZARD_TENSE_ASSUMED_NOTE_JA} />
       {point === undefined ? (
         <Unavailable
-          messageJa={isLoading ? '災害リスクを調べています…' : '災害の情報を取得できませんでした。'}
+          messageJa={
+            isLoading
+              ? '災害リスクを調べています…'
+              : messageJaOf(error, '災害の情報を取得できませんでした。')
+          }
         />
       ) : (
         <PanelRenderer panel={hazardCardPanel(point)} />

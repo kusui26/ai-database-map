@@ -25,6 +25,7 @@ import { hazardAlertsResponseSchema, type HazardAlertsResponse } from '@/shared/
 import { useGeoStore } from '@/stores/geoStore'
 import { useMapStore } from '@/stores/mapStore'
 import { isWarningMode } from '@/domain/hazard/warning-mode'
+import { fetchJson } from '@/lib/fetch-json'
 
 /** 問い合わせに使う座標の丸め（小数 3 桁 ≒ 110m）。現在地の揺れを畳む。 */
 const COORD_DECIMALS = 3
@@ -64,21 +65,16 @@ export function useAlertTarget(): AlertTarget | null {
   )
 }
 
-async function fetchAlerts([, lon, lat]: readonly [string, number, number]): Promise<
-  HazardAlertsResponse
-> {
+async function fetchAlerts([, lon, lat]: readonly [
+  string,
+  number,
+  number,
+]): Promise<HazardAlertsResponse> {
   const query = new URLSearchParams({ lon: String(lon), lat: String(lat) })
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
-  try {
-    const response = await fetch(`/api/hazard/alerts?${query.toString()}`, {
-      signal: controller.signal,
-    })
-    if (!response.ok) throw new Error(`いまの発表を取得できません（${response.status}）`)
-    return hazardAlertsResponseSchema.parse(await response.json())
-  } finally {
-    clearTimeout(timer)
-  }
+  return fetchJson(`/api/hazard/alerts?${query.toString()}`, hazardAlertsResponseSchema, {
+    timeoutMs: FETCH_TIMEOUT_MS,
+    fallbackJa: 'いまの発表を取得できませんでした',
+  })
 }
 
 export type HazardAlertState = {
@@ -88,10 +84,13 @@ export type HazardAlertState = {
 
 /** その地点の「今」（`null`＝まだ問い合わせない）。 */
 export function useHazardAlerts(target: AlertTarget | null): HazardAlertState {
-  const key = target === null ? null : (['hazard/alerts', round(target.lon), round(target.lat)] as const)
+  const key =
+    target === null ? null : (['hazard/alerts', round(target.lon), round(target.lat)] as const)
   const { data, error } = useSWR(key, fetchAlerts, {
     refreshInterval: (latest) =>
-      latest !== undefined && isWarningMode(latest.alertLevel) ? REFRESH_ACTIVE_MS : REFRESH_CALM_MS,
+      latest !== undefined && isWarningMode(latest.alertLevel)
+        ? REFRESH_ACTIVE_MS
+        : REFRESH_CALM_MS,
     // 通信できないときに古い発表を「今」として出さない。
     isPaused: () => typeof navigator !== 'undefined' && !navigator.onLine,
     keepPreviousData: false,

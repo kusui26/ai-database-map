@@ -19,6 +19,7 @@ import { MetricSelect } from '@/components/metrics/MetricSelect'
 import { StationFilterControls } from '@/components/metrics/StationFilterControls'
 import { useStationFilters } from '@/components/metrics/useStationFilters'
 import { useGrowth } from './useGrowth'
+import { messageJaOf } from '@/lib/fetch-json'
 
 const X_CATEGORY: Category = getEntry(DEFAULT_SCATTER_X)?.category ?? 'population'
 const Y_CATEGORY: Category = getEntry(DEFAULT_SCATTER_Y)?.category ?? 'passenger'
@@ -121,7 +122,10 @@ export function ScatterBody({
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
         {error !== undefined ? (
           <div className="rounded-xl bg-amber-50 p-4 text-sm text-amber-700 ring-1 ring-amber-200">
-            散布データを取得できませんでした。時間をおいて再度お試しください。
+            {messageJaOf(
+              error,
+              '散布データを取得できませんでした。時間をおいて再度お試しください。',
+            )}
           </div>
         ) : (
           <div className="relative">

@@ -4,19 +4,15 @@
 
 import useSWR from 'swr'
 import { type GrowthResponse, growthResponseSchema } from '@/shared/api'
+import { fetchJson } from '@/lib/fetch-json'
 
 const FETCH_TIMEOUT_MS = 15_000
 
-async function fetchGrowth(url: string): Promise<GrowthResponse> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
-  try {
-    const response = await fetch(url, { signal: controller.signal })
-    if (!response.ok) throw new Error(`散布データの取得に失敗しました (HTTP ${response.status})`)
-    return growthResponseSchema.parse(await response.json())
-  } finally {
-    clearTimeout(timer)
-  }
+function fetchGrowth(url: string): Promise<GrowthResponse> {
+  return fetchJson(url, growthResponseSchema, {
+    timeoutMs: FETCH_TIMEOUT_MS,
+    fallbackJa: '散布データを取得できませんでした',
+  })
 }
 
 /** 散布の絞り込み条件（そのままクエリ文字列になる・空配列＝絞らない）。 */

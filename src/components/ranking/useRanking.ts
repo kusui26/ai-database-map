@@ -4,20 +4,16 @@
 
 import useSWRInfinite from 'swr/infinite'
 import { type Order, type RankingResponse, rankingResponseSchema } from '@/shared/api'
+import { fetchJson } from '@/lib/fetch-json'
 
 const PAGE_SIZE = 50
 const FETCH_TIMEOUT_MS = 12_000
 
-async function fetchRankingPage(url: string): Promise<RankingResponse> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
-  try {
-    const response = await fetch(url, { signal: controller.signal })
-    if (!response.ok) throw new Error(`ランキングの取得に失敗しました (HTTP ${response.status})`)
-    return rankingResponseSchema.parse(await response.json())
-  } finally {
-    clearTimeout(timer)
-  }
+function fetchRankingPage(url: string): Promise<RankingResponse> {
+  return fetchJson(url, rankingResponseSchema, {
+    timeoutMs: FETCH_TIMEOUT_MS,
+    fallbackJa: 'ランキングを取得できませんでした',
+  })
 }
 
 export type RankingState = {

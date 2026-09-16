@@ -23,6 +23,8 @@ import { hazardPointResponseSchema, type HazardPointResponse } from '@/shared/ap
 import { hazardLayersWithPointAnswer } from '@/domain/hazard/catalog'
 import { pointHazard } from '@/domain/hazard/point'
 import { meshReadings } from '@/lib/hazard/readings'
+import { fetchJson } from '@/lib/fetch-json'
+import { shouldFallBackOffline } from './fallback'
 
 /** 問い合わせに使う座標の丸め（小数 4 桁 ≒ 11m）。 */
 const COORD_DECIMALS = 4
@@ -72,17 +74,10 @@ async function fetchPoint(target: HazardTarget): Promise<HazardPointResponse> {
     lat: String(target.lat),
     placeJa: target.placeJa,
   })
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
-  try {
-    const response = await fetch(`/api/hazard/point?${query.toString()}`, {
-      signal: controller.signal,
-    })
-    if (!response.ok) throw new Error(`地点のハザードを取得できません（${response.status}）`)
-    return hazardPointResponseSchema.parse(await response.json())
-  } finally {
-    clearTimeout(timer)
-  }
+  return fetchJson(`/api/hazard/point?${query.toString()}`, hazardPointResponseSchema, {
+    timeoutMs: FETCH_TIMEOUT_MS,
+    fallbackJa: '地点のハザードを取得できませんでした',
+  })
 }
 
 /**
@@ -100,6 +95,8 @@ async function loadHazard([, lon, lat, placeJa]: readonly [
   try {
     return await fetchPoint(target)
   } catch (error) {
+    // ⚠ 4xx では落ちない（`shouldFallBackOffline` に理由）。
+    if (!shouldFallBackOffline(error)) throw error
     console.error('共通API から地点のハザードを取れませんでした。メッシュだけで組み立てます', error)
     return offlineHazard(target)
   }

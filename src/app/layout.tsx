@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import type { ReactNode } from 'react'
 import { NuqsAdapter } from 'nuqs/adapters/next/app'
+import { SwrProvider } from '@/components/SwrProvider'
 import './globals.css'
 
 const DESCRIPTION =
@@ -63,7 +64,9 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
       <body className="min-h-full bg-slate-50 text-slate-900 antialiased">
         {/* 地図タイル（地理院）への接続を先行（LCP 短縮）。React が head へ巻き上げる。 */}
         <link rel="preconnect" href="https://cyberjapandata.gsi.go.jp" crossOrigin="anonymous" />
-        <NuqsAdapter>{children}</NuqsAdapter>
+        <NuqsAdapter>
+          <SwrProvider>{children}</SwrProvider>
+        </NuqsAdapter>
       </body>
     </html>
   )

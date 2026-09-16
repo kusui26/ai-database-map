@@ -15,6 +15,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { type Route } from '@/shared/api'
 import { ROUTE_TYPES, routeFilterLabel, routeOptionLabel, routeTypeLabel } from '@/shared/constants'
 import { cn } from '@/lib/utils'
+import { messageJaOf } from '@/lib/fetch-json'
 
 /** 一覧に表示する最大件数（検索で絞り込めるため上限を設けて描画量を抑える）。 */
 const MAX_VISIBLE = 60
@@ -161,7 +162,9 @@ export function RouteMultiSelect({
           )}
           <div className="min-h-0 flex-1 overflow-y-auto">
             {error !== undefined && (
-              <p className="px-2 py-1 text-xs text-amber-600">路線一覧を取得できませんでした。</p>
+              <p className="px-2 py-1 text-xs text-amber-600">
+                {messageJaOf(error, '路線一覧を取得できませんでした。')}
+              </p>
             )}
             {isLoading && <p className="px-2 py-1 text-xs text-slate-400">読み込み中…</p>}
             {!isLoading && error === undefined && visible.length === 0 && (

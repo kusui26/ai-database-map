@@ -22,6 +22,8 @@ import useSWR from 'swr'
 import { hazardEscapeResponseSchema, type HazardEscapeResponse } from '@/shared/api'
 import type { EvacuationDisasterKey } from '@/shared/evacuation'
 import { escapeDirectionAt } from '@/lib/hazard/escape-source'
+import { fetchJson } from '@/lib/fetch-json'
+import { shouldFallBackOffline } from './fallback'
 
 /** 問い合わせに使う座標の丸め（小数 3 桁 ≒ 110m）。現在地の揺れを畳む。 */
 const COORD_DECIMALS = 3
@@ -61,17 +63,10 @@ async function fetchEscape(
     placeJa,
     for: disaster,
   })
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
-  try {
-    const response = await fetch(`/api/hazard/escape?${query.toString()}`, {
-      signal: controller.signal,
-    })
-    if (!response.ok) throw new Error(`脱出方向を取得できません（${response.status}）`)
-    return hazardEscapeResponseSchema.parse(await response.json())
-  } finally {
-    clearTimeout(timer)
-  }
+  return fetchJson(`/api/hazard/escape?${query.toString()}`, hazardEscapeResponseSchema, {
+    timeoutMs: FETCH_TIMEOUT_MS,
+    fallbackJa: '脱出方向を取得できませんでした',
+  })
 }
 
 /**
@@ -90,6 +85,8 @@ async function loadEscape([, lon, lat, placeJa, disaster]: readonly [
   try {
     return await fetchEscape(lon, lat, placeJa, disaster)
   } catch (error) {
+    // 地点のハザードと同じ理由（`shouldFallBackOffline`）。
+    if (!shouldFallBackOffline(error)) throw error
     console.error('共通API から脱出方向を取れませんでした。メッシュだけで組み立てます', error)
     return offlineEscape(target)
   }
@@ -98,6 +95,8 @@ async function loadEscape([, lon, lat, placeJa, disaster]: readonly [
 export type EscapeState = {
   readonly escape: HazardEscapeResponse | undefined
   readonly isLoading: boolean
+  /** 4xx のときだけ出る（それ以外はメッシュだけの答えに切り替わるので `undefined`）。 */
+  readonly error: Error | undefined
 }
 
 /** 脱出方向（`null`＝まだ調べない）。 */
@@ -112,9 +111,9 @@ export function useEscapeDirection(target: EscapeTarget | null): EscapeState {
           target.placeJa,
           target.disaster,
         ] as const)
-  const { data, isLoading } = useSWR(key, loadEscape, {
+  const { data, error, isLoading } = useSWR(key, loadEscape, {
     revalidateOnFocus: false,
     keepPreviousData: false,
   })
-  return { escape: data, isLoading }
+  return { escape: data, isLoading, error: error instanceof Error ? error : undefined }
 }

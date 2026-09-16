@@ -14,6 +14,7 @@
 import useSWR from 'swr'
 import { hazardEvacuationResponseSchema, type HazardEvacuationResponse } from '@/shared/api'
 import type { EvacuationDisasterKey } from '@/shared/evacuation'
+import { fetchJson } from '@/lib/fetch-json'
 
 /** 問い合わせに使う座標の丸め（小数 3 桁 ≒ 110m）。現在地の揺れを畳む。 */
 const COORD_DECIMALS = 3
@@ -43,17 +44,10 @@ async function fetchSites([, lon, lat, placeJa, disaster]: readonly [
     placeJa,
     for: disaster,
   })
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
-  try {
-    const response = await fetch(`/api/hazard/evacuation?${query.toString()}`, {
-      signal: controller.signal,
-    })
-    if (!response.ok) throw new Error(`避難場所を取得できません（${response.status}）`)
-    return hazardEvacuationResponseSchema.parse(await response.json())
-  } finally {
-    clearTimeout(timer)
-  }
+  return fetchJson(`/api/hazard/evacuation?${query.toString()}`, hazardEvacuationResponseSchema, {
+    timeoutMs: FETCH_TIMEOUT_MS,
+    fallbackJa: '避難場所を取得できませんでした',
+  })
 }
 
 export type EvacuationState = {

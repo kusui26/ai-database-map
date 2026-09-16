@@ -10,6 +10,7 @@
 import useSWR from 'swr'
 import { z } from 'zod'
 import { stationListItemSchema } from '@/shared/api'
+import { fetchJson } from '@/lib/fetch-json'
 import { municipalityOptions, type MunicipalityOption } from './municipalities'
 
 const FETCH_TIMEOUT_MS = 12_000
@@ -19,15 +20,11 @@ const STATION_LIMIT = 2000
 const listSchema = z.array(stationListItemSchema)
 
 async function fetchOptions(url: string): Promise<readonly MunicipalityOption[]> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
-  try {
-    const response = await fetch(url, { signal: controller.signal })
-    if (!response.ok) throw new Error(`市区町村の取得に失敗しました (HTTP ${response.status})`)
-    return municipalityOptions(listSchema.parse(await response.json()))
-  } finally {
-    clearTimeout(timer)
-  }
+  const stations = await fetchJson(url, listSchema, {
+    timeoutMs: FETCH_TIMEOUT_MS,
+    fallbackJa: '市区町村を取得できませんでした',
+  })
+  return municipalityOptions(stations)
 }
 
 export type MunicipalitiesState = {

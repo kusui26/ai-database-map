@@ -7,22 +7,15 @@
 
 import useSWR from 'swr'
 import { type StationDetail, stationDetailSchema } from '@/shared/api'
+import { fetchJson } from '@/lib/fetch-json'
 
 const FETCH_TIMEOUT_MS = 10_000
 
-async function fetchStationDetail(url: string): Promise<StationDetail> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
-  try {
-    const response = await fetch(url, { signal: controller.signal })
-    if (!response.ok) {
-      throw new Error(`駅詳細の取得に失敗しました (HTTP ${response.status}): ${url}`)
-    }
-    const payload: unknown = await response.json()
-    return stationDetailSchema.parse(payload)
-  } finally {
-    clearTimeout(timer)
-  }
+function fetchStationDetail(url: string): Promise<StationDetail> {
+  return fetchJson(url, stationDetailSchema, {
+    timeoutMs: FETCH_TIMEOUT_MS,
+    fallbackJa: '駅詳細を取得できませんでした',
+  })
 }
 
 export type StationDetailState = {

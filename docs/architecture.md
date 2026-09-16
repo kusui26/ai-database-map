@@ -223,7 +223,7 @@ Step1 の全ブロックが完了し、下記が実体として存在する。�
 | データ | `stations` **9,273 行**・`station_values` **約 503 万行**。CSV との全数照合レポートあり |
 | `pipeline/` | データ生成・投入（Python）。`data/`・`slide/` は gitignore |
 | 品質 | typecheck / lint / test / build 緑。Lighthouse **mobile Perf 78・A11y 98**／**desktop Perf 98**（mobile Perf は地図キャンバス LCP が律速） |
-| デプロイ | Vercel（`main` マージで本番）＋ **Cron `0 3 * * *` → /api/health**（Supabase pause 対策） |
+| デプロイ | Vercel（`main` マージで本番）＋ **Cron `0 3 * * *` → /api/health**（DB への日次疎通確認。失敗通知は未設定） |
 
 **Step2（P8a・P8b・P8c 完了・純加算）＝Step2 DoD 達成**：
 - **P8a（2026-07-11）**：`src/ai`（§7.3）＝`tools`（catalog 駆動の 5 ツール・domain 直呼び）／`client`（`@ai-sdk/google` provider 抽象）／`system-prompt`／`assemble`（ツール結果→**既存 Panel ビルダで MapResponse を決定的に組立**＝§4 の同一描画パス・LLM は幻覚しない）／`catalog-digest`／`rate-limit`。`POST /api/chat`（**AI SDK v6 `ToolLoopAgent`**・`stepCountIs(6)`・SSE ストリーミング＋`data-map` パート・IP レート制限／入力 500 字／45s abort）。主 LLM は **Gemini Flash 系**（§10.2）だが `gemini-2.5-flash` は 2026-07 に新規非対応のため既定は `gemini-flash-latest`（env 切替可・固定版は P8c eval）。
@@ -235,7 +235,7 @@ Step1 の全ブロックが完了し、下記が実体として存在する。�
 
 ## 8. デプロイ・環境・セキュリティ
 
-- **デプロイ**：Vercel（`main` へのマージで本番デプロイ）。`pipeline/`・`data/` は `.vercelignore`。**Vercel Cron `0 3 * * *` → `/api/health`**（`vercel.json`）が DB に 1 クエリ投げ、Supabase 無料枠の自動停止を防ぐ。
+- **デプロイ**：Vercel（`main` へのマージで本番デプロイ）。`pipeline/`・`data/` は `.vercelignore`。**Vercel Cron `0 3 * * *` → `/api/health`**（`vercel.json`）が DB に 1 クエリ投げる。**元は Supabase 無料枠の pause 対策だったが、Pro では不要**（2026-09-16）。いまは本番から DB へ届くことの日次確認で、**失敗を知らせる仕組みは用意していない**（死活監視ではない）。
 - **環境変数**：`.env`(gitignore)。パイプラインの `ESTAT_APP_ID`、アプリの `NEXT_PUBLIC_MAP_STYLE_URL`（既定＝地理院スタイル・キー不要）・`NEXT_PUBLIC_SITE_URL`（OG/canonical の基点）・`SUPABASE_URL`・`SUPABASE_ANON_KEY`・`SUPABASE_SERVICE_ROLE_KEY`（サーバのみ）・`GEMINI_API_KEY`（Step2・サーバのみ）。本番は **Vercel ダッシュボード**で設定。**鍵・完全URLは出力/ログに出さない**。
 - **Supabase**：**RLS 有効化**（読み取りは公開ビュー/匿名ロールに限定）、**SSL 正常化**、CORS 制限、書込は service role をサーバ側のみ。過去プロジェクトの CORS 全開放 / `rejectUnauthorized:false` を踏襲しない。
 - **DB 変更**：`supabase/migrations` の**バージョン管理**のみ（`force:true` の破壊的 DROP を使わない）。投入は**バルク＋冪等 upsert**。

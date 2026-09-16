@@ -59,3 +59,22 @@ export function barScale(rows: readonly { readonly score: number }[]): number {
 export function barWidth(value: number, scale: number): number {
   return scale <= 0 ? 0 : Math.max(0, (value / scale) * 100)
 }
+
+// --- ⚠（値が信用できない指標）の見せ方 -------------------------------------
+
+/** 内訳と指標は同じ並び（`presenter` が同じ配列から作る）。その対応で ⚠ の指標名を引く。 */
+export function flaggedLabelsJa(
+  breakdown: readonly { readonly flagged: boolean }[],
+  metrics: readonly { readonly shortLabelJa: string }[],
+): readonly string[] {
+  return breakdown.flatMap((item, index) =>
+    item.flagged ? [metrics[index]?.shortLabelJa ?? ''] : [],
+  )
+}
+
+/** ⚠ が 1 つでも付いた駅の数（件数を言わずに印だけ出すと、例外なのか常態なのか分からない）。 */
+export function flaggedRowCount(
+  rows: readonly { readonly breakdown: readonly { readonly flagged: boolean }[] }[],
+): number {
+  return rows.filter((row) => row.breakdown.some((item) => item.flagged)).length
+}

@@ -23,6 +23,8 @@ import {
   barWidth,
   countsJa,
   exclusionsJa,
+  flaggedLabelsJa,
+  flaggedRowCount,
   percentJa,
   scoreJa,
 } from '@/components/recommend/summary'
@@ -222,5 +224,31 @@ describe('内訳の帯', () => {
   it('負の寄与は 0 幅にする（負の長さは描けない）', () => {
     expect(barWidth(-0.1, 1)).toBe(0)
     expect(barWidth(0.25, 0.5)).toBe(50)
+  })
+})
+
+describe('⚠ は「どの指標が」まで言う', () => {
+  const metrics = [
+    { shortLabelJa: '将来人口' },
+    { shortLabelJa: '地価水準' },
+    { shortLabelJa: '乗降水準' },
+  ]
+
+  it('内訳と指標の並びで対応を取る', () => {
+    const breakdown = [{ flagged: false }, { flagged: true }, { flagged: true }]
+    expect(flaggedLabelsJa(breakdown, metrics)).toEqual(['地価水準', '乗降水準'])
+  })
+
+  it('1 つも立っていなければ空（印そのものを出さない）', () => {
+    expect(flaggedLabelsJa([{ flagged: false }], metrics)).toEqual([])
+  })
+
+  it('⚠ が付いた駅を数える（例外なのか常態なのかが分かるように）', () => {
+    const rows = [
+      { breakdown: [{ flagged: false }, { flagged: false }] },
+      { breakdown: [{ flagged: true }, { flagged: false }] },
+      { breakdown: [{ flagged: true }, { flagged: true }] },
+    ]
+    expect(flaggedRowCount(rows)).toBe(2)
   })
 })

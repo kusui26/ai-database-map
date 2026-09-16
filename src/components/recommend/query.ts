@@ -90,8 +90,11 @@ export function hasArea(criteria: RecommendCriteria): boolean {
   )
 }
 
-/** 既定と違う重みだけを「指標名:重み」で並べる（同じなら送らない＝URL が短くなる）。 */
-function weightsParam(criteria: RecommendCriteria): string {
+/**
+ * 既定と違う重みだけを「指標名:重み」で並べる（同じなら送らない＝URL が短くなる）。
+ * リクエストにも共有 URL にも同じ形を使う（2 つの書式を持たない）。
+ */
+export function changedWeightsParam(criteria: RecommendCriteria): string {
   const defaults = RECOMMEND_PRESETS[criteria.preset].metrics
   const changed = defaults.flatMap((metric) => {
     const value = criteria.weights[metric.metric]
@@ -127,7 +130,7 @@ export function recommendUrl(criteria: RecommendCriteria): string | null {
   if (criteria.operators.length > 0) params.set('operators', criteria.operators.join(','))
   if (criteria.routes.length > 0) params.set('routes', criteria.routes.join(','))
   if (criteria.routeTypes.length > 0) params.set('routeTypes', criteria.routeTypes.join(','))
-  const weights = weightsParam(criteria)
+  const weights = changedWeightsParam(criteria)
   if (weights.length > 0) params.set('weights', weights)
   for (const [key, value] of hazardParams(criteria)) params.set(key, value)
   return `/api/recommend?${params.toString()}`

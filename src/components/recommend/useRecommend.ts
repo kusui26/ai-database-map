@@ -70,6 +70,9 @@ export function useRecommend(criteria: RecommendCriteria, active: boolean): Reco
   const { data, error, isLoading, isValidating } = useSWR(active ? url : null, fetchRecommend, {
     revalidateOnFocus: false,
     keepPreviousData: true,
+    // 失敗しても自動で叩き直さない。400 は条件を直さない限り何度やっても同じで、
+    // 429 は**叩き直すこと自体が原因**——待つよう書いてあるのに裏で再試行しては意味がない。
+    shouldRetryOnError: false,
   })
   return {
     data,

@@ -9,7 +9,61 @@
  */
 
 import type { RecommendResponse } from '@/shared/api'
-import { countsJa, exclusionsJa } from './summary'
+import type { ResultAdvice } from './advice'
+import { countsJa, exclusionsJa, flaggedRowCount } from './summary'
+
+/**
+ * 空振り（0 件・全除外）と、少なすぎる結果の言い方。
+ * **「該当なし」で終わらせない**——理由はこちらが持っているのだから、次の一手まで出す。
+ */
+export function RecommendAdvice({ advice }: { advice: ResultAdvice }) {
+  const empty = advice.tone === 'empty'
+  return (
+    <div
+      className={
+        empty
+          ? 'mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-800 ring-1 ring-amber-200'
+          : 'mt-3 rounded-xl bg-slate-50 p-3 text-sm text-slate-700 ring-1 ring-slate-200'
+      }
+    >
+      <p className="font-medium">{advice.headlineJa}</p>
+      <ul className="mt-1 space-y-0.5 text-xs">
+        {advice.hintsJa.map((hint) => (
+          <li key={hint} className="flex gap-1.5">
+            <span aria-hidden className="opacity-50">
+              ・
+            </span>
+            <span>{hint}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+/**
+ * ⚠ が何を意味するかを、**印と同じ画面で**言う。
+ * 件数も出す——出さないと、例外なのか常態なのかが分からない。
+ */
+export function RecommendFlaggedNote({ response }: { response: RecommendResponse }) {
+  if (response.flagged === 'exclude') {
+    const excluded = response.excludedCounts.flagged
+    if (excluded === 0) return null
+    return (
+      <p className="mt-1.5 text-xs text-amber-700">
+        ⚠（値が信用できない指標）が付いた {excluded} 駅を候補から外しています。
+      </p>
+    )
+  }
+  const marked = flaggedRowCount(response.rows)
+  if (marked === 0) return null
+  return (
+    <p className="mt-1.5 text-xs text-amber-700">
+      ⚠ は低分母などで値が信用できない指標がある駅です（表示中 {marked} 駅）。参考値として読み、
+      外したいときは上の「⚠除外」を使ってください。
+    </p>
+  )
+}
 
 /** 表の上に出す帯。**候補の数を最初に**（候補が変われば順位も変わるため）。 */
 export function RecommendSummaryBar({ response }: { response: RecommendResponse }) {

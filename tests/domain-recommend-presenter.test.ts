@@ -14,6 +14,7 @@ import type { HazardLevel } from '@/shared/constants'
 import type { StationHazardSummary } from '@/shared/hazard-summary'
 import { recommendStations } from '@/domain/recommend'
 import { columnsFor, resolveMetrics } from '@/domain/recommend/metrics'
+import { sensitivityJa } from '@/domain/recommend/labels'
 import { presentRecommendation } from '@/domain/recommend/presenter'
 import { RECOMMEND_PRESETS } from '@/domain/recommend/presets'
 import { buildRecommendInput } from '@/domain/recommend/request'
@@ -290,5 +291,13 @@ describe('敏感度は駅名で返す（§13.4-4）', () => {
     const response = present()
     expect(response.sensitivity.runs).toBe(METRICS.length * 2)
     expect(response.sensitivity.verdictJa).toMatch(/頑健|僅差/)
+  })
+
+  it('順位が 0〜1 駅のとき「頑健」と言わない（振っても変わらないのは相手がいないから）', () => {
+    const stable = { runs: 10, stable: true, swaps: [], enteredTop: [], leftTop: [] }
+    expect(sensitivityJa(stable, 5, 0)).toContain('比べる相手がいません')
+    expect(sensitivityJa(stable, 5, 1)).toContain('比べる相手がいません')
+    // 2 駅あれば入れ替わりうるので、そこからは頑健／僅差を言ってよい。
+    expect(sensitivityJa(stable, 5, 2)).toContain('頑健')
   })
 })

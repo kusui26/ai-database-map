@@ -40,7 +40,7 @@ function input(overrides: Partial<PointHazardInput> = {}): PointHazardInput {
     uncoveredLayerKeys: [],
     rivers: [],
     elevationM: 0.2,
-    online: true,
+    onlineSourcesReached: true,
     notesJa: [],
     ...overrides,
   }
@@ -209,11 +209,14 @@ describe('hazard/point: 「該当なし」を「安全」と訳さない（§7.5
     expect(result.verdict.evacuation).toBe('stay')
   })
 
-  it('オフライン（メッシュだけ）なら確からしさは unknown で、行動を断定しない', () => {
-    const result = pointHazard(input({ online: false }), ALL_LAYERS)
+  it('公式タイルに届かなかった（メッシュだけ）なら unknown で、行動を断定しない', () => {
+    const result = pointHazard(input({ onlineSourcesReached: false }), ALL_LAYERS)
     expect(result.certainty).toBe('unknown')
     expect(result.verdict.evacuation).toBeNull()
-    expect(result.verdict.headlineJa).toContain('オフライン')
+    expect(result.verdict.headlineJa).toContain('250m メッシュだけで判断')
+    // ⚠ **理由は名乗らない。** ここに届くのは確からしさだけで、端末が切れていたのか
+    //   こちらが届かなかったのかを知らない（260916 §7）。
+    expect(result.verdict.headlineJa).not.toContain('オフライン')
   })
 
   it('網羅性の注記は必ず出て、同じ文は 1 行に畳まれる', () => {
@@ -364,9 +367,15 @@ describe('hazard/wording: 確からしさと言い方', () => {
     )
   })
 
-  it('該当なしの見出しは、オフラインかどうかで変わる', () => {
-    expect(noHazardHeadlineJa('exact')).not.toContain('オフライン')
-    expect(noHazardHeadlineJa('unknown')).toContain('オフライン')
+  it('該当なしの見出しは、何で判断したかを言う（理由は名乗らない）', () => {
+    expect(noHazardHeadlineJa('exact')).not.toContain('メッシュだけ')
+    expect(noHazardHeadlineJa('unknown')).toContain('250m メッシュだけで判断')
+    // 「オフライン」と言えるのは端末がそう言っているときだけ。ここでは分からない（260916 §7）。
+    expect(noHazardHeadlineJa('unknown')).not.toContain('オフライン')
+    // どちらの言い方でも「安全」とは言わない。
+    for (const certainty of ['exact', 'unknown'] as const) {
+      expect(noHazardHeadlineJa(certainty)).toContain('安全という意味ではありません')
+    }
   })
 })
 

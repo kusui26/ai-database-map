@@ -459,11 +459,17 @@ export type HazardCertainty = 'exact' | 'partial' | 'unknown'
 
 export const HAZARD_CERTAINTIES: readonly HazardCertainty[] = ['exact', 'partial', 'unknown']
 
-/** 確からしさのラベル（UI のバッジ）。 */
+/**
+ * 確からしさのラベル（UI のバッジ）。
+ *
+ * ⚠ `unknown` は以前「オフライン（メッシュのみ）」だった。**理由を名乗ってはいけない**
+ * ——サーバが公式タイルに届かなかったときも `unknown` になり、そのとき利用者は繋がっている
+ * （`docs/260916_ops_guard.md` §7）。**何で判断したか**だけを言う。
+ */
 export const HAZARD_CERTAINTY_LABELS_JA: Readonly<Record<HazardCertainty, string>> = {
   exact: 'この地点で確定',
   partial: '250m メッシュの範囲',
-  unknown: 'オフライン（メッシュのみ）',
+  unknown: 'メッシュのみ（照合できず）',
 }
 
 /**

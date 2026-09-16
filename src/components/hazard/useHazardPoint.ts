@@ -4,10 +4,10 @@
  * 地点の災害リスクを取る（`docs/260824_flood.md` §8.3・§7.2）。
  * 現在地カードと駅バッジが**同じフックを通る**——両方で言うことが変わらないように。
  *
- * ## オンラインは共通API、オフラインは**同じドメイン関数**をブラウザで走らせる
+ * ## 届くなら共通API、届かないときは**同じドメイン関数**をブラウザで走らせる
  *
  * 原則は「UI から直接ドメインを叩かない」（`.claude/CLAUDE.md` §2）だが、
- * **オフラインだけは例外にせざるを得ない**——通信できないのだから API は呼べない。
+ * **届かないときだけは例外にせざるを得ない**——通信できないのだから API は呼べない。
  * そこで、**再実装ではなく `pointHazard` そのもの**をブラウザで動かす。
  * 違うのは入力（浸水ナビと公式タイルが無い）だけで、その差は `certainty: 'unknown'` に出る。
  *
@@ -22,9 +22,10 @@ import useSWR from 'swr'
 import { hazardPointResponseSchema, type HazardPointResponse } from '@/shared/api'
 import { hazardLayersWithPointAnswer } from '@/domain/hazard/catalog'
 import { pointHazard } from '@/domain/hazard/point'
+import { meshOnlyNoteJa, type MeshOnlyReason } from '@/domain/hazard/wording'
 import { meshReadings } from '@/lib/hazard/readings'
 import { fetchJson } from '@/lib/fetch-json'
-import { shouldFallBackOffline } from './fallback'
+import { shouldFallBackToMesh } from './fallback'
 
 /** 問い合わせに使う座標の丸め（小数 4 桁 ≒ 11m）。 */
 const COORD_DECIMALS = 4
@@ -43,8 +44,16 @@ function round(value: number): number {
   return Number(value.toFixed(COORD_DECIMALS))
 }
 
-/** オフラインの答え。**メッシュだけ**なので `online: false`＝確からしさは `unknown` になる。 */
-async function offlineHazard(target: HazardTarget): Promise<HazardPointResponse> {
+/**
+ * 端末のメッシュだけで組み立てた答え。確からしさは `unknown` になる。
+ *
+ * **理由を引数で受け取る。** 端末が切れているのか、取りに行って届かなかったのかで
+ * 添える 1 文が変わる——「オフライン」と言えるのは前者だけである（260916 §7）。
+ */
+async function meshOnlyHazard(
+  target: HazardTarget,
+  reason: MeshOnlyReason,
+): Promise<HazardPointResponse> {
   const mesh = await meshReadings(target.lon, target.lat)
   return pointHazard(
     {
@@ -53,16 +62,13 @@ async function offlineHazard(target: HazardTarget): Promise<HazardPointResponse>
       placeJa: target.placeJa,
       mesh: mesh.mesh,
       tile: [],
-      // オフラインでは公式タイルに届かないので、近さも図の有無も測れない。
+      // 公式タイルに届いていないので、近さも図の有無も測れない。
       tileNearby: [],
       uncoveredLayerKeys: [],
       rivers: [],
       elevationM: mesh.elevationM,
-      online: false,
-      notesJa: [
-        ...(mesh.noteJa === null ? [] : [mesh.noteJa]),
-        'オフラインのため、端末に保存した 250m メッシュだけで判断しています。',
-      ],
+      onlineSourcesReached: false,
+      notesJa: [...(mesh.noteJa === null ? [] : [mesh.noteJa]), meshOnlyNoteJa(reason)],
     },
     hazardLayersWithPointAnswer(),
   )
@@ -91,14 +97,17 @@ async function loadHazard([, lon, lat, placeJa]: readonly [
   string,
 ]): Promise<HazardPointResponse> {
   const target = { lon, lat, placeJa }
-  if (typeof navigator !== 'undefined' && !navigator.onLine) return offlineHazard(target)
+  // 端末が「繋がっていない」と言っているときだけ、`offline` と名乗ってよい。
+  if (typeof navigator !== 'undefined' && !navigator.onLine)
+    return meshOnlyHazard(target, 'offline')
   try {
     return await fetchPoint(target)
   } catch (error) {
-    // ⚠ 4xx では落ちない（`shouldFallBackOffline` に理由）。
-    if (!shouldFallBackOffline(error)) throw error
+    // ⚠ 4xx では落ちない（`shouldFallBackToMesh` に理由）。
+    if (!shouldFallBackToMesh(error)) throw error
     console.error('共通API から地点のハザードを取れませんでした。メッシュだけで組み立てます', error)
-    return offlineHazard(target)
+    // ここに来た利用者は**繋がっている**（届かなかったのはこちら側）。
+    return meshOnlyHazard(target, 'unreachable')
   }
 }
 

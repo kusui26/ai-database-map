@@ -16,12 +16,12 @@
 import { type HazardCardPanel, type HazardItem } from '@/shared/protocol'
 import {
   EVACUATION_LABELS_JA,
-  HAZARD_CERTAINTY_LABELS_JA,
   HAZARD_LEVEL_COLORS,
   HAZARD_LEVEL_ICONS,
   HAZARD_LEVEL_LABELS_JA,
   HAZARD_SOURCE_LABELS_JA,
 } from '@/shared/constants'
+import { certaintyNoteJa } from '@/domain/hazard/wording'
 import { cn } from '@/lib/utils'
 import { Emphasis } from './Emphasis'
 import { SourceList } from './SourceList'
@@ -84,6 +84,8 @@ function HazardRow({ item }: { item: HazardItem }) {
 
 export function HazardCard({ panel }: { panel: HazardCardPanel }) {
   const compact = panel.size === 'compact'
+  // 文言は domain が持つ（AI も同じことを言える・CLAUDE.md §2）。
+  const certaintyNote = certaintyNoteJa(panel.certainty)
 
   return (
     <section className={cn('rounded-xl bg-white', compact ? 'p-3' : 'px-1 py-1')}>
@@ -98,14 +100,7 @@ export function HazardCard({ panel }: { panel: HazardCardPanel }) {
         <Emphasis text={panel.headlineJa} />
       </p>
 
-      {panel.certainty !== 'exact' && (
-        <p className="mt-1 text-xs text-amber-700">
-          ⓘ {HAZARD_CERTAINTY_LABELS_JA[panel.certainty]}
-          {panel.certainty === 'partial'
-            ? 'での判断です。この地点そのものの値は、地図の色でご確認ください。'
-            : 'での判断です。通信できるようになったら、もう一度ご確認ください。'}
-        </p>
-      )}
+      {certaintyNote !== null && <p className="mt-1 text-xs text-amber-700">ⓘ {certaintyNote}</p>}
 
       {panel.evacuation !== null && (
         <p className="mt-1 text-sm font-semibold text-slate-900">

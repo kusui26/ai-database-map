@@ -75,7 +75,9 @@ export function assembleHazardPoint(
       uncoveredLayerKeys: tile.uncoveredLayerKeys,
       rivers: navi.rivers,
       elevationM: mesh.elevationM,
-      online: tile.reached,
+      // ⚠ サーバは常にオンラインである。false になるのは**公式タイルに届かなかった**ときで、
+      //    その理由は `notesJa`（「公式タイルを N レイヤぶん取得できませんでした」）が言う。
+      onlineSourcesReached: tile.reached,
       notesJa,
     },
     hazardLayersWithPointAnswer(),

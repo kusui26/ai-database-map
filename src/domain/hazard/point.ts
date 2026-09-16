@@ -94,8 +94,14 @@ export type PointHazardInput = {
   readonly rivers: readonly HazardRiver[]
   /** 平均標高（m・無ければ null）。 */
   readonly elevationM: number | null
-  /** オンラインの情報源に**一度でも届いたか**。届いていなければ答えは `unknown`。 */
-  readonly online: boolean
+  /**
+   * オンラインの情報源（公式タイル）に**一度でも届いたか**。届いていなければ答えは `unknown`。
+   *
+   * ⚠ **「利用者がオンラインか」ではない。** サーバが公式タイルに届かなかったときも false になる
+   * ——そのとき利用者は繋がっている。この取り違えが「オフラインのため」という嘘の元だった
+   * （`docs/260916_ops_guard.md` §7）。理由は `MeshOnlyReason` が別に持つ。
+   */
+  readonly onlineSourcesReached: boolean
   /** 取得できなかったものの説明（部分応答であることを隠さない）。 */
   readonly notesJa: readonly string[]
 }
@@ -325,7 +331,7 @@ export function pointHazard(
     return hit === null || item === null ? [] : [{ key, item, rank: hit.rank }]
   })
   const items = byDangerFirst(resolved.map((each) => each.item))
-  const certainty: HazardCertainty = input.online
+  const certainty: HazardCertainty = input.onlineSourcesReached
     ? weakestCertainty(items.map((item) => item.certainty))
     : 'unknown'
   const neighbours = neighboursOf(input)

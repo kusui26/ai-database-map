@@ -5,7 +5,7 @@ import {
   nearestOutsideCell,
   outsideAlreadyJa,
   ESCAPE_LIMITATIONS_JA,
-  ESCAPE_OFFLINE_NOTE_JA,
+  escapeMeshOnlyNoteJa,
   type EscapeCell,
 } from '@/domain/hazard/escape'
 import { escapeDirectionPanel } from '@/domain/hazard/panels'
@@ -187,19 +187,26 @@ describe('domain/hazard: escapeDirection パネル', () => {
 })
 
 /**
- * オフラインの正直さ（§8.3・PR-5b）。
+ * メッシュだけで答えたときの正直さ（§8.3・PR-5b、言い方は 260916 §7）。
  *
  * 脱出方向は**配布済みのメッシュだけで計算できる**ので、通信が切れても答えが出る。
  * ただし「公式の地図でも塗られていないか」の確認はできない——その差を隠さない。
  */
-describe('domain/hazard: オフラインで答えたときの注記', () => {
-  it('メッシュだけで判断したことと、その限界を言う', () => {
-    expect(ESCAPE_OFFLINE_NOTE_JA).toContain('オフライン')
-    expect(ESCAPE_OFFLINE_NOTE_JA).toContain('250m メッシュ')
+describe('domain/hazard: メッシュだけで答えたときの注記', () => {
+  it.each(['offline', 'unreachable'] as const)('%s：限界は理由によらず同じ', (reason) => {
+    const note = escapeMeshOnlyNoteJa(reason)
+    expect(note).toContain('250m メッシュ')
     // **確認できていないこと**を言う（§11 リスク 7c ぶん甘い方に出る）。
-    expect(ESCAPE_OFFLINE_NOTE_JA).toContain('照合ができていない')
-    expect(ESCAPE_OFFLINE_NOTE_JA).toContain('区域の中のことがあります')
+    expect(note).toContain('照合ができていない')
+    expect(note).toContain('区域の中のことがあります')
     // 「安全」とは言わない。
-    expect(ESCAPE_OFFLINE_NOTE_JA).not.toContain('安全です')
+    expect(note).not.toContain('安全です')
+  })
+
+  it('「オフライン」と言うのは、端末がそう言っているときだけ', () => {
+    expect(escapeMeshOnlyNoteJa('offline')).toContain('オフラインのため')
+    // 5xx・タイムアウトで落ちてきた利用者は**繋がっている**（260916 §7）。
+    expect(escapeMeshOnlyNoteJa('unreachable')).not.toContain('オフライン')
+    expect(escapeMeshOnlyNoteJa('unreachable')).toContain('最新のデータを取得できなかったため')
   })
 })

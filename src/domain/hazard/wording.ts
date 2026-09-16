@@ -16,6 +16,7 @@
  * 2. **レイヤの網羅性**。内水は 47 都道府県中 22 しか収録が無く、高潮・津波・土砂はメッシュ化していない
  */
 
+import { HAZARD_CERTAINTY_LABELS_JA } from '@/shared/constants'
 import { COVERAGE_STEPS } from '@/shared/hazard-mesh'
 import type { HazardCertainty, HazardSource } from '@/shared/hazard'
 
@@ -126,15 +127,66 @@ export function nearHazardHeadlineJa(
   )
 }
 
+// --- メッシュだけで判断したとき（260916 §7） ------------------------------
+
+/**
+ * **250m メッシュだけで判断することになった理由**。分かっていることだけ言うためにある型。
+ *
+ * ## なぜ「オフライン」と決め打ちにできないのか
+ *
+ * 公式タイルに届かない事情は 2 つあり、**利用者から見て意味が正反対**である。
+ *
+ * | | 何が起きたか | 利用者は |
+ * | --- | --- | --- |
+ * | `offline` | 端末が自分で「繋がっていない」と言っている（`navigator.onLine === false`） | 繋がっていない |
+ * | `unreachable` | 取りに行って届かなかった（5xx・タイムアウト・サーバが公式タイルに届かない） | **繋がっている** |
+ *
+ * 以前はどちらでも「オフラインのため」と言っていた。G5 でレート制限を入れ、G2 で 4xx を
+ * 塞いだ結果、**残った 5xx・タイムアウトの経路で、繋がっている人に「オフライン」と言う**状態が
+ * 残っていた（`docs/260916_ops_guard.md` §7）。**知らないことを知っているように書かない。**
+ */
+export type MeshOnlyReason = 'offline' | 'unreachable'
+
+/** 理由 → 文の頭に置く原因の句。 */
+const MESH_ONLY_CAUSE_JA: Readonly<Record<MeshOnlyReason, string>> = {
+  offline: 'オフラインのため',
+  unreachable: '最新のデータを取得できなかったため',
+}
+
+/** メッシュだけで答えたことを添える 1 文（地点）。**黙って劣化した答えを返さない。** */
+export function meshOnlyNoteJa(reason: MeshOnlyReason): string {
+  return `${MESH_ONLY_CAUSE_JA[reason]}、端末に保存した 250m メッシュだけで判断しています。`
+}
+
+/**
+ * 確からしさのバッジに添える一言（`exact` は何も言わない）。
+ *
+ * ⚠ ここも**理由を名乗らない**。`unknown` は「公式の地図と照合できなかった」という意味でしかなく、
+ * 端末が切れていたのかサーバが届かなかったのかは分からない（260916 §7）。
+ * 以前は UI 側に「**通信できるようになったら**、もう一度ご確認ください」と直書きされていて、
+ * 繋がっている利用者にも通信の問題だと言っていた。**文言は domain に置く**（CLAUDE.md §2）。
+ */
+export function certaintyNoteJa(certainty: HazardCertainty): string | null {
+  if (certainty === 'exact') return null
+  const label = HAZARD_CERTAINTY_LABELS_JA[certainty]
+  return certainty === 'partial'
+    ? `${label}での判断です。この地点そのものの値は、地図の色でご確認ください。`
+    : `${label}での判断です。時間をおいて、もう一度ご確認ください。`
+}
+
 /**
  * 何にも当たらなかったときの 1 文。**「安全です」とは決して言わない。**
  * 言えるのは「指定された区域のデータには入っていない」ことだけである。
+ *
+ * ⚠ ここでは**理由を名乗らない**。この関数に届くのは `certainty` だけで、
+ * 端末が切れていたのか取りに行って失敗したのかを知らない（`MeshOnlyReason` はここまで来ない）。
+ * **何で判断したか**は言えるので、それだけ言う。理由は知っている側（`notesJa`）が言う。
  */
 export function noHazardHeadlineJa(certainty: HazardCertainty): string {
   const base =
     'この場所は、表示できるハザードの指定区域には入っていません（安全という意味ではありません）。'
   return certainty === 'unknown'
-    ? `${base}オフラインのため、250m メッシュだけで判断しています。`
+    ? `${base}**250m メッシュだけで判断しています**（公式の地図と照合できていません）。`
     : base
 }
 

@@ -2,8 +2,10 @@
  * 共通API に届かなかったとき、**端末のメッシュだけで答えに切り替えてよいか**
  * （`docs/260916_ops_guard.md` G2）。
  *
- * 切り替えた答えには「オフラインのため、端末に保存した 250m メッシュだけで判断しています」と
- * 添う。だから**オフラインではない理由で切り替えると、嘘を添えることになる**。
+ * 切り替えた答えには「端末に保存した 250m メッシュだけで判断しています」と添う。
+ * **その頭に置く理由は、呼び出し側が知っている**（`MeshOnlyReason`）——端末が切れているなら
+ * 「オフラインのため」、取りに行って届かなかったなら「最新のデータを取得できなかったため」。
+ * ここで決めるのは**切り替えてよいかどうか**だけである。
  *
  * 4xx はサーバが「いまは答えない」と言っている状態で、利用者はオンラインである。
  * とくに 429（混雑）は、上流を守るための制限を入れた（G5）ことで**現実に起きる経路**になった。
@@ -14,6 +16,6 @@
 
 import { isClientError } from '@/lib/fetch-json'
 
-export function shouldFallBackOffline(error: unknown): boolean {
+export function shouldFallBackToMesh(error: unknown): boolean {
   return !isClientError(error)
 }

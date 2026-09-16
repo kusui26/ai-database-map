@@ -9,7 +9,7 @@
  * **避難先を開いたときに一緒に取る。** 「どこへ行くか」と「どちらへ動けば区域を出られるか」は
  * 同じ場面で要る問いなので、押す回数を増やさない。
  *
- * ## オンラインは共通API、オフラインは**同じ関数**をブラウザで走らせる
+ * ## 届くなら共通API、届かないときは**同じ関数**をブラウザで走らせる
  *
  * `useHazardPoint` と同じ形にしてある。脱出方向は**配布済みの 250m メッシュだけで計算できる**
  * ——Service Worker が現在地のまわり 9 枚を落としてあるので、通信が切れても答えが出る。
@@ -22,8 +22,9 @@ import useSWR from 'swr'
 import { hazardEscapeResponseSchema, type HazardEscapeResponse } from '@/shared/api'
 import type { EvacuationDisasterKey } from '@/shared/evacuation'
 import { escapeDirectionAt } from '@/lib/hazard/escape-source'
+import type { MeshOnlyReason } from '@/domain/hazard/wording'
 import { fetchJson } from '@/lib/fetch-json'
-import { shouldFallBackOffline } from './fallback'
+import { shouldFallBackToMesh } from './fallback'
 
 /** 問い合わせに使う座標の丸め（小数 3 桁 ≒ 110m）。現在地の揺れを畳む。 */
 const COORD_DECIMALS = 3
@@ -40,14 +41,22 @@ function round(value: number): number {
   return Number(value.toFixed(COORD_DECIMALS))
 }
 
-/** 端末の中だけで答える（**通信をしない**）。ドメイン関数はサーバと同じものを通る。 */
-function offlineEscape(target: EscapeTarget): Promise<HazardEscapeResponse> {
+/**
+ * 端末の中だけで答える（**通信をしない**）。ドメイン関数はサーバと同じものを通る。
+ *
+ * **理由を引数で受け取る。** 添える注記の頭が変わる——「オフライン」と言えるのは、
+ * 端末が自分でそう言っているときだけである（260916 §7）。
+ */
+function meshOnlyEscape(
+  target: EscapeTarget,
+  reason: MeshOnlyReason,
+): Promise<HazardEscapeResponse> {
   return escapeDirectionAt({
     lon: target.lon,
     lat: target.lat,
     placeJa: target.placeJa,
     disaster: target.disaster,
-    online: false,
+    meshOnly: reason,
   })
 }
 
@@ -81,14 +90,17 @@ async function loadEscape([, lon, lat, placeJa, disaster]: readonly [
   EvacuationDisasterKey,
 ]): Promise<HazardEscapeResponse> {
   const target = { lon, lat, placeJa, disaster }
-  if (typeof navigator !== 'undefined' && !navigator.onLine) return offlineEscape(target)
+  // 端末が「繋がっていない」と言っているときだけ、`offline` と名乗ってよい。
+  if (typeof navigator !== 'undefined' && !navigator.onLine)
+    return meshOnlyEscape(target, 'offline')
   try {
     return await fetchEscape(lon, lat, placeJa, disaster)
   } catch (error) {
-    // 地点のハザードと同じ理由（`shouldFallBackOffline`）。
-    if (!shouldFallBackOffline(error)) throw error
+    // 地点のハザードと同じ理由（`shouldFallBackToMesh`）。
+    if (!shouldFallBackToMesh(error)) throw error
     console.error('共通API から脱出方向を取れませんでした。メッシュだけで組み立てます', error)
-    return offlineEscape(target)
+    // ここに来た利用者は**繋がっている**（届かなかったのはこちら側）。
+    return meshOnlyEscape(target, 'unreachable')
   }
 }
 

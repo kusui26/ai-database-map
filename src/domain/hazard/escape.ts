@@ -29,6 +29,7 @@
 import { distanceM } from '@/shared/geo'
 import { meshCenterOfIndices, type LonLat, type MeshIndices } from '@/shared/mesh'
 import { bearingJa, distanceJa } from './evacuation'
+import { meshOnlyNoteJa, type MeshOnlyReason } from './wording'
 
 /** 1 セルの読み取り結果。**「区域の外」と「分からない」を混ぜない**（§7.5-1）。 */
 export type EscapeCell =
@@ -141,15 +142,21 @@ export const ESCAPE_LIMITATIONS_JA: readonly string[] = [
 ]
 
 /**
- * オフラインで答えたときの注記。**確認できていないことを隠さない**。
+ * メッシュだけで答えたときの注記。**確認できていないことを隠さない**。
  *
  * メッシュだけなら端末の中で計算できるが、「公式の地図でも塗られていないか」の確認ができない。
  * その差は §11 リスク 7c（メッシュは公式タイルより薄い）ぶんだけ**甘い方**に出るので、
  * 黙って返さずに言う。
+ *
+ * 頭の原因の句は `MeshOnlyReason` が決める——**「オフライン」は、端末がそう言っているときだけ**
+ * （260916 §7）。後ろの 1 文は理由によらず同じで、こちらが本題である。
  */
-export const ESCAPE_OFFLINE_NOTE_JA =
-  'オフラインのため、端末に保存した 250m メッシュだけで判断しています。' +
-  '**公式の地図との照合ができていない**ので、実際には区域の中のことがあります。'
+export function escapeMeshOnlyNoteJa(reason: MeshOnlyReason): string {
+  return (
+    meshOnlyNoteJa(reason) +
+    '**公式の地図との照合ができていない**ので、実際には区域の中のことがあります。'
+  )
+}
 
 /** 1 文の結論。**方向は言うが、行けとは言わない。** */
 export function escapeHeadlineJa(
@@ -168,7 +175,11 @@ export function escapeHeadlineJa(
  * そもそも答えられないときの 1 文（メッシュを持たない災害・読めなかった区画）。
  * **「区域の外」と言わない**——判定していないだけである。
  */
-export function escapeUnavailableJa(placeJa: string, areaLabelJa: string, reasonJa: string): string {
+export function escapeUnavailableJa(
+  placeJa: string,
+  areaLabelJa: string,
+  reasonJa: string,
+): string {
   return `${placeJa}について、${areaLabelJa}の外の向きは出せませんでした（${reasonJa}）。`
 }
 

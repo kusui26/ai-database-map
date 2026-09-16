@@ -25,7 +25,7 @@ const BASE = {
   uncoveredLayerKeys: [],
   rivers: [],
   elevationM: 0.2,
-  online: true,
+  onlineSourcesReached: true,
   notesJa: [],
 } as const
 

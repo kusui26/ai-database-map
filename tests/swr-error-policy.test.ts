@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest'
 import { HttpError } from '@/lib/fetch-json'
 import { ERROR_RETRY_COUNT, shouldRetry } from '@/components/SwrProvider'
-import { shouldFallBackOffline } from '@/components/hazard/fallback'
+import { shouldFallBackToMesh } from '@/components/hazard/fallback'
 
 describe('叩き直すか（SWR の既定は「上限なしで再試行」）', () => {
   it('4xx は 1 度も叩き直さない', () => {
@@ -34,13 +34,13 @@ describe('メッシュだけの答えに落ちるか', () => {
    * 上流の制限（G5）を入れたことで、429 は現実に起きる経路になった。
    */
   it('4xx では落ちない（サーバが「いまは答えない」と言っている）', () => {
-    expect(shouldFallBackOffline(new HttpError(429, '混雑しています'))).toBe(false)
-    expect(shouldFallBackOffline(new HttpError(400, '座標が要ります'))).toBe(false)
+    expect(shouldFallBackToMesh(new HttpError(429, '混雑しています'))).toBe(false)
+    expect(shouldFallBackToMesh(new HttpError(400, '座標が要ります'))).toBe(false)
   })
 
   it('通信断・タイムアウト・5xx では落ちる（沈黙させない・260824_flood §6.3）', () => {
-    expect(shouldFallBackOffline(new TypeError('Failed to fetch'))).toBe(true)
-    expect(shouldFallBackOffline(new DOMException('Aborted', 'AbortError'))).toBe(true)
-    expect(shouldFallBackOffline(new HttpError(500, 'x'))).toBe(true)
+    expect(shouldFallBackToMesh(new TypeError('Failed to fetch'))).toBe(true)
+    expect(shouldFallBackToMesh(new DOMException('Aborted', 'AbortError'))).toBe(true)
+    expect(shouldFallBackToMesh(new HttpError(500, 'x'))).toBe(true)
   })
 })

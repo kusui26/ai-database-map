@@ -38,14 +38,15 @@ import type { HazardEscapeResponse } from '@/shared/api'
 import type { SourceRef } from '@/shared/protocol'
 import {
   escapeHeadlineJa,
+  escapeMeshOnlyNoteJa,
   escapeUnavailableJa,
   nearestOutsideCell,
   outsideAlreadyJa,
   ESCAPE_LIMITATIONS_JA,
-  ESCAPE_OFFLINE_NOTE_JA,
   type EscapeCell,
   type EscapeSearchResult,
 } from '@/domain/hazard/escape'
+import type { MeshOnlyReason } from '@/domain/hazard/wording'
 import { hazardMeshTile } from './meshTiles'
 
 /** 探す上限（セル数）。250m × 80 ＝ 20km。徒歩でも車でも、これ以上は方向の話にならない。 */
@@ -69,7 +70,8 @@ export const DEFAULT_PLACE_JA = 'この地点'
 
 const SOURCES: readonly SourceRef[] = [
   {
-    labelJa: '出典：国土数値情報（洪水浸水想定区域 A31b・雨水出水浸水想定区域 A51）を 250m メッシュに集計',
+    labelJa:
+      '出典：国土数値情報（洪水浸水想定区域 A31b・雨水出水浸水想定区域 A51）を 250m メッシュに集計',
     url: 'https://nlftp.mlit.go.jp/ksj/',
     license: '国土数値情報 利用約款',
     forJa: null,
@@ -82,14 +84,18 @@ export type HazardEscapeRequest = {
   readonly placeJa?: string
   readonly disaster: EvacuationDisasterKey
   /**
-   * 公式タイルに届くか（既定 true）。**オフラインでは false**。
+   * 公式タイルに**届かなかった理由**（省略＝届く）。
    *
-   * 通信できないとき、**メッシュだけで答えることはできる**（配布タイルは端末にある）。
+   * 届かないとき、**メッシュだけで答えることはできる**（配布タイルは端末にある）。
    * ただし「公式の地図でも塗られていないか」の確認ができないので、
    * §11 リスク 7c（メッシュは公式タイルより薄い）の分だけ答えが甘くなる。
    * **黙って甘い答えを返さない**ために、注記に残す。
+   *
+   * ⚠ 真偽値ではなく理由を受けるのは、**注記の言い方が理由で変わる**から（260916 §7）。
+   * 「オフライン」と言えるのは端末が自分でそう言っているときだけで、
+   * 5xx やタイムアウトで落ちてきた場合の利用者は**繋がっている**。
    */
-  readonly online?: boolean
+  readonly meshOnly?: MeshOnlyReason
 }
 
 /** その災害の区域のうち、**自前メッシュで読めるもの**（洪水・内水だけ・決定 4）。 */
@@ -206,12 +212,14 @@ async function searchVerified(
 /** 探した結果に添える注記（黙って打ち切らない）。 */
 function escapeNotesJa(
   result: EscapeSearchResult & { rejected: number },
-  online: boolean,
+  meshOnly: MeshOnlyReason | null,
 ): readonly string[] {
   return [
-    ...(online ? [] : [ESCAPE_OFFLINE_NOTE_JA]),
+    ...(meshOnly === null ? [] : [escapeMeshOnlyNoteJa(meshOnly)]),
     ...(result.target === null && result.sawUnknown
-      ? ['探した範囲に、メッシュを読めない区画がありました。**区域の外が無いという意味ではありません**。']
+      ? [
+          '探した範囲に、メッシュを読めない区画がありました。**区域の外が無いという意味ではありません**。',
+        ]
       : []),
     ...(result.rejected > 0
       ? [
@@ -300,12 +308,13 @@ export async function escapeDirectionAt(
           await loadTiles(layerKeys, surroundingPrimaries(origin.lon, origin.lat), baseUrl),
           layerKeys,
         )
-  const online = request.online ?? true
+  // 届かなかった理由が入っていれば、公式タイルとの照合そのものを飛ばす。
+  const meshOnly = request.meshOnly ?? null
   const result = await searchVerified(
     origin,
     start,
     probe,
-    online ? tileLayerKeysFor(request.disaster) : [],
+    meshOnly === null ? tileLayerKeysFor(request.disaster) : [],
   )
 
   const searchedM = result.searchedRadiusCells * MESH_SIZE_M
@@ -315,7 +324,7 @@ export async function escapeDirectionAt(
       placeJa,
       areaLabelJa,
       escapeHeadlineJa(placeJa, areaLabelJa, result.target, searchedM),
-      escapeNotesJa(result, online),
+      escapeNotesJa(result, meshOnly),
     ),
     inside: true,
     direction:

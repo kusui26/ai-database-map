@@ -96,8 +96,19 @@ export function exclusionJa(reason: ExclusionReason): string {
   return `${groupJa}が「${HAZARD_LEVEL_LABELS_JA[reason.level]}」のため`
 }
 
-/** 敏感度の 1 行（§13.4-4）。「頑健」か「僅差」かをここで言い切る。 */
-export function sensitivityJa(sensitivity: Sensitivity, topN: number): string {
+/** 並びが変わりうる最小の駅数。1 駅以下では「振っても変わらない」のは当たり前で、意味を持たない。 */
+const MIN_COMPARABLE = 2
+
+/**
+ * 敏感度の 1 行（§13.4-4）。「頑健」か「僅差」かをここで言い切る。
+ *
+ * ⚠ **順位が 0〜1 駅のときに「頑健」と言わない。** 振っても変わらないのは並べる相手が
+ * いないからで、順位が安定している証拠ではない。全除外の画面で「頑健」と出ていた（W5 で修正）。
+ */
+export function sensitivityJa(sensitivity: Sensitivity, topN: number, rankedCount: number): string {
+  if (rankedCount < MIN_COMPARABLE) {
+    return `順位が付いたのは ${rankedCount} 駅なので、重みを振っても比べる相手がいません`
+  }
   return sensitivity.stable
     ? `頑健（重みを ±20% 振っても上位 ${topN} の並びは変わりません・${sensitivity.runs} 通り）`
     : `僅差（重みを ±20% 振ると上位 ${topN} の並びが変わります・${sensitivity.runs} 通り）`

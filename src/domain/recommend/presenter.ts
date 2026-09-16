@@ -189,7 +189,7 @@ function sensitivityView(
   return {
     runs: sensitivity.runs,
     stable: sensitivity.stable,
-    verdictJa: sensitivityJa(sensitivity, topN),
+    verdictJa: sensitivityJa(sensitivity, topN, run.result.ranked.length),
     swaps: sensitivity.swaps.map(([a, b]) => ({ a: ref(a), b: ref(b) })),
     enteredTop: sensitivity.enteredTop.map(ref),
     leftTop: sensitivity.leftTop.map(ref),

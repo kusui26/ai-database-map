@@ -13,21 +13,22 @@ import {
   HAZARD_LEVEL_LABELS_JA,
   RADII_M,
   radiusLabel,
-  type HazardLevel,
 } from '@/shared/constants'
-import { SUMMARY_HAZARD_GROUPS, type SummaryHazardGroup } from '@/shared/hazard-summary'
-import type { HazardPolicyMode, NormalizeMethod } from '@/shared/recommend'
+import { SUMMARY_HAZARD_GROUPS } from '@/shared/hazard-summary'
+import {
+  normalizeMethodSchema,
+  type HazardPolicyMode,
+  type NormalizeMethod,
+} from '@/shared/recommend'
 import { HAZARD_PENALTY_LABELS_JA, PRESET_IDS, RECOMMEND_PRESETS } from '@/domain/recommend/presets'
 import { METRIC_SELECT_CLASS } from '@/components/metrics/MetricSelect'
 import { StationFilterControls } from '@/components/metrics/StationFilterControls'
 import type { StationFiltersState } from '@/components/metrics/useStationFilters'
 import { cn } from '@/lib/utils'
+import { CUTOFF_LEVELS, toGroup, toLevel, toMethod } from './parse'
 import type { RecommendCriteria } from './query'
 import type { MunicipalitiesState } from './useMunicipalities'
 import { WeightSliders } from './WeightSliders'
-
-/** 足切りに使える下限。`none` は入れない——「想定区域外以上」は候補が全部消えるだけで意味がない。 */
-const CUTOFF_LEVELS: readonly HazardLevel[] = ['caution', 'warning', 'danger', 'critical']
 
 const METHOD_LABELS_JA: Readonly<Record<NormalizeMethod, string>> = {
   percentile: 'パーセンタイル',
@@ -207,20 +208,6 @@ function HazardControls({
   )
 }
 
-/** 文字列 → 列挙（`as` を使わずに型を絞る）。知らない値は既定へ。 */
-function toGroup(value: string): SummaryHazardGroup {
-  return SUMMARY_HAZARD_GROUPS.find((group) => group === value) ?? 'flood'
-}
-
-function toLevel(value: string): HazardLevel {
-  return CUTOFF_LEVELS.find((level) => level === value) ?? 'danger'
-}
-
-function toMethod(value: string): NormalizeMethod {
-  const methods: readonly NormalizeMethod[] = ['percentile', 'minmax', 'zscore']
-  return methods.find((method) => method === value) ?? 'percentile'
-}
-
 export function RecommendControls({
   criteria,
   filters,
@@ -269,7 +256,7 @@ export function RecommendControls({
             value={criteria.method}
             onChange={(event) => onChange({ method: toMethod(event.target.value) })}
           >
-            {(['percentile', 'minmax', 'zscore'] as const).map((method) => (
+            {normalizeMethodSchema.options.map((method) => (
               <option key={method} value={method}>
                 {METHOD_LABELS_JA[method]}
               </option>

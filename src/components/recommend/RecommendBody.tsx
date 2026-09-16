@@ -10,18 +10,34 @@
  * いないので、**何を候補にしたか**を必ず出す（W2 の突き合わせで、候補が 1 駅違うだけで
  * 4 位以下が入れ替わることを実測している）。方法・重み・除外・敏感度・限界・出典も同じ理由で、
  * 表と一緒に必ず出す（§13.4）。
+ *
+ * ## 条件は URL に置く
+ *
+ * 開いたときに URL から読み、変わったら書き戻す（`history: 'replace'`）。共有できて、
+ * 再現できて、閉じても消えない。中身は閉じるたびに unmount されるので、ここが唯一の置き場になる。
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useQueryStates } from 'nuqs'
 import { useMapStore } from '@/stores/mapStore'
-import { useRecommendStore } from '@/stores/recommendStore'
+import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { useStationFilters } from '@/components/metrics/useStationFilters'
+import { resultAdvice } from './advice'
 import { RecommendControls } from './RecommendControls'
-import { RecommendFootnotes, RecommendSummaryBar } from './RecommendNotes'
+import {
+  RecommendAdvice,
+  RecommendFlaggedNote,
+  RecommendFootnotes,
+  RecommendSummaryBar,
+} from './RecommendNotes'
 import { RecommendTable, WeightLegend } from './RecommendTable'
 import { hasArea, type RecommendCriteria } from './query'
+import { criteriaFromUrl, criteriaToUrl, RECOMMEND_PARSERS } from './url'
 import { useMunicipalities } from './useMunicipalities'
-import { useRecommend } from './useRecommend'
+import { useDebounced, useRecommend } from './useRecommend'
+
+/** URL の書き換えは、取得と同じ間隔で落ち着かせる（スライダ 1 回で何十回も書かない）。 */
+const URL_DEBOUNCE_MS = 400
 
 function Notice({ tone, children }: { tone: 'plain' | 'warn'; children: React.ReactNode }) {
   return (
@@ -45,18 +61,17 @@ export function RecommendBody({
   active: boolean
   onSelect: (grp: string) => void
 }) {
-  // 閉じたときの条件から再開する（モーダルの中身は閉じるたびに unmount される）。
-  // 初期値としてだけ読む（以後の変化は購読しない＝開いている間に外から書き換わらない）。
-  const [remembered] = useState(() => useRecommendStore.getState().criteria)
-  const remember = useRecommendStore((state) => state.remember)
-  const filters = useStationFilters(active, remembered)
-  const [recipe, setRecipe] = useState<RecommendCriteria>(remembered)
+  const [urlValues, setUrlValues] = useQueryStates(RECOMMEND_PARSERS, { history: 'replace' })
+  // URL は**開いたときにだけ**読む（以後は書くだけ。戻る/進むで途中に戻らないよう replace にしてある）。
+  const [initial] = useState<RecommendCriteria>(() => criteriaFromUrl(urlValues))
+  const filters = useStationFilters(active, initial)
+  const [recipe, setRecipe] = useState<RecommendCriteria>(initial)
   const prefectures = filters.values.prefectures
   const prefecture = prefectures.length === 1 ? (prefectures[0] ?? null) : null
   const municipalities = useMunicipalities(active ? prefecture : null)
 
   // 都道府県が**変わったら**市区町村は捨てる（別の県の市区町村が残ると 0 件になる）。
-  // 初回は捨てない——覚えていた条件で開き直したときに、選び直しになってしまう。
+  // 初回は捨てない——URL で渡された条件が、開いた瞬間に消えてしまう。
   const lastPrefecture = useRef(prefecture)
   useEffect(() => {
     if (lastPrefecture.current === prefecture) return
@@ -70,12 +85,21 @@ export function RecommendBody({
     () => ({ ...recipe, ...filters.values }),
     [recipe, filters.values],
   )
-  const { data, isLoading, isRefreshing, errorJa } = useRecommend(criteria, active)
-
-  // 閉じる（unmount する）ときに、そのときの条件を覚える。
   const latest = useRef(criteria)
   latest.current = criteria
-  useEffect(() => () => remember(latest.current), [remember])
+
+  // 条件が落ち着いたら URL へ。既定と同じ値は nuqs が自動で消す（URL を既定で汚さない）。
+  const urlKey = useDebounced(JSON.stringify(criteriaToUrl(criteria)), URL_DEBOUNCE_MS)
+  const written = useRef(JSON.stringify(criteriaToUrl(initial)))
+  useEffect(() => {
+    const next = criteriaToUrl(latest.current)
+    const key = JSON.stringify(next)
+    if (key === written.current) return
+    written.current = key
+    void setUrlValues(next)
+  }, [urlKey, setUrlValues])
+
+  const { data, isLoading, isRefreshing, errorJa } = useRecommend(criteria, active)
 
   // 地図に上位を印す。**表を閉じたあとも残す**——地図の上で場所を確かめるのが次の一手なので。
   const setHighlightedGrps = useMapStore((state) => state.setHighlightedGrps)
@@ -88,15 +112,52 @@ export function RecommendBody({
     setRecipe((current) => ({ ...current, ...patch }))
   }, [])
 
+  const advice = data === undefined ? null : resultAdvice(data)
+
+  // 狭い画面では、結果が出たら条件を畳む。つまみ全部で画面の 6 割が埋まると、
+  // 「直して確かめる」のたびに上下へ長くスクロールすることになる（実測 390px）。
+  // 自分で開けたあとは畳まない（`hasResult` が変わらないので再発火しない）。
+  const isDesktop = useIsDesktop()
+  const [openControls, setOpenControls] = useState(true)
+  const hasResult = data !== undefined
+  useEffect(() => {
+    if (!isDesktop && hasResult) setOpenControls(false)
+  }, [isDesktop, hasResult])
+
   return (
     <>
       <div className="border-b border-slate-100 px-4 py-3">
-        <RecommendControls
-          criteria={criteria}
-          filters={filters}
-          municipalities={municipalities}
-          onChange={onChange}
-        />
+        {openControls ? (
+          <>
+            <RecommendControls
+              criteria={criteria}
+              filters={filters}
+              municipalities={municipalities}
+              onChange={onChange}
+            />
+            {!isDesktop && hasResult && (
+              <button
+                type="button"
+                onClick={() => setOpenControls(false)}
+                className="mt-2 w-full rounded-lg bg-slate-50 py-1.5 text-xs font-medium text-slate-500"
+              >
+                条件を閉じる
+              </button>
+            )}
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setOpenControls(true)}
+            className="flex w-full items-center justify-between gap-2 text-left text-sm"
+          >
+            <span className="min-w-0 flex-1 truncate text-slate-700">
+              {data?.area.labelJa}
+              <span className="ml-1.5 text-xs text-slate-400">{data?.preset.labelJa}</span>
+            </span>
+            <span className="shrink-0 text-xs font-medium text-indigo-600">条件を変える</span>
+          </button>
+        )}
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
@@ -113,16 +174,12 @@ export function RecommendBody({
         ) : (
           <div className={isRefreshing ? 'opacity-60 transition-opacity' : undefined}>
             <RecommendSummaryBar response={data} />
-            {data.rankedCount === 0 ? (
-              <p className="py-6 text-center text-sm text-slate-500">
-                {data.candidateCount === 0
-                  ? '該当する駅がありませんでした。エリアの条件を見直してください。'
-                  : `候補 ${data.candidateCount} 駅はすべて除外されました。下の理由をご覧ください。`}
-              </p>
-            ) : (
+            {advice !== null && <RecommendAdvice advice={advice} />}
+            {data.rankedCount > 0 && (
               <>
                 <div className="mt-3">
                   <WeightLegend metrics={data.metrics} />
+                  <RecommendFlaggedNote response={data} />
                 </div>
                 <div className="mt-2">
                   <RecommendTable response={data} onSelect={onSelect} />

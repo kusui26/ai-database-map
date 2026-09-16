@@ -1,6 +1,7 @@
 'use client'
 
 import { type ReactNode, useState } from 'react'
+import { parseAsBoolean, useQueryState } from 'nuqs'
 import { PANEL_GAP_PX, PANEL_WIDTH_PX } from '@/shared/constants'
 import { useChatStore } from '@/stores/chatStore'
 import { useGeoStore } from '@/stores/geoStore'
@@ -10,6 +11,8 @@ import { usePrefetchOnIdle } from '@/hooks/usePrefetchOnIdle'
 // 初期バンドルから外す：ダイアログ（散布は Chart.js を含む）は初回オープンまで読み込まない。
 // 遅延ロードの定義は共通モジュールに置く（Suspense 境界の付け忘れを 1 か所に閉じ込めるため）。
 import { DIALOG_LOADERS, RankingDialog, RecommendDialog, ScatterDialog } from './lazyDialogs'
+// 名前だけを参照する（`url.ts` を import すると、おすすめ一式が初期バンドルに来る）。
+import { RECOMMEND_OPEN_PARAM } from './recommend/openParam'
 import { cn } from '@/lib/utils'
 
 /** FAB とチャットパネルのあいだの余白。 */
@@ -118,11 +121,16 @@ function FabButton({
 export function Fab() {
   const [rankingOpen, setRankingOpen] = useState(false)
   const [scatterOpen, setScatterOpen] = useState(false)
-  const [recommendOpen, setRecommendOpen] = useState(false)
+  // おすすめだけ URL に載せる——条件ごと共有できるリンクにするため（§13.7 W5）。
+  const [recommendOpen, setRecommendOpen] = useQueryState(
+    RECOMMEND_OPEN_PARAM,
+    parseAsBoolean.withDefault(false),
+  )
   // 一度開いたら以後もマウントし続ける（初回のみチャンク取得・状態は保持）。
   const [rankingSeen, setRankingSeen] = useState(false)
   const [scatterSeen, setScatterSeen] = useState(false)
-  const [recommendSeen, setRecommendSeen] = useState(false)
+  // 共有リンクを踏んだ（`?rec=true`）ときは、最初から開いた状態で始まる。
+  const [recommendSeen, setRecommendSeen] = useState(recommendOpen)
   // デスクトップでチャットを開くと FAB が左パネルに隠れるため右へ寄せる（位置はパネル幅から算出）。
   const chatOpen = useChatStore((state) => state.open)
   const isDesktop = useIsDesktop()
@@ -172,13 +180,18 @@ export function Fab() {
           title="エリアの中でおすすめの駅を出す"
           onClick={() => {
             setRecommendSeen(true)
-            setRecommendOpen(true)
+            void setRecommendOpen(true)
           }}
         />
       </div>
       {rankingSeen && <RankingDialog open={rankingOpen} onOpenChange={setRankingOpen} />}
       {scatterSeen && <ScatterDialog open={scatterOpen} onOpenChange={setScatterOpen} />}
-      {recommendSeen && <RecommendDialog open={recommendOpen} onOpenChange={setRecommendOpen} />}
+      {recommendSeen && (
+        <RecommendDialog
+          open={recommendOpen}
+          onOpenChange={(open) => void setRecommendOpen(open)}
+        />
+      )}
     </>
   )
 }

@@ -649,7 +649,10 @@ export type RecommendArea = z.infer<typeof recommendAreaSchema>
 export const recommendMetricSchema = z.object({
   key: z.string(),
   baseMetric: z.string(),
+  /** カタログのラベル（年・半径まで入った長い名前）。 */
   labelJa: z.string(),
+  /** レシピが付けた短い名前（「将来人口」）。凡例や見出しはこちらを使う。 */
+  shortLabelJa: z.string(),
   unit: unitSchema,
   format: formatSchema,
   radiusM: z.number().nullable(),

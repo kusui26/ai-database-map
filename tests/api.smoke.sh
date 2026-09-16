@@ -149,6 +149,16 @@ get "$BASE/api/hazard/alerts" "lon=139.847" "lat=35.7645" "placeJa=亀有駅"
   [ "$(echo "$BODY" | jq -r '.headlineJa | contains("安全")')" = false ]; } &&
   ok "hazard/alerts（限界を明示・「安全」と言わない）" || ng "hazard alerts wording"
 
+# 13a) 区域を特定できないときの言い方（G6・docs/260916_ops_guard.md）。
+#      ⚠ 上流は**海上・国外でも、不調のときでも同じ `{}`** を返し、しかも**同じ海上の地点が
+#      即答のときと 10 秒返らないときがある**（2026-09-16 実測）。どちらの枝に入るかは日によって
+#      変わるので、**枝ではなく不変条件**を見る：黙らないこと・「海上・国外です」と断定しないこと。
+get "$BASE/api/hazard/alerts" "lon=145" "lat=35"
+{ [ "$HTTP" = 200 ] && [ "$(echo "$BODY" | jq -r '.area')" = null ] &&
+  [ "$(echo "$BODY" | jq -r '[.notesJa[] | select(contains("一時的"))] | length')" -gt 0 ] &&
+  [ "$(echo "$BODY" | jq -r '[.notesJa[] | select(contains("海上・国外の可能性があります"))] | length')" = 0 ]; } &&
+  ok "hazard/alerts：特定できないとき、黙らず・海上と断定しない" || ng "hazard alerts 海上の言い方"
+
 # 13b) キキクル：カタログの `timesUrl` から最新時刻を解決し、実タイルが 200 で返るか。
 #      これは**気象庁の配信を直接**叩く（自前サーバを経由しない設計・§7.4）。
 #      配信の形が変わると、地図には 404 が並ぶだけで**何も出ないまま静かに壊れる**ので、ここで見る。
@@ -341,7 +351,7 @@ case "$BASE" in
       done
       { [ "$HTTP" = 429 ] && [ "$(echo "$BODY" | jq -r .error.code)" = RATE_LIMITED ]; } &&
         ok "hazard/${route}：上限を超えると 429（上流には行かない）" ||
-        ng "hazard/${route} の上限（http=$HTTP）"
+        ng "hazard/${route} の上限（http=${HTTP}）"
     done
 
     # カタログは上流を叩かないので制限しない（守るものが無い）。
@@ -364,16 +374,16 @@ cache_control() { # url [urlencoded k=v ...]
 
 CC=$(cache_control "$BASE/api/stations/geojson")
 { echo "$CC" | grep -q "max-age=3600"; } &&
-  ok "geojson：ブラウザ向けの寿命が届く（${CC#*: }）" || ng "geojson の max-age（$CC）"
+  ok "geojson：ブラウザ向けの寿命が届く（${CC#*: }）" || ng "geojson の max-age（${CC}）"
 
 CC=$(cache_control "$BASE/api/ranking" "metric=pop_2020_1km" "limit=5")
 { echo "$CC" | grep -q "max-age=300"; } &&
-  ok "ranking：ブラウザ向けの寿命が届く（${CC#*: }）" || ng "ranking の max-age（$CC）"
+  ok "ranking：ブラウザ向けの寿命が届く（${CC#*: }）" || ng "ranking の max-age（${CC}）"
 
 # ⚠ 「いま」の警報は配り置きしない。ここに max-age が付いたら落とす。
 CC=$(cache_control "$BASE/api/hazard/alerts" "lon=139.847" "lat=35.7645")
 { ! echo "$CC" | grep -qE "(^|[ ,])max-age="; } &&
-  ok "hazard/alerts：ブラウザには持たせない（${CC#*: }）" || ng "alerts に max-age が付いている（$CC）"
+  ok "hazard/alerts：ブラウザには持たせない（${CC#*: }）" || ng "alerts に max-age が付いている（${CC}）"
 
 echo ""
 echo "==== $pass passed / $fail failed ===="

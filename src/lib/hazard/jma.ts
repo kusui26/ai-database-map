@@ -173,15 +173,38 @@ const reverseGeocodeSchema = z.object({
 /**
  * 緯度経度 → 5 桁の市区町村コード。**海上や国外は `null`**（エラーではない）。
  * 逆ジオコーダは北海道も `01101` のようにゼロ埋めして返す（対応表と桁が揃う）。
+ *
+ * ## 「見つからなかった」を覚えない（G6・`docs/260916_ops_guard.md`）
+ *
+ * **上流は、海上・国外でも、壊れているときでも、同じ `{}` を返す**（実測：太平洋・赤道沖・
+ * ソウルはいずれも `{}`）。応答からこの 2 つを区別する手立ては無い。
+ *
+ * 以前はこの `null` を `remember` に**期限なしで**覚えていた。そのため、上流が不調だった隙に
+ * 1 度 `{}` を受け取ると、**そのプロセスが生きている間ずっと**「市区町村を特定できませんでした
+ * （海上・国外の可能性があります）」と答え続けた——葛飾区にいる人に対しても。
+ * 2026-09-16 に本番で再現し、プロセスを入れ替えると直った。
+ *
+ * だから**見つからなかった答えは覚えない**。同時に来た問い合わせを 1 回にまとめる効果
+ * （`remember` 本来の目的）は残したいので、解決してから鍵を捨てる。
+ * 海上の地点を毎回引き直すことになるが、駅も現在地も陸にあるので、その費用はほぼ発生しない。
+ *
+ * 形が違う応答（`{"results": []}` など）は**投げる**。これは「海上」ではなく「読めなかった」で、
+ * `remember` は失敗を覚えない。同じ区別は `officialTiles`（404 と通信失敗）・`meshTiles`・
+ * `evacuation-source` が既にしている。
  */
 export function municipalityCodeAt(lon: number, lat: number): Promise<string | null> {
   const key = `${lon.toFixed(COORD_DECIMALS)},${lat.toFixed(COORD_DECIMALS)}`
-  return remember(municipalities, key, async () => {
-    const parsed = reverseGeocodeSchema.safeParse(
-      await fetchJson(`${REVERSE_GEOCODER_URL}?lat=${lat}&lon=${lon}`),
-    )
-    return parsed.success ? (parsed.data.results?.muniCd ?? null) : null
+  const pending = remember(municipalities, key, async () => {
+    const body = await fetchJson(`${REVERSE_GEOCODER_URL}?lat=${lat}&lon=${lon}`)
+    return reverseGeocodeSchema.parse(body).results?.muniCd ?? null
   })
+  // 見つからなかったら覚えない（上で書いた理由）。失敗は `remember` 自身が捨てる。
+  void pending
+    .then((code) => {
+      if (code === null) municipalities.remove(key)
+    })
+    .catch(() => {})
+  return pending
 }
 
 /** `flood_xml.json` → 区域に繋がる形（発表中のものだけが載っている）。 */

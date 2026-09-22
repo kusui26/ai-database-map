@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.8.3 — 2026-09-22
+
+- **MulmoClaude の手順から回避策を外した**（上流が直したため）。設定は 3 つ → **2 つ**
+  （MCP の登録と地図タイルの CSP）。**スキルはプラグインのまま効きます**。
+  - **MulmoClaude 1.18.0 以上**を使ってください。1.18.0 で、Docker サンドボックスの中でも
+    Claude Code のプラグインが解決されるようになりました
+    （[#3186](https://github.com/receptron/mulmoclaude/issues/3186) →
+    [#3188](https://github.com/receptron/mulmoclaude/pull/3188)：台帳のホストのパスを
+    コンテナ側に読み替える）
+  - **すでにリンクを張った人は消してください**——同じスキルが 2 回出ます
+    （`station-analysis` と `ai-database-map:station-analysis`）。消し方は README に
+- 実機で確認：**symlink 無し・サンドボックス ON** で、プラグインの MCP（13 ツール・connected）・
+  スラッシュコマンド 11・SessionStart フックがエージェントに届く。台帳の読み替えを外すと 0 に戻る
+  （`docs/260912_gui_chat_protocol.md` §4.6.1 ⑤）
+
 ## 0.8.2 — 2026-09-15
 
 - **MulmoClaude が動かない理由の説明を訂正**（0.8.1 の説明は誤りだった）。

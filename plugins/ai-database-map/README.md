@@ -39,39 +39,16 @@ claude mcp add --transport http ai-database-map https://ai-database-map.vercel.a
 
 ### MulmoClaude で使う
 
-MulmoClaude は既定で **Docker サンドボックス**の中でエージェントを動かします。そのとき
-**Claude Code のプラグインが丸ごと読み込まれません**——スキルもスラッシュコマンドも MCP もフックも
-届かず、しかも**エラーが出ません**。作法を知らないまま、答えの質だけが落ちます。
-
-原因はパスの不一致です。プラグインの場所を記録している台帳がホストの絶対パス（`/Users/…`）を持つ一方、
-コンテナの中のホームは `/home/node` なので、その場所が存在しません。upstream に報告済みです
-（[receptron/mulmoclaude#3186](https://github.com/receptron/mulmoclaude/issues/3186)）。
-
-設定は 3 つです。**2 はサンドボックスを使うときだけ**必要で、#3186 が直れば要らなくなります。
-`npx mulmoclaude --disable-sandbox` で動かす場合は 2 を飛ばせますが、エージェントがホストで
-直接動くようになります（サンドボックスの保護は外れます）。
+**MulmoClaude 1.18.0 以上**を使ってください（`npx mulmoclaude@latest` なら常に最新です）。
+設定は 2 つで、**スキルは Claude Code のときと同じくプラグインのまま効きます**
+（既定の Docker サンドボックスの中でもそのまま届きます。ワークスペース側の作業はありません）。
 
 1. **MCP サーバを足す**（必須）——Settings → **MCP servers** に HTTP で追加します
    （id は `station-data`、URL は上と同じ）。実体は `<workspace>/config/mcp.json` です。
    MulmoClaude がエージェントに渡す許可リストは**ここに登録したサーバから作られる**ので、
-   登録しないとツールを呼べません。サンドボックスを使う場合は、そもそもプラグイン同梱の
-   MCP 定義が読み込まれないため、なおさら必要です。
-2. **スキルを置く**（サンドボックスを使う場合）——ワークスペース（既定 `~/mulmoclaude`）に
-   1 回だけリンクを張ります。Claude Code は作業ディレクトリの `.claude/skills/` を自分で読むので、
-   ここに置けばサンドボックスの中からでも届きます。
+   登録しないとツールを呼べません。
 
-   ```bash
-   mkdir -p ~/mulmoclaude/.claude/skills && cd ~/mulmoclaude/.claude/skills
-   for s in station-analysis station-recommendation transport-planning \
-            market-analysis analyze-csv hazard-reading; do
-     ln -s "../../../.claude/plugins/marketplaces/ai-database-map/plugins/ai-database-map/skills/$s" "$s"
-   done
-   ```
-
-   **相対リンクにしてください**——Docker サンドボックスの中でも解決します（絶対パスは切れます）。
-   リンク先はマーケットプレイスの複製なので、`/plugin` で更新すると**自動で追随**します。
-
-3. **地図のタイルを許可する**（必須）——`<workspace>/config/csp.json` を作ります。**再起動は不要**です。
+2. **地図のタイルを許可する**（必須）——`<workspace>/config/csp.json` を作ります。**再起動は不要**です。
 
    ```json
    {
@@ -84,6 +61,21 @@ MulmoClaude は既定で **Docker サンドボックス**の中でエージェ�
    ```
 
    受け付けるのは `https://ホスト名` だけです。パスやワイルドカードは黙って無視されます。
+
+> **以前の版で案内していたスキルのリンクは、もう要りません。**
+> 1.18.0 より前は、サンドボックスの中でプラグインが丸ごと不活性になる不具合があり
+> （[#3186](https://github.com/receptron/mulmoclaude/issues/3186)・
+> [#3188](https://github.com/receptron/mulmoclaude/pull/3188) で修正）、
+> `<workspace>/.claude/skills/` に symlink を張る回避策を書いていました。
+> **張ってある場合は消してください**——同じスキルが 2 回出ます
+> （`station-analysis` と `ai-database-map:station-analysis`）。
+>
+> ```bash
+> cd ~/mulmoclaude/.claude/skills && rm -f station-analysis station-recommendation \
+>   transport-planning market-analysis analyze-csv hazard-reading
+> ```
+>
+> 消えるのはリンクだけです（`rm -f` はディレクトリを消さないので、同名の自作スキルがあれば残ります）。
 
 ### 地図の出し方（母艦に共通）
 

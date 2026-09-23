@@ -326,17 +326,21 @@ CLAUDE.md §2 の図に「ユーザーの Claude」が並ぶ前身 §4.1 の構�
 |---|---|---|
 | Claude Code 単体 | 既存：`/plugin marketplace add kusui26/AI-Database-Map` → install | プラグイン更新（0.8.0） |
 | **MulmoTerminal**（Claude/Codex） | ①**ワークスペースにしたいディレクトリで** `npx mulmoterminal@latest`（`npx` 起動では**そこが WORKSPACE**。直接起動なら `~/mulmoclaude`）。②Settings → `userMcpServers` に `{ id: "station-data", url: https://ai-database-map.vercel.app/api/mcp }`（**次のセッションから**有効）。③セルは候補チップの **WORKSPACE** を選ぶ＋Agent は Claude。④プラグインは Claude Code に **user scope** で導入済みであること。**Canvas のスイッチは触らない**——ワークスペースでは表示されず、GUI ツールは自動で付く（§4.6.1） | README/LP に「母艦で使う」節・スクリーンショット・`.mcp.json` 雛形 |
-| **MulmoClaude** | ①Settings → **MCP servers** に HTTP を追加（`<workspace>/config/mcp.json`）——**必須**。登録しないとツールが 1 つも呼べない。②スキルを `<workspace>/.claude/skills/` に**相対 symlink** で置く——**Docker サンドボックスを使うときだけ必須**（既定は使う）。サンドボックス内では Claude Code がプラグインを解決できない（`receptron/mulmoclaude#3186`）。③地図を出すなら `<workspace>/config/csp.json` に `img-src`（再起動不要）。④T2：`plugins/` に tgz＋`plugins.json` に 1 行（**利用者が自分で**・同梱は無い＝§4.4.1）（①〜③は §4.6.1） | 導入ページ・**MCP カタログ掲載 PR**（`src/config/mcpCatalog.ts`：`type:"http"`・`riskLevel:"low"`・認証なし・i18n 8 ロケール・決定 17）・**upstream 要望**（プラグインのスキルも走査してほしい） |
+| **MulmoClaude**（**1.18.0 以上**） | ①Settings → **MCP servers** に HTTP を追加（`<workspace>/config/mcp.json`）——**必須**。登録しないとツールが 1 つも呼べない。②地図を出すなら `<workspace>/config/csp.json` に `img-src`（再起動不要）。③T2：`plugins/` に tgz＋`plugins.json` に 1 行（**利用者が自分で**・同梱は無い＝§4.4.1）。**スキルは何もしなくてよい**——1.18.0 でサンドボックス内でもプラグインが解決されるようになった（§4.6.1 ①・旧版で必要だった symlink は不要） | 導入ページ・**MCP カタログ掲載 PR**は not planned（`docs/260915_week5…` §2）・**upstream 要望は実装された**（#3175 → #3184／#3186 → #3188） |
 | Codex（MulmoTerminal） | codex セル＋`.codex-plugin`／`codex mcp add` | **実導入検証**（前回未検証のまま） |
 | claude.ai / Cowork | 既存コネクタ（テキスト） | `_meta.ui` 撤収後に「コネクタ再追加」案内（最後の 1 回） |
 
-### 4.6.1 実機で分かったこと（2026-09-14／15 実走・MulmoTerminal 4.21 / MulmoClaude 1.16）
+### 4.6.1 実機で分かったこと（2026-09-14／15 実走・MulmoTerminal 4.21 / MulmoClaude 1.16。⑤ は 2026-09-22・MulmoClaude 1.21.0）
 
 母艦は「同じ Claude Code を動かすもの」と括れない。**プラグインがそもそも読み込まれるか**と
 **どのツールを許可するか**が別物で、そこが導入手順の実体になる。以下は
 パッケージのソースを逐語で読み、実機で確かめた事実（① は 2026-09-15 に原因を訂正した）。
 
 **① Docker サンドボックスの中で、Claude Code がプラグインを解決できない。**
+> ✅ **2026-09-22：上流で解消（MulmoClaude 1.18.0）。** 以下は 1.18.0 より前の話で、
+> **いまの導入手順に symlink は無い**（実測は §10 の「母艦・実機（MulmoClaude）」）。
+> 経緯を残すのは、同じ誤診（観測と機構を確かめずに結びつける）を繰り返さないため。
+
 MulmoClaude は既定で Docker サンドボックスの中にエージェントを置く。そのとき**プラグインが
 丸ごと不活性**になる——スキル・スラッシュコマンド・MCP サーバ・SessionStart フックのすべてが届かない。
 **症状が無言**なのが厄介で、エラーも警告も出ないまま、作法を知らないエージェントが自己流で答える。
@@ -365,7 +369,12 @@ MulmoClaude は既定で Docker サンドボックスの中にエージェント
 戻る。影響は当プラグインに限らず、`claude-plugins-official` を含む登録済みマーケットプレイス全部。
 upstream に報告済み（`receptron/mulmoclaude#3186`）。**サンドボックスを使わなければ何も要らない。**
 
-**回避策は `<workspace>/.claude/skills/` への相対 symlink。** これが効くのは、CLI が**作業ディレクトリの
+> ✅ **直ったのはここ（#3188・1.18.0）。** 先方は「台帳を読むときにホストのホーム接頭辞を
+> コンテナ側に読み替え、書き換えた写しを `:ro` で被せる」形で実装した（`server/agent/
+> pluginLedgerMount.ts`＋`pluginLedgerPaths.ts`）。**2 つの台帳とも**読み替えるので、上の
+> 「両方書き換えないと直らない」がそのまま満たされる。結末は `docs/260915_week5…` §10。
+
+**回避策（1.18.0 より前）は `<workspace>/.claude/skills/` への相対 symlink。** これが効くのは、CLI が**作業ディレクトリの
 `.claude/skills/` を自分で読む**から（MulmoClaude の discovery とは無関係）。
 相対にする理由は、ワークスペースが `/home/node/mulmoclaude`、`~/.claude` が `/home/node/.claude` に
 マウントされ、**ホームからの相対位置がホストと一致する**こと。だから 3 階層上がる相対リンクは両方で解決し、
@@ -403,8 +412,30 @@ MulmoClaude の既定に `https:` は無いので `<workspace>/config/csp.json` 
 `sanitizeCspExtra` が黙って落とす。**再起動は不要**（リクエストごとに読み直す）。
 広げたことは起動時に警告としてログに出る。
 
+**⑤ ① は 1.18.0 で解消した（2026-09-22 実測）。** 上流の修正（#3188）が入った版で測り直すと、
+**ワークスペースに symlink が 1 本も無い状態**で、プラグインが丸ごと届く。測り方は
+「上流のコード自身に docker の引数を組ませ、その中で `claude -p` を走らせ、**init イベント**を読む」
+（成功判定に `plugin list` を使わない——§5.3 の教訓）。台帳の読み替えだけを外した実行を
+並べてあるので、**測定器が壊れていない**ことも同時に見える。
+
+| 実行（すべて symlink 無し・同じまっさらなワークスペース） | プラグインの MCP | スラッシュコマンド | SessionStart フック |
+| --- | --- | --- | --- |
+| **1.18+ の実挙動**（台帳の読み替えあり） | `plugin:ai-database-map:station-data` **connected**・ツール **13** | **11**（`ai-database-map:*`） | **発火** |
+| 読み替えを外す（＝1.17 以前） | **0** | **0** | なし |
+
+11 本は `plugins/ai-database-map/skills/` の**11 本と完全一致**する（スキルは
+`<plugin>:<skill>` の形でコマンド一覧に出る）。ツール名の綴りは
+`mcp__plugin_ai-database-map_station-data__build_dataset`＝末尾一致の規則（§4.5）がそのまま効く。
+
+⚠ **古いリンクは消す。** 回避策を張ったままだと、同じスキルが**2 回**出る（`station-analysis` と
+`ai-database-map:station-analysis`）。実測でコマンドは 70 → **90 本**に増えた。
+**②（MCP の登録が必須）は変わらない**——`--allowedTools` は `config/mcp.json` に登録したサーバだけを
+許可するので、プラグイン同梱の MCP 定義は読まれても呼べない。
+
 **結果**：両方の母艦で、フォーム → チャート → 地図 → 文書がそろうところまで実機で確認した
 （MulmoTerminal 2026-09-14／MulmoClaude 2026-09-15）。§10 の「残る手動確認」はこれで解消。
+導入手順は 2026-09-22 に**回避策ごと削った**（README・`/ai`・ルート README・
+`tests/host-setup-docs.test.ts`）。
 
 ### 4.7 Claude Code 単体の GUI：Artifacts（T1′・任意）
 
@@ -514,6 +545,7 @@ Claude : [list_stations 横浜市 → 137 駅] [build_dataset 137 駅×20 列（
 | **PR-16** | **T2 プラグイン**：`packages/gui-chat-plugin`（`definePlugin`・`stationArea` action 判別・`tools/list` からの定義生成＋版同期テスト・Vue View＝共通レンダラ＋MapLibre（Shadow DOM）・Preview・i18n） | PR-11 | `mulmoclaude --dev-plugin` で全 action の描画（地図・パネル・免責）／`vue-tsc`・lint 緑／`npm pack` 可 |
 | **PR-17** | **T2 配布**：npm publish・利用者向けの ledger 導入手順・スキルの `stationArea` 優先規則の実走。**同梱提案 PR は削除**（前提が成り立たない・§4.4.1） | PR-16 | MulmoClaude で「横浜駅の詳細を見せて」→ Canvas に地図＋パネル（実機） |
 | **PR-18** | Artifacts レポート（`/ai-database-map:report`）——任意 | PR-14 | Pro/Max セッションで Artifact が公開される |
+| **PR-15e** | **回避策を手順から外す**（上流が直ったので）：MulmoClaude 1.18.0（#3186 → #3188）で、サンドボックスの中でもプラグインが解決される。README・`/ai`・ルート README から symlink の節を削り、**すでに張った人向けの掃除**（同じスキルが 2 回出る）を足す。`tests/host-setup-docs.test.ts` は**旧文言を書けない否定**へ組み替え。プラグイン 0.8.3 | PR-15c・上流 1.18.0 | 実機で、symlink 無し・サンドボックス ON のまま **init イベント**にスキル・コマンド・フック・プラグイン MCP が出る（§4.6.1 ⑤）／退役した文言が手順に戻らない（テスト） |
 | **W1〜W6** | **「おすすめ駅」の Web 実装**（§13）——domain の純関数 → 結線 → `/api/recommend` → 画面 → 仕上げ。MCP と `protocol.ts` は無改変 | PR-15d | §13.8 のとおり |
 
 PR-11〜13 は独立に着手可（12 と 13 は並行）。**T1 は PR-14 で完成**、T2 は PR-16/17（決定 15′ で導入 CLI 待ち）。運用（Vercel WAF・Spend Management）は前身のまま。
@@ -755,6 +787,36 @@ PR-11〜13 は独立に着手可（12 と 13 は並行）。**T1 は PR-14 で�
 > **残り**：PR-15b（MulmoClaude のカタログ掲載 PR・**upstream 要望**＝プラグインのスキルも
 > 走査してほしい・Codex 実導入検証）。Codex は CLI 未導入でブロック中。
 
+> **✅ PR-15e 完了（2026-09-22）。** 上流が直したので、**手順から回避策を消した**。
+> 足したのではなく**減らした** PR で、利用者の作業は 3 つ → **2 つ**（MCP の登録と地図の CSP）になった。
+>
+> **測り方が今回の本体**。相手のコードを信じて文書を書き換えるのではなく、
+> **上流のコード自身に docker の引数を組ませて**（`pluginLedgerMountArgs()` ＋
+> `buildDockerSpawnArgs()`）その中で `claude -p` を走らせ、**init イベント**を読んだ。
+> 同じ関数の**台帳の読み替えだけを外した実行**を並べたので、結果が「効いた」なのか
+> 「測れていない」なのかが区別できる——読み替えあり＝MCP connected・13 ツール／コマンド 11／
+> フック発火、読み替えなし＝**0／0／無し**。成功判定に `plugin list` を使わないのは §5.3 の教訓
+> （`enabled` と言いながらエージェントには届かない段がある）。
+>
+> **証拠の性質**：ワークスペースは**まっさらな別ディレクトリ**（`.claude/skills/` が無い）なので、
+> 届いた経路はプラグインしかない。出た 11 本は `plugins/ai-database-map/skills/` の 11 本と
+> **完全一致**した（スキルは `<plugin>:<skill>` の形でコマンド一覧に出る）。
+> サンドボックス・イメージは 1.21.0 の `Dockerfile.sandbox` と **sha が一致**していたので、
+> 利用者が得るものと同じイメージで測ったことになる。
+>
+> **実測が 1 つ、案内を増やさせた**：回避策を張ったままだと**同じスキルが 2 回**出る
+> （コマンド 70 → 90 本）。消すだけでなく「**張ってある人は消す**」を README に足した。
+>
+> **測れなかったこと**（正直に書く）：コンテナ内で**モデルが実際にスキルを呼ぶ**ところまでは
+> 自動化できていない。MulmoClaude は毎ターン前に Keychain の資格情報をファイルへ書き出してから
+> コンテナを起こすが、その手順はこの検証の外に置いた。ホスト実行では
+> `ai-database-map:station-recommendation` が実際に呼ばれることを確認済みで、
+> コンテナ側は「スキルが**見えている**」（init）ところまでを証拠としている。
+>
+> **検証**：typecheck・lint・ユニット全緑（`tests/host-setup-docs.test.ts` は 8 件に組み替え、
+> **変更前の文書に当てて 5 件落ちる**ことを確認）・`pnpm build`・`claude plugin validate --strict`。
+> プラグイン 0.8.3。
+
 ---
 
 ## 10. 検証計画
@@ -763,7 +825,7 @@ PR-11〜13 は独立に着手可（12 と 13 は並行）。**T1 は PR-14 で�
 - **E2E（ローカル本番ビルド）**：tools/list 13 本（`map_probe` 無し）・`_meta.ui` 無し・`present` 有無の結果差分・`render_map` の 200/410/429
 - **実レンダ（Playwright）**：ECharts option を cdnjs の ECharts で描画／地図 HTML を **母艦と同じ CSP**（`sandbox allow-scripts; default-src 'none'; connect-src 'none'; img-src https:`）の iframe で描画し、タイル `<img>` の取得数・マーカー・面を実測（PR-9b の偽タイル route を流用）
 - **母艦・実機（MulmoTerminal）**：✅ **確認済み（2026-09-14）**——WORKSPACE のセル＋`userMcpServers` で横浜 golden を実走し、フォーム → チャート → **地図** → 文書まで描画。Canvas スイッチは不要だった（§4.6.1 ③）。⏳ 残り：Codex セル（**Codex CLI 未導入でブロック**）／プロジェクト・ディレクトリのセル（`.mcp.json`＋Canvas スイッチ・`userMcpServers` は合流しない経路）
-- **母艦・実機（MulmoClaude）**：✅ **確認済み（2026-09-15）**——`config/mcp.json` 登録＋`.claude/skills/` への相対 symlink 6 本＋`config/csp.json` で地図まで描画。**サンドボックスを使うと symlink 無しでは作法が 1 つも届かず地図に到達しない**こと、**サンドボックスを外せば symlink 無しでも届く**ことを実測（§4.6.1 ①）。⏳ 残り：T2 を `--dev-plugin` で全 action
+- **母艦・実機（MulmoClaude）**：✅ **確認済み（2026-09-15）**——`config/mcp.json` 登録＋`.claude/skills/` への相対 symlink 6 本＋`config/csp.json` で地図まで描画。**サンドボックスを使うと symlink 無しでは作法が 1 つも届かず地図に到達しない**こと、**サンドボックスを外せば symlink 無しでも届く**ことを実測（§4.6.1 ①）。✅ **2026-09-22 に測り直した（1.21.0・修正は 1.18.0 から）**——**symlink 無し・サンドボックス ON** で init にプラグインの MCP（connected・13 ツール）・コマンド 11・SessionStart フックが出る。台帳の読み替えだけを外すと 0/0/無しに戻る（§4.6.1 ⑤）。⏳ 残り：T2 を `--dev-plugin` で全 action
 - **回帰**：Claude Code 単体の golden 11/11（既存ランナー）・Gemini eval（既存）・claude.ai コネクタで iframe が消えテキストが出る
 
 ---

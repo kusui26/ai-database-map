@@ -31,28 +31,18 @@ const MARKETPLACE_ADD = '/plugin marketplace add kusui26/AI-Database-Map'
 const PLUGIN_INSTALL = '/plugin install ai-database-map@ai-database-map'
 const CODEX_ADD = 'codex plugin marketplace add kusui26/AI-Database-Map'
 
-// 母艦（MulmoTerminal / MulmoClaude）の設定。MulmoClaude は既定の Docker サンドボックス内で
-// Claude Code がプラグインを解決できない（台帳がホストの絶対パスを持つ・receptron/mulmoclaude#3186）。
-// 回避策として、スキルを相対 symlink で置く——相対にするのは、ホームからの相対位置がホストと
-// コンテナで一致し、絶対パスだとコンテナ内で切れるため。
+// 母艦（MulmoTerminal / MulmoClaude）の設定。MulmoClaude 1.18.0 より前は、既定の Docker
+// サンドボックスの中で Claude Code がプラグインを解決できず（台帳がホストの絶対パスを持つ・
+// receptron/mulmoclaude#3186）、スキルを手で置く回避策が要った。1.18.0 で台帳が読み替えられる
+// ようになったので、**設定は MCP の登録と地図タイルの CSP の 2 つだけ**になった。
 const MULMO_MCP_ENTRY = `{ "id": "station-data", "url": "${MCP_URL}" }`
-const MULMO_SKILLS = [
-  'station-analysis',
-  'station-recommendation',
-  'transport-planning',
-  'market-analysis',
-  'analyze-csv',
-  'hazard-reading',
-].join(' ')
-const MULMO_SKILL_LINK = `mkdir -p ~/mulmoclaude/.claude/skills && cd ~/mulmoclaude/.claude/skills && for s in ${MULMO_SKILLS}; do ln -s "../../../.claude/plugins/marketplaces/ai-database-map/plugins/ai-database-map/skills/$s" "$s"; done`
+const MIN_MULMOCLAUDE_VERSION = '1.18.0'
 const MAP_TILE_HOSTS = [
   'https://cyberjapandata.gsi.go.jp',
   'https://disaportaldata.gsi.go.jp',
   'https://www.jma.go.jp',
 ]
 const MULMO_CSP = `mkdir -p ~/mulmoclaude/config && printf '%s' '${JSON.stringify({ 'img-src': MAP_TILE_HOSTS })}' > ~/mulmoclaude/config/csp.json`
-// サンドボックス内で Claude Code がプラグインを解決できない件（台帳がホストの絶対パスを持つ）。
-const MULMO_SANDBOX_ISSUE = 'https://github.com/receptron/mulmoclaude/issues/3186'
 
 /** コマンド 1 行＋コピー（横スクロール可・折返さない）。 */
 function Command({ text }: { text: string }) {
@@ -304,27 +294,28 @@ export default function AiIntroPage() {
 
         <h3 className="text-sm font-semibold text-slate-900">MulmoClaude</h3>
         <p className="text-sm text-slate-600">
-          MulmoClaude は既定で <span className="font-medium">Docker サンドボックス</span>
-          の中で動き、そのとき
-          <span className="font-medium">Claude Code のプラグインが読み込まれません</span>
-          （エラーは出ないまま、答えの質だけが落ちます）。Settings › MCP servers に同じ URL
-          を足したうえで、スキルのリンクを 1 回張ってください。
+          <span className="font-medium">{MIN_MULMOCLAUDE_VERSION} 以上</span>
+          を使ってください。設定は 2 つです。Settings › MCP servers に同じ URL
+          を足し（許可リストがここから作られます）、地図のタイルを許可する次の 1
+          行を実行します（再起動は不要）。
+          <span className="font-medium">スキルはプラグインのまま効きます。</span>
         </p>
-        <Command text={MULMO_SKILL_LINK} />
+        <Command text={MULMO_CSP} />
         <p className="text-xs text-slate-500">
-          リンクが要るのはサンドボックスを使うときだけです（
+          以前ここで案内していたスキルのリンク（
+          <code>~/mulmoclaude/.claude/skills</code> への
+          symlink）は不要になりました。張ってある場合は消してください——同じスキルが 2
+          回出ます。消し方は
           <a
-            href={MULMO_SANDBOX_ISSUE}
+            href="https://github.com/kusui26/AI-Database-Map/blob/main/plugins/ai-database-map/README.md#mulmoclaude-で使う"
             target="_blank"
             rel="noopener noreferrer"
             className="underline underline-offset-2"
           >
-            報告済みの不具合
+            プラグインの README
           </a>
-          が直れば不要になります）。地図のタイルは既定で読めないので、次も 1
-          回だけ実行します（再起動は不要）。
+          にあります。
         </p>
-        <Command text={MULMO_CSP} />
       </Section>
 
       <Section title="Claude.ai（web / デスクトップ / モバイル）">

@@ -78,8 +78,13 @@ export function AboutDialog({
             <section className="space-y-2">
               <h3 className="font-semibold text-slate-900">データ出典</h3>
               <p className="text-xs text-slate-500">
-                下表は指標カタログから自動生成しています。多くは出典明記で商用利用可（政府統計・国土数値情報
-                利用約款）ですが、<span className="font-medium text-amber-700">⚠</span>{' '}
+                {/* 「国土数値情報 利用約款」の空白は**意図したもの**——カタログの license が
+                    355 件すべてこの表記（`src/shared/catalog/catalog.json`）。改行で空白に
+                    なっていたのを `{' '}` に置き換えただけで、画面の表示は変わらない。
+                    直接の空白だと prettier がそこで折り返し、意図が消える。 */}
+                下表は指標カタログから自動生成しています。多くは出典明記で商用利用可（政府統計・国土数値情報{' '}
+                利用約款）ですが、
+                <span className="font-medium text-amber-700">⚠</span>{' '}
                 の付いた出典は商用利用に制限があります。ご利用の際は各原典の利用規約をご確認ください。
               </p>
               <ul className="space-y-2">

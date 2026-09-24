@@ -371,6 +371,10 @@ describe('フック', () => {
   it('hooks.json は CLAUDE_PLUGIN_ROOT のスクリプトを指し、スクリプトが実在する', () => {
     const hooks = readFileSync(`${ROOT}/hooks/hooks.json`, 'utf-8')
     expect(hooks).toContain('${CLAUDE_PLUGIN_ROOT}/scripts/session-context.sh')
+    // **引用符で囲む**——プラグインの置き場所に空白があると、囲まないとシェルが語に割って
+    // 起動に失敗する（実測：`sh: /…/space: No such file or directory`）。
+    // `plugin validate --strict` も 2.1.281 の版から警告にしている。
+    expect(hooks).toContain('"\\"${CLAUDE_PLUGIN_ROOT}/scripts/session-context.sh\\""')
     const script = readFileSync(`${ROOT}/scripts/session-context.sh`, 'utf-8')
     expect(script.startsWith('#!/bin/sh')).toBe(true)
     expect(script).toContain('"hookEventName":"SessionStart"')

@@ -95,12 +95,18 @@ with sync_playwright() as playwright:
         page.screenshot(path=f"{OUT}/ai-{width}.png", full_page=True)
         page.close()
 
-    # 参考出力（落とさない）：JSX の改行は空白になるので、日本語の途中で折り返すと
-    # 「地図の タイル」と出る。既知の箇所が残っているため情報として並べるだけにする。
+    # JSX の改行は空白になるので、日本語の途中で折り返すと「地図の タイル」と出る。
+    # ソース側は `tests/jsx-text-spacing.test.ts` が CI で見ているが、**出来上がりでも**見る
+    # ——`{' '}` や要素の境界など、JSXText の外から空白が入る道があるため。
+    #
+    # ⚠ 「 ・ 」（両側に空白のある中黒）は**リンクの区切り**（「地図アプリを開く ・ GitHub」）で、
+    # 意図したもの。先に畳んでから数える。この頁にはデータ由来の文字列
+    #（「国土交通省 国土数値情報」のような組織名＋データ名）が無いので、これで十分絞れる。
     page = browser.new_page(viewport={"width": 1280, "height": 900})
     page.goto(f"{BASE}/ai", wait_until="networkidle")
-    gaps = re.findall(r"[぀-ヿ㐀-鿿] [぀-ヿ㐀-鿿]", page.inner_text("body"))
-    print(f"  info 日本語のあいだの空白: {len(gaps)} 件 {gaps[:4]}")
+    body = page.inner_text("body").replace(" ・ ", "・")
+    gaps = re.findall(r"[぀-ヿ㐀-鿿] [぀-ヿ㐀-鿿]", body)
+    check("日本語のあいだに空白が無い", not gaps, f"{len(gaps)} 件 {gaps[:4]}")
     page.close()
     browser.close()
 

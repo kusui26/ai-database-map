@@ -221,8 +221,7 @@ export default function AiIntroPage() {
         <p className="text-xs text-slate-500">
           上の数値と文言は、リポジトリに入っている受け入れテスト（golden）を 2026-09 に実走した
           <span className="font-medium">実際の応答からの抜粋</span>
-          です。重みは質問者の条件に合わせて
-          その都度決まるので、順位が固定されているわけではありません。
+          です。重みは質問者の条件に合わせてその都度決まるので、順位が固定されているわけではありません。
         </p>
       </Section>
 

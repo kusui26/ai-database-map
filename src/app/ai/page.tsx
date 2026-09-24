@@ -364,10 +364,15 @@ export default function AiIntroPage() {
       </Section>
 
       <Section title="扱えるデータ（13 ツール）">
+        {/* 名前の札は**横に並べたいが、狭い画面では並べられない**。いちばん長い
+            `get_station_detail / rank_stations / compare_growth` は 380px あり、説明の最小幅を足すと
+            1 行に 448px 要る——430px の端末でも溢れていた（実測：320px で 112px・390px で 42px）。
+            そこで sm 未満は**縦に積む**。札は `max-w-full` で折り返せるようにし（`/` の前後で切れる）、
+            sm 以上は `shrink-0` を戻して従来どおり 1 行に並べる。 */}
         <ul className="space-y-1.5 text-sm">
           {TOOLS.map((tool) => (
-            <li key={tool.name} className="flex gap-2">
-              <code className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-700">
+            <li key={tool.name} className="flex flex-col gap-1 sm:flex-row sm:gap-2">
+              <code className="max-w-full self-start rounded bg-slate-100 px-1.5 py-0.5 text-xs break-words text-slate-700 sm:shrink-0">
                 {tool.name}
               </code>
               <span className="text-slate-600">{tool.desc}</span>

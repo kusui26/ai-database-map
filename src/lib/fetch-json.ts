@@ -18,6 +18,7 @@
  */
 
 import { errorEnvelopeSchema } from '@/shared/api'
+import { platformMessageJa, platformStatusOf } from '@/shared/platform-error'
 
 /** 共通API の失敗（状態番号を持つ）。 */
 export class HttpError extends Error {
@@ -48,8 +49,15 @@ export function messageJaOf(error: unknown, fallbackJa: string): string {
   return error instanceof HttpError ? error.message : fallbackJa
 }
 
-/** 共通API のエラー封筒から日本語を取り出す。形が違えば null。 */
+/**
+ * 共通API のエラー封筒から日本語を取り出す。形が違えば null。
+ *
+ * ⚠ **Vercel（WAF）の本文は封筒と同じ形をしている**（`{"error":{"code":"403","message":"Forbidden",…}}`）。
+ * 先に見分けないと、遮断されたときに英語の `Forbidden` を「サーバの日本語」として画面に出してしまう
+ * （2026-09-24 に WAF を `Deny` にしてから開いていた穴・`shared/platform-error.ts`）。
+ */
 function serverMessageJa(body: unknown): string | null {
+  if (platformStatusOf(body) !== null) return platformMessageJa(body)
   const parsed = errorEnvelopeSchema.safeParse(body)
   return parsed.success ? parsed.data.error.message : null
 }

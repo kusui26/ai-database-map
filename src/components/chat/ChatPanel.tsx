@@ -12,6 +12,7 @@ import { DefaultChatTransport } from 'ai'
 import { useChat } from '@ai-sdk/react'
 import { Drawer } from 'vaul'
 import { mapResponseSchema } from '@/shared/protocol'
+import { chatErrorMessageJa } from '@/shared/chat-errors'
 import { cn } from '@/lib/utils'
 import { PANEL_WIDTH_CSS, radiusLabel } from '@/shared/constants'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
@@ -148,11 +149,14 @@ function ChatBody() {
         ) : (
           <Thread messages={messages} busy={busy} />
         )}
+        {/* 失敗の理由は**サーバが決めた 1 文をそのまま**出す（以前は 429 以外をすべて
+            「応答の取得に失敗しました」で上書きしていた・2026-09-25）。選び方は shared/chat-errors.ts。 */}
         {error !== undefined && (
-          <div className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-700 ring-1 ring-amber-200">
-            {error.message.includes('429') || error.message.includes('多す')
-              ? 'リクエストが集中しています。少し時間をおいて再度お試しください。'
-              : '応答の取得に失敗しました。時間をおいて再度お試しください。'}
+          <div
+            role="alert"
+            className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-700 ring-1 ring-amber-200"
+          >
+            {chatErrorMessageJa(error, typeof navigator === 'undefined' || navigator.onLine)}
           </div>
         )}
       </div>

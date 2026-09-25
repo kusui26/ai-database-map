@@ -8,6 +8,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { fetchJson, HttpError, isClientError, messageJaOf } from '@/lib/fetch-json'
+import { PLATFORM_BLOCKED_JA } from '@/shared/platform-error'
 
 const schema = z.object({ ok: z.literal(true) })
 const OPTIONS = { timeoutMs: 1000, fallbackJa: 'データを取得できませんでした' }
@@ -65,6 +66,36 @@ describe('失敗したとき：サーバの日本語を捨てない', () => {
   it('本文が JSON でなくても、そこで止まらない', async () => {
     stubFetch(500, 'not json at all')
     await expect(fetchJson('/api/x', schema, OPTIONS)).rejects.toBeInstanceOf(HttpError)
+  })
+})
+
+describe('失敗したとき：Vercel（WAF）の本文を「サーバの日本語」と取り違えない', () => {
+  // 2026-09-24 に本番の WAF を Deny にして実測した本文そのもの。アプリの封筒と同じ形をしている。
+  const WAF_BODY = JSON.stringify({
+    error: { code: '403', message: 'Forbidden', id: 'hnd1::2z8j8-1790257960406-d619c6ead9e9' },
+  })
+
+  it('WAF の遮断は、英語の Forbidden ではなく「一時的に制限しています」と言う', async () => {
+    stubFetch(403, WAF_BODY)
+    const error = await fetchJson('/api/x', schema, OPTIONS).catch((e: unknown) => e)
+    expect(error instanceof HttpError && error.status).toBe(403)
+    expect(error instanceof Error && error.message).toBe(PLATFORM_BLOCKED_JA)
+    expect(error instanceof Error && error.message).not.toContain('Forbidden')
+  })
+
+  it('WAF 以外の Vercel のエラーも、英語を出さず呼び出し側の 1 文に倒す', async () => {
+    stubFetch(
+      502,
+      JSON.stringify({ error: { code: '502', message: 'Bad Gateway', id: 'hnd1::abc' } }),
+    )
+    const error = await fetchJson('/api/x', schema, OPTIONS).catch((e: unknown) => e)
+    expect(error instanceof Error && error.message).toBe('データを取得できませんでした（HTTP 502）')
+  })
+
+  it('アプリの封筒（code が語）は今までどおり、その日本語を使う', async () => {
+    stubFetch(403, JSON.stringify({ error: { code: 'FORBIDDEN', message: '権限がありません' } }))
+    const error = await fetchJson('/api/x', schema, OPTIONS).catch((e: unknown) => e)
+    expect(error instanceof Error && error.message).toBe('権限がありません')
   })
 })
 

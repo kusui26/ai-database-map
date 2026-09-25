@@ -24,6 +24,7 @@ import { RADII_M } from '@/shared/constants'
 import { apiError, clientIp } from '@/lib/http'
 import { stationByGrp } from '@/db/queries'
 import {
+  CHAT_TEMPERATURE,
   CHAT_TIMEOUT_MS,
   chatModel,
   chatModelId,
@@ -216,7 +217,7 @@ export async function POST(request: Request): Promise<Response> {
         system: buildSystemPrompt() + mapContext,
         tools: createTools(collector, new URL(request.url).origin),
         stopWhen: stepCountIs(MAX_TOOL_STEPS),
-        temperature: 0.2,
+        temperature: CHAT_TEMPERATURE,
         // 対話は fail-fast 寄りに。既定 2 だと無料枠 429 の retry-after を待って長く固まる。
         maxRetries: 1,
         messages: modelMessages,

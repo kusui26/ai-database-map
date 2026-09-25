@@ -3,7 +3,7 @@
 AI Database Map の **Step2＝AIネイティブ化**で実装した「AI チャット」の仕様・仕組み・使い方・今後の改善点をまとめる。実装ブロックは `plan_fable.md` の **P8a–P8d**、設計の正は `architecture.md` §4/§6/§10。
 
 - 実装：`src/ai/`（LLM 層）＋ `src/app/api/chat/`（API）＋ `src/components/chat/`（UI）
-- 既定モデル：**`gemini-flash-lite-latest`**（Google Gemini・env `GEMINI_MODEL` で差替）
+- 既定モデル：**`gemini-3.5-flash-lite`**（Google Gemini・番号つきの版に固定・env `GEMINI_MODEL` で差替）
 - 状態：**Step2 DoD 達成**（会話がクリックと同じ描画パス／ゴールデン20問 eval 20/20／ドメイン無改変の純加算）
 
 ---
@@ -89,25 +89,32 @@ AI Database Map の **Step2＝AIネイティブ化**で実装した「AI チャ�
 
 ### 4.1 モデル（プロバイダ抽象）
 
-- 既定：**`gemini-flash-lite-latest`**（`src/ai/client.ts` `DEFAULT_CHAT_MODEL`）。高速（多段でも ~3s）・ツール選択良好・**無料枠が実用的（本プロジェクト実値で 15 RPM / 500 RPD＝§6.1）**。
-- 切替：env **`GEMINI_MODEL`**（例 `gemini-flash-latest` / `gemini-3-flash-preview`）。プロバイダ抽象（`chatModel()`）の背後にあり、**1 行で差替可能**。フォールバックは Claude Haiku 4.5 / GPT-4.1-mini / Groq 等（`architecture.md` §10.2）。
+- 既定：**`gemini-3.5-flash-lite`**（`src/ai/client.ts` `DEFAULT_CHAT_MODEL`・**番号つきの版に固定**）。golden eval 38/38（2026-09-26）・1 ターンの中央値 4〜5 秒・**無料枠で実用になる 3.x の Flash-Lite**（§6.1）。
+- 温度：**送らない**（＝モデルの既定 1.0・`CHAT_TEMPERATURE`）。Google は Gemini 3 系で既定のままを強く推奨している。以前の 0.2 と eval で差が無かったので推奨に従う。
+- 切替：env **`GEMINI_MODEL`**（**番号つきの ID** を指定する）。プロバイダ抽象（`chatModel()`）の背後にあり、**1 行で差替可能**。フォールバックは Claude Haiku 4.5 / GPT-4.1-mini / Groq 等（`architecture.md` §10.2）。
+- **版を上げるとき**：Google は新しい版を 2 週間前にメールで告知する。**golden eval を流してから**上げる（手順・判断の記録は `docs/260926_chat_model_eval.md`）。
 
-**モデル・エイリアスの実体（何のモデルか）**
+**なぜ別名（`-latest`）を既定にしないか**
 
-`gemini-flash-lite-latest` / `gemini-flash-latest` は特定バージョンではなく **`-latest` ローリング・エイリアス**。Google が新リリースで**ホットスワップ**する（変更時は **2 週間前にメール通知**）。バージョンを固定したいときは**数字付き ID** を `GEMINI_MODEL` に指定する。API メタデータ（getModel）と 429 応答で確認した **2026-07 時点の実体**：
+`gemini-flash-lite-latest` / `gemini-flash-latest` は特定バージョンではなく **`-latest` ローリング・エイリアス**で、Google が新リリースで**ホットスワップ**する。2026-09 には `gemini-flash-lite-latest` の中身が **3.1 → 3.5 Flash-Lite に替わっていたが、エラーは出ず、こちらは気づかなかった**（本番の設定が一度も eval を通っていない状態になった）。
 
-| モデル ID | 実体（2026-07 時点） | 系統 | 種別 |
+- 番号つきの版なら中身は替わらない。退役すれば 404 になり、`model failure … status=404` の 1 行（§4.6）ですぐ分かる
+- `@ai-sdk/google` は ID が `gemini-3` で始まるときだけ Gemini 3 として扱う。そのため並列のツール呼び出しの 2 つ目以降（署名が付かないのが仕様）に検証を飛ばす目印を補い、ログに `AI SDK Warning … without a thoughtSignature` を出す——**無害**（`docs/260926_chat_model_eval.md` §4.4）
+- プレビュー版（`-preview`）も既定にしない（数か月で退役する）。`tests/ai-client-model.test.ts` が見張る
+
+**モデル ID の実体**（getModel・generateContent の `modelVersion`・[退役表](https://ai.google.dev/gemini-api/docs/deprecations)。2026-09-26 時点）：
+
+| モデル ID | 実体 | 系統 | 種別 |
 |---|---|---|---|
-| **`gemini-flash-lite-latest`（既定）** | **Gemini 3.1 Flash-Lite**（現行の最新安定 Flash-Lite） | 3.1 | エイリアス（可変） |
-| `gemini-flash-latest` | **Gemini 3.5 Flash**（最新安定 Flash・429 応答が `model: gemini-3.5-flash` を明示） | 3.5 | エイリアス（可変） |
+| **`gemini-3.5-flash-lite`（既定）** | **Gemini 3.5 Flash-Lite**（`3.5-flash-lite-07-2026`・2026-07-21 公開・退役予定なし） | 3.5 | 固定 |
+| `gemini-flash-lite-latest` | いまは 3.5 Flash-Lite（2026-07 は 3.1 Flash-Lite） | — | 別名（可変） |
+| `gemini-3.1-flash-lite` | Gemini 3.1 Flash-Lite（`3.1-flash-lite-05-2026`・**早ければ 2027-05-07 に退役**・後継は 3.5） | 3.1 | 固定 |
+| `gemini-flash-latest` | Gemini 3.5 Flash（2026-07 時点・429 応答が `model: gemini-3.5-flash` を明示） | 3.5 | 別名（可変） |
 | `gemini-3-flash-preview` | Gemini 3 Flash Preview | 3 | 固定（プレビュー） |
-| `gemini-3.1-flash-lite` | Gemini 3.1 Flash-Lite（stable） | 3.1 | 固定 |
 | `gemini-2.5-flash-lite` | Gemini 2.5 Flash-Lite（2025-07 stable） | 2.5 | 固定 |
 | `gemini-2.5-flash` | 新規 API ユーザーに提供終了（generateContent が 404） | 2.5 | 使用不可 |
 
-> 既定の `gemini-flash-lite-latest` は**「最新の Flash-Lite」**を追う。2026-07 現在は **Gemini 3.1 Flash-Lite** を指すが、将来のリリースで別バージョンに変わりうる（2 週間前通知あり）。挙動を固定したい本番では数字付き ID（例 `gemini-3.1-flash-lite`）の指定を推奨。
->
-> ⚠ **2026-09-25 実測：`gemini-flash-lite-latest` は `gemini-3.5-flash-lite`（思考型・getModel で `thinking: true`）を指していた**（generateContent の `modelVersion`）。上の表の 3.1 から入れ替わっている。Google は Gemini 3 で **temperature を既定の 1.0 のまま**にするよう勧めており（1.0 未満は「ループや性能低下を招きうる」）、こちらは 0.2——品質への影響は golden eval で確かめる（未実施・§9）。
+> 思考：3.1 も 3.5 も getModel では `thinking: true` で、既定の思考は**最小（`minimal`）**。eval の拒否の問では思考トークンは 0 だった。「3.5 は思考型だから遅い」わけではない（`docs/260926_chat_model_eval.md` §1・§4.3）。
 
 - 鍵：**`GEMINI_API_KEY`（サーバ専用）**。`@ai-sdk/google` の既定 env（`GOOGLE_GENERATIVE_AI_API_KEY`）ではなく本プロジェクトの `GEMINI_API_KEY` を明示注入する。
 - ライブラリ：**AI SDK v6 ライン固定**（`ai@6` ＋ `@ai-sdk/google@3` ＋ `@ai-sdk/react@3`）。
@@ -213,7 +220,7 @@ Vercel の本文はアプリの封筒と同じ形なので、見分けないと�
 ```bash
 # .env（サーバ専用・gitignore）
 GEMINI_API_KEY=＜Google AI Studio のキー＞
-# GEMINI_MODEL=gemini-flash-latest   # 任意（未指定なら gemini-flash-lite-latest）
+# GEMINI_MODEL=…   # 任意（未指定なら gemini-3.5-flash-lite。替えるなら番号つきの ID で・§4.1）
 # SUPABASE_URL / SUPABASE_ANON_KEY も必要（ツールが DB を叩くため）
 
 pnpm dev            # ローカル起動（http://localhost:3000）
@@ -248,16 +255,18 @@ Gemini 無料枠の制限は **RPM（1分あたりリクエスト）／RPD（1�
 | モデル（無料枠・本プロジェクト実値） | RPM（1分） | TPM（1分） | RPD（1日） | 1か月（≒RPD×日数） |
 |---|---|---|---|---|
 | `gemini-flash-latest`（＝Gemini 3.5 Flash） | 5 | 250K | 20 | ~600 |
-| **`gemini-flash-lite-latest`（＝Gemini 3.1 Flash-Lite・既定）** | **15** | 250K | **500** | ~15,000 |
+| **`gemini-flash-lite-latest`（＝当時の実体 Gemini 3.1 Flash-Lite・当時の既定）** | **15** | 250K | **500** | ~15,000 |
 | `gemini-3-flash-preview`（＝Gemini 3 Flash） | 5 | 250K | 20 | ~600 |
 | `gemini-2.5-flash`（固定 ID） | 5 | 250K | 20 | ~600 |
 | `gemini-2.5-flash-lite`（固定 ID） | 10 | 250K | 20 | ~600 |
 
-> **要点**：既定の **`gemini-flash-lite-latest`（＝Gemini 3.1 Flash-Lite）は 15 RPM / 500 RPD**（＝flash-latest の 20 RPD の **25 倍**）で、無料枠で唯一まともに使える。他は軒並み **RPD 20**（`gemini-flash-latest`＝3.5 Flash も同様）。API 実測（RPM=15）とも一致。
+> **2026-09-26 に既定を `gemini-3.5-flash-lite` に固定した（§4.1）。3.5 Flash-Lite の値はまだ AI Studio で確かめていない**。同日の eval で 3.5 Flash-Lite を約 250 回（うち番号つきの ID で約 160 回）呼んで、429 は 1 度も出ていない。確かめたら上表に足す。
+>
+> **要点**：当時の既定 **`gemini-flash-lite-latest`（＝Gemini 3.1 Flash-Lite）は 15 RPM / 500 RPD**（＝flash-latest の 20 RPD の **25 倍**）で、無料枠で唯一まともに使える。他は軒並み **RPD 20**（`gemini-flash-latest`＝3.5 Flash も同様）。API 実測（RPM=15）とも一致。
 >
 > **公開情報は当てにならない**：Web 上の第三者情報は日付により **15/30 RPM・250〜1,500 RPD** とばらつく（**2025-12 に無料枠 50–80% 削減**、**2026-05 の 3.1 Flash-Lite GA** 等、改定が続くため）。実際、公開値では 2.5 Flash＝250 RPD / 2.5 Flash-Lite＝1,000 RPD だが、**本プロジェクトの実値はいずれも 20 RPD** と大幅に低い。→ **必ず自分の AI Studio の値を正とする**。
 >
-> **1 チャット＝多段ツールで 2〜3 リクエスト消費**するため、既定モデルの体感は「1 日あたり 約 150〜250 対話・1 分あたり 5〜7 対話」まで。超えると 429（画面に「ただいま混雑しています」が出る・§4.6）。本格運用は有料枠/Vertex（§6.2）。
+> **1 チャット＝多段ツールで 2〜3 リクエスト消費**するため、15 RPM / 500 RPD なら体感は「1 日あたり 約 150〜250 対話・1 分あたり 5〜7 対話」まで。超えると 429（画面に「ただいま混雑しています」が出る・§4.6）。本格運用は有料枠/Vertex（§6.2）。
 
 出典：**上表の値は本プロジェクトの [AI Studio レート制限画面](https://aistudio.google.com/rate-limit)（一次ソース・2026-07-13）**。制度の背景は [Rate limits（公式・AI Studio 参照方式）](https://ai.google.dev/gemini-api/docs/rate-limits)・[Models（`-latest` の定義）](https://ai.google.dev/gemini-api/docs/models)。第三者情報（[aifreeapi](https://www.aifreeapi.com/en/posts/gemini-api-free-tier-rate-limits)／[TokenMix](https://tokenmix.ai/blog/gemini-api-free-tier-limits)）は日付でばらつき参考程度。RPM=15 は API 実測でも確認済み。
 
@@ -272,9 +281,11 @@ Gemini 無料枠の制限は **RPM（1分あたりリクエスト）／RPD（1�
 
 ## 7. 評価（eval・`src/ai/eval` ＋ `tests/chat-eval.test.ts`）
 
-- **ゴールデン20問**（駅詳細6・ランキング4・散布2・比較1・曖昧駅名2・カタログ2・データ外拒否3）を実 `/api/chat` に投げ、**期待ツール列（入力の部分一致）・パネル型・駅選択・拒否・要点文字列**を純関数で採点（`score.ts`・単体テスト済）。
-- **結果：20/20 合格**（`gemini-flash-lite-latest`）。全問で正しいツール列＋`MapResponse` が Zod 通過、拒否3問はデータパネルを出さず丁寧に断る。
-- 実行：`pnpm dev` → `EVAL=1 pnpm exec vitest run tests/chat-eval.test.ts`（無料枠のため問間スロットル＋429 リトライ内蔵）。
+- **ゴールデン 38 問**（駅詳細 6・ランキング 5・散布 3・比較 1・曖昧駅名 2・カタログ 2・**災害 13**・**データ外拒否 4**・地図文脈 2）を実 `/api/chat` に投げ、**期待ツール列（入力の部分一致）・パネル型・駅選択・拒否・要点文字列・言ってはいけない語**を純関数で採点（`score.ts`・単体テスト済）。
+- **合格の線**：全体 36/38 以上、かつ**災害・拒否は 1 問も落とさない**（17/17。人命に関わる言い方の不変条件）。
+- **記録するもの**：合否に加えて、**所要時間（p50・p95・最大）と再試行に頼った問の数**（集計は `src/ai/eval/report.ts`）。runner は失敗した問を 65 秒待って 1 度だけ流し直すので、合格数だけではモデルの不安定さが隠れる。
+- **最新の結果（2026-09-26）**：`gemini-3.5-flash-lite` × 既定温度で **38/38**（災害・拒否 17/17・再試行 0）。20 問の時代は 20/20（2026-07・P8c）、37 問で 37/37（2026-08-28・`docs/260828_eval_report.md`）。
+- 実行：サーバを起動 → `EVAL=1 pnpm exec vitest run tests/chat-eval.test.ts`（無料枠のため問間スロットル＋429 リトライ内蔵）。**モデルや温度を比べるとき**は `EVAL_REPORT`（レポートの書き出し先）と `EVAL_LABEL`（名札）を付け、サーバのログ（初回応答の打ち切り・`model failure`）も数える——手順は `docs/260926_chat_model_eval.md` §3。
 
 ---
 
@@ -293,9 +304,9 @@ Gemini 無料枠の制限は **RPM（1分あたりリクエスト）／RPD（1�
 ## 9. 今後の改善点
 
 **優先度：高（本番運用）**
-1. **本番モデル＝有料枠 or Vertex AI**：日次上限・学習利用を回避。`GEMINI_MODEL` を `gemini-flash-latest` 等に。プロバイダ抽象済みなので設定のみ。
+1. **本番モデル＝有料枠 or Vertex AI**：日次上限・学習利用を回避。`GEMINI_MODEL` を Flash 系の番号つきの版（例 `gemini-3.5-flash`）に——eval を流してから（§4.1）。プロバイダ抽象済みなので設定のみ。
 2. **レート制限を Upstash Redis 等へ**：サーバレス横断で厳密に。`rate-limit.ts` の seam を差替。
-3. ~~**エラー UX の一本化**~~——**実施（2026-09-25・§4.6）**。残るのは**モデルの検証**：`-latest` が 3.5 Flash-Lite（思考型）に替わったので、golden eval で品質と temperature 0.2 の是非を確かめ、別名のまま使うか版を固定するかを決める（§4.1）。
+3. ~~**エラー UX の一本化**~~——**実施（2026-09-25・§4.6）**。続く**モデルの検証**も**実施（2026-09-26・§4.1）**：既定を `gemini-3.5-flash-lite` に固定し、温度は送らない（`docs/260926_chat_model_eval.md`）。そこで見つけた残りの宿題（ツールへの不正な引数が「失敗」と記録される件など）は同 §6。
 
 **優先度：中（機能拡張）**
 4. **MCP 公開**：共通APIを **Model Context Protocol** のツールとしても公開すれば、外部 AI クライアント（Claude 等）も同一表面を使える（`architecture.md` §10.5-5）。「API こそがプロダクト」の外部拡張。

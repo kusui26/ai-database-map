@@ -5,19 +5,23 @@
  *   1) 別端末で dev サーバ起動：`pnpm dev`（.env に GEMINI_API_KEY・SUPABASE_* が必要）
  *   2) `EVAL=1 pnpm exec vitest run tests/chat-eval.test.ts`
  *      （ポート変更時は `CHAT_BASE_URL=http://localhost:PORT`／閾値は `EVAL_PASS`／間隔は `EVAL_THROTTLE_MS`）
- *      失敗問だけの再実行は `EVAL_ONLY=id1,id2`（モデル側の遅延で落ちた問を全 33 問流さず確認する）
+ *      失敗問だけの再実行は `EVAL_ONLY=id1,id2`（モデル側の遅延で落ちた問を全問流さず確認する）
  *      災害だけなら `EVAL_ONLY=$(node -e "…")` ——**id を手で並べない**（増えるたびに古くなる）。
  *      分野で絞りたいときは `EVAL_CATEGORY=災害`（`cases.ts` の `category` と一致するもの）。
+ *      レポートを残すなら `EVAL_REPORT=path.md`、モデルを比べるなら `EVAL_LABEL=…`（名札）も付ける
+ *      （手順は `docs/260926_chat_model_eval.md` §3）。
  *
- * Gemini 無料枠は 5 req/分・1 問が多段ツールで数回モデルを呼ぶため、問間にスロットルを入れ、
- * quota で失敗した問は 1 度だけクールダウン再試行する。合格率と各問の内訳を出力する。
+ * Gemini 無料枠は 1 分あたりの回数に上限があり（Flash-Lite は 15 回）、1 問が多段ツールで数回
+ * モデルを呼ぶため、問間にスロットルを入れ、quota で失敗した問は 1 度だけクールダウン再試行する。
+ * 合格率・各問の内訳・所要時間・再試行に頼った問を出力する（集計は `src/ai/eval/report.ts`）。
  */
 
 import { writeFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { mapResponseSchema } from '@/shared/protocol'
-import { EVAL_CASES } from '@/ai/eval/cases'
+import { EVAL_CASES, type EvalCase } from '@/ai/eval/cases'
 import { scoreCase, type EvalObserved } from '@/ai/eval/score'
+import { type EvalRun, renderReport, summarizeRuns } from '@/ai/eval/report'
 
 const ENABLED = process.env.EVAL === '1'
 const BASE_URL = process.env.CHAT_BASE_URL ?? 'http://localhost:3000'
@@ -43,10 +47,18 @@ const CRITICAL_CATEGORIES: readonly string[] = ['災害', '拒否']
 const THROTTLE_MS = Number(process.env.EVAL_THROTTLE_MS ?? '45000')
 const REQUEST_TIMEOUT_MS = 75_000
 const REPORT_PATH = process.env.EVAL_REPORT ?? ''
+/**
+ * 何を測ったか（例「gemini-3.5-flash-lite / temperature 既定」）。**モデルは runner からは見えない**
+ * （サーバの `GEMINI_MODEL` とコードの既定で決まる）ので、比べるときは流す側が名札を付ける。
+ */
+const LABEL = process.env.EVAL_LABEL ?? '（名札なし）'
 /** 実行する問を id で絞る（空＝全問）。落ちた問だけを流し直すため。 */
 const ONLY = (process.env.EVAL_ONLY ?? '').split(',').filter((id) => id.length > 0)
 /** 分野で絞る（`災害` など）。**id を手で並べない**——問が増えるたびに古くなるため。 */
 const CATEGORY = process.env.EVAL_CATEGORY ?? ''
+
+/** 失敗した問を流し直す前の待ち（無料枠の 1 分窓をまたぐ）。 */
+const RETRY_COOLDOWN_MS = 65_000
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -127,6 +139,15 @@ async function ask(query: string, selectedGrp?: string, radiusM?: number): Promi
   return { toolCalls, panelTypes, actionTypes, text, haystack, mapResponseValid, errored }
 }
 
+/** 1 問を投げ、所要時間も測る（採点するのは、この 1 回の結果）。 */
+async function timedAsk(
+  testCase: EvalCase,
+): Promise<{ readonly observed: AskResult; readonly elapsedMs: number }> {
+  const startedAt = Date.now()
+  const observed = await ask(testCase.query, testCase.selectedGrp, testCase.radiusM)
+  return { observed, elapsedMs: Date.now() - startedAt }
+}
+
 describe.skipIf(!ENABLED)(`eval — ゴールデン ${EVAL_CASES.length} 問`, () => {
   it(
     '合格率を計測する',
@@ -137,11 +158,8 @@ describe.skipIf(!ENABLED)(`eval — ゴールデン ${EVAL_CASES.length} 問`, (
           (CATEGORY.length === 0 || each.category === CATEGORY),
       )
       const cases = selected
-      const lines: string[] = ['# eval レポート', '', `対象: ${BASE_URL}`, '']
-      const rows: string[] = ['| # | id | 分野 | 合否 | 失敗チェック |', '|---|---|---|---|---|']
-      let passed = 0
+      const runs: EvalRun[] = []
       let firstAsk = true
-      const criticalFailures: string[] = []
 
       for (let index = 0; index < cases.length; index += 1) {
         const testCase = cases[index]
@@ -149,51 +167,49 @@ describe.skipIf(!ENABLED)(`eval — ゴールデン ${EVAL_CASES.length} 問`, (
         if (!firstAsk) await sleep(THROTTLE_MS)
         firstAsk = false
 
-        let observed = await ask(testCase.query, testCase.selectedGrp, testCase.radiusM)
-        // quota/一時エラーで data-map が来なければ 1 度だけ長めに待って再試行
-        if (!observed.mapResponseValid || observed.errored) {
-          await sleep(65_000)
-          observed = await ask(testCase.query, testCase.selectedGrp, testCase.radiusM)
-        }
+        const first = await timedAsk(testCase)
+        // quota/一時エラーで data-map が来なければ 1 度だけ長めに待って再試行。
+        // **合格数はこれで隠れる**ので、再試行したことは記録に残す（そのモデルの安定性）。
+        const retried = !first.observed.mapResponseValid || first.observed.errored
+        if (retried) await sleep(RETRY_COOLDOWN_MS)
+        const { observed, elapsedMs } = retried ? await timedAsk(testCase) : first
 
         const result = scoreCase(testCase.expect, observed)
-        if (result.pass) passed += 1
         const failed = result.checks.filter((check) => !check.ok).map((check) => check.name)
-        if (!result.pass && CRITICAL_CATEGORIES.includes(testCase.category)) {
-          criticalFailures.push(`${testCase.id}（${failed.join('；')}）`)
-        }
-        rows.push(
-          `| ${index + 1} | ${testCase.id} | ${testCase.category} | ${result.pass ? '✅' : '❌'} | ${failed.join('；') || '—'} |`,
-        )
+        runs.push({
+          id: testCase.id,
+          category: testCase.category,
+          pass: result.pass,
+          failedChecks: failed,
+          elapsedMs,
+          retried,
+          toolCallCount: observed.toolCalls.length,
+        })
         // 進捗ログ
         console.log(
           `[${index + 1}/${cases.length}] ${result.pass ? 'PASS' : 'FAIL'} ${testCase.id}` +
+            `  ${(elapsedMs / 1000).toFixed(1)}s${retried ? ' ↻' : ''}` +
             `  tools=${observed.toolCalls.map((call) => call.name).join(',')}` +
             `  panels=${observed.panelTypes.join(',')}` +
             (failed.length > 0 ? `  ✗ ${failed.join('；')}` : ''),
         )
       }
 
-      const rate = `${passed}/${cases.length}`
-      lines.push(
-        `**合格率: ${rate}（閾値 ${PASS_THRESHOLD}）**`,
-        '',
-        `**落としてはいけない分野（${CRITICAL_CATEGORIES.join('・')}）の失敗: ${
-          criticalFailures.length === 0 ? 'なし' : criticalFailures.join('、')
-        }**`,
-        '',
-        ...rows,
-        '',
-      )
-      const report = lines.join('\n')
+      const summary = summarizeRuns(runs, CRITICAL_CATEGORIES)
+      const report = renderReport(runs, summary, {
+        label: LABEL,
+        baseUrl: BASE_URL,
+        threshold: PASS_THRESHOLD,
+        criticalCategories: CRITICAL_CATEGORIES,
+      })
       console.log('\n' + report)
       if (REPORT_PATH.length > 0) writeFileSync(REPORT_PATH, report)
 
       // **災害・拒否は 1 問も落とさない**（絞って流したときも当てる——ここが本題だから）。
-      expect(criticalFailures, '落としてはいけない分野で失敗した').toEqual([])
+      expect(summary.criticalFailures, '落としてはいけない分野で失敗した').toEqual([])
       // 一部だけ流したとき（id・分野で絞ったとき）は、全体の下限は当てない。
       const partial = ONLY.length > 0 || CATEGORY.length > 0
-      expect(passed).toBeGreaterThanOrEqual(partial ? 0 : PASS_THRESHOLD)
+      expect(summary.passed).toBeGreaterThanOrEqual(partial ? 0 : PASS_THRESHOLD)
     },
     45 * 60 * 1000,
   )

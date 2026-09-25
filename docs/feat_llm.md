@@ -79,6 +79,7 @@ AI Database Map の **Step2＝AIネイティブ化**で実装した「AI チャ�
 | `system-prompt.ts` | 役割・カタログ要約・振る舞い規約（簡潔・幻覚禁止・データ外は拒否） |
 | `catalog-digest.ts` | メトリクス・カタログの要約（system-prompt と getMetricsCatalog で共有） |
 | `rate-limit.ts` | 簡易 IP レート制限（固定窓・純関数） |
+| `chat-errors.ts` | 失敗の**種類**を HTTP 状態で決める（`classifyChatFailure`）＋記録の 1 行（発話を伏せる・§4.6） |
 | `types.ts` | `ToolEffect` / `EffectCollector` |
 | `eval/cases.ts` `eval/score.ts` | ゴールデン20問と純関数採点（§8） |
 
@@ -105,6 +106,8 @@ AI Database Map の **Step2＝AIネイティブ化**で実装した「AI チャ�
 | `gemini-2.5-flash` | 新規 API ユーザーに提供終了（generateContent が 404） | 2.5 | 使用不可 |
 
 > 既定の `gemini-flash-lite-latest` は**「最新の Flash-Lite」**を追う。2026-07 現在は **Gemini 3.1 Flash-Lite** を指すが、将来のリリースで別バージョンに変わりうる（2 週間前通知あり）。挙動を固定したい本番では数字付き ID（例 `gemini-3.1-flash-lite`）の指定を推奨。
+>
+> ⚠ **2026-09-25 実測：`gemini-flash-lite-latest` は `gemini-3.5-flash-lite`（思考型・getModel で `thinking: true`）を指していた**（generateContent の `modelVersion`）。上の表の 3.1 から入れ替わっている。Google は Gemini 3 で **temperature を既定の 1.0 のまま**にするよう勧めており（1.0 未満は「ループや性能低下を招きうる」）、こちらは 0.2——品質への影響は golden eval で確かめる（未実施・§9）。
 
 - 鍵：**`GEMINI_API_KEY`（サーバ専用）**。`@ai-sdk/google` の既定 env（`GOOGLE_GENERATIVE_AI_API_KEY`）ではなく本プロジェクトの `GEMINI_API_KEY` を明示注入する。
 - ライブラリ：**AI SDK v6 ライン固定**（`ai@6` ＋ `@ai-sdk/google@3` ＋ `@ai-sdk/react@3`）。
@@ -141,16 +144,56 @@ MapResponse = {
 | IP レート制限 | **20 リクエスト / 60 秒**（固定窓・インメモリ） | `rate-limit.ts`。超過は 429（Retry 秒つき）。10,000 キー超で期限切れ掃除 |
 | 入力（最新発話） | **500 文字** | 超過は 400 |
 | 会話履歴の合計 | **4,000 文字** | 履歴詰め込みでの回避を防止・超過は 400 |
-| タイムアウト | **45 秒**（アプリ側 abort） | `AbortSignal.timeout`。Vercel 関数上限 `maxDuration=60` より短く graceful abort |
+| タイムアウト | **50 秒**（アプリ側 abort・`CHAT_TIMEOUT_MS`） | `AbortSignal.timeout`。Vercel 関数上限 `maxDuration=60` より短く graceful abort |
 | リトライ | **`maxRetries: 1`** | 無料枠 429 の長い retry-after 待ちを避ける |
 | 鍵未設定 | **503**（NOT_CONFIGURED） | `isChatConfigured()` |
-| エラー | 日本語の封筒メッセージ | `friendlyError()`（429/混雑は専用文言）。`toUIMessageStream({onError})` に渡す |
+| エラー | **種類ごとの日本語 1 文**（§4.6） | `classifyChatFailure()` が HTTP 状態で種類を決め、文は `shared/chat-errors.ts`。`toUIMessageStream({onError})` に渡す。**元のエラーは 1 行で記録**する |
 | ランタイム | `nodejs` | provider SDK が Node 前提 |
 
 ### 4.5 ストリーミング
 
 - **AI SDK v6 の UI message stream**（`createUIMessageStream` → SSE）。`text-delta`（本文）と `tool-*`（ツール呼び出し）を即時ストリーム、ループ完了後に **`data-map` パート**で `MapResponse` を送出。
 - クライアントは `useChat` の `onData` で `data-map` を受け、`useApplyMapActions` が地図へ即時反映。`message.parts` からパネルをインライン描画。
+- 本文が無いまま終わったターン（打ち切り・本文なしの終了）は、`data-map` の `messages` の一文を吹き出しに出す（`messageParts.displayTextOf`）。**2026-09-25 まで画面はこれを描いておらず、打ち切りは無言だった**。
+
+### 4.6 失敗の言い分けと記録（2026-09-25）
+
+**きっかけ**：Gemini が一時的に応答しなくなり、本番は 31 秒待って失敗した（同じ時間帯、API に直接投げた最小の生成にも 14.3 秒）。
+10 分ほどで自然に回復したが、3 つの弱点が見えた——①画面が 429 以外をすべて「応答の取得に失敗しました」で上書きしていた
+②サーバも提供元の 500 を「生成に失敗」と言っていた（待てば直るのに）③**ログに元のエラーが残っておらず、429 か 5xx かを
+後から確かめられなかった**。
+
+**種類は HTTP 状態で決める**（`src/ai/chat-errors.ts`・文言の正規表現はやめた）。基準は**待てば直るか**。
+
+| 種類 | 提供元の応答 | 画面の 1 文（`shared/chat-errors.ts`） |
+|---|---|---|
+| `rate_limited` | 429 | ただいま混雑しています（無料枠の上限の可能性があります）。少し時間をおいて… |
+| `unavailable` | 5xx・408・接続の失敗 | AI（Gemini）が一時的に応答できない状態です。少し時間をおいて… |
+| `rejected` | その他の 4xx（鍵・モデル名・リクエストの形） | チャットの設定に問題があり…**時間をおいても直らない可能性**があります |
+| `unknown` | それ以外 | 応答の生成に失敗しました。時間をおいて… |
+
+**画面は言い換えない**。サーバの 1 文をそのまま出し、自分で選ぶのはサーバの答えが届かなかったときだけ——
+アプリの HTTP エラー（封筒の日本語）・**WAF の遮断**（「一時的に制限しています」＝`shared/platform-error.ts`。
+Vercel の本文はアプリの封筒と同じ形なので、見分けないと英語の `Forbidden` が出る）・通信断（端末がオフラインと
+言っているときだけ「オフライン」）。
+
+**記録は失敗 1 件につき 1 行**（Vercel の Runtime Logs で `model failure` を検索）：
+
+```
+[api/chat] model failure kind=rejected status=400 provider=INVALID_ARGUMENT attempts=1
+  model=gemini-flash-lite-latest elapsed=341ms name=AI_APICallError detail="API key not valid. Please pass a valid API key."
+```
+
+- **発話は出さない**。提供元の説明に紛れていても伏せる（4 文字以上の発話を `[発話]` に置換）。説明は 160 字で切る
+- SDK の既定は失敗のたびに生のエラー（説明・応答本文）を `console.error` に出すので、`streamText` の `onError` で止めた
+  （`ToolLoopAgent` はこれを型の上で渡せないため、`streamText` を直接呼ぶ形にした。引数と停止条件は同じ）
+- 重ねて記録しないもの：同じエラーの再送・こちらの打ち切りの残骸（`TimeoutError`）・派生の
+  `NoOutputGeneratedError`（他に原因があるとき）。打ち切りは結果の 1 行（`[api/chat] aborted …`）が記録する
+
+**検証**：`tests/api-chat-errors.test.ts`（提供元の失敗を `MockLanguageModelV3` で投げ、画面に届く SSE とログの両方を見る）・
+`tests/chat-error-message.test.ts`・`tests/chat-errors.test.ts`・`tests/ui.chat-errors.smoke.py`（実ブラウザ 9 場面。
+**旧コードの本番に当てると 9 場面すべて落ちる**）。偽の API キー・存在しないモデル名で本物の Gemini にも当て、
+400 / 404 がそれぞれ `rejected` として 1 行で残ることを確かめた。
 
 ---
 
@@ -214,7 +257,7 @@ Gemini 無料枠の制限は **RPM（1分あたりリクエスト）／RPD（1�
 >
 > **公開情報は当てにならない**：Web 上の第三者情報は日付により **15/30 RPM・250〜1,500 RPD** とばらつく（**2025-12 に無料枠 50–80% 削減**、**2026-05 の 3.1 Flash-Lite GA** 等、改定が続くため）。実際、公開値では 2.5 Flash＝250 RPD / 2.5 Flash-Lite＝1,000 RPD だが、**本プロジェクトの実値はいずれも 20 RPD** と大幅に低い。→ **必ず自分の AI Studio の値を正とする**。
 >
-> **1 チャット＝多段ツールで 2〜3 リクエスト消費**するため、既定モデルの体感は「1 日あたり 約 150〜250 対話・1 分あたり 5〜7 対話」まで。超えると 429（`friendlyError` が「混雑」を返す）。本格運用は有料枠/Vertex（§6.2）。
+> **1 チャット＝多段ツールで 2〜3 リクエスト消費**するため、既定モデルの体感は「1 日あたり 約 150〜250 対話・1 分あたり 5〜7 対話」まで。超えると 429（画面に「ただいま混雑しています」が出る・§4.6）。本格運用は有料枠/Vertex（§6.2）。
 
 出典：**上表の値は本プロジェクトの [AI Studio レート制限画面](https://aistudio.google.com/rate-limit)（一次ソース・2026-07-13）**。制度の背景は [Rate limits（公式・AI Studio 参照方式）](https://ai.google.dev/gemini-api/docs/rate-limits)・[Models（`-latest` の定義）](https://ai.google.dev/gemini-api/docs/models)。第三者情報（[aifreeapi](https://www.aifreeapi.com/en/posts/gemini-api-free-tier-rate-limits)／[TokenMix](https://tokenmix.ai/blog/gemini-api-free-tier-limits)）は日付でばらつき参考程度。RPM=15 は API 実測でも確認済み。
 
@@ -239,7 +282,7 @@ Gemini 無料枠の制限は **RPM（1分あたりリクエスト）／RPD（1�
 
 - **無料枠のクォータ**が厳しい（上表）。連投・多段クエリで 429 になりやすい。本番は有料枠/Vertex 前提。
 - **レート制限がインメモリ**：サーバレス（Vercel）では**インスタンスごと**に独立するため、厳密な全体制限ではない（コメントどおり「下限」）。→ 改善は §9。
-- **ストリーム中 Gemini 429 のメッセージ**：`route.ts` は「混雑しています」を返すが、`ChatPanel` のエラー分類は `error.message` に `'429'`/`'多す'` を含むかで判定するため、**この経路の 429 は汎用文言になる**ことがある（プレストリームのレート制限 429 は「多すぎます」で拾える）。→ §9 で構造化ステータスに。
+- ~~**ストリーム中 Gemini 429 のメッセージ**：`ChatPanel` が `'429'`/`'多す'` の文字列で判定するため汎用文言になる~~——**解消（2026-09-25・§4.6）**。画面はサーバの 1 文をそのまま出す。
 - **`data-map` は応答の末尾**に届く（`assemble` はループ完了後に動く）。地図操作の「返答中の即時反映」は、テキストが流れた後・最終段でまとまって反映される（多段ツールでも UX 上は十分だが、真の逐次反映ではない）。
 - **散布の ⤢ 昇格**は、パネルとツール呼び出しの内容照合でキーを復元する。照合できない場合は昇格しない。
 - **任意半径クエリ**（例「3km 以内の人口」）は未対応（事前計算6半径のみ）。
@@ -252,7 +295,7 @@ Gemini 無料枠の制限は **RPM（1分あたりリクエスト）／RPD（1�
 **優先度：高（本番運用）**
 1. **本番モデル＝有料枠 or Vertex AI**：日次上限・学習利用を回避。`GEMINI_MODEL` を `gemini-flash-latest` 等に。プロバイダ抽象済みなので設定のみ。
 2. **レート制限を Upstash Redis 等へ**：サーバレス横断で厳密に。`rate-limit.ts` の seam を差替。
-3. **エラー UX の一本化**：`route` と `ChatPanel` を**構造化ステータス**（コード）で連携し、429/混雑・タイムアウト・鍵未設定を確実に出し分ける（現状の文字列マッチを廃止）。
+3. ~~**エラー UX の一本化**~~——**実施（2026-09-25・§4.6）**。残るのは**モデルの検証**：`-latest` が 3.5 Flash-Lite（思考型）に替わったので、golden eval で品質と temperature 0.2 の是非を確かめ、別名のまま使うか版を固定するかを決める（§4.1）。
 
 **優先度：中（機能拡張）**
 4. **MCP 公開**：共通APIを **Model Context Protocol** のツールとしても公開すれば、外部 AI クライアント（Claude 等）も同一表面を使える（`architecture.md` §10.5-5）。「API こそがプロダクト」の外部拡張。

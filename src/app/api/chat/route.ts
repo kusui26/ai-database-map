@@ -1,7 +1,7 @@
 /**
  * POST /api/chat（Step2・AIネイティブ化の中核）。
  *
- * AI SDK v6 のツールループ（ToolLoopAgent・stepCountIs 上限）で Gemini にツール（＝共通API/domain）を
+ * AI SDK v6 のツールループ（streamText・stepCountIs 上限）で Gemini にツール（＝共通API/domain）を
  * 叩かせ、テキストをストリーミングする。ループ完了後、assemble.ts が **MapResponse(Zod検証済)** を
  * data-map パートで送出する（パネル・地図操作は domain が決定的に生成＝幻覚しない）。
  *
@@ -15,7 +15,7 @@ import {
   createUIMessageStream,
   createUIMessageStreamResponse,
   stepCountIs,
-  ToolLoopAgent,
+  streamText,
   type UIMessage,
 } from 'ai'
 import { z } from 'zod'
@@ -26,10 +26,13 @@ import { stationByGrp } from '@/db/queries'
 import {
   CHAT_TIMEOUT_MS,
   chatModel,
+  chatModelId,
   isChatConfigured,
   MAX_INPUT_CHARS,
   MAX_TOOL_STEPS,
 } from '@/ai/client'
+import { chatFailureLogLine, classifyChatFailure, failuresToRecord } from '@/ai/chat-errors'
+import { CHAT_FAILURE_JA } from '@/shared/chat-errors'
 import { createCollector } from '@/ai/types'
 import { type ChatUIMessage, createTools } from '@/ai/tools'
 import { buildSystemPrompt, mapContextPrompt } from '@/ai/system-prompt'
@@ -37,7 +40,7 @@ import { assemble, textOrFallback, type ChatOutcome } from '@/ai/assemble'
 import { rateLimit } from '@/ai/rate-limit'
 
 export const runtime = 'nodejs'
-/** Vercel 関数の実行上限（秒）。アプリ側 45s abort に対する外枠（Hobby 上限 60s）。 */
+/** Vercel 関数の実行上限（秒）。アプリ側 50s abort（`CHAT_TIMEOUT_MS`）に対する外枠（Hobby 上限 60s）。 */
 export const maxDuration = 60
 
 // --- 入力（useChat 互換：UIMessage[]） ----------------------------------
@@ -85,13 +88,29 @@ function outcomeOf(aborted: boolean, failureCount: number): ChatOutcome {
   return failureCount > 0 ? 'failed' : 'ok'
 }
 
-/** ストリームエラーをユーザー向けの短い日本語に変換（無料枠 429/混雑は専用文言に）。 */
-function friendlyError(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error)
-  if (/429|quota|rate|RESOURCE_EXHAUSTED|overloaded|503|UNAVAILABLE/i.test(message)) {
-    return 'ただいま混雑しています（無料枠の上限の可能性があります）。少し時間をおいて再度お試しください。'
+/**
+ * ストリームの失敗を、利用者に見せる 1 文にする。**種類はエラーの中身（HTTP 状態）で決める**——
+ * 以前は文言の正規表現で判定しており、提供元の 500 のような一時的な不調を「生成に失敗」に落としていた
+ * （2026-09-25 の障害）。文そのものは `shared/chat-errors.ts` が持ち、画面も同じ語彙で読む。
+ */
+function failureSentence(error: unknown): string {
+  return CHAT_FAILURE_JA[classifyChatFailure(error).kind]
+}
+
+/**
+ * 失敗を 1 件ずつ記録する。**元のエラーを捨てない**——捨てると、次の障害で原因が分からない
+ * （2026-09-25）。重複・打ち切りの残骸・派生のエラーを除く規則は `failuresToRecord`。
+ */
+function logFailures(
+  failures: readonly unknown[],
+  aborted: boolean,
+  startedAt: number,
+  utterances: string[],
+): void {
+  const context = { modelId: chatModelId(), elapsedMs: Date.now() - startedAt, utterances }
+  for (const failure of failuresToRecord(failures, aborted)) {
+    console.error(chatFailureLogLine(classifyChatFailure(failure), context))
   }
-  return '応答の生成に失敗しました。時間をおいて再度お試しください。'
 }
 
 /** text だけの UIMessage を構築（id は convertToModelMessages で不要）。 */
@@ -168,6 +187,8 @@ export async function POST(request: Request): Promise<Response> {
 
   // 地図で選択中の駅を LLM の文脈に（P8e）。未選択・解決失敗なら文脈なしで続行（安全側）。
   const mapContext = await resolveMapContext(parsed.data.selectedGrp, parsed.data.radiusM)
+  // 失敗を記録するとき、提供元の説明に紛れた発話を伏せるために使う（ログには決して出さない）。
+  const utterances = conversation.map((message) => message.text)
 
   // 4) ツールループ＋ストリーミング
   const uiMessages = conversation.map((message) => textMessage(message.role, message.text))
@@ -183,26 +204,34 @@ export async function POST(request: Request): Promise<Response> {
           data: mapResponseSchema.parse(assemble(effects, '')),
         })
       })
-      const agent = new ToolLoopAgent({
+      const modelMessages = await convertToModelMessages(uiMessages)
+      const abortSignal = AbortSignal.timeout(CHAT_TIMEOUT_MS)
+      const failures: unknown[] = []
+      // ツールループ（stopWhen で最大 MAX_TOOL_STEPS 回）。以前は ToolLoopAgent 経由だったが、
+      // あれは streamText の薄い包みで `onError` を型の上で渡せない。SDK の既定の `onError` は
+      // 失敗のたびに生のエラー（提供元の説明・応答本文）を console.error に出すので、発話が紛れうる。
+      // 記録は logFailures の 1 行（発話を伏せる）に一本化するため、ここで受け取って握る。
+      const result = streamText({
         model: chatModel(),
-        instructions: buildSystemPrompt() + mapContext,
+        system: buildSystemPrompt() + mapContext,
         tools: createTools(collector, new URL(request.url).origin),
         stopWhen: stepCountIs(MAX_TOOL_STEPS),
         temperature: 0.2,
         // 対話は fail-fast 寄りに。既定 2 だと無料枠 429 の retry-after を待って長く固まる。
         maxRetries: 1,
+        messages: modelMessages,
+        abortSignal,
+        onError: ({ error }) => {
+          failures.push(error)
+        },
       })
-      const modelMessages = await convertToModelMessages(uiMessages)
-      const abortSignal = AbortSignal.timeout(CHAT_TIMEOUT_MS)
-      const result = await agent.stream({ messages: modelMessages, abortSignal })
-      // テキスト/ツールパートを即時ストリーム。内側にも friendlyError を渡す
+      // テキスト/ツールパートを即時ストリーム。内側にも failureSentence を渡す
       // （渡さないと SDK 既定の英語 "An error occurred." がクライアントに届く）。
-      const failures: unknown[] = []
       writer.merge(
         result.toUIMessageStream<ChatUIMessage>({
           onError: (error) => {
             failures.push(error)
-            return friendlyError(error)
+            return failureSentence(error)
           },
         }),
       )
@@ -221,14 +250,15 @@ export async function POST(request: Request): Promise<Response> {
         assemble(effects, textOrFallback(text, panelCount, outcome)),
       )
       writer.write({ type: 'data-map', id: MAP_PART_ID, data: mapResponse })
-      // 1 行サマリ（本番での再発検知用・発話内容は出さない）。
+      // 失敗の中身を 1 件ずつ（種類・HTTP 状態・回数）。続けて 1 行サマリ。どちらも発話は出さない。
+      logFailures(failures, abortSignal.aborted, startedAt, utterances)
       console.info(
         `[api/chat] ${outcome} ${Date.now() - startedAt}ms effects=${effects.length} panels=${panelCount} text=${text.length > 0}`,
       )
     },
     onError: (error) => {
-      console.error('[api/chat] stream error:', error instanceof Error ? error.message : error)
-      return friendlyError(error)
+      logFailures([error], false, startedAt, utterances)
+      return failureSentence(error)
     },
   })
 

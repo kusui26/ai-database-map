@@ -29,3 +29,17 @@ export function mapResponseOf(parts: readonly Part[]): MapResponse | null {
   }
   return null
 }
+
+/**
+ * 吹き出しに出す本文。**モデルの本文が無いときは、サーバが用意した一文に倒す**。
+ *
+ * サーバは本文が空で終わったターン（打ち切り・本文なしの正常終了）に、状況を言う一文を
+ * data-map の `messages` に載せている（`assemble.ts` の `textOrFallback`・fail-soft F2）。
+ * ところが画面は text パートしか描いておらず、**その一文が一度も表示されていなかった**
+ * ——打ち切りでは本文もエラーも出ず、利用者には無言に見えた（2026-09-25 に判明）。
+ */
+export function displayTextOf(parts: readonly Part[]): string {
+  const streamed = textOf(parts)
+  if (streamed.length > 0) return streamed
+  return mapResponseOf(parts)?.messages.at(-1)?.text ?? ''
+}

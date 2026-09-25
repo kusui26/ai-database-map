@@ -59,8 +59,14 @@ export function isChatConfigured(): boolean {
   return key !== undefined && key.length > 0
 }
 
-/** 初回チャンク待ちの打ち切り（再試行してよい失敗かを型で判別するための専用エラー）。 */
-class FirstChunkTimeoutError extends Error {
+/**
+ * 初回チャンク待ちの打ち切り（再試行してよい失敗かを型で判別するための専用エラー）。
+ *
+ * 2 回とも打ち切ると、このエラーがそのまま SDK を抜けてくる（`APICallError` ではないので SDK は
+ * 再試行せず、`handleFetchError` も包まない）。**提供元が時間内に応答しなかった**という意味なので、
+ * 分類では一時的な不調として扱う（`chat-errors.ts`）——2026-09-25 の障害の「31 秒」はこれだった。
+ */
+export class FirstChunkTimeoutError extends Error {
   constructor(timeoutMs: number) {
     super(`モデルの初回応答が ${timeoutMs}ms 以内に得られませんでした`)
     this.name = 'FirstChunkTimeoutError'

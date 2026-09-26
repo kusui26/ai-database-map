@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
+import { readUIMessageStream, type UIMessageChunk } from 'ai'
 import { requireEntry } from '@/shared/catalog'
 import { type Panel } from '@/shared/protocol'
 import { buildPanelGroups, toolCallsOf, type ToolCall } from '@/components/chat/panelGroups'
@@ -291,5 +292,182 @@ describe('ファミリ名で呼ばれた場合の昇格復元', () => {
       order: 'asc', // 出力（解決後）の並び順を採る
       excludeLowN: false,
     })
+  })
+})
+
+/**
+ * 失敗した呼び出しを ⤢ の照合に使わない（2026-09-26）。
+ *
+ * パーツは手で組まず、**サーバが送るのと同じチャンクの並び**（実物から採取）を、画面（useChat）と
+ * 同じ組み立て（`readUIMessageStream`）に通して作る。手で組むと実物と形がずれる——実際、SDK が弾いた
+ * 既知のツールの呼び出しは、引数を `input` ではなく `rawInput` に持つ。
+ */
+describe('失敗した呼び出しは ⤢ の照合に使わない', () => {
+  const X = 'pop_gr_2020_2015_2km'
+  const Y = 'rate_covid'
+  const TOOL_FAILURE = 'ツールの呼び出しに失敗しました。'
+
+  /** 実行まで進んだ呼び出し（成功でも、ツールが失敗を結果として返した場合でも同じ並び）。 */
+  function executedCall(
+    toolCallId: string,
+    toolName: string,
+    input: Record<string, unknown>,
+    output: Record<string, unknown>,
+  ): UIMessageChunk[] {
+    return [
+      { type: 'tool-input-start', toolCallId, toolName },
+      { type: 'tool-input-delta', toolCallId, inputTextDelta: JSON.stringify(input) },
+      { type: 'tool-input-available', toolCallId, toolName, input },
+      { type: 'tool-output-available', toolCallId, output },
+    ]
+  }
+
+  /** 実行が投げた呼び出し（`input` を持ったまま失敗する）。 */
+  function thrownCall(toolCallId: string, input: Record<string, unknown>): UIMessageChunk[] {
+    return [
+      { type: 'tool-input-start', toolCallId, toolName: 'compareGrowth' },
+      { type: 'tool-input-available', toolCallId, toolName: 'compareGrowth', input },
+      { type: 'tool-output-error', toolCallId, errorText: TOOL_FAILURE },
+    ]
+  }
+
+  /** SDK が弾いた呼び出し（形の合わない引数）。 */
+  function rejectedCall(toolCallId: string, input: Record<string, unknown>): UIMessageChunk[] {
+    return [
+      { type: 'tool-input-start', toolCallId, toolName: 'compareGrowth' },
+      { type: 'tool-input-delta', toolCallId, inputTextDelta: JSON.stringify(input) },
+      {
+        type: 'tool-input-error',
+        toolCallId,
+        toolName: 'compareGrowth',
+        input,
+        errorText: TOOL_FAILURE,
+      },
+      { type: 'tool-output-error', toolCallId, errorText: TOOL_FAILURE },
+    ]
+  }
+
+  /** 画面と同じ組み立てに通して、応答のパーツを得る。 */
+  async function partsFrom(calls: readonly UIMessageChunk[]): Promise<readonly { type: string }[]> {
+    const chunks: UIMessageChunk[] = [
+      { type: 'start', messageId: 'm1' },
+      { type: 'start-step' },
+      ...calls,
+      { type: 'finish-step' },
+      { type: 'finish' },
+    ]
+    const stream = new ReadableStream<UIMessageChunk>({
+      start(controller) {
+        chunks.forEach((chunk) => controller.enqueue(chunk))
+        controller.close()
+      },
+    })
+    const messages = await Array.fromAsync(readUIMessageStream({ stream }))
+    return messages.at(-1)?.parts ?? []
+  }
+
+  /** 存在しない都道府県名。ツールは失敗を結果として返す（`tool-specs.ts` の構造化エラー）。 */
+  const UNKNOWN_PREFECTURE = {
+    error: '未知の都道府県: 千葉市',
+    hint: '都道府県は正式名（例「神奈川県」「東京都」）で指定してください。',
+  }
+
+  it('散布：「千葉市」で失敗し「千葉県」で呼び直した → ⤢ は呼び直した方の条件で開く', async () => {
+    const parts = await partsFrom([
+      ...executedCall(
+        'c1',
+        'compareGrowth',
+        { x: X, y: Y, prefectures: ['千葉市'] },
+        UNKNOWN_PREFECTURE,
+      ),
+      ...executedCall(
+        'c2',
+        'compareGrowth',
+        { x: X, y: Y, prefectures: ['千葉県'] },
+        { resolvedMetrics: { x: X, y: Y }, prefectures: ['千葉県'], pointCount: 3 },
+      ),
+    ])
+    const promotion = buildPanelGroups([scatter], toolCallsOf(parts))[0]?.promotion
+    expect(promotion?.kind === 'scatter' ? promotion.prefectures : null).toEqual(['千葉県'])
+  })
+
+  it('ランキング：同じく、失敗を返した呼び出しの都道府県を使わない', async () => {
+    const metric = 'pop_gr_2020_2015_1km'
+    const parts = await partsFrom([
+      ...executedCall(
+        'c1',
+        'rankStations',
+        { metric, prefectures: ['千葉市'] },
+        UNKNOWN_PREFECTURE,
+      ),
+      ...executedCall(
+        'c2',
+        'rankStations',
+        { metric, prefectures: ['千葉県'] },
+        { resolvedMetric: metric, prefectures: ['千葉県'], order: 'desc' },
+      ),
+    ])
+    const promotion = buildPanelGroups([rankingTable], toolCallsOf(parts))[0]?.promotion
+    expect(promotion?.kind === 'ranking' ? promotion.prefectures : null).toEqual(['千葉県'])
+  })
+
+  it('実行が投げた呼び出しは input を持ったまま失敗するので、状態で除く', async () => {
+    const parts = await partsFrom([
+      ...thrownCall('c1', { x: X, y: Y, operators: ['東日本旅客鉄道'] }),
+      ...executedCall('c2', 'compareGrowth', { x: X, y: Y }, { resolvedMetrics: { x: X, y: Y } }),
+    ])
+    expect(parts.filter((part) => part.type === 'tool-compareGrowth')).toHaveLength(2)
+    expect(toolCallsOf(parts)).toHaveLength(1)
+    const promotion = buildPanelGroups([scatter], toolCallsOf(parts))[0]?.promotion
+    expect(promotion?.kind === 'scatter' ? promotion.operators : null).toEqual([])
+  })
+
+  it('SDK が弾いた呼び出し（形の合わない引数）は、引数を rawInput に持つ。これも除く', async () => {
+    const parts = await partsFrom(
+      rejectedCall('c1', { x: X, y: Y, operators: ['新幹線'], routeTypes: ['1'] }),
+    )
+    // 画面の組み立ては、失敗した呼び出しの引数を input ではなく rawInput に置く
+    expect(parts).toContainEqual(
+      expect.objectContaining({
+        type: 'tool-compareGrowth',
+        state: 'output-error',
+        input: undefined,
+      }),
+    )
+    expect(toolCallsOf(parts)).toEqual([])
+  })
+
+  it('「該当 0 件」は失敗ではない（空の図を生んでいる）ので除かない', async () => {
+    const zeroMatches = {
+      resolvedMetrics: { x: X, y: Y },
+      operators: ['新幹線'],
+      pointCount: 0,
+      clusterCount: 0,
+      note: '半径1km（既定）・2015→2020年（既定）・該当が 0 件でした。',
+    }
+    const parts = await partsFrom(
+      executedCall('c1', 'compareGrowth', { x: X, y: Y, operators: ['新幹線'] }, zeroMatches),
+    )
+    expect(toolCallsOf(parts)).toHaveLength(1)
+  })
+
+  it('実行中の呼び出しは残す（パネルは出力より先に届くので、その間は入力で照合する）', async () => {
+    const parts = await partsFrom([
+      { type: 'tool-input-start', toolCallId: 'c1', toolName: 'compareGrowth' },
+      {
+        type: 'tool-input-available',
+        toolCallId: 'c1',
+        toolName: 'compareGrowth',
+        input: { x: X, y: Y },
+      },
+    ])
+    expect(toolCallsOf(parts)).toEqual([
+      { name: 'compareGrowth', input: { x: X, y: Y }, output: {} },
+    ])
+  })
+
+  it('承認されなかった呼び出し（output-denied）も除く', () => {
+    const denied = { type: 'tool-compareGrowth', state: 'output-denied', input: { x: X, y: Y } }
+    expect(toolCallsOf([denied])).toEqual([])
   })
 })

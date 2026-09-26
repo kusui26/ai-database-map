@@ -136,6 +136,33 @@ describe('canvasTargetOf（キャンバスに出す対象・260802）', () => {
     const second = assistant('a2', [scatter], SCATTER_INPUT)
     expect(canvasTargetOf([first])?.key).not.toBe(canvasTargetOf([second])?.key)
   })
+
+  it('失敗を返した呼び出しの条件では開かない（「千葉市」で失敗し「千葉県」で呼び直した）', () => {
+    // 形は tests/chat-panel-groups.test.ts で画面と同じ組み立てから確かめたもの
+    const message: ChatUIMessage = {
+      id: 'a1',
+      role: 'assistant',
+      parts: [
+        {
+          type: 'tool-compareGrowth',
+          toolCallId: 'c1',
+          state: 'output-available',
+          input: { ...SCATTER_INPUT, prefectures: ['千葉市'] },
+          output: { error: '未知の都道府県: 千葉市', hint: '都道府県は正式名で指定してください。' },
+        },
+        {
+          type: 'tool-compareGrowth',
+          toolCallId: 'c2',
+          state: 'output-available',
+          input: { ...SCATTER_INPUT, prefectures: ['千葉県'] },
+          output: { resolvedMetrics: SCATTER_INPUT, prefectures: ['千葉県'] },
+        },
+        { type: 'data-map', data: { messages: [], mapActions: [], panels: [scatter] } },
+      ],
+    }
+    const promotion = canvasTargetOf([message])?.promotion
+    expect(promotion?.kind === 'scatter' ? promotion.prefectures : null).toEqual(['千葉県'])
+  })
 })
 
 describe('chipLabel（スレッドに残す参照チップの文言）', () => {

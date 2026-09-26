@@ -5,6 +5,7 @@
  *   駅詳細 = stationCard ＋ 本文（trendChart/statTable/barChart）／ランキング = rankingTable ／散布 = scatter。
  * ここではその境界を復元し、各グループの昇格先（ドロワー/モーダル）に渡す実パラメータを、
  * **ツール呼び出しの入力**（metric・都道府県・x/y キー等）と内容照合して復元する（protocol は無改変）。
+ * 照合に使うのは、パネルを生みうる呼び出しだけ（失敗したものは除く＝`toolCallsOf`）。
  */
 
 import { type Panel } from '@/shared/protocol'
@@ -188,24 +189,44 @@ export function buildPanelGroups(
   return groups
 }
 
-/** useChat のメッセージ parts からツール呼び出し（名前＋入力＋出力）を抽出する。 */
+/** パネルを生まずに終わった呼び出しの状態（SDK が弾いた・実行が投げた／承認されなかった）。 */
+const FAILED_STATES: ReadonlySet<string> = new Set(['output-error', 'output-denied'])
+
+/**
+ * パネルを生まなかった呼び出しか。どれも副産物（パネル）を生まないのに、照合に残すと、同じキーで
+ * 後から成功した呼び出しより**先に**拾われ、⤢ もキャンバスも失敗した方の引数で開いてしまう。
+ *
+ * - 出力に `error`：ツールが失敗を結果として返した（`tool-specs.ts` の `{ error, hint }`）。
+ *   **実際に起きるのはこれ**——例：存在しない都道府県名（「千葉市」）で失敗し、「千葉県」で呼び直して
+ *   図が出ても、⤢ もキャンバスも「千葉市」で開いていた（状態は `output-available`、`input` もある）
+ * - `output-error`：実行が投げた（`input` を持ったまま）。SDK が弾いた形の合わない引数もこの状態だが、
+ *   そのとき引数は `rawInput` に入り `input` は空なので、照合には元から当たらない
+ * - `output-denied`：承認されず、実行されなかった
+ *
+ * 「該当 0 件」は失敗ではない（空の図を生み、出力は `note` で伝える）ので除かない。
+ */
+function hasFailed(record: Record<string, unknown>): boolean {
+  const state = readString(record.state)
+  if (state !== undefined && FAILED_STATES.has(state)) return true
+  return typeof asRecord(record.output).error === 'string'
+}
+
+/** ツールのパーツなら呼び出した名前（`tool-<name>` か `dynamic-tool` の toolName）。 */
+function toolNameOf(type: string, record: Record<string, unknown>): string | undefined {
+  if (type.startsWith('tool-')) return type.slice('tool-'.length)
+  return type === 'dynamic-tool' ? readString(record.toolName) : undefined
+}
+
+/**
+ * useChat のメッセージ parts から、**パネルを生みうる**ツール呼び出し（名前＋入力＋出力）を抽出する。
+ * 失敗した呼び出しは除く（`hasFailed`）。実行中のものは残す——パネル（data-map）は出力より先に届くので、
+ * その間の照合はこの呼び出しの入力に頼る。
+ */
 export function toolCallsOf(parts: readonly { type: string }[]): ToolCall[] {
-  const calls: ToolCall[] = []
-  for (const part of parts) {
-    if (part.type.startsWith('tool-')) {
-      const record = asRecord(part)
-      calls.push({
-        name: part.type.slice('tool-'.length),
-        input: asRecord(record.input),
-        output: asRecord(record.output),
-      })
-    } else if (part.type === 'dynamic-tool') {
-      const record = asRecord(part)
-      const name = readString(record.toolName)
-      if (name !== undefined) {
-        calls.push({ name, input: asRecord(record.input), output: asRecord(record.output) })
-      }
-    }
-  }
-  return calls
+  return parts.flatMap((part) => {
+    const record = asRecord(part)
+    const name = toolNameOf(part.type, record)
+    if (name === undefined || hasFailed(record)) return []
+    return [{ name, input: asRecord(record.input), output: asRecord(record.output) }]
+  })
 }

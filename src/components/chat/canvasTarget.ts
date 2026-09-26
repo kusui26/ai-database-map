@@ -9,10 +9,10 @@
  * (3) ユーザーが閉じたあと勝手に開き直さない、を同時に満たす（§5）。
  */
 
-import { type Promotion } from '@/stores/chatStore'
+import { type PanelPromotion, type Promotion } from '@/shared/promotion'
 import { type ChatUIMessage } from './types'
-import { buildPanelGroups, toolCallsOf } from './panelGroups'
-import { mapResponseOf } from './messageParts'
+import { buildPanelGroups } from './panelGroups'
+import { mapResponseOf, panelPromotionsOf } from './messageParts'
 
 export type CanvasTarget = {
   /** 回答 ID ＋ 条件。同じ図なら同じ値になる。 */
@@ -21,7 +21,7 @@ export type CanvasTarget = {
 }
 
 /** キャンバスで開ける昇格か（駅詳細は右ドロワーが担当する）。 */
-function isCanvasKind(promotion: Promotion | { readonly kind: string } | null): boolean {
+function isCanvasKind(promotion: PanelPromotion | null): promotion is Promotion {
   return promotion !== null && (promotion.kind === 'scatter' || promotion.kind === 'ranking')
 }
 
@@ -36,10 +36,8 @@ export function canvasTargetOf(messages: readonly ChatUIMessage[]): CanvasTarget
   const response = mapResponseOf(message.parts)
   if (response === null) return null
 
-  const groups = buildPanelGroups(response.panels, toolCallsOf(message.parts))
-  const promotions = groups
-    .map((group) => group.promotion)
-    .filter((promotion): promotion is Promotion => isCanvasKind(promotion))
+  const groups = buildPanelGroups(response.panels, panelPromotionsOf(message.parts))
+  const promotions = groups.map((group) => group.promotion).filter(isCanvasKind)
   const promotion = promotions[promotions.length - 1]
   if (promotion === undefined) return null
 

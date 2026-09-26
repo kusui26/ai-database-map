@@ -7,33 +7,7 @@
 
 import { create } from 'zustand'
 import { type DetailTab } from '@/shared/constants'
-import { type Order } from '@/shared/api'
-
-/** ⤢ 昇格の対象（クリックUIと同じモーダルへ・plan_fable §2.4 ルール③）。 */
-export type Promotion =
-  | {
-      readonly kind: 'ranking'
-      readonly metricKey: string
-      readonly prefectures: readonly string[]
-      /** 運営会社・路線・事業者種別の絞り込み（260801・散布と同じ意味）。 */
-      readonly operators: readonly string[]
-      readonly routes: readonly string[]
-      readonly routeTypes: readonly number[]
-      readonly order: Order
-      readonly excludeLowN: boolean
-    }
-  | {
-      readonly kind: 'scatter'
-      readonly xKey: string
-      readonly yKey: string
-      readonly prefectures: readonly string[]
-      /** 運営会社の絞り込み（260730・空＝全社）。 */
-      readonly operators: readonly string[]
-      /** 路線・事業者種別の絞り込み（260731・空＝全路線。両者は OR）。 */
-      readonly routes: readonly string[]
-      readonly routeTypes: readonly number[]
-      readonly excludeLowN: boolean
-    }
+import { type Promotion } from '@/shared/promotion'
 
 type ChatStore = {
   /** 左サイドチャットパネル（モバイルはボトムシート）の開閉。 */

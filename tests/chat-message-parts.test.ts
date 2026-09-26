@@ -7,8 +7,9 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { displayTextOf } from '@/components/chat/messageParts'
+import { displayTextOf, panelPromotionsOf } from '@/components/chat/messageParts'
 import { type ChatUIMessage } from '@/components/chat/types'
+import { type RankingPromotion } from '@/shared/promotion'
 
 type Part = ChatUIMessage['parts'][number]
 
@@ -44,5 +45,39 @@ describe('吹き出しの本文', () => {
   it('どちらも無ければ空（吹き出しを出さない）', () => {
     expect(displayTextOf([])).toBe('')
     expect(displayTextOf([dataMap(null)])).toBe('')
+  })
+})
+
+/**
+ * ⤢ の条件（data-promotions）。サーバが図を生んだ副産物から作り、パネルと同じ並びで送る。
+ * 画面は形を確かめてから使う——合わなければ使わない（推し量った条件で開くより安全）。
+ */
+describe('⤢ の条件（data-promotions）', () => {
+  const ranking: RankingPromotion = {
+    kind: 'ranking',
+    metricKey: 'pax_2024',
+    order: 'desc',
+    prefectures: ['千葉県'],
+    operators: [],
+    routes: [],
+    routeTypes: [],
+    excludeLowN: false,
+  }
+
+  it('最後の data-promotions を読む（途中経過は段階的に上書きされる）', () => {
+    const parts = [
+      { type: 'data-promotions', data: [null] },
+      { type: 'data-promotions', data: [ranking] },
+    ]
+    expect(panelPromotionsOf(parts)).toEqual([ranking])
+  })
+
+  it('届いていなければ空（⤢ を出さない）', () => {
+    expect(panelPromotionsOf([textPart('こんにちは'), dataMap(null)])).toEqual([])
+  })
+
+  it('形が合わなければ空（壊れた条件で開かない）', () => {
+    const broken = [{ type: 'data-promotions', data: [{ kind: 'ranking', metricKey: 1 }] }]
+    expect(panelPromotionsOf(broken)).toEqual([])
   })
 })

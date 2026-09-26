@@ -10,8 +10,8 @@ import { type MapResponse } from '@/shared/protocol'
 import { PanelStack } from '@/components/panels/PanelRenderer'
 import { useMapUrlState } from '@/components/map/useMapUrlState'
 import { type ChatUIMessage } from './types'
-import { buildPanelGroups, toolCallsOf } from './panelGroups'
-import { displayTextOf, mapResponseOf, textOf } from './messageParts'
+import { buildPanelGroups } from './panelGroups'
+import { displayTextOf, mapResponseOf, panelPromotionsOf, textOf } from './messageParts'
 import { PanelChip } from './PanelChip'
 import { RichText } from './richText'
 
@@ -43,7 +43,7 @@ export function ChatMessage({ message }: { message: ChatUIMessage }) {
   const text = displayTextOf(message.parts)
   const response = mapResponseOf(message.parts)
   const groups =
-    response === null ? [] : buildPanelGroups(response.panels, toolCallsOf(message.parts))
+    response === null ? [] : buildPanelGroups(response.panels, panelPromotionsOf(message.parts))
   const dict = response === null ? new Map<string, string>() : nameToGrp(response)
 
   return (

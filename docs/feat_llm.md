@@ -250,25 +250,28 @@ Gemini 無料枠の制限は **RPM（1分あたりリクエスト）／RPD（1�
 - **`-latest` エイリアスの制限は、その時点で指す実体モデルに従う**（実体が変われば制限も変わる）。
 - Google 公式のレート制限ページは**モデル別の数値掲載をやめ、AI Studio で各自確認**する方式（実容量は変動しうる）。
 
-**本プロジェクトの実値（[AI Studio レート制限画面](https://aistudio.google.com/rate-limit) の表示・2026-07-13）**。Google 公式はモデル別数値の掲載をやめ**この画面（プロジェクト単位・随時変動）が唯一の正**なので、下表はその実値：
+**本プロジェクトの実値（[AI Studio レート制限画面](https://aistudio.google.com/rate-limit) の表示・2026-07-13。既定の 3.5 Flash-Lite の行だけ 2026-09-26）**。Google 公式はモデル別数値の掲載をやめ**この画面（プロジェクト単位・随時変動）が唯一の正**なので、下表はその実値：
 
 | モデル（無料枠・本プロジェクト実値） | RPM（1分） | TPM（1分） | RPD（1日） | 1か月（≒RPD×日数） |
 |---|---|---|---|---|
+| **`gemini-3.5-flash-lite`（＝Gemini 3.5 Flash-Lite・既定）** | **15** | 250K | **500** | ~15,000 |
 | `gemini-flash-latest`（＝Gemini 3.5 Flash） | 5 | 250K | 20 | ~600 |
-| **`gemini-flash-lite-latest`（＝当時の実体 Gemini 3.1 Flash-Lite・当時の既定）** | **15** | 250K | **500** | ~15,000 |
+| `gemini-flash-lite-latest`（＝当時の実体 Gemini 3.1 Flash-Lite・当時の既定） | 15 | 250K | 500 | ~15,000 |
 | `gemini-3-flash-preview`（＝Gemini 3 Flash） | 5 | 250K | 20 | ~600 |
 | `gemini-2.5-flash`（固定 ID） | 5 | 250K | 20 | ~600 |
 | `gemini-2.5-flash-lite`（固定 ID） | 10 | 250K | 20 | ~600 |
 
-> **2026-09-26 に既定を `gemini-3.5-flash-lite` に固定した（§4.1）。3.5 Flash-Lite の値はまだ AI Studio で確かめていない**。同日の eval で 3.5 Flash-Lite を約 250 回（うち番号つきの ID で約 160 回）呼んで、429 は 1 度も出ていない。確かめたら上表に足す。
+> **要点**：無料枠でまともに使えるのは **3.x の Flash-Lite（15 RPM / 500 RPD）**だけ（＝flash-latest の 20 RPD の **25 倍**）。既定の `gemini-3.5-flash-lite`（2026-09-26〜）も、7 月の既定（3.1 Flash-Lite）と同じ値である。他は軒並み **RPD 20**（`gemini-flash-latest`＝3.5 Flash も同様）。API 実測（RPM=15）とも一致。
 >
-> **要点**：当時の既定 **`gemini-flash-lite-latest`（＝Gemini 3.1 Flash-Lite）は 15 RPM / 500 RPD**（＝flash-latest の 20 RPD の **25 倍**）で、無料枠で唯一まともに使える。他は軒並み **RPD 20**（`gemini-flash-latest`＝3.5 Flash も同様）。API 実測（RPM=15）とも一致。
+> **別名で呼んだ分も、その時点の実体の枠に数えられる**：モデル検証の日（2026-09-26）の使用量の表示は RPD 282/500 で、その日に別名（`gemini-flash-lite-latest`）と番号つきの ID で 3.5 Flash-Lite を呼んだ数の合計（約 270 回）とほぼ一致した。
+>
+> **1 回の呼び出しは約 7〜8K トークン**（システムプロンプトとツール定義だけで約 7K・2026-09-26 実測）で、1 チャット（3 回）で約 2.2 万。15 RPM まで使っても TPM は約 11 万で、250K の半分に届かない——**先に効くのは RPM**。
 >
 > **公開情報は当てにならない**：Web 上の第三者情報は日付により **15/30 RPM・250〜1,500 RPD** とばらつく（**2025-12 に無料枠 50–80% 削減**、**2026-05 の 3.1 Flash-Lite GA** 等、改定が続くため）。実際、公開値では 2.5 Flash＝250 RPD / 2.5 Flash-Lite＝1,000 RPD だが、**本プロジェクトの実値はいずれも 20 RPD** と大幅に低い。→ **必ず自分の AI Studio の値を正とする**。
 >
 > **1 チャット＝多段ツールで 2〜3 リクエスト消費**するため、15 RPM / 500 RPD なら体感は「1 日あたり 約 150〜250 対話・1 分あたり 5〜7 対話」まで。超えると 429（画面に「ただいま混雑しています」が出る・§4.6）。本格運用は有料枠/Vertex（§6.2）。
 
-出典：**上表の値は本プロジェクトの [AI Studio レート制限画面](https://aistudio.google.com/rate-limit)（一次ソース・2026-07-13）**。制度の背景は [Rate limits（公式・AI Studio 参照方式）](https://ai.google.dev/gemini-api/docs/rate-limits)・[Models（`-latest` の定義）](https://ai.google.dev/gemini-api/docs/models)。第三者情報（[aifreeapi](https://www.aifreeapi.com/en/posts/gemini-api-free-tier-rate-limits)／[TokenMix](https://tokenmix.ai/blog/gemini-api-free-tier-limits)）は日付でばらつき参考程度。RPM=15 は API 実測でも確認済み。
+出典：**上表の値は本プロジェクトの [AI Studio レート制限画面](https://aistudio.google.com/rate-limit)（一次ソース・2026-07-13。3.5 Flash-Lite の行は 2026-09-26）**。制度の背景は [Rate limits（公式・AI Studio 参照方式）](https://ai.google.dev/gemini-api/docs/rate-limits)・[Models（`-latest` の定義）](https://ai.google.dev/gemini-api/docs/models)。第三者情報（[aifreeapi](https://www.aifreeapi.com/en/posts/gemini-api-free-tier-rate-limits)／[TokenMix](https://tokenmix.ai/blog/gemini-api-free-tier-limits)）は日付でばらつき参考程度。RPM=15 は API 実測でも確認済み。
 
 ### 6.2 コスト・プライバシー
 

@@ -256,7 +256,8 @@ without a `thoughtSignature` (tools: `getHazardAlerts`). Injected the documented
   この eval を流してから上げる
 
 **本番への反映**：Vercel の環境変数に `GEMINI_MODEL` があると、そちらが優先されてコードの既定は効かない。
-未設定であること（または `gemini-3.5-flash-lite`）を確かめる。
+→ **確認済み（2026-09-26）**：Vercel にあるのは `GEMINI_API_KEY` だけ（利用者の確認）。PR #161 のマージ後、
+本番で 1 問通して正常に返った（ツール・パネル・本文・5.2 秒）。
 
 ## 6. 本 PR の外に残したこと
 
@@ -271,5 +272,6 @@ without a `thoughtSignature` (tools: `getHazardAlerts`). Injected the documented
    3.5 でも 13〜15 秒で来た（§4.6）。打ち切りを短くすれば停滞の待ちは縮むが、遅い時間帯（C では 8〜13 秒が
    10 回）には正常な応答まで切りうる。決めるには別の測定が要る
 3. **§4.4 の警告を黙らせる**：`globalThis.AI_SDK_LOG_WARNINGS` に関数を渡せば、この 1 種だけ落とせる
-4. **3.5 Flash-Lite の無料枠の値**は AI Studio の画面でしか確かめられない（`docs/feat_llm.md` §6.1）。
-   この日は 3.5 Flash-Lite を約 250 回（うち番号つきの ID で約 160 回）呼んで、429 は 1 度も出ていない
+4. ~~**3.5 Flash-Lite の無料枠の値**を AI Studio で確かめる~~——**確認済み（2026-09-26）**：15 RPM・250K TPM・
+   500 RPD で、3.1 と同じ（`docs/feat_llm.md` §6.1）。この日の使用量の表示は RPD 282/500 で、別名と番号つきの ID で
+   呼んだ数の合計（約 270 回）とほぼ一致した——別名の分も同じ枠に数えられる

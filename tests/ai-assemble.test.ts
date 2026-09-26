@@ -10,9 +10,11 @@ import { buildStationDetail } from '@/domain/stations/presenter'
 import { buildRanking, type RankRawRow } from '@/domain/ranking/presenter'
 import { buildGrowth, type ScatterRow } from '@/domain/growth/presenter'
 import { mapResponseSchema, panelSchema } from '@/shared/protocol'
+import { panelPromotionsSchema } from '@/shared/promotion'
 import {
   assemble,
   mapActionsForEffect,
+  promotionsFor,
   panelsForGrowth,
   panelsForHazardPoint,
   panelsForRanking,
@@ -96,6 +98,7 @@ const rankRows: RankRawRow[] = [
 const rankingEffect: RankingEffect = {
   kind: 'ranking',
   response: buildRanking('pop_gr_2020_2015_1km', ['千葉県'], 'desc', rankRows, 2, 0),
+  excludeLowN: false,
 }
 
 const valueRows: ScatterRow[] = [
@@ -105,6 +108,7 @@ const valueRows: ScatterRow[] = [
 const growthEffect: GrowthEffect = {
   kind: 'growth',
   response: buildGrowth(valueRows, 'pop_gr_2020_2015_2km', 'rate_covid', { prefectures: [] }),
+  excludeLowN: false,
 }
 
 describe('panelsForStationDetail', () => {
@@ -205,6 +209,130 @@ describe('assemble', () => {
     const response = assemble([paxEffect, rankingEffect, growthEffect], '結果です。')
     expect(mapResponseSchema.safeParse(response).success).toBe(true)
     expect(response.panels.map((panel) => panel.type)).toContain('scatter')
+  })
+})
+
+/**
+ * ⤢ の条件（data-promotions）。**図を生んだ副産物そのもの**から作る（画面は推し量らない）。
+ * 以前は画面がツール呼び出しと照合していたので、同じ指標の図が 2 つあると、どちらも最初の呼び出しの
+ * 条件で開いた（2026-09-26）。
+ */
+describe('promotionsFor（⤢ の条件・パネルと同じ並び）', () => {
+  it('パネルと同じ数・同じ並びで、図の先頭パネルにだけ条件が付く', () => {
+    const effects = [popEffect, rankingEffect, growthEffect]
+    const panels = assemble(effects, '').panels
+    const promotions = promotionsFor(effects)
+    expect(promotions).toHaveLength(panels.length)
+    expect(promotions.map((promotion) => promotion?.kind ?? null)).toEqual(
+      panels.map((panel) =>
+        panel.type === 'stationCard'
+          ? 'detail'
+          : panel.type === 'rankingTable'
+            ? 'ranking'
+            : panel.type === 'scatter'
+              ? 'scatter'
+              : null,
+      ),
+    )
+    expect(() => panelPromotionsSchema.parse(promotions)).not.toThrow()
+  })
+
+  it('駅詳細：駅と焦点カテゴリ（本文のグラフには付けない）', () => {
+    const [lead, ...body] = promotionsFor([popEffect])
+    expect(lead).toEqual({ kind: 'detail', grp: station.grp, category: 'population' })
+    expect(body.every((promotion) => promotion === null)).toBe(true)
+    expect(promotionsFor([paxEffect])[0]).toEqual({
+      kind: 'detail',
+      grp: station.grp,
+      category: null,
+    })
+  })
+
+  it('ランキング：応答が持つ正規化済みの条件（種別は表示名でなくコード）', () => {
+    const effect: RankingEffect = {
+      kind: 'ranking',
+      response: buildRanking('pop_gr_2020_2015_1km', ['千葉県'], 'asc', rankRows, 2, 0, {
+        operators: ['東日本旅客鉄道'],
+        routes: ['常磐線'],
+        routeTypes: [2],
+      }),
+      excludeLowN: true,
+    }
+    expect(promotionsFor([effect])).toEqual([
+      {
+        kind: 'ranking',
+        metricKey: 'pop_gr_2020_2015_1km',
+        order: 'asc',
+        prefectures: ['千葉県'],
+        operators: ['東日本旅客鉄道'],
+        routes: ['常磐線'],
+        routeTypes: [2],
+        excludeLowN: true,
+      },
+    ])
+  })
+
+  it('散布：x/y のキーと絞り込み・除外の指定', () => {
+    expect(promotionsFor([growthEffect])).toEqual([
+      {
+        kind: 'scatter',
+        xKey: 'pop_gr_2020_2015_2km',
+        yKey: 'rate_covid',
+        prefectures: [],
+        operators: [],
+        routes: [],
+        routeTypes: [],
+        excludeLowN: false,
+      },
+    ])
+  })
+
+  it('同じ指標の図が 2 つあっても、それぞれが**自分の**条件を持つ（以前は両方とも最初の条件で開いた）', () => {
+    // 本物の応答で起きた形：事業者名に「新幹線」を渡して 0 件の図 → 絞り込みを外して呼び直し、点のある図
+    const zeroMatches: GrowthEffect = {
+      kind: 'growth',
+      response: buildGrowth([], 'pop_gr_2020_2015_2km', 'rate_covid', {
+        operators: ['新幹線'],
+        routeTypes: [1],
+      }),
+      excludeLowN: false,
+    }
+    const retried: GrowthEffect = {
+      kind: 'growth',
+      response: buildGrowth(valueRows, 'pop_gr_2020_2015_2km', 'rate_covid', { routeTypes: [1] }),
+      excludeLowN: false,
+    }
+    const [first, second] = promotionsFor([zeroMatches, retried])
+    expect(first?.kind === 'scatter' ? first.operators : null).toEqual(['新幹線'])
+    expect(second?.kind === 'scatter' ? second.operators : null).toEqual([])
+    expect(second?.kind === 'scatter' ? second.routeTypes : null).toEqual([1])
+  })
+
+  it('ハザード系は昇格しない（null）', () => {
+    const hazard: HazardPointEffect = {
+      kind: 'hazardPoint',
+      point: pointHazard(
+        {
+          lon: 139.847,
+          lat: 35.7645,
+          placeJa: '亀有駅',
+          mesh: [],
+          tile: [],
+          tileNearby: [],
+          uncoveredLayerKeys: [],
+          rivers: [],
+          elevationM: 0.2,
+          onlineSourcesReached: true,
+          notesJa: [],
+        },
+        hazardLayersWithPointAnswer(),
+      ),
+    }
+    expect(promotionsFor([hazard])).toEqual([null])
+  })
+
+  it('副産物が無ければ空（図も無い）', () => {
+    expect(promotionsFor([])).toEqual([])
   })
 })
 

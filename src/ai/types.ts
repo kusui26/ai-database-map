@@ -30,12 +30,16 @@ export type StationDetailEffect = {
 export type RankingEffect = {
   readonly kind: 'ranking'
   readonly response: RankingResponse
+  /** 信頼性の低い値を除外したか（応答には残らない。⤢ の条件に要る）。 */
+  readonly excludeLowN: boolean
 }
 
 /** 散布（増減率比較）ツールの副産物。 */
 export type GrowthEffect = {
   readonly kind: 'growth'
   readonly response: GrowthResponse
+  /** 信頼性の低い値を除外したか（応答には除外した件数しか残らない。⤢ の条件に要る）。 */
+  readonly excludeLowN: boolean
 }
 
 /**

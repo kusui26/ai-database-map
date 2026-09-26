@@ -17,6 +17,7 @@ import {
   stepCountIs,
   streamText,
   type UIMessage,
+  type UIMessageStreamWriter,
 } from 'ai'
 import { z } from 'zod'
 import { mapResponseSchema } from '@/shared/protocol'
@@ -42,10 +43,11 @@ import {
   toolFailuresOf,
 } from '@/ai/chat-errors'
 import { CHAT_FAILURE_JA } from '@/shared/chat-errors'
-import { createCollector } from '@/ai/types'
+import { createCollector, type ToolEffect } from '@/ai/types'
 import { type ChatUIMessage, createTools } from '@/ai/tools'
 import { buildSystemPrompt, mapContextPrompt } from '@/ai/system-prompt'
-import { assemble, textOrFallback, type ChatOutcome } from '@/ai/assemble'
+import { assemble, promotionsFor, textOrFallback, type ChatOutcome } from '@/ai/assemble'
+import { panelPromotionsSchema } from '@/shared/promotion'
 import { rateLimit } from '@/ai/rate-limit'
 
 export const runtime = 'nodejs'
@@ -87,6 +89,28 @@ const MAX_CONVERSATION_CHARS = 4000
  * 最後の完全版が権威になる（部分成果の先出し・fail-soft）。
  */
 const MAP_PART_ID = 'map'
+
+/** data-promotions（⤢ の条件・パネルと同じ並び）の固定 id。data-map と一緒に上書きする。 */
+const PROMOTIONS_PART_ID = 'promotions'
+
+/**
+ * 図（data-map）と、その ⤢ の条件（data-promotions）を送る。条件は図を生んだ副産物から作る
+ * （`assemble.ts` の `promotionsFor`）——画面がツール呼び出しとの照合で推し量らないように。
+ * 条件を先に送り、図だけが条件の無いまま描かれる瞬間を作らない。
+ */
+function writeMap(
+  writer: UIMessageStreamWriter<ChatUIMessage>,
+  effects: readonly ToolEffect[],
+  text: string,
+): void {
+  const promotions = panelPromotionsSchema.parse(promotionsFor(effects))
+  writer.write({ type: 'data-promotions', id: PROMOTIONS_PART_ID, data: promotions })
+  writer.write({
+    type: 'data-map',
+    id: MAP_PART_ID,
+    data: mapResponseSchema.parse(assemble(effects, text)),
+  })
+}
 
 /**
  * ターンの終わり方を判定する（本文が空のときの言い換えに使う）。
@@ -216,13 +240,7 @@ export async function POST(request: Request): Promise<Response> {
     execute: async ({ writer }) => {
       // ツールが成果を出すたびに、その時点のパネル/地図操作を先に送る（fail-soft）。
       // 同じ id で上書きするため、最後に送る完全版が常に権威になる。
-      const collector = createCollector((effects) => {
-        writer.write({
-          type: 'data-map',
-          id: MAP_PART_ID,
-          data: mapResponseSchema.parse(assemble(effects, '')),
-        })
-      })
+      const collector = createCollector((effects) => writeMap(writer, effects, ''))
       const modelMessages = await convertToModelMessages(uiMessages)
       const abortSignal = AbortSignal.timeout(CHAT_TIMEOUT_MS)
       // モデルの失敗（ターンの失敗）と、ツールの失敗（モデルに差し戻されて手順が続く）は別に数える。
@@ -272,10 +290,7 @@ export async function POST(request: Request): Promise<Response> {
       // 本文が空でも必ず一言返す（中断・エラー・ステップ上限のいずれでも無言にしない）。
       const panelCount = assemble(effects, '').panels.length
       const outcome = outcomeOf(abortSignal.aborted, failures.length)
-      const mapResponse = mapResponseSchema.parse(
-        assemble(effects, textOrFallback(text, panelCount, outcome)),
-      )
-      writer.write({ type: 'data-map', id: MAP_PART_ID, data: mapResponse })
+      writeMap(writer, effects, textOrFallback(text, panelCount, outcome))
       // 失敗の中身を 1 件ずつ（種類・HTTP 状態・回数）、ツールの失敗も 1 件ずつ。続けて 1 行サマリ。
       // どれも発話は出さない。
       logFailures(failures, abortSignal.aborted, startedAt, utterances)

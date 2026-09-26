@@ -1199,7 +1199,7 @@ export const TOOL_SPECS = {
           ? '該当が 0 件でした。路線名は正式名称（例「東海道新幹線」）で指定し、会社と路線が同じ事業者のものか確認してください。'
           : null
       return {
-        effects: [{ kind: 'ranking' as const, response }],
+        effects: [{ kind: 'ranking' as const, response, excludeLowN: exclude }],
         forLlm: rankingForLlm(
           resolved.key,
           resolutionNote(resolved.note, emptyNote),
@@ -1297,7 +1297,7 @@ export const TOOL_SPECS = {
           ? '該当が 0 件でした。路線名は正式名称（例「東海道新幹線」）で指定し、会社と路線が同じ事業者のものか確認してください。'
           : null
       return {
-        effects: [{ kind: 'growth' as const, response }],
+        effects: [{ kind: 'growth' as const, response, excludeLowN: exclude }],
         forLlm: growthForLlm(
           xResolved.key,
           yResolved.key,

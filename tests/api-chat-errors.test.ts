@@ -310,7 +310,13 @@ describe('失敗でない終わり方も、画面が一言出せる形で終わ�
     current.model = hangingModel()
     const chunks = await ask()
     // 実際に流れる並び。画面は abort のあとの data-map の一文を吹き出しに出す（messageParts.displayTextOf）。
-    expect(chunks.map((chunk) => chunk.type)).toEqual(['start', 'abort', 'data-map'])
+    // data-promotions（⤢ の条件）は図より先に送る（図が無ければ空の並び）。
+    expect(chunks.map((chunk) => chunk.type)).toEqual([
+      'start',
+      'abort',
+      'data-promotions',
+      'data-map',
+    ])
     expect(errorTextsOf(chunks)).toEqual([])
     expect(fallbackTextOf(chunks)).toBe('時間内に取得できませんでした。もう一度お試しください。')
     expect(failureLines()).toEqual([])

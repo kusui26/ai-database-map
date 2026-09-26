@@ -16,6 +16,7 @@
  */
 
 import { tool, type InferUITools, type UIMessage } from 'ai'
+import { type PanelPromotions } from '@/shared/promotion'
 import { type MapResponse } from '@/shared/protocol'
 import { type EffectCollector } from './types'
 import { TOOL_SPECS, type ToolRunContext, type ToolRunResult } from './tool-specs'
@@ -113,8 +114,11 @@ export function createTools(collector: EffectCollector, origin: string) {
   }
 }
 
-/** チャットのカスタムデータパート（最終 MapResponse を data-map で送出）。 */
-export type ChatDataParts = { map: MapResponse }
+/**
+ * チャットのカスタムデータパート。data-map＝MapResponse、data-promotions＝その ⤢ の条件
+ * （パネルと同じ並び・`shared/promotion.ts`）。
+ */
+export type ChatDataParts = { map: MapResponse; promotions: PanelPromotions }
 
 /** ツール群の型（UI メッセージのツールパート推論に使う）。 */
 export type ChatTools = ReturnType<typeof createTools>

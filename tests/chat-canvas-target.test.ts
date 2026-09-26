@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { type Panel } from '@/shared/protocol'
+import {
+  type PanelPromotions,
+  type RankingPromotion,
+  type ScatterPromotion,
+} from '@/shared/promotion'
 import { type ChatUIMessage } from '@/components/chat/types'
 import { canvasTargetOf } from '@/components/chat/canvasTarget'
 import { chipLabel } from '@/components/chat/PanelChip'
@@ -34,27 +39,19 @@ const stationCard: Panel = {
   badges: [],
 }
 
-/** data-map と ツール呼び出しを持つアシスタント応答を組み立てる。 */
+/** data-map と、サーバが付けた ⤢ の条件（data-promotions・パネルと同じ並び）を持つアシスタント応答。 */
 function assistant(
   id: string,
   panels: readonly Panel[],
-  toolInput: Record<string, unknown> = {},
-  toolName = 'compareGrowth',
-  toolOutput: Record<string, unknown> = {},
+  promotions: PanelPromotions = panels.map(() => null),
 ): ChatUIMessage {
   return {
     id,
     role: 'assistant',
     parts: [
       { type: 'text', text: 'ご覧ください' },
+      { type: 'data-promotions', data: [...promotions] },
       { type: 'data-map', data: { messages: [], mapActions: [], panels: [...panels] } },
-      {
-        type: `tool-${toolName}`,
-        toolCallId: `${id}-call`,
-        state: 'output-available',
-        input: toolInput,
-        output: toolOutput,
-      },
     ],
   }
 }
@@ -65,8 +62,32 @@ const user = (id: string): ChatUIMessage => ({
   parts: [{ type: 'text', text: '質問' }],
 })
 
-/** 散布の昇格はカタログキーから復元されるため、ラベルではなくキーを渡す。 */
-const SCATTER_INPUT = { x: 'pop_gr_2020_2015_2km', y: 'rate_covid' }
+function scatterPromotion(
+  filters: Partial<Pick<ScatterPromotion, 'prefectures' | 'operators' | 'routeTypes'>> = {},
+): ScatterPromotion {
+  return {
+    kind: 'scatter',
+    xKey: 'pop_gr_2020_2015_2km',
+    yKey: 'rate_covid',
+    prefectures: [],
+    operators: [],
+    routes: [],
+    routeTypes: [],
+    excludeLowN: false,
+    ...filters,
+  }
+}
+
+const rankingPromotion: RankingPromotion = {
+  kind: 'ranking',
+  metricKey: 'pax_2024',
+  order: 'desc',
+  prefectures: [],
+  operators: [],
+  routes: [],
+  routeTypes: [],
+  excludeLowN: false,
+}
 
 describe('canvasTargetOf（キャンバスに出す対象・260802）', () => {
   it('メッセージが無ければ null＝初期表示で地図を隠さない', () => {
@@ -78,90 +99,69 @@ describe('canvasTargetOf（キャンバスに出す対象・260802）', () => {
   })
 
   it('駅詳細だけの回答では出さない（右ドロワーが担当する）', () => {
-    const detail = assistant('a1', [stationCard], { grp: '東京#0' }, 'getStationDetail')
+    const detail = assistant(
+      'a1',
+      [stationCard],
+      [{ kind: 'detail', grp: '東京#0', category: null }],
+    )
     expect(canvasTargetOf([detail])).toBeNull()
   })
 
-  it('散布があればその昇格パラメータを返す', () => {
-    // x/y はカタログのラベルからキーを逆引きするため、実在のキーを渡す
-    const message = assistant('a1', [scatter], {
-      x: 'pop_gr_2020_2015_2km',
-      y: 'rate_covid',
-      operators: ['東海旅客鉄道'],
-      routeTypes: [1],
-    })
-    const target = canvasTargetOf([message])
-    expect(target?.promotion.kind).toBe('scatter')
+  it('散布があれば、サーバが付けた条件で開く', () => {
+    const promotion = scatterPromotion({ operators: ['東海旅客鉄道'], routeTypes: [1] })
+    const target = canvasTargetOf([assistant('a1', [scatter], [promotion])])
+    expect(target?.promotion).toEqual(promotion)
     expect(target?.key.startsWith('a1:')).toBe(true)
-    if (target?.promotion.kind === 'scatter') {
-      expect(target.promotion.operators).toEqual(['東海旅客鉄道'])
-      expect(target.promotion.routeTypes).toEqual([1])
-    }
   })
 
   it('ランキングも対象', () => {
-    const message = assistant('a1', [ranking], { metric: 'pax_2024' }, 'rankStations')
+    const message = assistant('a1', [ranking], [rankingPromotion])
     expect(canvasTargetOf([message])?.promotion.kind).toBe('ranking')
   })
 
   it('直近のアシスタント応答を見る（そのあとユーザー発言が来ても変わらない）', () => {
-    const first = assistant('a1', [ranking], { metric: 'pax_2024' }, 'rankStations')
+    const first = assistant('a1', [ranking], [rankingPromotion])
     const before = canvasTargetOf([first])
     expect(canvasTargetOf([first, user('u2')])?.key).toBe(before?.key)
   })
 
   it('複数の応答があれば最後の応答を採る', () => {
-    const first = assistant('a1', [ranking], { metric: 'pax_2024' }, 'rankStations')
-    const second = assistant('a2', [scatter], {
-      x: 'pop_gr_2020_2015_2km',
-      y: 'rate_covid',
-    })
+    const first = assistant('a1', [ranking], [rankingPromotion])
+    const second = assistant('a2', [scatter], [scatterPromotion()])
     expect(canvasTargetOf([first, second])?.promotion.kind).toBe('scatter')
   })
 
   it('key は「同じ図なら同じ・条件が変われば変わる」（開き直しの判定に使う）', () => {
-    const base = assistant('a1', [scatter], { x: 'pop_gr_2020_2015_2km', y: 'rate_covid' })
-    const same = assistant('a1', [scatter], { x: 'pop_gr_2020_2015_2km', y: 'rate_covid' })
-    const filtered = assistant('a1', [scatter], {
-      x: 'pop_gr_2020_2015_2km',
-      y: 'rate_covid',
-      operators: ['東海旅客鉄道'],
-    })
+    const base = assistant('a1', [scatter], [scatterPromotion()])
+    const same = assistant('a1', [scatter], [scatterPromotion()])
+    const filtered = assistant('a1', [scatter], [scatterPromotion({ operators: ['東海旅客鉄道'] })])
     expect(canvasTargetOf([base])?.key).toBe(canvasTargetOf([same])?.key)
     expect(canvasTargetOf([base])?.key).not.toBe(canvasTargetOf([filtered])?.key)
   })
 
   it('回答が違えば（同じ条件でも）key は変わる', () => {
-    const first = assistant('a1', [scatter], SCATTER_INPUT)
-    const second = assistant('a2', [scatter], SCATTER_INPUT)
+    const first = assistant('a1', [scatter], [scatterPromotion()])
+    const second = assistant('a2', [scatter], [scatterPromotion()])
     expect(canvasTargetOf([first])?.key).not.toBe(canvasTargetOf([second])?.key)
   })
 
-  it('失敗を返した呼び出しの条件では開かない（「千葉市」で失敗し「千葉県」で呼び直した）', () => {
-    // 形は tests/chat-panel-groups.test.ts で画面と同じ組み立てから確かめたもの
-    const message: ChatUIMessage = {
-      id: 'a1',
-      role: 'assistant',
-      parts: [
-        {
-          type: 'tool-compareGrowth',
-          toolCallId: 'c1',
-          state: 'output-available',
-          input: { ...SCATTER_INPUT, prefectures: ['千葉市'] },
-          output: { error: '未知の都道府県: 千葉市', hint: '都道府県は正式名で指定してください。' },
-        },
-        {
-          type: 'tool-compareGrowth',
-          toolCallId: 'c2',
-          state: 'output-available',
-          input: { ...SCATTER_INPUT, prefectures: ['千葉県'] },
-          output: { resolvedMetrics: SCATTER_INPUT, prefectures: ['千葉県'] },
-        },
-        { type: 'data-map', data: { messages: [], mapActions: [], panels: [scatter] } },
+  it('同じ指標の図が 2 つあれば、最後の図を**その図の**条件で開く（以前は最初の図の条件だった）', () => {
+    // 本物の応答で起きた形：事業者名に「新幹線」を渡して 0 件の図 → 絞り込みを外して呼び直し、点のある図
+    const empty = { ...scatter, title: '（全国・新幹線・新幹線）', clusterCount: 0 }
+    const retried = { ...scatter, title: '（全国・新幹線）', clusterCount: 4 }
+    const message = assistant(
+      'a1',
+      [empty, retried],
+      [
+        scatterPromotion({ operators: ['新幹線'], routeTypes: [1] }),
+        scatterPromotion({ routeTypes: [1] }),
       ],
-    }
-    const promotion = canvasTargetOf([message])?.promotion
-    expect(promotion?.kind === 'scatter' ? promotion.prefectures : null).toEqual(['千葉県'])
+    )
+    expect(canvasTargetOf([message])?.promotion).toEqual(scatterPromotion({ routeTypes: [1] }))
+  })
+
+  it('サーバの条件が届いていなければ開かない（推し量らない）', () => {
+    expect(canvasTargetOf([assistant('a1', [scatter], [])])).toBeNull()
   })
 })
 

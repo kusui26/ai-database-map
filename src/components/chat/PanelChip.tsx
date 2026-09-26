@@ -8,8 +8,9 @@
  * 開かなくてもどの回答か分かる（docs/260802_ai_chat_canvs.md §6）。
  */
 
+import { type PanelPromotion } from '@/shared/promotion'
 import { type Panel } from '@/shared/protocol'
-import { type GroupPromotion, type PanelGroup } from './panelGroups'
+import { type PanelGroup } from './panelGroups'
 import { usePromote } from './usePromote'
 
 /** チップに出す見出し。図はタイトルを、駅詳細は駅名を、地点のハザードは地点名を使う。 */
@@ -26,7 +27,7 @@ export function chipLabel(panels: readonly Panel[]): string {
   return '結果'
 }
 
-function IconFor({ kind }: { kind: GroupPromotion['kind'] }) {
+function IconFor({ kind }: { kind: PanelPromotion['kind'] }) {
   const path =
     kind === 'scatter'
       ? 'M4 20V4M4 20h16M9 15.5a1 1 0 1 0 0-.001M14 9.5a1 1 0 1 0 0-.001M18 13.5a1 1 0 1 0 0-.001'
@@ -66,7 +67,7 @@ function ExpandIcon() {
   )
 }
 
-export function PanelChip({ group, promotion }: { group: PanelGroup; promotion: GroupPromotion }) {
+export function PanelChip({ group, promotion }: { group: PanelGroup; promotion: PanelPromotion }) {
   const promote = usePromote()
   const label = chipLabel(group.panels)
 

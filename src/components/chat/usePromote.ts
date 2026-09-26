@@ -8,15 +8,15 @@
 import { useCallback } from 'react'
 import { useMapUrlState } from '@/components/map/useMapUrlState'
 import { useChatStore } from '@/stores/chatStore'
-import { type GroupPromotion } from './panelGroups'
+import { type PanelPromotion } from '@/shared/promotion'
 
-export function usePromote(): (promotion: GroupPromotion) => void {
+export function usePromote(): (promotion: PanelPromotion) => void {
   const { setGrp } = useMapUrlState()
   const promote = useChatStore((state) => state.promote)
   const setRequestedCategory = useChatStore((state) => state.setRequestedCategory)
 
   return useCallback(
-    (promotion: GroupPromotion) => {
+    (promotion: PanelPromotion) => {
       if (promotion.kind === 'detail') {
         setRequestedCategory(promotion.category) // ドロワーが開く際に読む（1 回消費）
         void setGrp(promotion.grp)

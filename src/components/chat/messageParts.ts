@@ -5,6 +5,7 @@
  * **同じ読み取り方**をするよう 1 か所にまとめる（.claude/CLAUDE.md §3 DRY）。
  */
 
+import { panelPromotionsSchema, type PanelPromotions } from '@/shared/promotion'
 import { type MapResponse } from '@/shared/protocol'
 import { type ChatUIMessage } from './types'
 
@@ -28,6 +29,19 @@ export function mapResponseOf(parts: readonly Part[]): MapResponse | null {
     if (part !== undefined && part.type === 'data-map') return part.data
   }
   return null
+}
+
+/** 中身を信用しないパーツの最小の形（data パートの中身は確かめてから使う）。 */
+type UncheckedPart = { readonly type: string; readonly data?: unknown }
+
+/**
+ * 最後の data-promotions（⤢ の条件・パネルと同じ並び）。data-map と同じく段階的に上書きされる。
+ * 形が合わなければ空（＝⤢ を出さない。推し量った条件で開くより安全）。
+ */
+export function panelPromotionsOf(parts: readonly UncheckedPart[]): PanelPromotions {
+  const part = [...parts].reverse().find((candidate) => candidate.type === 'data-promotions')
+  const parsed = panelPromotionsSchema.safeParse(part?.data ?? [])
+  return parsed.success ? parsed.data : []
 }
 
 /**

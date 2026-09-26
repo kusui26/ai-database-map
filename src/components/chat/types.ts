@@ -6,9 +6,11 @@
  */
 
 import { type UIMessage } from 'ai'
+import { type PanelPromotions } from '@/shared/promotion'
 import { type MapResponse } from '@/shared/protocol'
 
-export type ChatDataParts = { map: MapResponse }
+/** data-map＝MapResponse、data-promotions＝その ⤢ の条件（パネルと同じ並び）。 */
+export type ChatDataParts = { map: MapResponse; promotions: PanelPromotions }
 
 /** useChat<ChatUIMessage>。message.parts は text / data-map / tool-* を含む。 */
 export type ChatUIMessage = UIMessage<unknown, ChatDataParts>

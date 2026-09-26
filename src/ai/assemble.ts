@@ -8,6 +8,7 @@
 
 import { type Category } from '@/shared/constants'
 import { formatNumber, type MetricFormat } from '@/shared/format'
+import { type PanelPromotion, type PanelPromotions } from '@/shared/promotion'
 import { type MapAction, type MapResponse, type Panel } from '@/shared/protocol'
 import {
   busPanels,
@@ -257,6 +258,56 @@ export function textOrFallback(
   if (trimmed.length > 0) return trimmed
   const fallback = FALLBACK_TEXT[outcome]
   return panelCount > 0 ? fallback.withPanels : fallback.withoutPanels
+}
+
+/**
+ * 副産物 → ⤢ の条件。**図を生んだ条件そのもの**（ツールの応答・焦点カテゴリ）から作る。
+ * 画面が推し量らない——同じ指標の図が 2 つあっても、それぞれが自分の条件を持つ（`shared/promotion.ts`）。
+ * ハザード系は昇格しない（null）。
+ */
+function promotionOf(effect: ToolEffect): PanelPromotion | null {
+  switch (effect.kind) {
+    case 'stationDetail':
+      return { kind: 'detail', grp: effect.detail.station.grp, category: effect.category }
+    case 'ranking': {
+      const { metric, order, prefectures, operators, routes, routeTypes } = effect.response
+      const filters = {
+        prefectures,
+        operators,
+        routes,
+        routeTypes,
+        excludeLowN: effect.excludeLowN,
+      }
+      return { kind: 'ranking', metricKey: metric.key, order, ...filters }
+    }
+    case 'growth': {
+      const { x, y, prefectures, operators, routes, routeTypes } = effect.response
+      const filters = {
+        prefectures,
+        operators,
+        routes,
+        routeTypes,
+        excludeLowN: effect.excludeLowN,
+      }
+      return { kind: 'scatter', xKey: x.key, yKey: y.key, ...filters }
+    }
+    // 種類を足したら、ここで昇格させるかを決める（列挙しておけば型検査が漏れを捕まえる）。
+    case 'hazardPoint':
+    case 'hazardAlerts':
+    case 'evacuation':
+    case 'escape':
+      return null
+  }
+}
+
+/**
+ * パネルと**同じ並び**の ⤢ の条件。副産物ごとに、先頭パネル（駅カード・順位表・散布）にだけ条件を付け、
+ * 残り（駅詳細の本文のグラフなど）は null。`assemble` と同じ順に副産物を並べるので、添字でそのまま対応する。
+ */
+export function promotionsFor(effects: readonly ToolEffect[]): PanelPromotions {
+  return effects.flatMap((effect) =>
+    panelsFor(effect).map((_panel, index) => (index === 0 ? promotionOf(effect) : null)),
+  )
 }
 
 /**

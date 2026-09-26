@@ -17,6 +17,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { APICallError, simulateReadableStream } from 'ai'
 import { MockLanguageModelV3 } from 'ai/test'
+import { TOOL_FAILURE_JA } from '@/ai/chat-errors'
 import { resetRateLimitStore } from '@/ai/rate-limit'
 import { CHAT_FAILURE_JA } from '@/shared/chat-errors'
 import { mapResponseSchema } from '@/shared/protocol'
@@ -66,6 +67,18 @@ async function ask(): Promise<Chunk[]> {
 
 const errorTextsOf = (chunks: Chunk[]): unknown[] =>
   chunks.filter((chunk) => chunk.type === 'error').map((chunk) => chunk.errorText)
+
+/** ツールのパーツ（形の合わない呼び出し・その差し戻し）に添えられた 1 文。 */
+const toolErrorTextsOf = (chunks: Chunk[]): unknown[] =>
+  chunks
+    .filter((chunk) => chunk.type === 'tool-input-error' || chunk.type === 'tool-output-error')
+    .map((chunk) => chunk.errorText)
+
+const textOf = (chunks: Chunk[]): string =>
+  chunks
+    .filter((chunk) => chunk.type === 'text-delta')
+    .map((chunk) => (typeof chunk.delta === 'string' ? chunk.delta : ''))
+    .join('')
 
 /** 最後の data-map の一言（画面が本文の代わりに出す文）。 */
 function fallbackTextOf(chunks: Chunk[]): string | undefined {
@@ -130,6 +143,66 @@ function answeringModel(text: string): MockLanguageModelV3 {
   })
 }
 
+const START = { type: 'stream-start' as const, warnings: [] }
+const FINISH_TOOL_CALLS = {
+  type: 'finish' as const,
+  finishReason: { unified: 'tool-calls' as const, raw: 'STOP' },
+  usage: USAGE,
+}
+const FINISH_STOP = {
+  type: 'finish' as const,
+  finishReason: { unified: 'stop' as const, raw: 'STOP' },
+  usage: USAGE,
+}
+
+/** 1 手順目でツールを 1 回呼ぶ応答（`input` は JSON 文字列のまま渡す＝検証は SDK がする）。 */
+function toolCallStep(toolName: string, input: string) {
+  return {
+    stream: simulateReadableStream({
+      chunks: [
+        START,
+        { type: 'tool-call' as const, toolCallId: 'call-1', toolName, input },
+        FINISH_TOOL_CALLS,
+      ],
+    }),
+  }
+}
+
+/** 本文を返して終わる応答。 */
+function textStep(text: string) {
+  return {
+    stream: simulateReadableStream({
+      chunks: [
+        START,
+        { type: 'text-start' as const, id: 't1' },
+        { type: 'text-delta' as const, id: 't1', delta: text },
+        { type: 'text-end' as const, id: 't1' },
+        FINISH_STOP,
+      ],
+    }),
+  }
+}
+
+type StepAnswer = Awaited<ReturnType<MockLanguageModelV3['doStream']>>
+
+/**
+ * 呼ばれるたびに次の応答を返すモデル。尽きたら `whenExhausted` を投げる。
+ * （`MockLanguageModelV3` に配列を渡す形は、1 回目の呼び出しに 2 番目を返すので使わない）
+ */
+function modelAnswering(
+  steps: readonly StepAnswer[],
+  whenExhausted: unknown = new Error('テストの応答を使い切った'),
+): MockLanguageModelV3 {
+  const queue = [...steps]
+  return new MockLanguageModelV3({
+    doStream: async () => {
+      const next = queue.shift()
+      if (next === undefined) throw whenExhausted
+      return next
+    },
+  })
+}
+
 /** 何も返さず、打ち切られるまで待つモデル。 */
 function hangingModel(): MockLanguageModelV3 {
   return new MockLanguageModelV3({
@@ -149,6 +222,7 @@ beforeEach(() => {
     logged.push(args.map(String).join(' '))
   }
   vi.spyOn(console, 'error').mockImplementation(record)
+  vi.spyOn(console, 'warn').mockImplementation(record)
   vi.spyOn(console, 'info').mockImplementation(record)
 })
 
@@ -158,6 +232,7 @@ afterEach(() => {
 })
 
 const failureLines = (): string[] => logged.filter((line) => line.includes('model failure'))
+const toolFailureLines = (): string[] => logged.filter((line) => line.includes('tool failure'))
 
 /** 失敗 1 件につき記録は 1 行（派生の「出力が無かった」や重複を並べない）。その 1 行を返す。 */
 function onlyFailureLine(): string {
@@ -257,5 +332,77 @@ describe('失敗でない終わり方も、画面が一言出せる形で終わ�
     expect(chunks.some((chunk) => chunk.type === 'text-delta')).toBe(true)
     expect(errorTextsOf(chunks)).toEqual([])
     expect(failureLines()).toEqual([])
+  })
+})
+
+describe('ツールの失敗はモデルの失敗ではない（SDK がモデルに差し戻し、手順が続く）', () => {
+  // 2026-09-26 のモデル検証で実際に起きた形：routeTypes に数ではなく文字列を渡した。
+  // operators は文字列の配列なので形は合う（値は利用者の言葉から来うる＝記録に出てはいけない）。
+  const INVALID_INPUT = JSON.stringify({
+    x: 'pop_gr',
+    y: 'rate_covid',
+    operators: ['新幹線'],
+    routeTypes: ['1'],
+  })
+
+  it('形の合わない引数 → 同じターンで答え、結果は ok。記録はツールの失敗の 1 行だけ', async () => {
+    const model = modelAnswering([
+      toolCallStep('compareGrowth', INVALID_INPUT),
+      textStep('条件を直して集計しました。'),
+    ])
+    current.model = model
+    const chunks = await ask()
+
+    // SDK は失敗をモデルに差し戻し（2 手順目の入力に載る）、手順を続けた
+    expect(model.doStreamCalls).toHaveLength(2)
+    expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).toContain(
+      'Invalid input for tool compareGrowth',
+    )
+    // ターンは失敗ではない：error パートなし・本文が流れる・結果の 1 行は ok
+    expect(errorTextsOf(chunks)).toEqual([])
+    expect(textOf(chunks)).toBe('条件を直して集計しました。')
+    expect(failureLines()).toEqual([])
+    expect(logged.some((line) => line.startsWith('[api/chat] ok '))).toBe(true)
+    // ツールの失敗として、呼び出し 1 回につき 1 行。どの引数がなぜ合わないかが読める
+    const lines = toolFailureLines()
+    expect(lines).toHaveLength(1)
+    expect(lines[0]).toContain('tool=compareGrowth name=AI_InvalidToolInputError')
+    expect(lines[0]).toContain('routeTypes.0: Invalid input: expected number, received string')
+    // 引数の値は、記録のどこにも残さない
+    for (const line of logged) expect(line).not.toContain('新幹線')
+    // ツールのパーツには、モデルの失敗の文ではなく、ツールの失敗の文を添える
+    expect(toolErrorTextsOf(chunks)).toEqual([TOOL_FAILURE_JA, TOOL_FAILURE_JA])
+  })
+
+  it('無いツールを呼んだ → 同じく差し戻して続ける。記録はツールの失敗の 1 行', async () => {
+    const model = modelAnswering([
+      toolCallStep('getWeather', '{}'),
+      textStep('天気はお答えできません。'),
+    ])
+    current.model = model
+    const chunks = await ask()
+
+    expect(model.doStreamCalls).toHaveLength(2)
+    expect(errorTextsOf(chunks)).toEqual([])
+    expect(failureLines()).toEqual([])
+    const lines = toolFailureLines()
+    expect(lines).toHaveLength(1)
+    expect(lines[0]).toContain('tool=getWeather name=AI_NoSuchToolError')
+    expect(logged.some((line) => line.startsWith('[api/chat] ok '))).toBe(true)
+  })
+
+  it('ツールの失敗のあとで提供元が落ちた → それぞれの行で記録し、画面には提供元の失敗の文を出す', async () => {
+    current.model = modelAnswering(
+      [toolCallStep('compareGrowth', INVALID_INPUT)],
+      providerError(503, 'UNAVAILABLE', true),
+    )
+    const chunks = await ask()
+
+    // 画面の 1 文は提供元の失敗のもの。ツールのパーツの文と取り違えない
+    expect(errorTextsOf(chunks)).toEqual([CHAT_FAILURE_JA.unavailable])
+    expect(toolErrorTextsOf(chunks)).toEqual([TOOL_FAILURE_JA, TOOL_FAILURE_JA])
+    expect(onlyFailureLine()).toContain('kind=unavailable')
+    expect(toolFailureLines()).toHaveLength(1)
+    expect(logged.some((line) => line.startsWith('[api/chat] failed '))).toBe(true)
   })
 })

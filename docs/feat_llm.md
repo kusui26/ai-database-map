@@ -154,7 +154,7 @@ MapResponse = {
 | タイムアウト | **50 秒**（アプリ側 abort・`CHAT_TIMEOUT_MS`） | `AbortSignal.timeout`。Vercel 関数上限 `maxDuration=60` より短く graceful abort |
 | リトライ | **`maxRetries: 1`** | 無料枠 429 の長い retry-after 待ちを避ける |
 | 鍵未設定 | **503**（NOT_CONFIGURED） | `isChatConfigured()` |
-| エラー | **種類ごとの日本語 1 文**（§4.6） | `classifyChatFailure()` が HTTP 状態で種類を決め、文は `shared/chat-errors.ts`。`toUIMessageStream({onError})` に渡す。**元のエラーは 1 行で記録**する |
+| エラー | **種類ごとの日本語 1 文**（§4.6） | `classifyChatFailure()` が HTTP 状態で種類を決め、文は `shared/chat-errors.ts`。`toUIMessageStream({onError})` に渡す。**元のエラーは 1 行で記録**する（ツールの失敗は別の行で、ターンの失敗に数えない） |
 | ランタイム | `nodejs` | provider SDK が Node 前提 |
 
 ### 4.5 ストリーミング
@@ -196,6 +196,24 @@ Vercel の本文はアプリの封筒と同じ形なので、見分けないと�
   （`ToolLoopAgent` はこれを型の上で渡せないため、`streamText` を直接呼ぶ形にした。引数と停止条件は同じ）
 - 重ねて記録しないもの：同じエラーの再送・こちらの打ち切りの残骸（`TimeoutError`）・派生の
   `NoOutputGeneratedError`（他に原因があるとき）。打ち切りは結果の 1 行（`[api/chat] aborted …`）が記録する
+
+**ツールの失敗はモデルの失敗ではない**（2026-09-26）。モデルが形の合わない引数を渡したり（例 `routeTypes: ["1"]`）、
+無いツールを呼んだりすると、SDK はそのエラーを**ツールの結果としてモデルに差し戻し、手順を続ける**——モデルは
+同じターンで直して答えられる。だからターンの成否（`ok` / `failed`）には数えず、別の 1 行で残す
+（Runtime Logs で `tool failure` を検索）：
+
+```
+[api/chat] tool failure tool=compareGrowth name=AI_InvalidToolInputError
+  model=gemini-3.5-flash-lite detail="routeTypes.0: Invalid input: expected number, received string"
+```
+
+- 載せるのは**どの引数が、なぜ合わないか**だけ。引数の値は載せない（利用者の言葉や地点が入りうる）
+- 以前は、画面向けのストリームの `onError`（ツールの失敗でも呼ばれる）で失敗を拾っていたため、1 回の失敗が
+  `model failure kind=unknown` の 2 行（エラーと、SDK がそれを文字列にしたもの）になり、ターンが `failed` と
+  数えられていた。いまはモデルの失敗を `streamText` の `onError`（error パートでだけ呼ばれる）と `result.text` から、
+  ツールの失敗を手順の記録（`onStepFinish` の `content`）から取る
+- ツールのパーツに添える文も、モデルの失敗の文ではなく「ツールの呼び出しに失敗しました。」にした（画面は描かない）
+- 頻度は、モデルとツールの説明の相性の目安になる（2026-09-26 の eval では 38 問中 1 回）
 
 **検証**：`tests/api-chat-errors.test.ts`（提供元の失敗を `MockLanguageModelV3` で投げ、画面に届く SSE とログの両方を見る）・
 `tests/chat-error-message.test.ts`・`tests/chat-errors.test.ts`・`tests/ui.chat-errors.smoke.py`（実ブラウザ 9 場面。
@@ -309,7 +327,7 @@ Gemini 無料枠の制限は **RPM（1分あたりリクエスト）／RPD（1�
 **優先度：高（本番運用）**
 1. **本番モデル＝有料枠 or Vertex AI**：日次上限・学習利用を回避。`GEMINI_MODEL` を Flash 系の番号つきの版（例 `gemini-3.5-flash`）に——eval を流してから（§4.1）。プロバイダ抽象済みなので設定のみ。
 2. **レート制限を Upstash Redis 等へ**：サーバレス横断で厳密に。`rate-limit.ts` の seam を差替。
-3. ~~**エラー UX の一本化**~~——**実施（2026-09-25・§4.6）**。続く**モデルの検証**も**実施（2026-09-26・§4.1）**：既定を `gemini-3.5-flash-lite` に固定し、温度は送らない（`docs/260926_chat_model_eval.md`）。そこで見つけた残りの宿題（ツールへの不正な引数が「失敗」と記録される件など）は同 §6。
+3. ~~**エラー UX の一本化**~~——**実施（2026-09-25・§4.6）**。続く**モデルの検証**も**実施（2026-09-26・§4.1）**：既定を `gemini-3.5-flash-lite` に固定し、温度は送らない（`docs/260926_chat_model_eval.md`）。そこで見つけた宿題のうち、ツールへの不正な引数が「モデルの失敗」と記録される件は**修正済み**（§4.6）。残りは同 §6。
 
 **優先度：中（機能拡張）**
 4. **MCP 公開**：共通APIを **Model Context Protocol** のツールとしても公開すれば、外部 AI クライアント（Claude 等）も同一表面を使える（`architecture.md` §10.5-5）。「API こそがプロダクト」の外部拡張。

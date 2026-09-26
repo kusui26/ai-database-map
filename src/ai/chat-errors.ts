@@ -15,7 +15,10 @@
  * - `APICallError`：提供元が答えた（`statusCode` あり）か、届かなかった（無し・`isRetryable`）
  * - `RetryError`：再試行したうえで失敗した。中身は `errors`（全回）と `lastError`（最後）
  * - `FirstChunkTimeoutError`：こちらの fetch が初回応答を 15 秒で 2 回打ち切った（SDK は包まない）
- * - それ以外（ツールの形の不一致など）：種類は `unknown`
+ * - それ以外：種類は `unknown`
+ *
+ * **ツールの失敗（形の合わない引数・無いツール）はモデルの失敗ではない**——SDK がモデルに差し戻し、
+ * 手順は続く。別に数え、別の 1 行で記録する（下の `toolFailuresOf`・`toolFailureLogLine`）。
  */
 
 import { APICallError, NoOutputGeneratedError, RetryError } from 'ai'
@@ -138,6 +141,12 @@ function conceal(text: string, utterances: readonly string[]): string {
     .reduce((masked, utterance) => masked.split(utterance).join(CONCEALED), text)
 }
 
+/** 説明を 1 行のログに載せられる形にする（発話を伏せ、改行を畳み、長さを切り、引用符で囲む）。 */
+function detailField(text: string, utterances: readonly string[]): string {
+  const detail = conceal(text, utterances).replace(/\s+/g, ' ').trim().slice(0, DETAIL_MAX_CHARS)
+  return `detail=${JSON.stringify(detail)}`
+}
+
 export interface FailureLogContext {
   readonly modelId: string
   readonly elapsedMs: number
@@ -152,10 +161,6 @@ export interface FailureLogContext {
  *      model=gemini-flash-lite-latest elapsed=31042ms name=AI_APICallError detail="The model is overloaded."`
  */
 export function chatFailureLogLine(failure: ChatFailure, context: FailureLogContext): string {
-  const detail = conceal(failure.detail, context.utterances)
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, DETAIL_MAX_CHARS)
   const fields = [
     `kind=${failure.kind}`,
     `status=${failure.status ?? '-'}`,
@@ -164,7 +169,137 @@ export function chatFailureLogLine(failure: ChatFailure, context: FailureLogCont
     `model=${context.modelId}`,
     `elapsed=${context.elapsedMs}ms`,
     `name=${failure.name}`,
-    `detail=${JSON.stringify(detail)}`,
+    detailField(failure.detail, context.utterances),
   ]
   return ['[api/chat] model failure', ...fields].join(' ')
+}
+
+// ---------------------------------------------------------------------------
+// ツールの失敗（モデルの失敗ではない）
+// ---------------------------------------------------------------------------
+
+/**
+ * ツールの呼び出し 1 回の失敗。
+ *
+ * ## なぜモデルの失敗と分けるか（2026-09-26 のモデル検証で見つけた）
+ *
+ * モデルが形の合わない引数を渡すと（例：`routeTypes: ["1"]`＝数ではなく文字列）、SDK はそのエラーを
+ * **ツールの結果としてモデルに差し戻し、手順を続ける**。モデルは同じターンで直して答えられる——
+ * ターンの失敗ではない。ところが `toUIMessageStream` の `onError` はこれでも呼ばれるので、以前は
+ * 「モデルの失敗」として 2 行（エラーと、SDK がそれを文字列にしたもの）記録し、ターンを `failed` と数えていた。
+ */
+export interface ToolFailure {
+  readonly toolName: string
+  readonly error: unknown
+}
+
+/**
+ * ツールの失敗のとき、そのツールのパーツ（`tool-input-error` / `tool-output-error`）に添える 1 文。
+ * 画面は今のところ描かないが、ストリームを読む人が「ターンが失敗した」と取り違えないよう、
+ * モデルの失敗の文（`CHAT_FAILURE_JA`）とは分ける。
+ */
+export const TOOL_FAILURE_JA = 'ツールの呼び出しに失敗しました。'
+
+/** 手順の記録（`StepResult.content`）の 1 パーツのうち、ツールの失敗を見分けるのに要る部分。 */
+interface ToolPart {
+  readonly type: string
+  readonly toolCallId: string
+  readonly toolName: string
+  /** 形の合わない呼び出し・無いツールの呼び出し（SDK が `invalid: true` を付ける）。 */
+  readonly invalid: boolean
+  readonly error: unknown
+}
+
+function toolPartOf(part: unknown): ToolPart | null {
+  if (!isRecord(part)) return null
+  const { type, toolCallId, toolName } = part
+  if (typeof type !== 'string' || typeof toolCallId !== 'string' || typeof toolName !== 'string') {
+    return null
+  }
+  return { type, toolCallId, toolName, invalid: part.invalid === true, error: part.error }
+}
+
+/**
+ * 1 手順の記録から、ツールの失敗を**呼び出し 1 回につき 1 件**取り出す（純関数）。
+ *
+ * - 形の合わない呼び出し：エラーの本体（`InvalidToolInputError` / `NoSuchToolError`）は呼び出しの側
+ *   （`tool-call` の `error`）にある。差し戻し（`tool-error`）はそれを文字列にしたものなので数えない
+ * - 実行が投げた失敗：差し戻し（`tool-error`）の側にしか無い
+ */
+export function toolFailuresOf(content: readonly unknown[]): ToolFailure[] {
+  const parts = content.map(toolPartOf).filter((part): part is ToolPart => part !== null)
+  const invalidCallIds = new Set(
+    parts
+      .filter((part) => part.type === 'tool-call' && part.invalid)
+      .map((part) => part.toolCallId),
+  )
+  return parts
+    .filter((part) =>
+      part.type === 'tool-call'
+        ? part.invalid
+        : part.type === 'tool-error' && !invalidCallIds.has(part.toolCallId),
+    )
+    .map(({ toolName, error }) => ({ toolName, error }))
+}
+
+/** 検証の指摘 1 件（Standard Schema の issue。Zod の issues もこの形）。 */
+interface Issue {
+  readonly message: string
+  readonly path: readonly unknown[]
+}
+
+function isIssue(value: unknown): value is Issue {
+  return isRecord(value) && typeof value.message === 'string' && Array.isArray(value.path)
+}
+
+/** 原因をたどる深さの上限（`InvalidToolInputError` → `TypeValidationError` → `ZodError`）。 */
+const MAX_CAUSE_DEPTH = 4
+
+/** 原因をたどって、検証の指摘を探す。見つからなければ空。 */
+function issuesOf(error: unknown, depth: number = 0): Issue[] {
+  if (!isRecord(error) || depth > MAX_CAUSE_DEPTH) return []
+  const issues = error.issues
+  if (Array.isArray(issues) && issues.length > 0 && issues.every(isIssue)) return issues
+  return issuesOf(error.cause, depth + 1)
+}
+
+/** 指摘の場所（`routeTypes.0`）。Standard Schema は `{ key }` の形でも渡してくる。 */
+function issuePath(issue: Issue): string {
+  const segments = issue.path.map((segment) =>
+    isRecord(segment) ? String(segment.key) : String(segment),
+  )
+  return segments.length > 0 ? segments.join('.') : '(引数全体)'
+}
+
+/**
+ * 記録に載せる説明。形の合わない引数なら、**どの引数がなぜ合わないか**だけを並べる。
+ * SDK のメッセージは引数の値（`Value: {…}`）を含み、肝心の指摘は後ろにあって 160 字で切れてしまう。
+ * 値には利用者の言葉や地点（緯度経度）が入りうるので、そもそも載せない。
+ */
+function toolFailureDetail(error: unknown): string {
+  const issues = issuesOf(error)
+  if (issues.length > 0) {
+    return issues.map((issue) => `${issuePath(issue)}: ${issue.message}`).join('; ')
+  }
+  return error instanceof Error ? error.message : String(error)
+}
+
+/**
+ * ツールの失敗 1 件の記録（1 行）。モデルの失敗の行（`model failure`）とは別に、ターンの成否に数えない。
+ *
+ * 例：`[api/chat] tool failure tool=compareGrowth name=AI_InvalidToolInputError
+ *      model=gemini-3.5-flash-lite detail="routeTypes.0: Invalid input: expected number, received string"`
+ */
+export function toolFailureLogLine(
+  failure: ToolFailure,
+  context: Pick<FailureLogContext, 'modelId' | 'utterances'>,
+): string {
+  const { error } = failure
+  const fields = [
+    `tool=${failure.toolName}`,
+    `name=${error instanceof Error ? error.name : typeof error}`,
+    `model=${context.modelId}`,
+    detailField(toolFailureDetail(error), context.utterances),
+  ]
+  return ['[api/chat] tool failure', ...fields].join(' ')
 }

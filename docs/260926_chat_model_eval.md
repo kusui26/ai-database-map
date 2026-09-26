@@ -261,8 +261,8 @@ without a `thoughtSignature` (tools: `getHazardAlerts`). Injected the documented
 
 ## 6. 本 PR の外に残したこと
 
-1. **ツールへの不正な引数が「モデルの失敗」として記録される**：A で 1 回、モデルが `compareGrowth` に
-   不正な引数を渡した（`operators: ["新幹線"]` など）。SDK はエラーをモデルに返し、モデルは同じターンで
+1. ~~**ツールへの不正な引数が「モデルの失敗」として記録される**~~——**修正済み（2026-09-26・`docs/feat_llm.md` §4.6）**：A で 1 回、モデルが `compareGrowth` に
+   形の合わない引数を渡した（`routeTypes: ["1"]`＝数ではなく文字列）。SDK はエラーをモデルに返し、モデルは同じターンで
    直して合格した。ところが route は `toUIMessageStream` の `onError` でもこれを受け取るので、
    `model failure kind=unknown` を 2 行（Error と、その文字列）残し、ターンを `failed` と数える
    （本文が空なら「失敗」の一言が出る）。直すなら、ツールの失敗（`tool-input-error` /

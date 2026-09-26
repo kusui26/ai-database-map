@@ -32,7 +32,15 @@ import {
   MAX_INPUT_CHARS,
   MAX_TOOL_STEPS,
 } from '@/ai/client'
-import { chatFailureLogLine, classifyChatFailure, failuresToRecord } from '@/ai/chat-errors'
+import {
+  chatFailureLogLine,
+  classifyChatFailure,
+  failuresToRecord,
+  TOOL_FAILURE_JA,
+  type ToolFailure,
+  toolFailureLogLine,
+  toolFailuresOf,
+} from '@/ai/chat-errors'
 import { CHAT_FAILURE_JA } from '@/shared/chat-errors'
 import { createCollector } from '@/ai/types'
 import { type ChatUIMessage, createTools } from '@/ai/tools'
@@ -112,6 +120,16 @@ function logFailures(
   for (const failure of failuresToRecord(failures, aborted)) {
     console.error(chatFailureLogLine(classifyChatFailure(failure), context))
   }
+}
+
+/**
+ * ツールの失敗を 1 件ずつ記録する。**ターンの失敗ではない**（SDK がモデルに差し戻して手順が続く）ので、
+ * `model failure` とは別の行にし、結果の 1 行（ok / failed）にも数えない。形の合わない引数が
+ * どれくらい起きるかは、モデルやツールの説明の良し悪しを測る材料になる。
+ */
+function logToolFailures(failures: readonly ToolFailure[], utterances: string[]): void {
+  const context = { modelId: chatModelId(), utterances }
+  for (const failure of failures) console.warn(toolFailureLogLine(failure, context))
 }
 
 /** text だけの UIMessage を構築（id は convertToModelMessages で不要）。 */
@@ -207,11 +225,14 @@ export async function POST(request: Request): Promise<Response> {
       })
       const modelMessages = await convertToModelMessages(uiMessages)
       const abortSignal = AbortSignal.timeout(CHAT_TIMEOUT_MS)
+      // モデルの失敗（ターンの失敗）と、ツールの失敗（モデルに差し戻されて手順が続く）は別に数える。
       const failures: unknown[] = []
+      const toolFailures: ToolFailure[] = []
       // ツールループ（stopWhen で最大 MAX_TOOL_STEPS 回）。以前は ToolLoopAgent 経由だったが、
       // あれは streamText の薄い包みで `onError` を型の上で渡せない。SDK の既定の `onError` は
       // 失敗のたびに生のエラー（提供元の説明・応答本文）を console.error に出すので、発話が紛れうる。
       // 記録は logFailures の 1 行（発話を伏せる）に一本化するため、ここで受け取って握る。
+      // この `onError` が呼ばれるのはストリームの失敗（error パート）だけで、ツールの失敗では呼ばれない。
       const result = streamText({
         model: chatModel(),
         system: buildSystemPrompt() + mapContext,
@@ -225,15 +246,19 @@ export async function POST(request: Request): Promise<Response> {
         onError: ({ error }) => {
           failures.push(error)
         },
+        // ツールの失敗は、手順の記録から呼び出し 1 回につき 1 件取る（chat-errors.ts の toolFailuresOf）。
+        onStepFinish: ({ content }) => {
+          toolFailures.push(...toolFailuresOf(content))
+        },
       })
-      // テキスト/ツールパートを即時ストリーム。内側にも failureSentence を渡す
-      // （渡さないと SDK 既定の英語 "An error occurred." がクライアントに届く）。
+      // テキスト/ツールパートを即時ストリーム。ここは画面に送る 1 文を選ぶだけで、記録はしない。
+      // SDK はこれを、ストリームの失敗に加えて**ツールの失敗**（形の合わない引数・無いツール）でも呼ぶ——
+      // 以前はそれも「モデルの失敗」に積み、ターンを failed と数えていた。見分けは、上の streamText の
+      // onError が先に受け取ったかどうか（同じ error パートは、こちらに届く前にそちらを通る）。
+      // 渡さないと SDK 既定の英語 "An error occurred." がクライアントに届く。
       writer.merge(
         result.toUIMessageStream<ChatUIMessage>({
-          onError: (error) => {
-            failures.push(error)
-            return failureSentence(error)
-          },
+          onError: (error) => (failures.includes(error) ? failureSentence(error) : TOOL_FAILURE_JA),
         }),
       )
       // ループ完了後、domain が決定的に組み立てた MapResponse を data-map で送出。
@@ -251,8 +276,10 @@ export async function POST(request: Request): Promise<Response> {
         assemble(effects, textOrFallback(text, panelCount, outcome)),
       )
       writer.write({ type: 'data-map', id: MAP_PART_ID, data: mapResponse })
-      // 失敗の中身を 1 件ずつ（種類・HTTP 状態・回数）。続けて 1 行サマリ。どちらも発話は出さない。
+      // 失敗の中身を 1 件ずつ（種類・HTTP 状態・回数）、ツールの失敗も 1 件ずつ。続けて 1 行サマリ。
+      // どれも発話は出さない。
       logFailures(failures, abortSignal.aborted, startedAt, utterances)
+      logToolFailures(toolFailures, utterances)
       console.info(
         `[api/chat] ${outcome} ${Date.now() - startedAt}ms effects=${effects.length} panels=${panelCount} text=${text.length > 0}`,
       )

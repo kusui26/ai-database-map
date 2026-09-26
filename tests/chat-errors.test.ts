@@ -1,18 +1,28 @@
 /**
  * モデル呼び出しの失敗を、種類に分けて 1 行で記録する（`src/ai/chat-errors.ts`・純関数）。
+ * ツールの失敗（形の合わない引数・無いツール）は、モデルの失敗とは別に 1 行で記録する。
  *
  * ルートごとの確かめは `tests/api-chat-errors.test.ts`。ここでは境界——状態番号の区切り、
- * 再試行の数え方、記録の長さと伏せ方——を 1 つずつ固定する。
+ * 再試行の数え方、記録の長さと伏せ方、ツールの失敗の数え方——を 1 つずつ固定する。
  */
 
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import { APICallError, NoOutputGeneratedError, RetryError } from 'ai'
+import {
+  APICallError,
+  InvalidToolInputError,
+  NoOutputGeneratedError,
+  NoSuchToolError,
+  RetryError,
+  TypeValidationError,
+} from 'ai'
 import {
   chatFailureLogLine,
   classifyChatFailure,
   failuresToRecord,
   isOwnAbort,
+  toolFailureLogLine,
+  toolFailuresOf,
 } from '@/ai/chat-errors'
 
 function apiError(
@@ -169,5 +179,167 @@ describe('記録の 1 行', () => {
   it('説明の中の引用符で 1 行が壊れない（JSON の文字列として出す）', () => {
     const line = chatFailureLogLine(classifyChatFailure(new Error('say "hi"')), CONTEXT)
     expect(line.endsWith('detail="say \\"hi\\""')).toBe(true)
+  })
+})
+
+/**
+ * SDK が形の合わない引数に作るエラー。中身の入れ子も SDK と同じにする
+ * （`InvalidToolInputError` → `TypeValidationError` → `ZodError`）。
+ */
+function invalidInput(value: unknown): InvalidToolInputError {
+  const schema = z.object({
+    x: z.string(),
+    operators: z.array(z.string()).optional(),
+    routeTypes: z.array(z.number().int()).optional(),
+  })
+  const parsed = schema.safeParse(value)
+  if (parsed.success) throw new Error('テストの前提：形の合わない値を渡すこと')
+  return new InvalidToolInputError({
+    toolName: 'compareGrowth',
+    toolInput: JSON.stringify(value),
+    cause: new TypeValidationError({ value, cause: parsed.error }),
+  })
+}
+
+/** 手順の記録に残る、形の合わない呼び出しと、その差し戻し（SDK はエラーを文字列にして渡す）。 */
+function invalidCallParts(toolCallId: string, error: InvalidToolInputError | NoSuchToolError) {
+  return [
+    {
+      type: 'tool-call',
+      toolCallId,
+      toolName: 'compareGrowth',
+      input: {},
+      dynamic: true,
+      invalid: true,
+      error,
+    },
+    {
+      type: 'tool-error',
+      toolCallId,
+      toolName: 'compareGrowth',
+      input: {},
+      dynamic: true,
+      error: error.message,
+    },
+  ]
+}
+
+describe('ツールの失敗を数える（呼び出し 1 回につき 1 件）', () => {
+  const okCall = { type: 'tool-call', toolCallId: 'ok', toolName: 'searchStations', input: {} }
+  const okResult = { type: 'tool-result', toolCallId: 'ok', toolName: 'searchStations', output: {} }
+
+  it('形の合わない呼び出しは 1 件。エラーの本体は呼び出しの側から取り、文字列の差し戻しは数えない', () => {
+    const error = invalidInput({ x: 'pop_gr', routeTypes: ['1'] })
+    expect(toolFailuresOf(invalidCallParts('c1', error))).toEqual([
+      { toolName: 'compareGrowth', error },
+    ])
+  })
+
+  it('実行が投げた失敗は、差し戻しの側にしか無いので、そちらから取る', () => {
+    const thrown = new Error('catalog unavailable')
+    const content = [
+      { type: 'tool-call', toolCallId: 'c1', toolName: 'getMetricsCatalog', input: {} },
+      {
+        type: 'tool-error',
+        toolCallId: 'c1',
+        toolName: 'getMetricsCatalog',
+        input: {},
+        error: thrown,
+      },
+    ]
+    expect(toolFailuresOf(content)).toEqual([{ toolName: 'getMetricsCatalog', error: thrown }])
+  })
+
+  it('成功した呼び出しは数えない', () => {
+    expect(toolFailuresOf([{ type: 'text', text: '了解' }, okCall, okResult])).toEqual([])
+  })
+
+  it('並列の呼び出しでも、失敗したものだけを出てきた順に数える', () => {
+    const first = invalidInput({ x: 1 })
+    const second = new NoSuchToolError({
+      toolName: 'getWeather',
+      availableTools: ['searchStations'],
+    })
+    const content = [
+      ...invalidCallParts('c1', first),
+      okCall,
+      ...invalidCallParts('c2', second),
+      okResult,
+    ]
+    expect(toolFailuresOf(content).map((failure) => failure.error)).toEqual([first, second])
+  })
+
+  it('形の分からないパーツは無視して落ちない', () => {
+    expect(
+      toolFailuresOf([null, 'tool-error', 42, { type: 'tool-error' }, { toolName: 1 }]),
+    ).toEqual([])
+  })
+})
+
+describe('ツールの失敗の記録の 1 行', () => {
+  const CONTEXT = { modelId: 'gemini-3.5-flash-lite', utterances: [] }
+
+  it('形の合わない引数：どの引数がなぜ合わないかだけを並べ、引数の値は載せない', () => {
+    const error = invalidInput({ x: 'pop_gr', operators: ['新幹線'], routeTypes: ['1'] })
+    const line = toolFailureLogLine({ toolName: 'compareGrowth', error }, CONTEXT)
+    expect(line).toBe(
+      '[api/chat] tool failure tool=compareGrowth name=AI_InvalidToolInputError ' +
+        'model=gemini-3.5-flash-lite detail="routeTypes.0: Invalid input: expected number, received string"',
+    )
+    expect(line).not.toContain('新幹線')
+  })
+
+  it('指摘が複数なら「; 」で並べる。引数全体が合わないときは場所を「(引数全体)」と書く', () => {
+    const several = toolFailureLogLine(
+      { toolName: 'compareGrowth', error: invalidInput({ routeTypes: [1.5] }) },
+      CONTEXT,
+    )
+    expect(several).toContain(
+      'detail="x: Invalid input: expected string, received undefined; routeTypes.0: ',
+    )
+    const whole = toolFailureLogLine(
+      { toolName: 'compareGrowth', error: invalidInput('pop_gr') },
+      CONTEXT,
+    )
+    expect(whole).toContain('detail="(引数全体): Invalid input: expected object, received string"')
+  })
+
+  it('Standard Schema の `{ key }` 形の場所も読める', () => {
+    const cause = { issues: [{ message: 'Required', path: [{ key: 'x' }, { key: 0 }] }] }
+    const error = new InvalidToolInputError({ toolName: 't', toolInput: '{}', cause })
+    const line = toolFailureLogLine({ toolName: 't', error }, CONTEXT)
+    expect(line).toContain('detail="x.0: Required"')
+  })
+
+  it('無いツール：名前と、SDK の説明（呼ぼうとした名前を含む）を残す', () => {
+    const error = new NoSuchToolError({
+      toolName: 'getWeather',
+      availableTools: ['searchStations'],
+    })
+    const line = toolFailureLogLine({ toolName: 'getWeather', error }, CONTEXT)
+    expect(line).toContain('tool=getWeather name=AI_NoSuchToolError')
+    expect(line).toContain("unavailable tool 'getWeather'")
+  })
+
+  it('実行が投げた失敗：説明に発話が紛れていたら伏せ、160 文字で切る', () => {
+    const utterance = '横浜市で中古マンションを探しています'
+    const error = new Error(`lookup failed for "${utterance}" ${'x'.repeat(300)}`)
+    const line = toolFailureLogLine(
+      { toolName: 'getMetricsCatalog', error },
+      { ...CONTEXT, utterances: [utterance] },
+    )
+    expect(line).toContain('name=Error')
+    expect(line).toContain('[発話]')
+    expect(line).not.toContain(utterance)
+    const detail = z
+      .string()
+      .parse(JSON.parse(line.slice(line.indexOf('detail=') + 'detail='.length)))
+    expect(detail.length).toBe(160)
+  })
+
+  it('エラーが Error でなくても落ちない（名前は型名）', () => {
+    const line = toolFailureLogLine({ toolName: 'compareGrowth', error: 'bad input' }, CONTEXT)
+    expect(line).toContain('name=string')
+    expect(line).toContain('detail="bad input"')
   })
 })

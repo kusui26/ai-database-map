@@ -14,11 +14,13 @@
  *
  * - `APICallError`：提供元が答えた（`statusCode` あり）か、届かなかった（無し・`isRetryable`）
  * - `RetryError`：再試行したうえで失敗した。中身は `errors`（全回）と `lastError`（最後）
+ * - `FirstChunkTimeoutError`：こちらの fetch が初回応答を 15 秒で 2 回打ち切った（SDK は包まない）
  * - それ以外（ツールの形の不一致など）：種類は `unknown`
  */
 
 import { APICallError, NoOutputGeneratedError, RetryError } from 'ai'
 import { type ChatFailureKind } from '@/shared/chat-errors'
+import { FirstChunkTimeoutError } from './client'
 
 export interface ChatFailure {
   readonly kind: ChatFailureKind
@@ -74,6 +76,18 @@ export function classifyChatFailure(error: unknown): ChatFailure {
       status,
       providerStatus: providerStatusOf(cause.responseBody),
       attempts,
+      name: cause.name,
+      detail: cause.message,
+    }
+  }
+  // 初回応答の打ち切り（`client.ts` の createTimedFetch が 2 回とも 15 秒で切った）。
+  // 提供元が時間内に応答しなかった＝一時的な不調。打ち切り 1 回＋再試行 1 回で 2 回と数える。
+  if (cause instanceof FirstChunkTimeoutError) {
+    return {
+      kind: 'unavailable',
+      status: null,
+      providerStatus: null,
+      attempts: 2,
       name: cause.name,
       detail: cause.message,
     }

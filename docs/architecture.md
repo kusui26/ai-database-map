@@ -313,6 +313,7 @@ GraphAI（receptron・v2系・TypeScript・v2.0.18/2026）は **非同期デー�
 ### 10.7 確定事項（P8c の eval・2026-07 で確定。詳細は [`p8c_eval_report.md`](./p8c_eval_report.md)）
 - **採用モデル**：ゴールデン **20 問 eval が 20/20 合格**。**無料デプロイの既定＝`gemini-flash-lite-latest`**（高速 ~3s・日本語ツール選択良好・無料日次枠が実用的）。品質重視/本番は**有料枠 or Vertex AI** の `gemini-flash-latest`（＝3.5-flash）または `gemini-3-flash-preview` に `GEMINI_MODEL` で差し替え。
   - **無料枠の現実（決め手）**：`gemini-2.5-flash` は新規非対応（404）／`gemini-flash-latest` は **20 req/日**で無料運用に耐えない／`gemini-flash-lite-latest` は残枠あり・高速。→ プロバイダ抽象（`GEMINI_MODEL`）で 1 行差し替え可能にしてある。フォールバックは Claude Haiku 4.5 / GPT-4.1-mini / Groq。
+  - **2026-09-26 更新**：既定を**番号つきの `gemini-3.5-flash-lite` に固定**し、温度は送らない（＝既定 1.0）。別名 `gemini-flash-lite-latest` の中身が断りなく 3.1→3.5 Flash-Lite に替わっていたため。golden eval 38/38（[`260926_chat_model_eval.md`](./260926_chat_model_eval.md)）。
 - **GraphAI**：20 問（検索→詳細→本文・カタログ照会→ランキング・散布・2 駅比較・曖昧駅名・データ外拒否）が **AI SDK v6 `ToolLoopAgent` 単体で完結** → **不採用（既定は AI SDK v6）**。並列 fan-out（例「A駅とB駅を複数指標で並列比較」）が主戦場になった段階で低リスクに再評価（§10.4・可逆）。
 - **任意半径クエリ**（§5.2）を LLM から扱う集計方式（事前計算6半径＋補間 or PostGIS 幾何）は**将来拡張**（未着手）。
 

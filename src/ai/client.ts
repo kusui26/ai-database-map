@@ -10,18 +10,34 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { type LanguageModel } from 'ai'
 
 /**
- * 既定モデル（Gemini Flash 系・architecture.md §10.2/§10.7）。env `GEMINI_MODEL` で上書き可能。
+ * 既定モデル（Gemini Flash-Lite・architecture.md §10.2/§10.7）。env `GEMINI_MODEL` で上書き可能。
  *
- * 2026-07 の無料枠実測（docs/p8c_eval_report.md §2）で、`gemini-2.5-flash` は新規非対応（404）、
- * `gemini-flash-latest`（＝3.5-flash）は **20 req/日**で無料運用に耐えない、と判明。
- * P8c の eval（ゴールデン20問）で **`gemini-flash-lite-latest` が 20/20 合格・高速（~3s）・残枠あり**
- * だったため、**無料デプロイの既定に採用**する。品質重視/本番は有料枠 or Vertex の
- * `gemini-flash-latest`（または `gemini-3-flash-preview`）へ `GEMINI_MODEL` で差し替える。
+ * 無料枠で実用になるのは 3.x の Flash-Lite（Flash 系や 2.5 Flash-Lite は 20 回/日・
+ * docs/feat_llm.md §6.1）。2026-09-26 の eval で 38/38（災害・拒否 17/17）。
+ *
+ * **番号つきの版に固定する**（`-latest` の別名にしない）。別名は断りなく中身が替わり
+ * （2026-09 に `gemini-flash-lite-latest` が 3.1 → 3.5 に替わっていた）、替わってもエラーは出ない。
+ * 固定した版が退役すれば 404 になり、`model failure … status=404` の 1 行で分かる。
+ * 上げるときは eval を流してから（docs/260926_chat_model_eval.md）。
+ *
+ * ID が `gemini-3…` だと `@ai-sdk/google` が Gemini 3 として扱い、並列のツール呼び出しの 2 つ目以降
+ * （署名が付かないのが仕様）に目印を補う。そのたびに出る `AI SDK Warning … without a
+ * thoughtSignature` は無害（同 §4.4）。
  */
-export const DEFAULT_CHAT_MODEL = 'gemini-flash-lite-latest'
+export const DEFAULT_CHAT_MODEL = 'gemini-3.5-flash-lite'
 
 /** ツールループの最大ステップ数（検索→詳細→…の多段呼び出し上限・plan_fable P8a）。 */
 export const MAX_TOOL_STEPS = 6
+
+/**
+ * 生成の温度。**送らない**（`undefined`）＝モデルの既定（Gemini 3 系は 1.0）。
+ *
+ * Google は Gemini 3 系で既定のままを強く推奨している（1.0 未満は「ループや性能低下を招きうる」）。
+ * 以前は 0.2 を渡していたが、2026-09-26 の eval で既定でも 38/38 と変わらず、同じ時間帯に交互に
+ * 投げても速さ・長さに差がなかったので、推奨に従う（docs/260926_chat_model_eval.md）。
+ * 変えるなら eval を流してから。
+ */
+export const CHAT_TEMPERATURE: number | undefined = undefined
 
 /**
  * 1 リクエストの上限時間（ミリ秒・アプリ側 AbortSignal）。
@@ -59,8 +75,14 @@ export function isChatConfigured(): boolean {
   return key !== undefined && key.length > 0
 }
 
-/** 初回チャンク待ちの打ち切り（再試行してよい失敗かを型で判別するための専用エラー）。 */
-class FirstChunkTimeoutError extends Error {
+/**
+ * 初回チャンク待ちの打ち切り（再試行してよい失敗かを型で判別するための専用エラー）。
+ *
+ * 2 回とも打ち切ると、このエラーがそのまま SDK を抜けてくる（`APICallError` ではないので SDK は
+ * 再試行せず、`handleFetchError` も包まない）。**提供元が時間内に応答しなかった**という意味なので、
+ * 分類では一時的な不調として扱う（`chat-errors.ts`）——2026-09-25 の障害の「31 秒」はこれだった。
+ */
+export class FirstChunkTimeoutError extends Error {
   constructor(timeoutMs: number) {
     super(`モデルの初回応答が ${timeoutMs}ms 以内に得られませんでした`)
     this.name = 'FirstChunkTimeoutError'

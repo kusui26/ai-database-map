@@ -1,12 +1,12 @@
 /**
  * チャット UI の状態（Step2・P8b）。Zustand。
  *
- * チャットパネルの開閉、コンパクトカードの「⤢ 拡大＝昇格」先（ランキング/散布モーダル）、
- * 駅詳細昇格時の焦点カテゴリを保持する。選択駅・半径は URL（nuqs）が正で、ここには載せない。
+ * チャットパネルの開閉と、コンパクトカードの「⤢ 拡大＝昇格」先（ランキング/散布）を保持する。
+ * 選択駅・半径・駅詳細のタブは URL（nuqs）が正で、ここには載せない（タブは 2026-10-02 に URL へ移した・
+ * `components/detail/useDetailTab.ts`）。
  */
 
 import { create } from 'zustand'
-import { type DetailTab } from '@/shared/constants'
 import { type Promotion } from '@/shared/promotion'
 
 type ChatStore = {
@@ -28,13 +28,6 @@ type ChatStore = {
    */
   canvasKey: string | null
   setCanvasKey: (key: string) => void
-
-  /**
-   * 駅詳細昇格時にドロワーで開く焦点タブ（1 回消費）。
-   * **指標のカテゴリとは限らない**——災害タブも要求できるので `DetailTab` で持つ。
-   */
-  requestedCategory: DetailTab | null
-  setRequestedCategory: (category: DetailTab | null) => void
 }
 
 export const useChatStore = create<ChatStore>((set) => ({
@@ -49,7 +42,4 @@ export const useChatStore = create<ChatStore>((set) => ({
 
   canvasKey: null,
   setCanvasKey: (canvasKey) => set({ canvasKey }),
-
-  requestedCategory: null,
-  setRequestedCategory: (category) => set({ requestedCategory: category }),
 }))

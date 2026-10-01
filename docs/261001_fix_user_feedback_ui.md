@@ -143,14 +143,14 @@ useEffect(() => {
 | ファイル | 変更 |
 |---|---|
 | `src/shared/constants.ts` | `DetailTab` から `population_forecast` を外す。`detailTabFor(category: Category): DetailTab` を足す |
-| `src/components/detail/detailTab.ts`（新） | `isDetailTab(value: unknown): value is DetailTab`・`initialDetailTab(urlTab, storedTab)`・保存の読み書き（try/catch。プライベートモード等で投げたら既定に倒す） |
+| `src/components/detail/detailTab.ts`（新） | `isDetailTab(value: unknown): value is DetailTab`・`resolveDetailTab(urlTab, rememberedTab)`・記憶の読み書き `readRememberedDetailTab`／`rememberDetailTab`（try/catch。プライベートモード等で投げたら「記憶なし」に倒す） |
 | `src/components/detail/useDetailTab.ts`（新） | `useQueryState('tab', parseAsStringLiteral(DETAIL_TABS))` ＋ 記憶 |
 | `StationDetailPanel.tsx` | `useState` と 2 つの効果を消し、`useDetailTab()` に置き換える |
 | `usePromote.ts`・`chatStore.ts` | 詳細の ⤢ は `setTab(detailTabFor(category))` と `setGrp(grp)` を同じ tick で（nuqs が 1 回の URL 更新に束ねる）。`requestedCategory` を消す |
 
 ### 2.5 検証
 
-- 単体：`isDetailTab`（9 タブ・`population_forecast`・空文字・数値・null）、`initialDetailTab`（URL 優先・記憶の不正値・両方なし）、
+- 単体：`isDetailTab`（9 タブ・`population_forecast`・空文字・数値・null）、`resolveDetailTab`（URL 優先・記憶の不正値・両方なし）、
   `detailTabFor`（9 カテゴリ全部）、保存の読み書きが投げても既定を返すこと。
 - 画面：所得 → 新宿 → **所得のまま**／リロード → 所得／記憶だけある新しいタブ → 所得／`?tab=hazard` のリンク → 災害タブが
   **帯の中に見えている**（`useRevealTab`）／閉じて開き直しても保つ。
@@ -159,6 +159,30 @@ useEffect(() => {
 
 - 覚えたタブが「災害」だと、駅を替えるたびに地点のハザードを取りに行く。SWR のキャッシュが効き、1 駅 1 回なので許容する。
 - データの無い駅に替えると「この駅は『売上』のデータがありません」が出る。**黙って別のタブに替えるより正直**なので、そのままにする。
+
+### 2.7 実施記録（A1・2026-10-02）
+
+§12-1・§12-2 は推奨どおり（URL＋この端末の記憶／タブは replace）で実装した。§4.3 の不具合と §4.4(a) も同じ PR に入れた。
+
+- **型**：`DetailTab` から `population_forecast` を外し、`DETAIL_TABS`・`DEFAULT_DETAIL_TAB`・`detailTabFor` を
+  `shared/constants.ts` に集めた（チャットの部品が重い `StationDetailPanel` を読み込まずに済む）。
+- **決め方**：`components/detail/detailTab.ts`（`resolveDetailTab`・記憶の読み書き）と `useDetailTab.ts`（`?tab`）。
+  駅詳細パネルの「駅が変わったら乗降へ戻す」効果と、`chatStore` の 1 回消費の `requestedCategory` を消した。
+- **チャット**：`data-promotions` の焦点を `detailFocus.ts`・`useApplyDetailFocus.ts` で `?tab` に書く。⤢ のチップも同じ道。
+
+計画から変えた点：
+
+1. **乗降客数も URL に明示して書く**（計画は既定値を URL から消すとしていた）。URL に無いときは「この端末の記憶」を
+   使うので、既定値だけ消すと「乗降を選んだ」と「まだ選んでいない」の区別がつかない。開いただけでは書かない。
+2. **焦点の無い駅詳細（駅の概要）は、⤢ でもタブを触らない**（覚えたタブのまま）。チャットの自動と同じ規則にそろえた。
+3. **同じ焦点は 1 回の回答で 1 度だけ当てる**。サーバはツールが成功するたびに条件を送り直すので、
+   そのたびに当てると、回答の途中で利用者が替えたタブが戻ってしまう。質問を送るたびに当て直す。
+
+**検証**：
+- 単体テスト 1,271 件（新規 49 件）、型検査、lint、本番ビルド。
+- 画面テスト `tests/ui.detail-tab.smoke.py`（10 場面 36 項目）：修正後は全項目が通過し、修正前の本番に当てると 19 項目が失敗する。
+- タブを 5 回切り替えても、RSC の再取得と文書の再読込は 0 件。
+- 既存の画面テスト（⤢・チャットの失敗・おすすめ・災害の文言）も全項目が通過。
 
 ---
 
@@ -256,7 +280,7 @@ AI が `getStationDetail{category:'population_forecast'}`（ツールの入力�
 
 ### 4.4 直し方
 
-**(a) 聞いたタブで開く（全幅）**：`onData` で `data-promotions` を受けたら、駅詳細の焦点を `?tab` に書く。
+**(a) 聞いたタブで開く（全幅・A1 で実施・§2.7）**：`onData` で `data-promotions` を受けたら、駅詳細の焦点を `?tab` に書く。
 `data-promotions` は `data-map` の**前**に届く（`route.ts` の `writeMap`）ので、続く `selectStation` と同じ tick で URL が 1 回だけ変わり、
 **ドロワーは最初から聞いたタブで開く**。焦点が無い（`category: null`）ときは**タブを触らない**（覚えたタブのまま）。
 
@@ -289,8 +313,8 @@ GUI Chat Protocol の `selectStation` に焦点を足す案は取らない。焦
 
 | ファイル | 変更 |
 |---|---|
-| `src/components/chat/ChatPanel.tsx` | `onData` で `data-promotions` も受け、`detailFocusOf(promotions)` → `setTab` |
-| `src/components/chat/detailFocus.ts`（新） | `detailFocusOf(promotions: PanelPromotions): DetailTab \| null`（最後の駅詳細の焦点） |
+| `src/components/chat/ChatPanel.tsx`・`useApplyDetailFocus.ts`（新） | `onData` で `data-promotions` も受け、焦点を `useSelectDetailTab` で書く（1 回の回答で 1 度・送信のたびに当て直す） |
+| `src/components/chat/detailFocus.ts`（新） | `detailFocusOf(promotions): DetailFocus \| null`（最後の駅詳細の駅とタブ）・`focusToApply`（同じ焦点を当て直さない判定） |
 | `src/components/chat/presentation.ts`（新） | `presentationOf(kind, viewportWidth_px): 'chip' \| 'inline'` |
 | `src/components/chat/ChatMessage.tsx` | 'inline' のグループは `PanelStack`（compact）＋ ⤢ |
 | `StationDetailPanel.tsx` | 携帯でチャットのシートが開いている間は、AI の選択でシートを開かない（⤢ と地図のタップでは開く） |
@@ -669,7 +693,7 @@ jSTAT MAP（総務省統計局）・RESAS・不動産情報ライブラリ・Arc
 
 | PR | 中身 | 依存 | 規模 | 主な検証 |
 |---|---|---|:-:|---|
-| **A1** fix | タブを覚える（`?tab`＋記憶）・聞いたタブで開く・将来推計の不具合 | — | S | 単体・`ui.detail-tab.smoke.py` |
+| **A1** fix | タブを覚える（`?tab`＋記憶）・聞いたタブで開く・将来推計の不具合（**済・2026-10-02・§2.7**） | — | S | 単体・`ui.detail-tab.smoke.py` |
 | **A2** fix | 回答の末尾追従・枠の高さを固定・最新へボタン | — | S | `ui.chat-scroll.smoke.py` |
 | **A3** feat | 画面の状態を履歴に積む（push/replace・図の URL 化・1 回答 1 履歴） | A1 | M | `ui.history.smoke.py` |
 | **A4** feat | 狭い画面は会話の中に図・携帯で詳細シートを被せない | A1・A2・A3 | M | 3 幅の実レンダ |

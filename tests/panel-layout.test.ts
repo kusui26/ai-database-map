@@ -2,12 +2,12 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
   DETAIL_TAB_LABELS_JA,
+  DETAIL_TABS,
   PANEL_GAP_PX,
   PANEL_WIDTH_CSS,
   PANEL_WIDTH_PX,
 } from '@/shared/constants'
 import { TAB_FADE_WIDTH_PX, tabStripScrollLeft } from '@/lib/tab-strip'
-import { DETAIL_TABS } from '@/components/detail/StationDetailPanel'
 
 /**
  * 駅詳細のタブ帯（1440px 実測・2026-08-04／所得 2026-08-13／売上 2026-08-17／災害 2026-08-28）。

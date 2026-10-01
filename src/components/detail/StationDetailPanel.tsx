@@ -5,6 +5,9 @@
  * ?grp 選択で開き、閉じると ?grp をクリア。カード＋タブは Protocol の Panel を PanelStack で描画する。
  * タブは 8 カテゴリ（乗降・人口・所得・売上・地価・バス・事業所・従業者）＋**災害**。
  * 半径依存タブは集計半径セレクタを表示。
+ *
+ * 選んだタブは URL（`?tab`）とこの端末に覚え、**駅を替えても、閉じて開き直しても保つ**
+ * （`useDetailTab.ts`・`docs/261001_fix_user_feedback_ui.md` §2）。
  */
 
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
@@ -16,6 +19,7 @@ import {
   type DetailTab,
   CATEGORY_LABELS_JA,
   DETAIL_TAB_LABELS_JA,
+  DETAIL_TABS,
   PANEL_WIDTH_CSS,
   RADII_M,
   RADIUS_LABELS,
@@ -33,8 +37,8 @@ import {
 } from '@/domain/stations/panels'
 import { isRadiusDependentCategory } from '@/domain/metrics'
 import { useMapUrlState } from '@/components/map/useMapUrlState'
-import { useChatStore } from '@/stores/chatStore'
 import { useStationDetail } from '@/components/detail/useStationDetail'
+import { useDetailTab } from '@/components/detail/useDetailTab'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { PanelRenderer, PanelStack } from '@/components/panels/PanelRenderer'
 import { StationHazardBadge } from '@/components/hazard/StationHazardBadge'
@@ -43,33 +47,6 @@ import { type HazardTarget } from '@/components/hazard/useHazardPoint'
 import { TAB_FADE_WIDTH_PX, tabStripScrollLeft } from '@/lib/tab-strip'
 import { cn } from '@/lib/utils'
 import { messageJaOf } from '@/lib/fetch-json'
-
-/**
- * 詳細タブ（表示順）。所得は「そこに住む人の稼ぎ」、売上は「そこで落ちるお金」なので、
- * 人口 → 所得 → 売上 と並べる（`CATEGORY_ORDER` と同順）。
- *
- * **災害は末尾**（`docs/260828_fix_flood.md` §7 決定 2）。指標ではないので `Category` ではなく
- * `DetailTab` で持つ。2 番目に置けば見つけやすいが、**乗降・人口を主に使う人の並びを乱す**——
- * ヘッダのバッジという確実な入口があるので、並びを壊してまで前に出さない。
- *
- * ⚠ タブ帯は 7 タブで 460px、8 タブ（売上）で 516px、**9 タブ（災害）で 572px** になり、
- * パネル幅 420px を超えて横スライドが要る（パネルを広げると地図が狭くなるので広げない・
- * `docs/260805_research_add_dataset_economy.md` §16.3）。7 タブまでは最後のタブが 26px 見えて
- * 「続きがある」と分かったが、**8 タブ以降は最後のタブが完全に隠れる**ため、帯の右端に
- * フェードを出し、**選んだタブは帯を送って見せる**（`docs/260816_sales.md` §7.4 案A・
- * `docs/260828_fix_flood.md` §4.2・`tests/panel-layout.test.ts`）。
- */
-export const DETAIL_TABS: readonly DetailTab[] = [
-  'passenger',
-  'population',
-  'income',
-  'sales',
-  'land_price',
-  'bus',
-  'establishment',
-  'employee',
-  'hazard',
-]
 
 /**
  * 災害バッジとタブが見る地点。**1 か所で作る**——バッジ（ヘッダ）とタブ（本文）で
@@ -332,26 +309,8 @@ export function StationDetailPanel() {
   const { grp, setGrp, radiusM, setRadiusM } = useMapUrlState()
   const isDesktop = useIsDesktop()
   const { detail, isLoading, error } = useStationDetail(grp)
-  const [tab, setTab] = useState<DetailTab>('passenger')
-
-  // チャットの ⤢ 昇格が焦点タブを要求していれば、その1回だけ反映（無ければ乗降）。
-  const requestedCategory = useChatStore((state) => state.requestedCategory)
-  const setRequestedCategory = useChatStore((state) => state.setRequestedCategory)
-  const requestedRef = useRef(requestedCategory)
-  requestedRef.current = requestedCategory
-
-  // ⤢ 昇格が焦点タブを要求したら、選択駅が同じ（ドロワー既開）でもそのタブへ切替え、要求は消費する
-  useEffect(() => {
-    if (requestedCategory !== null) {
-      setTab(requestedCategory)
-      setRequestedCategory(null)
-    }
-  }, [requestedCategory, setRequestedCategory])
-
-  // 駅が変わったら乗降タブへ戻す（ただし焦点要求が保留中なら上の効果を優先）
-  useEffect(() => {
-    if (requestedRef.current === null) setTab('passenger')
-  }, [grp])
+  // 駅を替えても戻さない。チャットの焦点（聞いたタブ）も、このタブとして URL に書かれる。
+  const [tab, setTab] = useDetailTab()
 
   const open = grp !== null
   const close = useCallback(() => {

@@ -24,6 +24,7 @@ import { useChatStore } from '@/stores/chatStore'
 import { type ChatUIMessage } from './types'
 import { ChatMessage } from './ChatMessage'
 import { SuggestionChips } from './SuggestionChips'
+import { useApplyDetailFocus } from './useApplyDetailFocus'
 import { useApplyMapActions } from './useApplyMapActions'
 import { useCanvasAutoOpen } from './useCanvasAutoOpen'
 
@@ -62,6 +63,7 @@ function ChatBody() {
   const setHighlightedGrps = useMapStore((state) => state.setHighlightedGrps)
   const closeChat = useChatStore((state) => state.setOpen)
   const applyMapActions = useApplyMapActions()
+  const detailFocus = useApplyDetailFocus()
   // 選択駅の名前（インジケータ表示用）。ドロワーと SWR キャッシュを共有＝追加フェッチなし。
   const { detail: selectedDetail } = useStationDetail(grp)
 
@@ -69,6 +71,8 @@ function ChatBody() {
   const { messages, sendMessage, status, stop, error, setMessages } = useChat<ChatUIMessage>({
     transport,
     onData: (part) => {
+      // 駅詳細の焦点（聞いたタブ）は図より先に届く。地図が駅を選ぶ前にタブを書いておく。
+      if (part.type === 'data-promotions') detailFocus.apply(part.data)
       // data-map はサーバ検証済みだが、クライアントでも safeParse して型を確定＋失敗時は無視（防御的）。
       if (part.type !== 'data-map') return
       const parsed = mapResponseSchema.safeParse(part.data)
@@ -85,6 +89,7 @@ function ChatBody() {
   const send = (text: string): void => {
     const trimmed = text.trim()
     if (trimmed.length === 0 || trimmed.length > MAX_INPUT_CHARS || busy) return
+    detailFocus.reset() // 新しい回答の焦点は、前の回答と同じでも当て直す
     // 地図で駅を選択中なら、その選択を文脈として同送する（「この駅」等の解決に使う・P8e）。
     void sendMessage(
       { text: trimmed },

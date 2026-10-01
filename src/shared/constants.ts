@@ -77,10 +77,46 @@ export const CATEGORY_LABELS_JA: Readonly<Record<Category, string>> = {
  * ランキングの絞り込み・カタログの CSV 列）。ここに「災害」を足すと、**指標ではないものが
  * 指標の語彙に混ざる**——だからタブの型を分ける（`docs/260828_fix_flood.md` §4.1）。
  *
- * もともと 1 対 1 ではない（`Category` は 9 個、タブは `population_forecast` を出さない）ので、
- * 「タブ＝カテゴリ」という対応は**分ける前から既に崩れていた**。
+ * **将来推計人口（`population_forecast`）はタブではない**——人口タブの中に実績と並べて描く。
+ * 以前はこの型が `Category` を丸ごと含んでいたので型検査を通り、チャットが将来推計人口に
+ * 焦点を当てた駅詳細を ⤢ で開くと、**どのタブも選ばれず「データがありません」と出た**
+ * （`docs/261001_fix_user_feedback_ui.md` §4.3）。型から外し、カテゴリ → タブは `detailTabFor` だけが写す。
  */
-export type DetailTab = Category | 'hazard'
+export type DetailTab = Exclude<Category, 'population_forecast'> | 'hazard'
+
+/**
+ * 詳細タブ（表示順）。URL の `?tab` が受け付ける値もこの 9 つだけ（`components/detail/useDetailTab.ts`）。
+ *
+ * 所得は「そこに住む人の稼ぎ」、売上は「そこで落ちるお金」なので、人口 → 所得 → 売上 と並べる
+ * （`CATEGORIES` と同順）。**災害は末尾**（`docs/260828_fix_flood.md` §7 決定 2）。2 番目に置けば
+ * 見つけやすいが、**乗降・人口を主に使う人の並びを乱す**——ヘッダのバッジという確実な入口があるので、
+ * 並びを壊してまで前に出さない。
+ *
+ * ⚠ タブ帯は 7 タブで 460px、8 タブ（売上）で 516px、**9 タブ（災害）で 572px** になり、
+ * パネル幅 420px を超えて横スライドが要る（パネルを広げると地図が狭くなるので広げない・
+ * `docs/260805_research_add_dataset_economy.md` §16.3）。8 タブ以降は最後のタブが完全に隠れるため、
+ * 帯の右端にフェードを出し、**選んだタブは帯を送って見せる**（`StationDetailPanel.tsx`・
+ * `docs/260816_sales.md` §7.4 案A・`docs/260828_fix_flood.md` §4.2・`tests/panel-layout.test.ts`）。
+ */
+export const DETAIL_TABS: readonly DetailTab[] = [
+  'passenger',
+  'population',
+  'income',
+  'sales',
+  'land_price',
+  'bus',
+  'establishment',
+  'employee',
+  'hazard',
+]
+
+/** URL にも、この端末の記憶にもタブが無いときのタブ（駅の概要として乗降客数を出す）。 */
+export const DEFAULT_DETAIL_TAB: DetailTab = 'passenger'
+
+/** 指標カテゴリ → 駅詳細のタブ。将来推計人口は人口タブにある（チャットの駅詳細も人口として描く）。 */
+export function detailTabFor(category: Category): DetailTab {
+  return category === 'population_forecast' ? 'population' : category
+}
 
 /** タブの日本語ラベル。指標ぶんは `CATEGORY_LABELS_JA` を単一の出所として使う（重複させない）。 */
 export const DETAIL_TAB_LABELS_JA: Readonly<Record<DetailTab, string>> = {

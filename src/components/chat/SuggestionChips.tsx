@@ -39,9 +39,15 @@ const AFTER_GENERAL: readonly string[] = [
 export function SuggestionChips({
   hasMessages,
   onPick,
+  disabled,
 }: {
   hasMessages: boolean
   onPick: (text: string) => void
+  /**
+   * 回答を待っている間は押せなくする。**消さない**——消すとスレッドの枠が伸び縮みして、
+   * 回答の末尾が隠れる（2026-10-01 実測：602→464px・`docs/261001_fix_user_feedback_ui.md` §3.2）。
+   */
+  disabled: boolean
 }) {
   const { grp } = useMapUrlState()
   // 駅選択中は会話の有無に依らず掘り下げサジェストを出す（選んですぐ「ポチポチ」探索できる・P8e）。
@@ -54,7 +60,8 @@ export function SuggestionChips({
           key={chip}
           type="button"
           onClick={() => onPick(chip)}
-          className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-indigo-50 hover:text-indigo-700"
+          disabled={disabled}
+          className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors enabled:hover:bg-indigo-50 enabled:hover:text-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {chip}
         </button>

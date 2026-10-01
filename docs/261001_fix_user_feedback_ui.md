@@ -234,10 +234,13 @@ export function followScrollTop(bottom_px: number, questionTop_px: number | null
 
 | ファイル | 変更 |
 |---|---|
-| `src/components/chat/ChatPanel.tsx` | スレッドに `scrollRef`／`contentRef`。送信時に `scrollToBottom()`。サジェストを回答中も描く |
+| `src/components/chat/ChatPanel.tsx` | スレッドに `scrollRef`／`contentRef`。送信時に最新へ送る。サジェストを回答中も描く |
+| `src/components/chat/useChatScroll.ts`（新） | ライブラリの薄い包み（追従先・枠の高さの変化・動きを減らす設定） |
 | `src/components/chat/SuggestionChips.tsx` | `disabled` を受ける |
-| `src/components/chat/followScroll.ts`（新） | `followScrollTop` と定数（`FOLLOW_MARGIN_PX` など） |
-| `src/components/chat/JumpToLatest.tsx`（新） | 「↓ 最新の回答」ボタン |
+| `src/components/chat/ChatMessage.tsx` | 質問の吹き出しに印（`data-chat-question`） |
+| `src/components/chat/followScroll.ts`（新） | `followScrollTop` と定数（`FOLLOW_MARGIN_PX`・質問の印） |
+| `src/components/chat/JumpToLatest.tsx`（新） | 「↓ 最新の回答へ」ボタン |
+| `src/hooks/usePrefersReducedMotion.ts`（新） | 「視差効果を減らす」の設定を読む |
 
 ### 3.5 検証
 
@@ -245,6 +248,33 @@ export function followScrollTop(bottom_px: number, questionTop_px: number | null
 - 画面：①3 往復で毎回、末尾までの残りが 0px ②回答後にサジェストが戻っても 0px ③背の高い回答（ハザードのカード）で
   **質問の頭が見える** ④回答中に上へスクロールすると追わず、ボタンが出て、押すと末尾 ⑤携帯（390px）でも同じ
   ⑥`prefers-reduced-motion` で瞬時に送る。
+
+### 3.6 実施記録（A2・2026-10-02）
+
+§12-3 は推奨どおり `use-stick-to-bottom`（1.1.6・MIT）を足した。
+
+- **追従**：`components/chat/useChatScroll.ts` がライブラリを包む。追従先は `followScroll.ts`（純関数）で、
+  質問の吹き出しに付けた印（`data-chat-question`）から最後の質問の頭を DOM で読む。
+- **サジェストは消さない**：回答待ちの間は押せないだけ（`SuggestionChips` の `disabled`）。
+- **「最新の回答へ」**：`JumpToLatest.tsx`。追従先が見えていないときに出す。送信したら必ず最新へ送る。
+
+ライブラリのソースを読んで分かった注意と、その対処：
+
+1. **追従先の関数は、最初の描画で渡したものが使われ続ける**。だから関数はモジュールの外に置き、状態を閉じ込めない。
+2. **ライブラリは中身の伸びしか見ない**。枠が縮むと末尾が隠れたまま残る。逆に枠が広がると、ブラウザが詰めた
+   スクロールを「利用者が上へ戻した」と判定して追従が外れる。枠にも `ResizeObserver` を付け、追従していたなら、
+   2 フレーム待ってから（ライブラリの判定が済んでから）追従先へ寄せ直す。
+   - 対照実験で必要性を確かめた。寄せ直しを外した版では、回答の途中で駅詳細を閉じる（枠 464→568px）と、
+     スクロールが 692→588 に詰められて追従が外れ、続きが届いても末尾まで 453px 残った。
+3. **追従は下へしか動かない**。そのため「長い回答は質問の頭で止める」がそのまま成り立つ。
+
+**検証**：
+- 単体テスト 1,281 件（新規 10 件）、型検査、lint、本番ビルド。
+- 画面テスト `tests/ui.chat-scroll.smoke.py`（9 場面）：手元の本番ビルドで全項目が通過し、修正前の本番に当てると 14 項目が失敗する
+  （回答待ちの枠 602→464px は 10/1 の実測と一致）。
+  - 動きを減らす設定では、送りの途中のフレームが 0 枚（通常の設定では 49 枚）。
+- 既存の画面テスト（駅詳細のタブ・⤢・チャットの失敗・おすすめ・災害の文言）も全項目が通過。
+- チャットの塊は 299,464 → 306,892 バイト。
 
 ---
 
@@ -694,7 +724,7 @@ jSTAT MAP（総務省統計局）・RESAS・不動産情報ライブラリ・Arc
 | PR | 中身 | 依存 | 規模 | 主な検証 |
 |---|---|---|:-:|---|
 | **A1** fix | タブを覚える（`?tab`＋記憶）・聞いたタブで開く・将来推計の不具合（**済・2026-10-02・§2.7**） | — | S | 単体・`ui.detail-tab.smoke.py` |
-| **A2** fix | 回答の末尾追従・枠の高さを固定・最新へボタン | — | S | `ui.chat-scroll.smoke.py` |
+| **A2** fix | 回答の末尾追従・枠の高さを固定・最新へボタン（**済・2026-10-02・§3.6**） | — | S | `ui.chat-scroll.smoke.py` |
 | **A3** feat | 画面の状態を履歴に積む（push/replace・図の URL 化・1 回答 1 履歴） | A1 | M | `ui.history.smoke.py` |
 | **A4** feat | 狭い画面は会話の中に図・携帯で詳細シートを被せない | A1・A2・A3 | M | 3 幅の実レンダ |
 | **B1** feat | 会社・路線の名前解決（候補つきエラー・空の図を出さない） | — | S〜M | 単体・評価 |

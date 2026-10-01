@@ -5,6 +5,9 @@
  * デスクトップ＝左サイドパネル（開閉・地図は常に可視）／モバイル＝vaul ボトムシート（半分⇔全画面）。
  * useChat で /api/chat をストリーミング。data-map の mapActions は onData で **即時**地図へ反映。
  * 図はスレッドに描かず、参照チップから ChatCanvas（narrow はモーダル）で開く。
+ *
+ * スレッドは回答に追従し、回答が終わったら**その回答が見えている**ようにする（`useChatScroll`・
+ * `docs/261001_fix_user_feedback_ui.md` §3）。上へスクロールして読んでいる間は追わない。
  */
 
 import { useMemo, useState } from 'react'
@@ -23,10 +26,12 @@ import { useMapStore } from '@/stores/mapStore'
 import { useChatStore } from '@/stores/chatStore'
 import { type ChatUIMessage } from './types'
 import { ChatMessage } from './ChatMessage'
+import { JumpToLatest } from './JumpToLatest'
 import { SuggestionChips } from './SuggestionChips'
 import { useApplyDetailFocus } from './useApplyDetailFocus'
 import { useApplyMapActions } from './useApplyMapActions'
 import { useCanvasAutoOpen } from './useCanvasAutoOpen'
+import { useChatScroll } from './useChatScroll'
 
 /** 入力の最大文字数（サーバ /api/chat の 500 字上限に合わせる）。 */
 const MAX_INPUT_CHARS = 500
@@ -64,6 +69,7 @@ function ChatBody() {
   const closeChat = useChatStore((state) => state.setOpen)
   const applyMapActions = useApplyMapActions()
   const detailFocus = useApplyDetailFocus()
+  const scroll = useChatScroll()
   // 選択駅の名前（インジケータ表示用）。ドロワーと SWR キャッシュを共有＝追加フェッチなし。
   const { detail: selectedDetail } = useStationDetail(grp)
 
@@ -95,6 +101,7 @@ function ChatBody() {
       { text: trimmed },
       grp === null ? undefined : { body: { selectedGrp: grp, radiusM } },
     )
+    scroll.scrollToLatest() // 上を読んでいても、送った質問と「考え中」は必ず見せる
     setInput('')
   }
 
@@ -143,27 +150,32 @@ function ChatBody() {
         </div>
       </header>
 
-      {/* スレッド */}
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-        {!hasMessages ? (
-          <div className="mt-2 space-y-3 px-1">
-            <p className="text-sm leading-relaxed text-slate-500">
-              駅周辺のデータ（乗降客数、人口、地価、バス停数、事業所数、従業者数）について質問してください。
-            </p>
+      {/* スレッド（箱＝scrollRef、伸びる中身＝contentRef。「最新の回答へ」は箱の上に重ねる） */}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <div ref={scroll.scrollRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+          <div ref={scroll.contentRef}>
+            {!hasMessages ? (
+              <div className="mt-2 space-y-3 px-1">
+                <p className="text-sm leading-relaxed text-slate-500">
+                  駅周辺のデータ（乗降客数、人口、地価、バス停数、事業所数、従業者数）について質問してください。
+                </p>
+              </div>
+            ) : (
+              <Thread messages={messages} busy={busy} />
+            )}
+            {/* 失敗の理由は**サーバが決めた 1 文をそのまま**出す（以前は 429 以外をすべて
+                「応答の取得に失敗しました」で上書きしていた・2026-09-25）。選び方は shared/chat-errors.ts。 */}
+            {error !== undefined && (
+              <div
+                role="alert"
+                className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-700 ring-1 ring-amber-200"
+              >
+                {chatErrorMessageJa(error, typeof navigator === 'undefined' || navigator.onLine)}
+              </div>
+            )}
           </div>
-        ) : (
-          <Thread messages={messages} busy={busy} />
-        )}
-        {/* 失敗の理由は**サーバが決めた 1 文をそのまま**出す（以前は 429 以外をすべて
-            「応答の取得に失敗しました」で上書きしていた・2026-09-25）。選び方は shared/chat-errors.ts。 */}
-        {error !== undefined && (
-          <div
-            role="alert"
-            className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-700 ring-1 ring-amber-200"
-          >
-            {chatErrorMessageJa(error, typeof navigator === 'undefined' || navigator.onLine)}
-          </div>
-        )}
+        </div>
+        {!scroll.isAtLatest && <JumpToLatest onClick={scroll.scrollToLatest} />}
       </div>
 
       {/* サジェスト＋入力 */}
@@ -183,7 +195,8 @@ function ChatBody() {
             </span>
           </div>
         )}
-        {(!hasMessages || !busy) && <SuggestionChips hasMessages={hasMessages} onPick={send} />}
+        {/* 回答を待つ間も消さない（押せないだけ）。消すとスレッドの枠が伸び縮みし、回答の末尾が隠れる。 */}
+        <SuggestionChips hasMessages={hasMessages} onPick={send} disabled={busy} />
         {hasMessages && (
           <div className="flex justify-end">
             <button

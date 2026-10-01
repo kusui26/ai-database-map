@@ -11,6 +11,7 @@ import { PanelStack } from '@/components/panels/PanelRenderer'
 import { useMapUrlState } from '@/components/map/useMapUrlState'
 import { type ChatUIMessage } from './types'
 import { buildPanelGroups } from './panelGroups'
+import { QUESTION_MARKER } from './followScroll'
 import { displayTextOf, mapResponseOf, panelPromotionsOf, textOf } from './messageParts'
 import { PanelChip } from './PanelChip'
 import { RichText } from './richText'
@@ -33,8 +34,12 @@ export function ChatMessage({ message }: { message: ChatUIMessage }) {
   const { setGrp } = useMapUrlState()
 
   if (message.role === 'user') {
+    // 印＝回答が長いとき、スレッドをこの質問の頭で止める（`useChatScroll`・追従先）。
     return (
-      <div className="ml-auto max-w-[85%] rounded-2xl rounded-br-sm bg-indigo-600 px-3 py-2 text-sm whitespace-pre-wrap text-white">
+      <div
+        {...QUESTION_MARKER}
+        className="ml-auto max-w-[85%] rounded-2xl rounded-br-sm bg-indigo-600 px-3 py-2 text-sm whitespace-pre-wrap text-white"
+      >
         {textOf(message.parts)}
       </div>
     )

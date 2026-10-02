@@ -1,9 +1,48 @@
 'use client'
 
-/** rankingTable Panel のレンダラ（順位表・値 format 済・⚠ 列）。onSelect で行クリック→駅選択。 */
+/**
+ * rankingTable Panel のレンダラ（順位表・値 format 済・⚠ 列）。onSelect で行クリック→駅選択。
+ * compact（会話の中）は上位だけを出し、残りの数を添える（`rankingRows.ts`）。
+ */
 
-import { type RankingTablePanel } from '@/shared/protocol'
+import { type RankingRow, type RankingTablePanel } from '@/shared/protocol'
 import { cn } from '@/lib/utils'
+import { visibleRankingRows } from './rankingRows'
+
+function RankingRowButton({
+  row,
+  onSelect,
+}: {
+  row: RankingRow
+  onSelect?: (grp: string) => void
+}) {
+  return (
+    <button
+      type="button"
+      disabled={onSelect === undefined}
+      onClick={() => onSelect?.(row.grp)}
+      className={cn(
+        'flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-sm',
+        onSelect !== undefined && 'cursor-pointer hover:bg-indigo-50',
+      )}
+    >
+      <span className="w-6 shrink-0 text-right text-slate-400 tabular-nums">{row.rank}</span>
+      <span className="min-w-0 flex-1 truncate">
+        <span className="font-medium text-slate-800">{row.name}</span>
+        <span className="ml-1.5 text-xs text-slate-400">{row.prefecture}</span>
+      </span>
+      <span
+        className={cn(
+          'shrink-0 font-medium tabular-nums',
+          row.flagged ? 'text-amber-600' : 'text-slate-800',
+        )}
+      >
+        {row.formatted}
+        {row.flagged ? ' ⚠' : ''}
+      </span>
+    </button>
+  )
+}
 
 export function RankingTable({
   panel,
@@ -12,51 +51,30 @@ export function RankingTable({
   panel: RankingTablePanel
   onSelect?: (grp: string) => void
 }) {
+  const compact = panel.size === 'compact'
+  const { rows, hiddenCount } = visibleRankingRows(panel)
+
   return (
     <section>
       <div className="flex items-baseline justify-between gap-2">
-        <h3 className="font-semibold text-slate-800">{panel.title}</h3>
+        <h3 className={cn('font-semibold text-slate-800', compact && 'text-sm')}>{panel.title}</h3>
         {panel.unit !== null && (
           <span className="shrink-0 text-xs text-slate-400">単位: {panel.unit}</span>
         )}
       </div>
 
-      {panel.rows.length === 0 ? (
+      {rows.length === 0 ? (
         <p className="py-8 text-center text-sm text-slate-400">該当する駅がありません</p>
       ) : (
         <ol className="mt-2 divide-y divide-slate-100">
-          {panel.rows.map((row) => (
+          {rows.map((row) => (
             <li key={row.grp}>
-              <button
-                type="button"
-                disabled={onSelect === undefined}
-                onClick={() => onSelect?.(row.grp)}
-                className={cn(
-                  'flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-sm',
-                  onSelect !== undefined && 'cursor-pointer hover:bg-indigo-50',
-                )}
-              >
-                <span className="w-6 shrink-0 text-right text-slate-400 tabular-nums">
-                  {row.rank}
-                </span>
-                <span className="min-w-0 flex-1 truncate">
-                  <span className="font-medium text-slate-800">{row.name}</span>
-                  <span className="ml-1.5 text-xs text-slate-400">{row.prefecture}</span>
-                </span>
-                <span
-                  className={cn(
-                    'shrink-0 font-medium tabular-nums',
-                    row.flagged ? 'text-amber-600' : 'text-slate-800',
-                  )}
-                >
-                  {row.formatted}
-                  {row.flagged ? ' ⚠' : ''}
-                </span>
-              </button>
+              <RankingRowButton row={row} onSelect={onSelect} />
             </li>
           ))}
         </ol>
       )}
+      {hiddenCount > 0 && <p className="mt-1 px-2 text-xs text-slate-400">ほか {hiddenCount} 駅</p>}
     </section>
   )
 }

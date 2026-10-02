@@ -293,7 +293,12 @@ def scenario_chat_focus(browser: Browser, viewport: dict, name: str) -> None:
     stub_chat(page, "population")
     goto(page)
     send_chat(page, "東京駅の人口推移を教えて")
-    check("ドロワーは人口タブで開く", wait_for_tab(page, "人口"), f"タブ={active_tab(page)}")
+    if viewport["width"] < 640:
+        # 携帯：詳細のシートはチャットを覆うので、AI の選択では開かない（A4・§4.4(b)）。⤢ で聞いたタブのまま開く。
+        page.wait_for_function("() => new URL(location.href).searchParams.get('sheet') === 'closed'", timeout=WAIT_MS)
+        check("携帯ではシートを自動で開かない（回答を覆わない）", active_tab(page) == "(なし)", f"タブ={active_tab(page)}")
+        page.get_by_role("button", name="東京 の人口 を拡大").click()
+    check("駅詳細は人口タブで開く（携帯は会話の中の ⤢ から）", wait_for_tab(page, "人口"), f"タブ={active_tab(page)}")
     check("URL は駅と焦点のタブ", params(page).get("grp") == TOKYO and params(page).get("tab") == "population", str(params(page)))
     check("画面のエラーなし", not errors, "; ".join(errors))
     page.screenshot(path=f"{OUT}/detail-tab-chat-{name}.png")
@@ -321,7 +326,8 @@ def scenario_forecast(browser: Browser) -> None:
     check("自動で開いたドロワーは人口タブ", wait_for_tab(page, "人口"), f"タブ={active_tab(page)}")
     click_tab(page, "バス")
     wait_for_tab(page, "バス")
-    page.locator('button[title="東京 の詳細"]').click()
+    # チップの文言は聞いたこと（将来推計人口）。開くのは人口タブ（A4 でチップに焦点を足した）。
+    page.locator('button[title="東京 の将来推計人口"]').click()
     check("チップの ⤢ でも人口タブへ戻る", wait_for_tab(page, "人口"), f"タブ={active_tab(page)}")
     text = detail_text(page)
     check("「データがありません」を出さない", "データがありません" not in text, text[:80].replace("\n", " "))

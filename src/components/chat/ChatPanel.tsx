@@ -4,7 +4,8 @@
  * 左併設チャットパネル（plan_fable §2.4「AIインタラクション UI」・ルール①〜⑤）。
  * デスクトップ＝左サイドパネル（開閉・地図は常に可視）／モバイル＝vaul ボトムシート（半分⇔全画面）。
  * useChat で /api/chat をストリーミング。data-map の mapActions は onData で **即時**地図へ反映。
- * 図はスレッドに描かず、参照チップから ChatCanvas（narrow はモーダル）で開く。
+ * 図は、広い画面ではスレッドに参照チップだけを残してキャンバスに出し、狭い画面・携帯では
+ * 会話の中に出す（⤢ でモーダル・駅詳細へ広げる・`presentation.ts`）。
  *
  * スレッドは回答に追従し、回答が終わったら**その回答が見えている**ようにする（`useChatScroll`・
  * `docs/261001_fix_user_feedback_ui.md` §3）。上へスクロールして読んでいる間は追わない。
@@ -28,6 +29,7 @@ import { type ChatUIMessage } from './types'
 import { createAnswerHistory } from './answerHistory'
 import { ChatMessage } from './ChatMessage'
 import { JumpToLatest } from './JumpToLatest'
+import { viewportOf, type Viewport } from './presentation'
 import { SuggestionChips } from './SuggestionChips'
 import { useApplyDetailFocus } from './useApplyDetailFocus'
 import { useApplyMapActions } from './useApplyMapActions'
@@ -46,11 +48,19 @@ function SparkleIcon() {
   )
 }
 
-function Thread({ messages, busy }: { messages: readonly ChatUIMessage[]; busy: boolean }) {
+function Thread({
+  messages,
+  busy,
+  viewport,
+}: {
+  messages: readonly ChatUIMessage[]
+  busy: boolean
+  viewport: Viewport
+}) {
   return (
     <div className="flex flex-col gap-3">
       {messages.map((message) => (
-        <ChatMessage key={message.id} message={message} />
+        <ChatMessage key={message.id} message={message} viewport={viewport} />
       ))}
       {busy && (
         <div className="mr-auto flex items-center gap-1.5 rounded-2xl bg-white px-3 py-2.5 ring-1 ring-slate-200">
@@ -97,8 +107,10 @@ function ChatBody() {
     },
   })
 
-  // 回答に図が含まれたらキャンバスへ（広い画面のみ。narrow はチップから手動で開く）。
-  useCanvasAutoOpen(messages, useIsWide(), answerHistory)
+  // 画面幅の区分。図をチャットのどこに出すか（チップ／会話の中）と、キャンバスを開くかを決める。
+  const viewport = viewportOf(useIsDesktop(), useIsWide())
+  // 回答に図が含まれたらキャンバスへ（広い画面のみ。狭い画面・携帯は会話の中に出す）。
+  useCanvasAutoOpen(messages, viewport === 'wide', answerHistory)
 
   const [input, setInput] = useState('')
   const busy = status === 'submitted' || status === 'streaming'
@@ -173,7 +185,7 @@ function ChatBody() {
                 </p>
               </div>
             ) : (
-              <Thread messages={messages} busy={busy} />
+              <Thread messages={messages} busy={busy} viewport={viewport} />
             )}
             {/* 失敗の理由は**サーバが決めた 1 文をそのまま**出す（以前は 429 以外をすべて
                 「応答の取得に失敗しました」で上書きしていた・2026-09-25）。選び方は shared/chat-errors.ts。 */}

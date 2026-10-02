@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { type Panel } from '@/shared/protocol'
 import {
+  type DetailPromotion,
   type PanelPromotions,
   type RankingPromotion,
   type ScatterPromotion,
@@ -171,7 +172,21 @@ describe('chipLabel（スレッドに残す参照チップの文言）', () => {
     expect(chipLabel([ranking])).toBe('乗降客数（2024年）（全国・上位）')
   })
 
-  it('駅詳細は駅名を出す', () => {
+  it('駅詳細は駅名と、聞いたカテゴリ（押す前に開く先が分かる・2026-10-02）', () => {
+    const detail = (category: DetailPromotion['category']): DetailPromotion => ({
+      kind: 'detail',
+      grp: '東京#0',
+      category,
+    })
+    expect(chipLabel([stationCard], detail('population'))).toBe('東京 の人口')
+    expect(chipLabel([stationCard], detail('land_price'))).toBe('東京 の地価')
+    // 将来推計は人口タブで開くが、聞いたことはそのまま出す。
+    expect(chipLabel([stationCard], detail('population_forecast'))).toBe('東京 の将来推計人口')
+  })
+
+  it('焦点の無い駅詳細（駅の概要）・条件の無いときは「詳細」', () => {
+    const overview: DetailPromotion = { kind: 'detail', grp: '東京#0', category: null }
+    expect(chipLabel([stationCard], overview)).toBe('東京 の詳細')
     expect(chipLabel([stationCard])).toBe('東京 の詳細')
   })
 

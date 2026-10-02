@@ -306,7 +306,7 @@ function DetailBody({
 }
 
 export function StationDetailPanel() {
-  const { grp, setGrp, radiusM, setRadiusM } = useMapUrlState()
+  const { grp, setGrp, radiusM, setRadiusM, sheetClosed } = useMapUrlState()
   const isDesktop = useIsDesktop()
   const { detail, isLoading, error } = useStationDetail(grp)
   // 駅を替えても戻さない。チャットの焦点（聞いたタブ）も、このタブとして URL に書かれる。
@@ -351,9 +351,11 @@ export function StationDetailPanel() {
     )
   }
 
+  // 携帯：チャットを開いている間に AI が選んだ駅は、シートを閉じたままにする（`?sheet=closed`）。
+  // 回答を覆わないため。駅詳細は会話の中に出ていて、⤢ や地図・駅名を押すとシートが開く（A4）。
   return (
     <Drawer.Root
-      open={open}
+      open={open && !sheetClosed}
       onOpenChange={(next) => {
         if (!next) close()
       }}

@@ -3,20 +3,33 @@
 /**
  * スレッドに残す「図への参照」チップ（260802）。
  *
- * 図そのものはキャンバス（narrow ならモーダル）に出し、スレッドは**テキストだけ**にする。
+ * 図そのものはキャンバス・右の駅詳細に出し、スレッドは**テキストだけ**にする。
  * 文言は**パネルのタイトルをそのまま使う**ので、絞り込み条件（都道府県・会社・路線）まで残り、
  * 開かなくてもどの回答か分かる（docs/260802_ai_chat_canvs.md §6）。
+ *
+ * チップにするのは、図をチャットの外に出せる幅だけ。狭い画面・携帯では会話の中に図を出す
+ * （`InlineFigure`・出し分けは `presentation.ts`・2026-10-02）。
  */
 
+import { CATEGORY_LABELS_JA } from '@/shared/constants'
 import { type PanelPromotion } from '@/shared/promotion'
 import { type Panel } from '@/shared/protocol'
 import { type PanelGroup } from './panelGroups'
 import { usePromote } from './usePromote'
 
-/** チップに出す見出し。図はタイトルを、駅詳細は駅名を、地点のハザードは地点名を使う。 */
-export function chipLabel(panels: readonly Panel[]): string {
+/** 駅詳細のチップで、何を開くか（聞いたカテゴリ。焦点が無ければ「詳細」）。押す前に開く先が分かる。 */
+function detailFocusLabel(promotion: PanelPromotion | null): string {
+  if (promotion?.kind !== 'detail' || promotion.category === null) return '詳細'
+  return CATEGORY_LABELS_JA[promotion.category]
+}
+
+/** チップに出す見出し。図はタイトルを、駅詳細は駅名と聞いたカテゴリを、地点のハザードは地点名を使う。 */
+export function chipLabel(
+  panels: readonly Panel[],
+  promotion: PanelPromotion | null = null,
+): string {
   for (const panel of panels) {
-    if (panel.type === 'stationCard') return `${panel.label} の詳細`
+    if (panel.type === 'stationCard') return `${panel.label} の${detailFocusLabel(promotion)}`
     if (panel.type === 'hazardCard') return `${panel.placeJa} の災害リスク`
     if (panel.type === 'evacuationList')
       return `${panel.placeJa} の${panel.siteKindJa}（${panel.forDisasterJa}）`
@@ -48,7 +61,8 @@ function IconFor({ kind }: { kind: PanelPromotion['kind'] }) {
   )
 }
 
-function ExpandIcon() {
+/** ⤢（広げる）。チップと、会話の中の図の「拡大」で使う。 */
+export function ExpandIcon() {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -69,7 +83,7 @@ function ExpandIcon() {
 
 export function PanelChip({ group, promotion }: { group: PanelGroup; promotion: PanelPromotion }) {
   const promote = usePromote()
-  const label = chipLabel(group.panels)
+  const label = chipLabel(group.panels, promotion)
 
   return (
     <button

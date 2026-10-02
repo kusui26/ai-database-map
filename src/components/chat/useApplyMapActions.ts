@@ -12,12 +12,17 @@
  *
  * URL を書く操作の履歴は、その回答の約束に従う（`answerHistory.ts`）——最初に書くなら push、
  * 送り直しは replace、回答の途中で「戻る／進む」を押されたら書かない（2026-10-02）。
+ *
+ * 携帯でチャットを開いているときの `selectStation` は、駅を選ぶが詳細のシートは開かない
+ * （`?sheet=closed`）。シートがチャットを覆って回答が読めなくなるため。駅詳細は会話の中に出す（A4）。
  */
 
 import { useCallback } from 'react'
 import { type MapAction, type MapResponse } from '@/shared/protocol'
+import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { useHazardUrlState } from '@/components/map/useHazardUrlState'
 import { useMapUrlState } from '@/components/map/useMapUrlState'
+import { useChatStore } from '@/stores/chatStore'
 import { useMapStore } from '@/stores/mapStore'
 import { type AnswerHistory } from './answerHistory'
 
@@ -40,7 +45,11 @@ export function writesUrl(response: MapResponse): boolean {
 export type MapActionsApplier = (response: MapResponse, answerHistory: AnswerHistory) => void
 
 export function useApplyMapActions(): MapActionsApplier {
-  const { setGrp, setRadiusM } = useMapUrlState()
+  const { setGrp, setRadiusM, keepSheetClosed } = useMapUrlState()
+  const isDesktop = useIsDesktop()
+  const chatOpen = useChatStore((state) => state.open)
+  // 携帯でチャットのシートが開いている＝駅詳細のシートを開くと回答を覆う。
+  const sheetWouldCoverChat = !isDesktop && chatOpen
   const { setLayerKeys, setOpacity } = useHazardUrlState()
   const setHighlightedGrps = useMapStore((state) => state.setHighlightedGrps)
   const setMarkedPoint = useMapStore((state) => state.setMarkedPoint)
@@ -58,6 +67,7 @@ export function useApplyMapActions(): MapActionsApplier {
             if (history === null) break
             void setGrp(action.grp, { history })
             if (action.radiusM !== undefined) void setRadiusM(action.radiusM, { history })
+            if (sheetWouldCoverChat) void keepSheetClosed({ history })
             break
           case 'highlightStations':
             setHighlightedGrps(action.grps)
@@ -90,6 +100,8 @@ export function useApplyMapActions(): MapActionsApplier {
     [
       setGrp,
       setRadiusM,
+      keepSheetClosed,
+      sheetWouldCoverChat,
       setLayerKeys,
       setOpacity,
       setHighlightedGrps,

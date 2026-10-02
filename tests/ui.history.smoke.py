@@ -18,6 +18,7 @@
 - 中での調整（半径・タブ・図やおすすめの中の条件・ハザードのレイヤ）は replace
 - **1 回の回答で積む履歴は 1 つ**。回答の途中で戻る／進むを押されたら、その回答はもう URL を書かない
 - 戻る／進むでページを読み直さない（RSC の再取得もしない）
+- 選んでいる駅をもう一度選んでも（チップ・検索）、同じ URL の履歴を積まない（戻るが空振りしない・A4 で追加）
 - 図の中身は、外から図が替わったときに 1 回だけ作る（開くたびに 2 回作らない・駅だけ戻しても作り直さない）
 - 狭い画面・携帯で、初めて出す図や詳細を一瞬も広い画面の形（キャンバス・右ドロワー）で作らない
 
@@ -474,6 +475,24 @@ def scenario_answer(browser: Browser) -> None:
     session.finish("answer")
 
 
+def scenario_reselect(browser: Browser) -> None:
+    print("[選んでいる駅をもう一度選ぶ（チップ・検索）：同じ URL の履歴を積まない＝戻る 1 回で前の画面へ]")
+    session = Session(browser, WIDE, [answer(with_ranking=False)])
+    session.open()
+    send(session.page, "東京駅の人口推移を教えて")
+    wait_answered(session.page)
+    after_answer = session.length()
+    # 駅詳細のチップ（文言は「東京 の人口」・A4 より前は「東京 の詳細」）。
+    session.page.locator('button[title^="東京 の"]').first.click()
+    session.page.wait_for_timeout(SETTLE_MS)
+    check("チップで選んでいる駅を開き直しても、履歴は増えない", session.length() == after_answer, f"{after_answer} → {session.length()}")
+    pick_station(session.page, "東京")
+    check("検索で同じ駅をもう一度選んでも、履歴は増えない", session.length() == after_answer, f"{after_answer} → {session.length()}")
+    session.back()
+    check("戻る 1 回で、回答の前に戻る（空振りしない）", "grp" not in session.params() and not detail_open(session.page), str(session.params()))
+    session.finish("reselect")
+
+
 def scenario_back_mid_answer(browser: Browser) -> None:
     print("[回答の途中で戻る：送り直しが戻った先の履歴を上書きしない]")
     session = Session(browser, WIDE, [answer(with_ranking=False, delay_ms=STAGE_DELAY_MS)])
@@ -490,21 +509,21 @@ def scenario_back_mid_answer(browser: Browser) -> None:
     session.finish("back-mid-answer")
 
 
-def scenario_chip(browser: Browser) -> None:
-    print("[⤢ のチップ（狭い画面）：図を開く → 戻るで閉じる]")
+def scenario_inline_expand(browser: Browser) -> None:
+    print("[⤢ 拡大（狭い画面・会話の中の図）：図を開く → 戻るで閉じる]")
     session = Session(browser, NARROW, [answer(with_ranking=True)])
     session.open()
     send(session.page, "千葉県で人口が増えた駅は？")
     wait_answered(session.page)
-    check("狭い画面では自動で開かない（チップだけ）", not modal(session.page, "ランキング").is_visible())
-    session.page.locator(f'button[title="{RANKING_TABLE["title"]}"]').click()
+    check("狭い画面ではモーダルを自動で開かない（図は会話の中・A4）", not modal(session.page, "ランキング").is_visible())
+    session.page.get_by_role("button", name=f"{RANKING_TABLE['title']} を拡大").click()
     dialog = modal(session.page, "ランキング")
     dialog.wait_for(state="visible")
     session.page.wait_for_timeout(800)
-    check("チップで図が開く（AI の条件＝千葉県）", session.params().get("figPref") == "千葉県", str(session.params()))
+    check("⤢ で図が開く（AI の条件＝千葉県）", session.params().get("figPref") == "千葉県", str(session.params()))
     session.back()
     check("戻る＝図が閉じる", not modal(session.page, "ランキング").is_visible() and "fig" not in session.params(), str(session.params()))
-    session.finish("chip")
+    session.finish("inline-expand")
 
 
 def scenario_recommend(browser: Browser) -> None:
@@ -644,8 +663,9 @@ SCENARIOS: list[Callable[[Browser], None]] = [
     scenario_fab_canvas,
     scenario_fab_modal,
     scenario_answer,
+    scenario_reselect,
     scenario_back_mid_answer,
-    scenario_chip,
+    scenario_inline_expand,
     scenario_recommend,
     scenario_shared_link,
     scenario_phone,

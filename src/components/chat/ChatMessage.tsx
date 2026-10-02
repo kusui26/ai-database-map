@@ -1,19 +1,23 @@
 'use client'
 
 /**
- * チャット 1 メッセージの描画。ユーザーは右吹き出し、アシスタントは本文（駅名チップ化）＋
- * 図への**参照チップ**（図の実体はキャンバス／モーダル側・260802）。
- * 昇格先が無いグループ（markdown 等）だけは、従来どおりその場に描く。
+ * チャット 1 メッセージの描画。ユーザーは右吹き出し、アシスタントは本文（駅名チップ化）＋図。
+ *
+ * 図は、画面幅に応じて**参照チップ**（実体はキャンバス・右の駅詳細・260802）か、**会話の中**
+ * （compact・⤢ で拡大・2026-10-02）に出す。出し分けは `presentation.ts`。
+ * 昇格先が無いグループ（markdown・ハザードのカード等）は、どの幅でもその場に描く。
  */
 
 import { type MapResponse } from '@/shared/protocol'
 import { PanelStack } from '@/components/panels/PanelRenderer'
 import { useMapUrlState } from '@/components/map/useMapUrlState'
 import { type ChatUIMessage } from './types'
-import { buildPanelGroups } from './panelGroups'
+import { buildPanelGroups, type PanelGroup } from './panelGroups'
 import { QUESTION_MARKER } from './followScroll'
 import { displayTextOf, mapResponseOf, panelPromotionsOf, textOf } from './messageParts'
+import { InlineFigure } from './InlineFigure'
 import { PanelChip } from './PanelChip'
+import { presentationOf, type Viewport } from './presentation'
 import { RichText } from './richText'
 
 /** 応答に出た駅名 → grp（本文リンク化の辞書。確実に grp が分かる範囲に限定）。 */
@@ -30,7 +34,27 @@ function nameToGrp(response: MapResponse): Map<string, string> {
   return dict
 }
 
-export function ChatMessage({ message }: { message: ChatUIMessage }) {
+/** 回答の 1 グループ（図 1 つ・または昇格先の無いパネル）。 */
+function AnswerGroup({ group, viewport }: { group: PanelGroup; viewport: Viewport }) {
+  const { setGrp } = useMapUrlState()
+  const promotion = group.promotion
+
+  if (promotion === null) {
+    // 昇格先が無い＝図ではない（markdown 等）。テキストと同じ扱いでその場に出す。
+    return (
+      <div className="rounded-xl bg-white p-3 ring-1 ring-slate-200">
+        <PanelStack panels={group.panels} onSelect={(grp) => void setGrp(grp)} />
+      </div>
+    )
+  }
+  return presentationOf(promotion.kind, viewport) === 'inline' ? (
+    <InlineFigure group={group} promotion={promotion} />
+  ) : (
+    <PanelChip group={group} promotion={promotion} />
+  )
+}
+
+export function ChatMessage({ message, viewport }: { message: ChatUIMessage; viewport: Viewport }) {
   const { setGrp } = useMapUrlState()
 
   if (message.role === 'user') {
@@ -58,16 +82,9 @@ export function ChatMessage({ message }: { message: ChatUIMessage }) {
           <RichText text={text} nameToGrp={dict} onSelect={(grp) => void setGrp(grp)} />
         </div>
       )}
-      {groups.map((group, index) =>
-        group.promotion === null ? (
-          // 昇格先が無い＝図ではない（markdown 等）。テキストと同じ扱いでその場に出す。
-          <div key={index} className="rounded-xl bg-white p-3 ring-1 ring-slate-200">
-            <PanelStack panels={group.panels} onSelect={(grp) => void setGrp(grp)} />
-          </div>
-        ) : (
-          <PanelChip key={index} group={group} promotion={group.promotion} />
-        ),
-      )}
+      {groups.map((group, index) => (
+        <AnswerGroup key={index} group={group} viewport={viewport} />
+      ))}
     </div>
   )
 }

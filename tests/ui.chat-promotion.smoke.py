@@ -236,7 +236,8 @@ class Scenario:
     viewport: dict
     body: str
     api_path: str
-    chip_title: str | None
+    # ⤢ を押す図のタイトル（広い画面はチップ・狭い画面と携帯は会話の中の図の「拡大」）。None は押さない。
+    expand_title: str | None
     # 判定するのは**最後に**取りに行った条件（キャンバスが最終的に出す図・チップで開いた図）。
     # キャンバスは図が届くたびに最新の図へ切り替わるので、途中で先の図を開くのは正しい動き。
     judge: Callable[[dict[str, str]], bool]
@@ -260,8 +261,10 @@ def run(browser, scenario: Scenario) -> None:
     )
     open_chat_and_send(page, "図にして")
     page.wait_for_timeout(2500)
-    if scenario.chip_title is not None:
-        page.locator(f'button[title="{scenario.chip_title}"]').first.click()
+    if scenario.expand_title is not None:
+        # 広い画面はチップ、狭い画面・携帯は会話の中の図の ⤢「拡大」（A4・2026-10-02）。
+        title = scenario.expand_title
+        page.locator(f'button[title="{title}"], button[title="{title} を拡大"]').first.click()
         page.wait_for_timeout(2500)
     queries = queries_of(requested)
     check("開いた図がデータを取りに行った", len(queries) > 0, f"{len(queries)} 件")
@@ -277,9 +280,9 @@ PHONE = {"width": 390, "height": 844}
 SCENARIOS = [
     Scenario("失敗→呼び直し・散布・広い画面", WIDE, RETRY_SCATTER, "/api/growth", None, only_chiba_prefecture, "呼び直した方（千葉県）で開く"),
     Scenario("失敗→呼び直し・ランキング・広い画面", WIDE, RETRY_RANKING, "/api/ranking", None, only_chiba_prefecture, "呼び直した方（千葉県）で開く"),
-    Scenario("失敗→呼び直し・散布・携帯（チップ）", PHONE, RETRY_SCATTER, "/api/growth", RETRY_SCATTER_PANEL["title"], only_chiba_prefecture, "呼び直した方（千葉県）で開く"),
+    Scenario("失敗→呼び直し・散布・携帯（会話の中の図の ⤢）", PHONE, RETRY_SCATTER, "/api/growth", RETRY_SCATTER_PANEL["title"], only_chiba_prefecture, "呼び直した方（千葉県）で開く"),
     Scenario("同じ指標の図が2つ・広い画面", WIDE, TWO_FIGURES, "/api/growth", None, retried_figure_conditions, "キャンバスは最後の図を、その図の条件で開く"),
-    Scenario("同じ指標の図が2つ・携帯（2枚目のチップ）", PHONE, TWO_FIGURES, "/api/growth", TWO_FIGURES_LAST_PANEL["title"], retried_figure_conditions, "2 枚目のチップは 2 枚目の条件で開く"),
+    Scenario("同じ指標の図が2つ・携帯（2枚目の図の ⤢）", PHONE, TWO_FIGURES, "/api/growth", TWO_FIGURES_LAST_PANEL["title"], retried_figure_conditions, "2 枚目の図の ⤢ は 2 枚目の条件で開く"),
 ]
 
 with sync_playwright() as playwright:

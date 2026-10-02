@@ -10,7 +10,7 @@
  * `docs/261001_fix_user_feedback_ui.md` §3）。上へスクロールして読んでいる間は追わない。
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { DefaultChatTransport } from 'ai'
 import { useChat } from '@ai-sdk/react'
 import { Drawer } from 'vaul'
@@ -25,6 +25,7 @@ import { useStationDetail } from '@/components/detail/useStationDetail'
 import { useMapStore } from '@/stores/mapStore'
 import { useChatStore } from '@/stores/chatStore'
 import { type ChatUIMessage } from './types'
+import { createAnswerHistory } from './answerHistory'
 import { ChatMessage } from './ChatMessage'
 import { JumpToLatest } from './JumpToLatest'
 import { SuggestionChips } from './SuggestionChips'
@@ -68,8 +69,16 @@ function ChatBody() {
   const setHighlightedGrps = useMapStore((state) => state.setHighlightedGrps)
   const closeChat = useChatStore((state) => state.setOpen)
   const applyMapActions = useApplyMapActions()
-  const detailFocus = useApplyDetailFocus()
+  // 1 回の回答で積む履歴は 1 つ（タブ・駅・ハザード・図をまとめて「戻る」1 回で取り消せる）。
+  const answerHistory = useMemo(() => createAnswerHistory(), [])
+  const detailFocus = useApplyDetailFocus(answerHistory)
   const scroll = useChatScroll()
+
+  // 回答の途中で「戻る／進む」を押されたら、その回答はもう URL を書かない（戻った先を上書きしない）。
+  useEffect(() => {
+    window.addEventListener('popstate', answerHistory.suspend)
+    return () => window.removeEventListener('popstate', answerHistory.suspend)
+  }, [answerHistory])
   // 選択駅の名前（インジケータ表示用）。ドロワーと SWR キャッシュを共有＝追加フェッチなし。
   const { detail: selectedDetail } = useStationDetail(grp)
 
@@ -77,17 +86,19 @@ function ChatBody() {
   const { messages, sendMessage, status, stop, error, setMessages } = useChat<ChatUIMessage>({
     transport,
     onData: (part) => {
+      // 戻る／進むで止めた回答は、もう地図を動かさない（利用者が取り消した状態を尊重する）。
+      if (!answerHistory.isActive()) return
       // 駅詳細の焦点（聞いたタブ）は図より先に届く。地図が駅を選ぶ前にタブを書いておく。
       if (part.type === 'data-promotions') detailFocus.apply(part.data)
       // data-map はサーバ検証済みだが、クライアントでも safeParse して型を確定＋失敗時は無視（防御的）。
       if (part.type !== 'data-map') return
       const parsed = mapResponseSchema.safeParse(part.data)
-      if (parsed.success) applyMapActions(parsed.data)
+      if (parsed.success) applyMapActions(parsed.data, answerHistory)
     },
   })
 
   // 回答に図が含まれたらキャンバスへ（広い画面のみ。narrow はチップから手動で開く）。
-  useCanvasAutoOpen(messages, useIsWide())
+  useCanvasAutoOpen(messages, useIsWide(), answerHistory)
 
   const [input, setInput] = useState('')
   const busy = status === 'submitted' || status === 'streaming'
@@ -96,6 +107,7 @@ function ChatBody() {
     const trimmed = text.trim()
     if (trimmed.length === 0 || trimmed.length > MAX_INPUT_CHARS || busy) return
     detailFocus.reset() // 新しい回答の焦点は、前の回答と同じでも当て直す
+    answerHistory.reset() // 新しい回答は、最初に URL を書くときに履歴を 1 つ積む
     // 地図で駅を選択中なら、その選択を文脈として同送する（「この駅」等の解決に使う・P8e）。
     void sendMessage(
       { text: trimmed },

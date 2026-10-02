@@ -7,9 +7,12 @@
  *
  * x/y 指標ピッカ × 都道府県 × 運営会社 × 路線 × ⚠除外 → /api/growth（決定的 k-means 済み）
  * → Chart.js 散布（クラスタ色分け）。点クリックは `onSelect` に委ねる（枠側の作法に従う）。
+ *
+ * 条件は**開いた図**（URL の `?fig`・`figure/url.ts`）から始め、変えたら `onConditions` で知らせる
+ * （入れ物が URL へ書き戻す＝戻る・進む・リロードで同じ条件の散布が出る・2026-10-02）。
  */
 
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { type Category } from '@/shared/constants'
 import { getEntry } from '@/shared/catalog'
 import { DEFAULT_SCATTER_X, DEFAULT_SCATTER_Y, rankableGroups } from '@/domain/metrics'
@@ -18,6 +21,7 @@ import { ScatterChart, SCATTER_HEIGHT } from '@/components/panels/ScatterChart'
 import { MetricSelect } from '@/components/metrics/MetricSelect'
 import { StationFilterControls } from '@/components/metrics/StationFilterControls'
 import { useStationFilters } from '@/components/metrics/useStationFilters'
+import { type ScatterFigure } from '@/components/figure/url'
 import { useGrowth } from './useGrowth'
 import { messageJaOf } from '@/lib/fetch-json'
 
@@ -28,31 +32,27 @@ function firstKeyOf(category: Category): string | undefined {
   return rankableGroups(category)[0]?.entries[0]?.key
 }
 
-/** チャットからの昇格で初期 x/y・条件を preset する（未指定は既定）。 */
-export type ScatterInitial = {
-  readonly xKey: string
-  readonly yKey: string
-  readonly prefectures: readonly string[]
-  /** 運営会社の絞り込み（260730・省略時は全社）。 */
-  readonly operators?: readonly string[]
-  /** 路線・事業者種別の絞り込み（260731・省略時は全路線。両者は OR）。 */
-  readonly routes?: readonly string[]
-  readonly routeTypes?: readonly number[]
-  readonly excludeLowN: boolean
+/** 開いた図の指標。無い・カタログに無い（手で書き換えた URL など）なら既定の指標。 */
+function knownKeyOr(key: string | null, fallback: string): string {
+  return key !== null && getEntry(key) !== undefined ? key : fallback
 }
 
 export function ScatterBody({
   initial,
   active,
   onSelect,
+  onConditions,
 }: {
-  initial?: ScatterInitial
+  /** 開いた図（条件の初期値）。FAB で開いた直後は x/y が null＝既定の指標。 */
+  initial: ScatterFigure
   /** 表示中か（false の間は取得しない。モーダルの open／キャンバスの表示状態）。 */
   active: boolean
   onSelect: (grp: string) => void
+  /** 条件が変わったら呼ぶ（開いた直後の既定の補完を含む）。入れ物が URL へ書き戻す。 */
+  onConditions?: (figure: ScatterFigure) => void
 }) {
-  const initialX = initial?.xKey ?? DEFAULT_SCATTER_X
-  const initialY = initial?.yKey ?? DEFAULT_SCATTER_Y
+  const initialX = knownKeyOr(initial.xKey, DEFAULT_SCATTER_X)
+  const initialY = knownKeyOr(initial.yKey, DEFAULT_SCATTER_Y)
   const [xCategory, setXCategory] = useState<Category>(getEntry(initialX)?.category ?? X_CATEGORY)
   const [xKey, setXKey] = useState<string>(initialX)
   const [yCategory, setYCategory] = useState<Category>(getEntry(initialY)?.category ?? Y_CATEGORY)
@@ -61,8 +61,22 @@ export function ScatterBody({
   const filters = useStationFilters(active, initial)
   // 既定で信頼性の低い値（⚠）を除外する：母数が小さい駅の増減率・中央値は外れ値に
   // なりやすく、既定の散布が数駅の極端値に引きずられるため（チャットからの昇格時は
-  // AI が実際に使った条件をそのまま反映する＝initial 優先）。
-  const [excludeLowN, setExcludeLowN] = useState<boolean>(initial?.excludeLowN ?? true)
+  // AI が実際に使った条件をそのまま反映する＝開いた図の値を優先）。
+  const [excludeLowN, setExcludeLowN] = useState<boolean>(initial.excludeLowN)
+
+  const { prefectures, operators, routes, routeTypes } = filters.values
+  useEffect(() => {
+    onConditions?.({
+      kind: 'scatter',
+      xKey,
+      yKey,
+      prefectures,
+      operators,
+      routes,
+      routeTypes,
+      excludeLowN,
+    })
+  }, [onConditions, xKey, yKey, prefectures, operators, routes, routeTypes, excludeLowN])
 
   const { growth, isLoading, isValidating, error } = useGrowth(
     { x: xKey, y: yKey, ...filters.values, excludeLowN },

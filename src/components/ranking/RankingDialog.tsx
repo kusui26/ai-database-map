@@ -1,7 +1,8 @@
 'use client'
 
 /**
- * ランキングのモーダル（FAB から開く／narrow でのチャット昇格先）。
+ * ランキングのモーダル。**狭い画面で図を出す入れ物**（FAB・チャットの ⤢・URL の `?fig`。
+ * 広い画面ではキャンバスが同じ図を出す・`chat/PromotionHost.tsx`）。
  * 枠（オーバーレイ・ヘッダ・閉じる）だけを持ち、中身は `RankingBody` に委ねる。
  * 同じ中身をチャットのキャンバスでも使う（docs/260802_ai_chat_canvs.md §2.1）。
  */
@@ -9,16 +10,21 @@
 import { useCallback } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { useMapUrlState } from '@/components/map/useMapUrlState'
-import { RankingBody, type RankingInitial } from './RankingBody'
+import { type RankingFigure } from '@/components/figure/url'
+import { RankingBody } from './RankingBody'
 
 export function RankingDialog({
   open,
   onOpenChange,
   initial,
+  onConditions,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  initial?: RankingInitial
+  /** 開いた図（条件の初期値・`figure/url.ts`）。 */
+  initial: RankingFigure
+  /** 中身が条件を変えたら呼ぶ（入れ物が URL へ書き戻す）。 */
+  onConditions?: (figure: RankingFigure) => void
 }) {
   const { setGrp } = useMapUrlState()
   // モーダルでは駅を選んだら閉じる（背後の地図・ドロワーを見せるため）。
@@ -56,7 +62,12 @@ export function RankingDialog({
             </Dialog.Close>
           </div>
 
-          <RankingBody initial={initial} active={open} onSelect={onSelect} />
+          <RankingBody
+            initial={initial}
+            active={open}
+            onSelect={onSelect}
+            onConditions={onConditions}
+          />
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

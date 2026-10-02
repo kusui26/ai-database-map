@@ -6,9 +6,12 @@
  * （`StationDetailPanel` が `DetailBody` を共用しているのと同じ形・260802）。
  *
  * /api/ranking をページング（もっと見る）で全件まで。行クリックは `onSelect` に委ねる。
+ *
+ * 条件は**開いた図**（URL の `?fig`・`figure/url.ts`）から始め、変えたら `onConditions` で知らせる
+ * （入れ物が URL へ書き戻す＝戻る・進む・リロードで同じ条件の表が出る・2026-10-02）。
  */
 
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { type Order } from '@/shared/api'
 import { type Category } from '@/shared/constants'
 import { getEntry } from '@/shared/catalog'
@@ -16,45 +19,58 @@ import { DEFAULT_RANKING_KEY, rankableGroups } from '@/domain/metrics'
 import { rankingPanel } from '@/domain/ranking/panel'
 import { RankingTable } from '@/components/panels/RankingTable'
 import { useStationFilters } from '@/components/metrics/useStationFilters'
+import { type RankingFigure } from '@/components/figure/url'
 import { MetricPicker } from './MetricPicker'
 import { useRanking } from './useRanking'
 import { messageJaOf } from '@/lib/fetch-json'
 
 const DEFAULT_CATEGORY: Category = getEntry(DEFAULT_RANKING_KEY)?.category ?? 'population'
 
-/** チャットからの昇格で初期指標・条件を preset する（未指定は既定）。 */
-export type RankingInitial = {
-  readonly metricKey: string
-  readonly prefectures: readonly string[]
-  /** 運営会社・路線・事業者種別の絞り込み（260801・省略時は絞らない）。 */
-  readonly operators?: readonly string[]
-  readonly routes?: readonly string[]
-  readonly routeTypes?: readonly number[]
-  readonly order: Order
-  readonly excludeLowN: boolean
+/** 開いた図の指標。無い・カタログに無い（手で書き換えた URL など）なら既定の指標。 */
+function initialMetricKey(figure: RankingFigure): string {
+  const key = figure.metricKey
+  return key !== null && getEntry(key) !== undefined ? key : DEFAULT_RANKING_KEY
 }
 
 export function RankingBody({
   initial,
   active,
   onSelect,
+  onConditions,
 }: {
-  initial?: RankingInitial
+  /** 開いた図（条件の初期値）。FAB で開いた直後は指標が null＝既定の指標。 */
+  initial: RankingFigure
   /** 表示中か（false の間は取得しない。モーダルの open／キャンバスの表示状態）。 */
   active: boolean
   onSelect: (grp: string) => void
+  /** 条件が変わったら呼ぶ（開いた直後の既定の補完を含む）。入れ物が URL へ書き戻す。 */
+  onConditions?: (figure: RankingFigure) => void
 }) {
-  const initialKey = initial?.metricKey ?? DEFAULT_RANKING_KEY
+  const initialKey = initialMetricKey(initial)
   const [category, setCategory] = useState<Category>(
     getEntry(initialKey)?.category ?? DEFAULT_CATEGORY,
   )
   const [metricKey, setMetricKey] = useState<string>(initialKey)
   // 絞り込みと連動は散布と共有する（260801）。
   const filters = useStationFilters(active, initial)
-  const [order, setOrder] = useState<Order>(initial?.order ?? 'desc')
+  const [order, setOrder] = useState<Order>(initial.order)
   // 既定で信頼性の低い値（⚠）を除外する。散布（PR #40）と揃え、同じデータを見ているのに
-  // 2 画面で母集団が違う、という食い違いを無くす（チャットからの昇格は initial 優先）。
-  const [excludeLowN, setExcludeLowN] = useState<boolean>(initial?.excludeLowN ?? true)
+  // 2 画面で母集団が違う、という食い違いを無くす（チャットからの昇格は AI が使った条件を優先）。
+  const [excludeLowN, setExcludeLowN] = useState<boolean>(initial.excludeLowN)
+
+  const { prefectures, operators, routes, routeTypes } = filters.values
+  useEffect(() => {
+    onConditions?.({
+      kind: 'ranking',
+      metricKey,
+      order,
+      prefectures,
+      operators,
+      routes,
+      routeTypes,
+      excludeLowN,
+    })
+  }, [onConditions, metricKey, order, prefectures, operators, routes, routeTypes, excludeLowN])
 
   const { ranking, total, isLoading, isLoadingMore, canLoadMore, loadMore, error } = useRanking(
     { metric: metricKey, ...filters.values, order, excludeLowN },

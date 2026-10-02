@@ -8,6 +8,7 @@ import { useCurrentPosition } from '@/hooks/useCurrentPosition'
 import { useOfflineHazardCache } from '@/hooks/useOfflineHazardCache'
 import { useMapUrlState } from './map/useMapUrlState'
 import { useHazardUrlState } from './map/useHazardUrlState'
+import { useFigureUrl } from './figure/useFigureUrl'
 import { useAlertTarget, useHazardAlerts } from './hazard/useHazardAlerts'
 import { useWarningMode } from './hazard/useWarningMode'
 import { isWarningMode } from '@/domain/hazard/warning-mode'
@@ -54,14 +55,14 @@ export function MapShell() {
   const chatOpen = useChatStore((state) => state.open)
   const setChatOpen = useChatStore((state) => state.setOpen)
   const { grp } = useMapUrlState()
-  const promotion = useChatStore((state) => state.promotion)
+  const { figure } = useFigureUrl()
   const [chatSeen, setChatSeen] = useState(false)
   // 駅詳細と図の表示先（キャンバス／モーダル）は「何も出さない状態」でも重い依存
   // （Chart.js・メトリクスカタログ）を連れてくる。初回に必要になるまでマウントしない
   // ＝初期表示で読み込まない（260803・§4-③）。
   // 一度出したら以後は保持する（閉じるアニメーションと内部状態を壊さない）。
   const [detailSeen, setDetailSeen] = useState(false)
-  const [promotionSeen, setPromotionSeen] = useState(false)
+  const [figureSeen, setFigureSeen] = useState(false)
   // 現在地の監視は**アプリ全体で 1 本だけ**。ここで回し、地図もカードも geoStore から読む。
   useCurrentPosition()
   // 警戒モード（§7.4）：レベル3相当以上なら、まだ何も選ばれていないときに限り
@@ -93,9 +94,10 @@ export function MapShell() {
     if (grp !== null) setDetailSeen(true)
   }, [grp])
 
+  // 図（URL の `?fig`）が開いたら入れ物を読み込む。FAB・チャット・共有リンクのどれから開いても同じ。
   useEffect(() => {
-    if (promotion !== null) setPromotionSeen(true)
-  }, [promotion])
+    if (figure !== null) setFigureSeen(true)
+  }, [figure])
 
   useEffect(() => {
     if (geoActive) setGeoSeen(true)
@@ -117,8 +119,8 @@ export function MapShell() {
       {geoSeen && <CurrentPositionPanel />}
       {detailSeen && <StationDetailPanel />}
       {chatSeen && <ChatPanel />}
-      {promotionSeen && <PromotionHost />}
-      {promotionSeen && <ChatCanvas />}
+      {figureSeen && <PromotionHost />}
+      {figureSeen && <ChatCanvas />}
     </main>
   )
 }

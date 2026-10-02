@@ -1,7 +1,8 @@
 'use client'
 
 /**
- * 散布図のモーダル（FAB から開く／narrow でのチャット昇格先）。
+ * 散布図のモーダル。**狭い画面で図を出す入れ物**（FAB・チャットの ⤢・URL の `?fig`。
+ * 広い画面ではキャンバスが同じ図を出す・`chat/PromotionHost.tsx`）。
  * 枠（オーバーレイ・ヘッダ・閉じる）だけを持ち、中身は `ScatterBody` に委ねる。
  * 同じ中身をチャットのキャンバスでも使う（docs/260802_ai_chat_canvs.md §2.1）。
  */
@@ -9,16 +10,21 @@
 import { useCallback } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { useMapUrlState } from '@/components/map/useMapUrlState'
-import { ScatterBody, type ScatterInitial } from './ScatterBody'
+import { type ScatterFigure } from '@/components/figure/url'
+import { ScatterBody } from './ScatterBody'
 
 export function ScatterDialog({
   open,
   onOpenChange,
   initial,
+  onConditions,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  initial?: ScatterInitial
+  /** 開いた図（条件の初期値・`figure/url.ts`）。 */
+  initial: ScatterFigure
+  /** 中身が条件を変えたら呼ぶ（入れ物が URL へ書き戻す）。 */
+  onConditions?: (figure: ScatterFigure) => void
 }) {
   const { setGrp } = useMapUrlState()
   // モーダルでは駅を選んだら閉じる（背後の地図・ドロワーを見せるため）。
@@ -56,7 +62,12 @@ export function ScatterDialog({
             </Dialog.Close>
           </div>
 
-          <ScatterBody initial={initial} active={open} onSelect={onSelect} />
+          <ScatterBody
+            initial={initial}
+            active={open}
+            onSelect={onSelect}
+            onConditions={onConditions}
+          />
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

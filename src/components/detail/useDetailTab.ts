@@ -12,7 +12,7 @@
  */
 
 import { useCallback, useState } from 'react'
-import { parseAsStringLiteral, useQueryState } from 'nuqs'
+import { parseAsStringLiteral, useQueryState, type HistoryOptions } from 'nuqs'
 import { DETAIL_TABS, type DetailTab } from '@/shared/constants'
 import {
   browserTabStorage,
@@ -25,13 +25,16 @@ import {
 /** 9 タブ以外の値（手で書き換えた URL など）は null＝URL に無いのと同じ扱いになる。 */
 const tabParser = parseAsStringLiteral(DETAIL_TABS).withOptions({ history: 'replace' })
 
-/** タブを選ぶ（URL に書き、この端末にも覚える）。タブ帯・災害バッジ・チャットの焦点が使う。 */
-export function useSelectDetailTab(): (tab: DetailTab) => void {
+/**
+ * タブを選ぶ（URL に書き、この端末にも覚える）。タブ帯・災害バッジ・チャットの焦点が使う。
+ * 履歴は既定で replace。チャットの回答は「1 回の回答で 1 履歴」に合わせて渡す（`chat/answerHistory.ts`）。
+ */
+export function useSelectDetailTab(): (tab: DetailTab, history?: HistoryOptions) => void {
   const [, setUrlTab] = useQueryState(DETAIL_TAB_PARAM, tabParser)
   return useCallback(
-    (tab: DetailTab) => {
+    (tab: DetailTab, history: HistoryOptions = 'replace') => {
       rememberDetailTab(browserTabStorage(), tab)
-      void setUrlTab(tab)
+      void setUrlTab(tab, { history })
     },
     [setUrlTab],
   )

@@ -10,7 +10,7 @@
  */
 
 import { useCallback, useMemo } from 'react'
-import { parseAsFloat, parseAsString, useQueryState } from 'nuqs'
+import { parseAsFloat, parseAsString, useQueryState, type HistoryOptions } from 'nuqs'
 import { clampHazardOpacity, HAZARD_OPACITY_DEFAULT } from '@/shared/constants'
 import { resolveHazardLayerKeys, toggleHazardLayer } from '@/domain/hazard/catalog'
 
@@ -24,9 +24,12 @@ export type HazardUrlState = {
   readonly opacity: number
   /** 1 レイヤの ON/OFF（同じグループで base は 1 つだけ、というルールはドメインが持つ）。 */
   readonly toggleLayer: (key: string) => void
-  /** まとめて差し替え（チャットの `setHazardLayers` から使う）。 */
-  readonly setLayerKeys: (keys: readonly string[]) => void
-  readonly setOpacity: (value: number) => void
+  /**
+   * まとめて差し替え（チャットの `setHazardLayers` から使う）。履歴は既定で replace（レイヤは調整）。
+   * AI の回答は「1 回の回答で 1 履歴」に合わせて `history` を渡す（`chat/answerHistory.ts`）。
+   */
+  readonly setLayerKeys: (keys: readonly string[], history?: HistoryOptions) => void
+  readonly setOpacity: (value: number, history?: HistoryOptions) => void
 }
 
 export function useHazardUrlState(): HazardUrlState {
@@ -41,10 +44,10 @@ export function useHazardUrlState(): HazardUrlState {
   const opacity = clampHazardOpacity(rawOpacity)
 
   const setLayerKeys = useCallback(
-    (keys: readonly string[]) => {
+    (keys: readonly string[], history: HistoryOptions = 'replace') => {
       const resolved = resolveHazardLayerKeys(keys)
       // 空なら ?hz ごと消す（既定状態の URL を汚さない）。
-      void setRawKeys(resolved.length === 0 ? null : resolved.join(SEPARATOR))
+      void setRawKeys(resolved.length === 0 ? null : resolved.join(SEPARATOR), { history })
     },
     [setRawKeys],
   )
@@ -55,9 +58,9 @@ export function useHazardUrlState(): HazardUrlState {
   )
 
   const setOpacity = useCallback(
-    (value: number) => {
+    (value: number, history: HistoryOptions = 'replace') => {
       const clamped = clampHazardOpacity(value)
-      void setRawOpacity(clamped === HAZARD_OPACITY_DEFAULT ? null : clamped)
+      void setRawOpacity(clamped === HAZARD_OPACITY_DEFAULT ? null : clamped, { history })
     },
     [setRawOpacity],
   )

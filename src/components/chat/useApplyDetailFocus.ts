@@ -10,10 +10,12 @@
  * 回答の途中で利用者が別のタブに替えたのを、送り直しで戻さないため。質問を送るたびに `reset` する。
  *
  * 当てるときは `useSelectDetailTab` を通す（タブ帯で選んだのと同じ＝URL に書き、この端末にも覚える）。
+ * 履歴はその回答の約束に従う（最初に URL を書くなら push・`answerHistory.ts`）。
  */
 
 import { useCallback, useMemo, useRef } from 'react'
 import { useSelectDetailTab } from '@/components/detail/useDetailTab'
+import { type AnswerHistory } from './answerHistory'
 import { focusToApply } from './detailFocus'
 
 export type DetailFocusApplier = {
@@ -23,7 +25,7 @@ export type DetailFocusApplier = {
   readonly reset: () => void
 }
 
-export function useApplyDetailFocus(): DetailFocusApplier {
+export function useApplyDetailFocus(answerHistory: AnswerHistory): DetailFocusApplier {
   const selectDetailTab = useSelectDetailTab()
   const appliedKey = useRef<string | null>(null)
 
@@ -32,9 +34,10 @@ export function useApplyDetailFocus(): DetailFocusApplier {
       const next = focusToApply(data, appliedKey.current)
       if (next === null) return
       appliedKey.current = next.key
-      selectDetailTab(next.focus.tab)
+      const history = answerHistory.take()
+      if (history !== null) selectDetailTab(next.focus.tab, history)
     },
-    [selectDetailTab],
+    [selectDetailTab, answerHistory],
   )
   const reset = useCallback(() => {
     appliedKey.current = null

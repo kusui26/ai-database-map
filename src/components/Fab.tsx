@@ -8,9 +8,13 @@ import { useGeoStore } from '@/stores/geoStore'
 import { useMapStore } from '@/stores/mapStore'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { usePrefetchOnIdle } from '@/hooks/usePrefetchOnIdle'
+// 図（ランキング・散布）は URL の `?fig` に書くだけ。出すのは図の入れ物（広い画面はキャンバス、
+// 狭い画面はモーダル）で、FAB はもう自分でダイアログを持たない（2026-10-02・計画書 §12-6）。
+import { DEFAULT_RANKING_FIGURE, DEFAULT_SCATTER_FIGURE } from './figure/url'
+import { useFigureUrl } from './figure/useFigureUrl'
 // 初期バンドルから外す：ダイアログ（散布は Chart.js を含む）は初回オープンまで読み込まない。
 // 遅延ロードの定義は共通モジュールに置く（Suspense 境界の付け忘れを 1 か所に閉じ込めるため）。
-import { DIALOG_LOADERS, RankingDialog, RecommendDialog, ScatterDialog } from './lazyDialogs'
+import { DIALOG_LOADERS, RecommendDialog } from './lazyDialogs'
 // 名前だけを参照する（`url.ts` を import すると、おすすめ一式が初期バンドルに来る）。
 import { RECOMMEND_OPEN_PARAM } from './recommend/openParam'
 import { cn } from '@/lib/utils'
@@ -114,21 +118,17 @@ function FabButton({
   )
 }
 
+/** おすすめを開いているか。開く・閉じるは履歴に積む（戻るで閉じ、進むで開き直せる・2026-10-02）。 */
+const recommendOpenParser = parseAsBoolean.withDefault(false).withOptions({ history: 'push' })
+
 /**
  * 左下 FAB（現在地＝Phase 2／ランキング＝P6a／散布図＝P6b／おすすめ＝W4）。
- * ダイアログは初回オープンで初めてマウント（遅延ロード）。
+ * ランキング・散布は URL の図を開くだけ（入れ物が出す）。おすすめは初回オープンで初めてマウント（遅延ロード）。
  */
 export function Fab() {
-  const [rankingOpen, setRankingOpen] = useState(false)
-  const [scatterOpen, setScatterOpen] = useState(false)
-  // おすすめだけ URL に載せる——条件ごと共有できるリンクにするため（§13.7 W5）。
-  const [recommendOpen, setRecommendOpen] = useQueryState(
-    RECOMMEND_OPEN_PARAM,
-    parseAsBoolean.withDefault(false),
-  )
-  // 一度開いたら以後もマウントし続ける（初回のみチャンク取得・状態は保持）。
-  const [rankingSeen, setRankingSeen] = useState(false)
-  const [scatterSeen, setScatterSeen] = useState(false)
+  const { openFigure } = useFigureUrl()
+  // おすすめも URL に載せる——条件ごと共有できるリンクにするため（§13.7 W5）。
+  const [recommendOpen, setRecommendOpen] = useQueryState(RECOMMEND_OPEN_PARAM, recommendOpenParser)
   // 共有リンクを踏んだ（`?rec=true`）ときは、最初から開いた状態で始まる。
   const [recommendSeen, setRecommendSeen] = useState(recommendOpen)
   // デスクトップでチャットを開くと FAB が左パネルに隠れるため右へ寄せる（位置はパネル幅から算出）。
@@ -161,18 +161,12 @@ export function Fab() {
         <FabButton
           icon={<TrophyIcon />}
           label="ランキング"
-          onClick={() => {
-            setRankingSeen(true)
-            setRankingOpen(true)
-          }}
+          onClick={() => openFigure(DEFAULT_RANKING_FIGURE)}
         />
         <FabButton
           icon={<ScatterIcon />}
           label="散布図"
-          onClick={() => {
-            setScatterSeen(true)
-            setScatterOpen(true)
-          }}
+          onClick={() => openFigure(DEFAULT_SCATTER_FIGURE)}
         />
         <FabButton
           icon={<StarIcon />}
@@ -184,8 +178,6 @@ export function Fab() {
           }}
         />
       </div>
-      {rankingSeen && <RankingDialog open={rankingOpen} onOpenChange={setRankingOpen} />}
-      {scatterSeen && <ScatterDialog open={scatterOpen} onOpenChange={setScatterOpen} />}
       {recommendSeen && (
         <RecommendDialog
           open={recommendOpen}

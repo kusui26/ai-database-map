@@ -108,7 +108,10 @@ export function samePair(a: RoutePair, b: RoutePair): boolean {
   return a.operator === b.operator && a.route === b.route
 }
 
-/** データの全路線の照合の形 → 当たる会社 × 路線（鍵ごと・同じ組は 1 回・強い形が先）。 */
+/**
+ * データの全路線の照合の形 → 当たる会社 × 路線（鍵ごとに同じ組は 1 回。同じ組の強い形と弱い形が
+ * 同じ鍵になれば強い形を残す。強弱の使い分けは `match.ts` の `decideHits`）。
+ */
 export type RouteFormIndex = ReadonlyMap<string, readonly FormHit[]>
 
 export function routeFormIndex(routes: readonly CatalogRoute[]): RouteFormIndex {

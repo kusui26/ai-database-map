@@ -185,6 +185,35 @@ async function narrowByPrefectures(
   return identities.filter((_, i) => (counts[i]?.count ?? 0) > 0)
 }
 
+/** 都道府県で 1 本に決めた（広げた読み替えの路線なら、そのことも書く）。 */
+function chosenOutcome(
+  input: string,
+  chosen: RouteIdentity,
+  match: RoutesMatch,
+  prefectures: readonly string[],
+): RouteOutcome {
+  const note = `「${input}」に当たる路線が複数あるため、${prefectures.join('・')}に駅のある ${identityLabel(chosen)} に決めました。`
+  const widened = widenedNote(input, chosen, match)
+  return { kind: 'pairs', pairs: chosen.pairs, notes: widened === null ? [note] : [note, widened] }
+}
+
+/** 決まらなかった理由と候補（都道府県で絞って 2 本以上残ればそれだけ、0 本・指定なしならすべて）。 */
+async function ambiguousOutcome(
+  input: string,
+  all: readonly RouteIdentity[],
+  narrowed: readonly RouteIdentity[] | null,
+  prefectures: readonly string[],
+  deps: NameResolveDeps,
+): Promise<RouteOutcome> {
+  const remaining = narrowed !== null && narrowed.length > 1 ? narrowed : all
+  const problem =
+    narrowed?.length === 0
+      ? `「${input}」に当たる路線は、${prefectures.join('・')}に駅がありません。`
+      : `「${input}」に当たる路線が複数あります（${remaining.length} 本）。`
+  const candidates = await candidatesOf(remaining, deps)
+  return { kind: 'problem', problem: { input, problem, candidates } }
+}
+
 /** 当たった路線から 1 本に決める（決まらなければ候補つきの理由）。 */
 async function decideRoutes(
   input: string,
@@ -196,27 +225,12 @@ async function decideRoutes(
   if (only !== undefined) {
     return { kind: 'pairs', pairs: only.pairs, notes: notesFor(input, only, match) }
   }
-  const narrowed =
-    prefectures.length > 0 ? await narrowByPrefectures(match.identities, prefectures, deps) : null
+  // 弱い候補（「東西線」に対する JR東西線）も、都道府県で絞る対象に入れる（大阪府なら JR東西線に決まる）。
+  const all = [...match.identities, ...match.others]
+  const narrowed = prefectures.length > 0 ? await narrowByPrefectures(all, prefectures, deps) : null
   const chosen = narrowed?.length === 1 ? narrowed[0] : undefined
-  if (chosen !== undefined) {
-    const note = `「${input}」は同じ名前の路線が複数あるため、${prefectures.join('・')}に駅のある ${identityLabel(chosen)} に決めました。`
-    const widened = widenedNote(input, chosen, match)
-    return {
-      kind: 'pairs',
-      pairs: chosen.pairs,
-      notes: widened === null ? [note] : [note, widened],
-    }
-  }
-  // 都道府県で絞って 2 本以上残ればそれだけを、絞れなければ（0 本・指定なし）すべてを候補にする。
-  const remaining =
-    narrowed !== null && narrowed.length > 1 ? narrowed : [...match.identities, ...match.others]
-  const candidates = await candidatesOf(remaining, deps)
-  const problem =
-    narrowed?.length === 0
-      ? `「${input}」という名前の路線は、${prefectures.join('・')}に駅がありません。`
-      : `「${input}」という名前の路線が複数あります（${(narrowed ?? match.identities).length} 本）。`
-  return { kind: 'problem', problem: { input, problem, candidates } }
+  if (chosen !== undefined) return chosenOutcome(input, chosen, match, prefectures)
+  return ambiguousOutcome(input, all, narrowed, prefectures, deps)
 }
 
 /** 会社の指定と合わないとき、その路線の持ち主を示す（「東横線」は東急電鉄、「小田急線」は小田急電鉄）。 */

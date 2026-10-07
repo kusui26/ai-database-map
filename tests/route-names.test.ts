@@ -160,6 +160,8 @@ describe('matchRoute：1 本に決まる言い方', () => {
     ['東横線', ['東急電鉄 東横線']],
     ['東横', ['東急電鉄 東横線']],
     ['東横線沿線', ['東急電鉄 東横線']],
+    ['東横線の沿線', ['東急電鉄 東横線']],
+    ['東横線沿線の駅', ['東急電鉄 東横線']],
     ['東京メトロ東西線', ['東京地下鉄 5号線東西線']],
     ['都営浅草線', ['東京都 1号線浅草線']],
     ['浅草線', ['東京都 1号線浅草線']],
@@ -350,7 +352,8 @@ describe('resolveNameFilters（ツール 1 回分）', () => {
     expect(result.ok).toBe(false)
     if (result.ok) return
     const problem = result.problems[0]
-    expect(problem?.problem).toContain('複数あります（4 本）')
+    // 数は候補の数とそろえる（4 本の東西線と、近い名前の JR東西線）
+    expect(problem?.problem).toContain('複数あります（5 本）')
     const rows = problem?.candidates?.map(
       (c) => `${c.operators.join()} ${c.routes.join()} ${c.stationCount}`,
     )
@@ -364,6 +367,27 @@ describe('resolveNameFilters（ツール 1 回分）', () => {
       ].sort(),
     )
     expect(result.hint).toContain('推測で選ばない')
+  })
+
+  it('近い名前の路線（JR東西線）も都道府県で絞る対象（東西線 × 大阪府 → JR東西線）', async () => {
+    const result = await resolveNameFilters(
+      { routes: ['東西線'], prefectures: ['大阪府'] },
+      fakeDeps(),
+    )
+    expect(result.ok && result.filters).toEqual({ operators: [], routes: ['JR東西線'] })
+    expect(result.ok && result.notes.join()).toContain('大阪府に駅のある 西日本旅客鉄道 JR東西線')
+  })
+
+  it('都道府県で絞って 2 本以上残れば、残った路線だけを候補にする', async () => {
+    const result = await resolveNameFilters(
+      { routes: ['東西線'], prefectures: ['東京都', '大阪府'] },
+      fakeDeps(),
+    )
+    expect(!result.ok && result.problems[0]?.problem).toContain('複数あります（2 本）')
+    expect(!result.ok && result.problems[0]?.candidates?.map((c) => c.routes)).toEqual([
+      ['5号線東西線'],
+      ['JR東西線'],
+    ])
   })
 
   it('都道府県に駅のある路線が無ければ、そう言って候補を返す', async () => {

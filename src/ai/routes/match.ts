@@ -276,9 +276,9 @@ function withLineSuffix(key: string, index: NameIndex, scope: Scope): RouteMatch
   return formMatch(`${key}線`, index, scope)
 }
 
-/** 利用者の言い方の飾り（「東横線沿線」「東横線の駅」）を外す。 */
+/** 利用者の言い方の飾り（「東横線沿線」「東横線の沿線」「東横線の駅」「東横線沿線の駅」）を外す。 */
 function withoutDecoration(input: string): string {
-  return input.trim().replace(/(沿線|の各駅|の駅)$/u, '')
+  return input.trim().replace(/(?:の?沿線)?(?:の各駅|の駅)?$/u, '')
 }
 
 /** 路線の名前を正式名へ。`scope` は会社の範囲（`operators` の指定・null＝全社）。 */

@@ -133,3 +133,23 @@ describe('システムプロンプト：合成スコアの推薦は画面へ引�
     expect(prompt).toContain('案内文に混ぜない')
   })
 })
+
+/**
+ * 会社・路線の名前（2026-10-07・B1）。サーバが正式名へ解決し、決まらなければ候補を返す。
+ * 実際の応答は `tests/chat-eval.test.ts` の `rank-route-*` が見る。ここで固定するのは指示が消えていないこと。
+ */
+describe('システムプロンプト：会社・路線の名前', () => {
+  it('言い方のまま渡してよい（正式名を推測で組み立てさせない）', () => {
+    expect(buildSystemPrompt()).toContain('利用者の言い方のまま渡してよい')
+  })
+
+  it('候補が返ったら推測で選ばず、分からなければ聞く', () => {
+    const prompt = buildSystemPrompt()
+    expect(prompt).toContain('推測で選ばない')
+    expect(prompt).toContain('どの路線かを利用者に聞く')
+  })
+
+  it('路線全体へ広げた読み替えは本文で断る（停車駅に限らない）', () => {
+    expect(buildSystemPrompt()).toContain('快速の停車駅に限らない')
+  })
+})

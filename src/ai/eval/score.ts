@@ -17,6 +17,8 @@ export type EvalObserved = {
   /** 判定用の干し草（本文＋MapResponse の JSON）。contains 系はここを見る。 */
   readonly haystack: string
   readonly mapResponseValid: boolean
+  /** 空の図の数（行の無い順位表・点の無い散布）。利用者には壊れた画面に見える（B1）。 */
+  readonly emptyFigureCount: number
 }
 
 /** ツール呼び出しの期待（name 一致＋input の部分一致）。 */
@@ -39,6 +41,13 @@ export type EvalExpectation = {
   readonly noRankScatter?: boolean
   /** 本文が非空。 */
   readonly textNonEmpty?: boolean
+  /** 空の図（行の無い順位表・点の無い散布）を出さない（2026-10-07 B1）。 */
+  readonly noEmptyFigures?: boolean
+  /**
+   * ツールごとの呼び出し回数の上限（例 `{ rankStations: 1 }`＝路線名が 1 回で解決される）。
+   * 以前は名前の当てずっぽうの呼び直しで、上限 6 回のうち 5 回を使っていた（計画書 §6.1）。
+   */
+  readonly maxCalls?: Readonly<Record<string, number>>
   /** これらを**すべて**含む（本文＋パネル）。 */
   readonly contains?: readonly string[]
   /** これらの**いずれか**を含む（拒否・言い換えの許容）。 */
@@ -51,6 +60,21 @@ export type EvalExpectation = {
    * 人命に関わる（`docs/260824_flood.md` §7.5・§6.5）。ここで機械的に落とす。
    */
   readonly notContains?: readonly string[]
+}
+
+/** 図の中身（空かどうかを見るのに要るものだけ）。 */
+type FigurePanel =
+  | { readonly type: 'rankingTable'; readonly rows: readonly unknown[] }
+  | { readonly type: 'scatter'; readonly points: readonly unknown[] }
+  | { readonly type: string }
+
+/** 空の図の数（行の無い順位表・点の無い散布）。 */
+export function emptyFigureCount(panels: readonly FigurePanel[]): number {
+  return panels.filter(
+    (panel) =>
+      ('rows' in panel && panel.type === 'rankingTable' && panel.rows.length === 0) ||
+      ('points' in panel && panel.type === 'scatter' && panel.points.length === 0),
+  ).length
 }
 
 export type CheckResult = { readonly name: string; readonly ok: boolean }
@@ -106,6 +130,13 @@ export function scoreCase(expectation: EvalExpectation, observed: EvalObserved):
   }
   if (expectation.textNonEmpty === true) {
     checks.push({ name: '本文が非空', ok: observed.text.trim().length > 0 })
+  }
+  if (expectation.noEmptyFigures === true) {
+    checks.push({ name: '空の図を出さない', ok: observed.emptyFigureCount === 0 })
+  }
+  for (const [name, max] of Object.entries(expectation.maxCalls ?? {})) {
+    const count = observed.toolCalls.filter((call) => call.name === name).length
+    checks.push({ name: `${name} の呼び出しは ${max} 回まで（${count} 回）`, ok: count <= max })
   }
   for (const needle of expectation.contains ?? []) {
     checks.push({ name: `「${needle}」を含む`, ok: observed.haystack.includes(needle) })

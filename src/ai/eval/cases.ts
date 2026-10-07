@@ -1,5 +1,5 @@
 /**
- * 評価：ゴールデン 38 問（駅詳細・ランキング・散布・比較・曖昧駅名・カタログ探索・データ外拒否・**災害**）。
+ * 評価：ゴールデン 41 問（駅詳細・ランキング・会社と路線の名前・散布・比較・曖昧駅名・カタログ探索・データ外拒否・**災害**）。
  * 各問は自然言語クエリと、機械判定できる期待（score.ts）を持つ。代表性を重視して分野を網羅する。
  *
  * **災害の 6 問だけは性格が違う**（`docs/260824_flood.md` §6.5・§10.4）。
@@ -129,6 +129,48 @@ export const EVAL_CASES: readonly EvalCase[] = [
         { name: 'rankStations', inputIncludes: { operators: ['東海旅客鉄道'], routeTypes: [1] } },
       ],
       panels: ['rankingTable'],
+    },
+  },
+
+  // --- 会社・路線の名前（2026-10-07 B1・`docs/261001_fix_user_feedback_ui.md` §6.6） ---
+  {
+    // 利用者の言い方（「東急東横線」）のまま 1 回で解決し、空の図を出さない。
+    // 以前は routes:["東急東横線"] で 0 件の空の図を出し、呼び直しに 5 回かかった（§6.1.2）。
+    id: 'rank-route-alias',
+    category: 'ランキング',
+    query: '東急東横線の沿線で地価が上がっている駅は？',
+    expect: {
+      toolCalls: [{ name: 'rankStations' }],
+      panels: ['rankingTable'],
+      contains: ['東横線'],
+      noEmptyFigures: true,
+      maxCalls: { rankStations: 1 },
+    },
+  },
+  {
+    // 番号つきの地下鉄の名前（データは「4号線丸ノ内線」）。
+    id: 'rank-route-metro',
+    category: 'ランキング',
+    query: '丸ノ内線の駅で乗降客数が多い順に教えて',
+    expect: {
+      toolCalls: [{ name: 'rankStations' }],
+      panels: ['rankingTable'],
+      contains: ['4号線丸ノ内線'],
+      noEmptyFigures: true,
+      maxCalls: { rankStations: 1 },
+    },
+  },
+  {
+    // 同じ名前の別路線（東京メトロ・札幌・仙台・京都）は推測で選ばない：図を出さずに、どれかを聞く。
+    // 以前は札幌・仙台・京都の東西線が黙って混ざり、東京メトロは入らなかった（§6.2-2）。
+    id: 'rank-route-ambiguous',
+    category: 'ランキング',
+    query: '東西線の駅で人口が増えているのはどこ？',
+    expect: {
+      noRankScatter: true,
+      noEmptyFigures: true,
+      textNonEmpty: true,
+      containsAny: ['どの', 'どちら', '札幌', '仙台', '京都'],
     },
   },
 

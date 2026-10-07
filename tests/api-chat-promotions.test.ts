@@ -41,6 +41,7 @@ vi.mock('@/db/queries', async (importOriginal) => {
   return {
     ...actual,
     // 存在しない事業者名（「新幹線」）で絞ると 0 件になる——本物の応答で起きた形
+    // （B1 からは名前の解決で止まり、ここまで来ない）
     scatterPoints: async (
       _x: string,
       _y: string,
@@ -52,6 +53,13 @@ vi.mock('@/db/queries', async (importOriginal) => {
       rows: RANK_ROWS,
       total: RANK_ROWS.length,
     }),
+    // 会社・路線の名前の解決が読む一覧（DB に行かせない）。
+    routeNames: async () => [
+      { route: '東海道新幹線', stationCount: 17, operators: ['東海旅客鉄道'], routeTypes: [1] },
+    ],
+    operatorNames: async () => [
+      { name: '東海旅客鉄道', stationCount: 412, prefectures: ['東京都', '静岡県', '愛知県'] },
+    ],
   }
 })
 
@@ -165,7 +173,7 @@ describe('図と一緒に、その図を生んだ条件を送る', () => {
       toolCallStep('c1', 'compareGrowth', {
         x: 'pop_gr_2020_2015_1km',
         y: 'rate_covid',
-        operators: ['新幹線'],
+        prefectures: ['東京都'],
         routeTypes: [1],
       }),
       toolCallStep('c2', 'compareGrowth', {
@@ -179,10 +187,34 @@ describe('図と一緒に、その図を生んだ条件を送る', () => {
 
     expect(map.panels.map((panel) => panel.type)).toEqual(['scatter', 'scatter'])
     expect(promotions).toHaveLength(map.panels.length)
-    const [empty, retried] = promotions
-    expect(empty).toMatchObject({ kind: 'scatter', operators: ['新幹線'], routeTypes: [1] })
-    expect(retried).toMatchObject({ kind: 'scatter', operators: [], routeTypes: [1] })
-    expect(retried).toMatchObject({ xKey: 'pop_gr_2020_2015_1km', yKey: 'rate_covid' })
+    const [tokyo, national] = promotions
+    expect(tokyo).toMatchObject({ kind: 'scatter', prefectures: ['東京都'], routeTypes: [1] })
+    expect(national).toMatchObject({ kind: 'scatter', prefectures: [], routeTypes: [1] })
+    expect(national).toMatchObject({ xKey: 'pop_gr_2020_2015_1km', yKey: 'rate_covid' })
+  })
+
+  it('事業者名に「新幹線」を入れた呼び出しは図を作らない（本番で空の図が出た形・B1）', async () => {
+    current.model = modelAnswering([
+      toolCallStep('c1', 'compareGrowth', {
+        x: 'pop_gr_2020_2015_1km',
+        y: 'rate_covid',
+        operators: ['新幹線'],
+        routeTypes: [1],
+      }),
+      toolCallStep('c2', 'compareGrowth', {
+        x: 'pop_gr_2020_2015_1km',
+        y: 'rate_covid',
+        routeTypes: [1],
+      }),
+      TEXT_STEP,
+    ])
+    const { map, promotions } = lastMapAndPromotions(await ask())
+
+    // 以前は 1 回目が「0 件の空の図」として出ていた。いまは呼び直した図だけ。
+    expect(map.panels.map((panel) => panel.type)).toEqual(['scatter'])
+    expect(promotions).toEqual([
+      expect.objectContaining({ kind: 'scatter', operators: [], routeTypes: [1] }),
+    ])
   })
 
   it('失敗を返した呼び出しには条件が付かない（図を生んだ呼び直しの条件だけ）', async () => {

@@ -42,6 +42,8 @@ from pathlib import Path
 import pandas as pd
 import psycopg
 
+from line_common import LINE_STATIONS_CSV, LINES_CSV
+from load_lines import copy_lines
 from load_station_routes import ROUTES_CSV, copy_station_routes
 from load_municipality import MUNI_CSV, apply_municipality
 
@@ -265,6 +267,16 @@ def main() -> int:
                 print(f"  station_routes ({routes_written:,} 行) copied in {time.time() - t0:.1f}s")
             else:
                 print(f"  station_routes: {ROUTES_CSV.name} が無いためスキップ")
+
+            # --- lines / line_stations（路線＝運行系統・L1・261008）も同じトランザクションで入れ直す ---
+            # line_stations は stations の truncate cascade で消え、駅の採番（id）も変わるため。
+            # build_lines.py を回していない環境ではスキップし、投入自体は止めない（station_routes と同じ扱い）。
+            if LINES_CSV.exists() and LINE_STATIONS_CSV.exists():
+                t0 = time.time()
+                lines_written, members_written = copy_lines(cur)
+                print(f"  lines ({lines_written} 路線・{members_written:,} 駅) copied in {time.time() - t0:.1f}s")
+            else:
+                print(f"  lines: {LINES_CSV.name} が無いためスキップ（pipeline/build_lines.py を先に）")
 
             # --- 市区町村（サイドカー・260902 PR-4）を同じトランザクションで結合 ---
             # routes と違い**無ければ失敗**させる——list_stations（MCP）の前提なので、

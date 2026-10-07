@@ -6,7 +6,7 @@ Step1 の中核資産である駅×半径データセットの**全体像・全�
 
 ## 1. 概要
 
-- **生成物**：`script/create_dataset_for_AI_Database_Map.ipynb` → **`data/derived/station_dataset.csv`（9,273 駅グループ × 806 列）**。あわせて監査明細 `station_operator_detail.csv`（1群×1社）、地価パネル `station_landprice_yearly.csv`（ロング形式）、路線 `station_routes.csv`（1群×1社×1路線・10,424 行）を出力。
+- **生成物**：`script/create_dataset_for_AI_Database_Map.ipynb` → **`data/derived/station_dataset.csv`（9,273 駅グループ × 806 列）**。あわせて監査明細 `station_operator_detail.csv`（1群×1社）、地価パネル `station_landprice_yearly.csv`（ロング形式）、路線 `station_routes.csv`（1群×1社×1路線・10,424 行）を出力。利用者が呼ぶ路線（運行系統）は別の原典（駅データ.jp）から `pipeline/build_lines.py` が `lines.csv`・`line_stations.csv` を作る（261008 L1・`pipeline/README.md`）。
   - **P5d（2026-07-09）**：`station_dataset.csv` を「すべてを含む単一ベース」に統一。地価中央値を**年次系列 `lp_med_{年}_{R}`（2007–2026・単年 `lp_med_{R}` を置換）**にし、運営会社名を `operators`（1群×1社を pax 規模降順で `・` 連結した単一文字列）として畳み込む。監査 CSV（yearly / operator_detail）は温存。UI/API/AI はカタログ再生成＋再ロードで自動追従。
 - **単位＝駅グループ（`grp`）**：同名・近接駅を 1km クラスタで統合した駅単位（`docs/passenger_aggregation.md`）。1 行 1 駅グループ。
 - **半径**：**500m / 1km / 2km / 5km / 10km / 20km**（過去プロジェクトの 1/2/5/10km を刷新・統一。※地価のみ後述の理由で 500m–10km）。

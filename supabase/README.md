@@ -23,6 +23,7 @@
 | `*_tighten_anon_grants.sql` | anon/authenticated を SELECT のみに厳格化（TRUNCATE/REFERENCES/TRIGGER を剥奪）                                                          |
 | `*_station_values_float4.sql` | `station_values.value` を `double precision` → `real`（容量 −46MB・260816）。⚠ **空の DB に適用すること**（データが入っているとテーブルを書き換え、ディスクのピークが 2 倍になる）|
 | `*_anon_select_only.sql` ／ `*_revoke_maintain_from_anon.sql` | anon/authenticated を**文字どおり SELECT のみ**に（Supabase の既定は `public` の新規テーブルに `arwdDxtm` を付与するため・260816）|
+| `*_lines.sql` | 路線（運行系統・駅データ.jp）`lines` と路線の駅 `line_stations`（261008 L1）。投入は `pipeline/load_lines.py`。法令上の路線 `station_routes` は残す |
 
 上表は代表的なものだけ。実際に適用されるのは `supabase/migrations/` の全ファイル（タイムスタンプ順）。
 

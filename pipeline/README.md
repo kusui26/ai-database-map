@@ -169,6 +169,36 @@ python3 pipeline/fetch_industry_mesh.py   # 2016 の 500m メッシュ 産業別
 - 秘匿（`X`）・該当なし（`-`）・非公表（`･･･`）は **0 に潰さず空欄**。売上が秘匿の市区町村では
   個人経営分も足さない（`retail_million_yen` が空欄のまま）。
 
+## 路線（運行系統）— 駅データ.jp（L1・261008）
+
+アプリの「路線」を、国土数値情報 S12 の**法令上の路線**（`station_routes`）ではなく、利用者が呼ぶ路線
+（**運行系統**）で持つ。S12 の「山手線」は 17 駅（品川〜新宿〜田端）だが、利用者の言う山手線は環状の 30 駅
+（`docs/261001_fix_user_feedback_ui.md` §6.8）。原典は**駅データ.jp の有料版（2024-04-26）の統合前の 4 つの CSV**
+（`data/駅データjp/`・gitignore）。**取り直さない**（費用のため・計画書 §12-19）ので、版は固定。
+
+```bash
+python3 pipeline/build_lines.py              # 駅レコード → アプリの駅（grp）・直しの表 → data/derived/lines*.csv
+python3 pipeline/validate_lines.py           # 独立の検証（全 PASS で exit 0）
+python3 pipeline/validate_lines.py --osm     # ＋ OpenStreetMap の主な 12 系統と突き合わせ（ネットワーク・キャッシュあり）
+python3 pipeline/load_lines.py               # lines / line_stations へ投入（単一トランザクション・投入後の確認つき）
+```
+
+| ファイル | 役割 |
+|---|---|
+| `line_rules.py` | **手で編集するのはここだけ**：名前の直し（16）・駅の追加（2）・結べなくてよい駅・駅データ.jp に無い S12 の路線（ケーブルカーなど）・人が確かめた事業者 → 会社名・固定の確認・OSM の系統 |
+| `line_common.py` | 原典とアプリの駅の読み込み、駅名の鍵（B1 の `nameKey` に括弧書き・末尾の「駅」を足したもの）、距離 |
+| `build_lines.py` | 駅レコード（路線 × 駅）を、駅名の鍵が同じで 1.5km 以内の駅へ結ぶ。候補が複数なら**会社名 → 駅名の完全一致 → 近さ**。事業者 → S12 の会社名は数で決める |
+| `validate_lines.py` | build の照合を使わずに確かめる：網羅・形・取り違えの兆候 2 つ・事業者の対応・固定の確認・どの路線にも属さない駅 |
+| `load_lines.py` | `copy_lines()`。`load_to_supabase.py` の全量投入からも呼ぶ（`line_stations` は `stations` の truncate cascade で消える） |
+
+**生成物**（`data/derived/`・gitignore）：`lines.csv`（601 路線）・`line_stations.csv`（10,618 行）が DB に入るもの。
+`line_links.csv`（駅レコードごとの結びつけ・方法・距離）と `line_unassigned.csv`（どの路線にも属さない駅）は監査用。
+`lines_loaded_grps.txt` は**投入が成功したときだけ** `load_lines.py` が書く（次の build で「前回の投入から増えた駅」を見つける）。
+
+**S12 を更新したら**：`build_lines.py` → `validate_lines.py`。「どの路線にも属さない駅」に**要対応**が出たら
+（新駅・改称。乗降がまだ無い新駅も「前回の投入から増えた駅」として出る）、`line_rules.py` の直しの表に足してから
+`load_lines.py`。路線名・事業者名の変更は自動では入らないので、見つけたら名前の直しで読み替える。
+
 ## 独立検証（260812）
 
 `data/derived/` の生成は**すべてノートブック 1 回で完結する**（`script/create_dataset_for_AI_Database_Map.ipynb`）。

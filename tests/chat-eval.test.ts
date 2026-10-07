@@ -1,5 +1,5 @@
 /**
- * 評価 runner：ゴールデン 38 問を実 /api/chat（SSE）に投げ、score.ts で採点する。
+ * 評価 runner：ゴールデン 41 問を実 /api/chat（SSE）に投げ、score.ts で採点する。
  *
  * 通常の `pnpm test` では **スキップ**（LLM/DB/課金に依存）。実行は：
  *   1) 別端末で dev サーバ起動：`pnpm dev`（.env に GEMINI_API_KEY・SUPABASE_* が必要）
@@ -20,7 +20,7 @@ import { writeFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { mapResponseSchema } from '@/shared/protocol'
 import { EVAL_CASES, type EvalCase } from '@/ai/eval/cases'
-import { scoreCase, type EvalObserved } from '@/ai/eval/score'
+import { emptyFigureCount, scoreCase, type EvalObserved } from '@/ai/eval/score'
 import { type EvalRun, renderReport, summarizeRuns } from '@/ai/eval/report'
 
 const ENABLED = process.env.EVAL === '1'
@@ -34,8 +34,10 @@ const BASE_URL = process.env.CHAT_BASE_URL ?? 'http://localhost:3000'
  *
  * 2026-09-16：おすすめの引き渡しを 1 問足して 38 問。**許す揺らぎを 2 問のまま**にするため
  * 36 へ上げる（問を足して閾値を据え置くと、上と同じ緩み方をする）。
+ *
+ * 2026-10-07：会社・路線の名前を 3 問足して 41 問（B1）。同じ理由で 39 へ上げる。
  */
-const PASS_THRESHOLD = Number(process.env.EVAL_PASS ?? '36')
+const PASS_THRESHOLD = Number(process.env.EVAL_PASS ?? '39')
 
 /**
  * **1 問でも落としてはいけない分野。**
@@ -72,6 +74,7 @@ async function ask(query: string, selectedGrp?: string, radiusM?: number): Promi
   let text = ''
   let mapResponse: unknown = null
   let mapResponseValid = false
+  let emptyFigures = 0
   let errored = false
 
   const response = await fetch(`${BASE_URL}/api/chat`, {
@@ -91,6 +94,7 @@ async function ask(query: string, selectedGrp?: string, radiusM?: number): Promi
       text,
       haystack: '',
       mapResponseValid,
+      emptyFigureCount: emptyFigures,
       errored: true,
     }
 
@@ -117,6 +121,7 @@ async function ask(query: string, selectedGrp?: string, radiusM?: number): Promi
           if (parsed.success) {
             panelTypes = parsed.data.panels.map((panel) => panel.type)
             actionTypes = parsed.data.mapActions.map((action) => action.type)
+            emptyFigures = emptyFigureCount(parsed.data.panels)
           }
         } else if (typeof type === 'string' && type === 'tool-input-available') {
           const name = chunk.toolName
@@ -136,7 +141,16 @@ async function ask(query: string, selectedGrp?: string, radiusM?: number): Promi
     }
   }
   const haystack = `${text} ${JSON.stringify(mapResponse)}`
-  return { toolCalls, panelTypes, actionTypes, text, haystack, mapResponseValid, errored }
+  return {
+    toolCalls,
+    panelTypes,
+    actionTypes,
+    text,
+    haystack,
+    mapResponseValid,
+    emptyFigureCount: emptyFigures,
+    errored,
+  }
 }
 
 /** 1 問を投げ、所要時間も測る（採点するのは、この 1 回の結果）。 */

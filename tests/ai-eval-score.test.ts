@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { scoreCase, type EvalObserved } from '@/ai/eval/score'
+import { emptyFigureCount, scoreCase, type EvalObserved } from '@/ai/eval/score'
 import { EVAL_CASES } from '@/ai/eval/cases'
 
 const base: EvalObserved = {
@@ -14,6 +14,7 @@ const base: EvalObserved = {
   text: '',
   haystack: '',
   mapResponseValid: true,
+  emptyFigureCount: 0,
 }
 
 describe('scoreCase', () => {
@@ -89,16 +90,47 @@ describe('scoreCase: 禁止応答（notContains）', () => {
       text: 'この場所は安全です。',
       haystack: 'この場所は安全です。',
       mapResponseValid: true,
+      emptyFigureCount: 0,
     }
     expect(scoreCase({ notContains: ['安全です'] }, observed).pass).toBe(false)
     expect(scoreCase({ notContains: ['避難しなくて'] }, observed).pass).toBe(true)
   })
 })
 
+describe('scoreCase: 空の図と呼び出し回数（2026-10-07 B1）', () => {
+  it('emptyFigureCount は行の無い順位表・点の無い散布だけを数える', () => {
+    expect(
+      emptyFigureCount([
+        { type: 'rankingTable', rows: [] },
+        { type: 'rankingTable', rows: [{ rank: 1 }] },
+        { type: 'scatter', points: [] },
+        { type: 'scatter', points: [{ x: 1 }] },
+        { type: 'stationCard' },
+      ]),
+    ).toBe(2)
+  })
+
+  it('noEmptyFigures は空の図が 1 つでもあれば落ちる', () => {
+    expect(scoreCase({ noEmptyFigures: true }, { ...base, emptyFigureCount: 1 }).pass).toBe(false)
+    expect(scoreCase({ noEmptyFigures: true }, base).pass).toBe(true)
+  })
+
+  it('maxCalls はそのツールの呼び出し回数だけを数える', () => {
+    const call = (name: string) => ({ name, input: {} })
+    const observed = {
+      ...base,
+      toolCalls: [call('searchStations'), call('rankStations'), call('rankStations')],
+    }
+    expect(scoreCase({ maxCalls: { rankStations: 1 } }, observed).pass).toBe(false)
+    expect(scoreCase({ maxCalls: { rankStations: 2 } }, observed).pass).toBe(true)
+    expect(scoreCase({ maxCalls: { compareGrowth: 0 } }, observed).pass).toBe(true)
+  })
+})
+
 describe('EVAL_CASES', () => {
-  it('38 問・id 一意・全問に期待あり', () => {
-    expect(EVAL_CASES.length).toBe(38)
-    expect(new Set(EVAL_CASES.map((c) => c.id)).size).toBe(38)
+  it('41 問・id 一意・全問に期待あり', () => {
+    expect(EVAL_CASES.length).toBe(41)
+    expect(new Set(EVAL_CASES.map((c) => c.id)).size).toBe(41)
     for (const testCase of EVAL_CASES) {
       expect(testCase.query.length).toBeGreaterThan(0)
       expect(Object.keys(testCase.expect).length).toBeGreaterThan(0)

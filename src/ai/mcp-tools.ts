@@ -149,7 +149,7 @@ export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
     mcpName: 'list_stations',
     titleJa: '駅の一覧（対象集合）',
     descriptionEn:
-      'List stations by prefecture / municipality (prefix match; 横浜市 bundles its wards), operator, route, bbox or near. Returns ids and coordinates only.',
+      'List stations by prefecture / municipality (prefix match; 横浜市 bundles its wards), operator, route, bbox or near. Operator and route names may be colloquial (resolved server-side). Returns ids and coordinates only.',
     maxResultSizeChars: 40_000,
     perMinute: 30,
   },
@@ -191,7 +191,8 @@ export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
   rankStations: {
     mcpName: 'rank_stations',
     titleJa: '駅ランキング',
-    descriptionEn: 'Rank stations by a catalog metric, filtered by prefecture/operator/route.',
+    descriptionEn:
+      'Rank stations by a catalog metric, filtered by prefecture/operator/route. Operator and route names may be colloquial (resolved server-side); ambiguous names return candidates and no chart.',
     maxResultSizeChars: 60_000,
     perMinute: 30,
     chartable: true, // rankingTable
@@ -199,7 +200,8 @@ export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
   compareGrowth: {
     mcpName: 'compare_growth',
     titleJa: '2 指標の散布',
-    descriptionEn: 'Scatter stations on two metrics with deterministic clustering.',
+    descriptionEn:
+      'Scatter stations on two metrics with deterministic clustering. Operator and route names may be colloquial (resolved server-side); ambiguous names return candidates and no chart.',
     maxResultSizeChars: 60_000,
     perMinute: 30,
     chartable: true, // scatter

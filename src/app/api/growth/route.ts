@@ -3,6 +3,7 @@ import { growthQuerySchema } from '@/shared/api'
 import { scatterPoints } from '@/db/queries'
 import { buildGrowth } from '@/domain/growth/presenter'
 import { resolveLineCodes } from '@/domain/lines'
+import { labelsOfOperators } from '@/domain/operators'
 import { BadRequestError, CACHE, handle, json } from '@/lib/http'
 
 export const runtime = 'nodejs'
@@ -33,7 +34,10 @@ export function GET(request: Request): Promise<Response> {
     for (const key of [query.x, query.y]) {
       if (!isRankableKey(key)) throw new BadRequestError(`散布不可の metric です: ${key}`)
     }
-    const lines = await resolveLineCodes(query.lines)
+    const [lines, operatorLabels] = await Promise.all([
+      resolveLineCodes(query.lines),
+      labelsOfOperators(query.operators),
+    ])
     if (!lines.ok) throw new BadRequestError(lines.messageJa)
 
     // 信頼性フラグは除外するときだけ引く（引かなければ DB 側の集計も軽い）。
@@ -53,6 +57,7 @@ export function GET(request: Request): Promise<Response> {
         excludeLowN: query.excludeLowN,
         prefectures: query.prefectures,
         operators: query.operators,
+        operatorLabels,
         routes: query.routes,
         routeTypes: query.routeTypes,
         lines: lines.lines,

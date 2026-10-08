@@ -18,6 +18,8 @@ import {
 export type FilterScope = {
   readonly prefectures: readonly string[]
   readonly operators: readonly string[]
+  /** 会社の表示名（`operators` と同じ順・駅データ.jp の事業者名・261008 L4）。無ければ会社名のまま出す。 */
+  readonly operatorLabels?: readonly string[]
   readonly routes: readonly string[]
   readonly routeTypes: readonly number[]
   /** 路線（運行系統・261008 L2）。名前で題に出す。 */
@@ -25,14 +27,27 @@ export type FilterScope = {
 }
 
 /**
- * 対象範囲の表示（例「全国・東海旅客鉄道・新幹線」「全国・JR山手線」）。
+ * 会社の表示名の並び（`operators` と同じ長さのときだけ使う。古い応答・表示名の無い呼び出しは会社名のまま）。
+ * 応答を組む側（presenter）もこれで埋めるので、題と応答の `operatorLabels` は同じ名前になる。
+ */
+export function displayOperators(
+  operators: readonly string[],
+  labels: readonly string[] | undefined,
+): string[] {
+  return labels !== undefined && labels.length === operators.length ? [...labels] : [...operators]
+}
+
+/**
+ * 対象範囲の表示（例「全国・JR東海・新幹線」「全国・JR山手線」）。
  * 都道府県は未選択でも「全国」と出し、それ以外は**絞ったものだけ**を併記する。
- * 路線（運行系統）は法令上の路線より先に出す（利用者が呼ぶ名前のほうが読み手に近い）。
+ * 会社は表示名（「東京都」ではなく「東京都交通局」）。路線（運行系統）は法令上の路線より先に出す
+ * （利用者が呼ぶ名前のほうが読み手に近い）。
  */
 export function scopeLabel(scope: FilterScope): string {
   const scopes = [prefectureLabel(scope.prefectures)]
   const lines = scope.lines ?? []
-  if (scope.operators.length > 0) scopes.push(operatorLabel(scope.operators))
+  const operators = displayOperators(scope.operators, scope.operatorLabels)
+  if (operators.length > 0) scopes.push(operatorLabel(operators))
   if (lines.length > 0) scopes.push(lineLabel(lines.map((line) => line.name)))
   if (scope.routes.length > 0) scopes.push(routeLabel(scope.routes))
   if (scope.routeTypes.length > 0) scopes.push(scope.routeTypes.map(routeTypeLabel).join('・'))

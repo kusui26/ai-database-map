@@ -12,6 +12,7 @@
 import type { ListStationsFilter } from '@/db/queries'
 import type { LineRef } from '@/shared/api'
 import { getEntry } from '@/shared/catalog'
+import { displayOperators } from '@/domain/scope'
 import {
   HAZARD_GROUP_LABELS_JA,
   HAZARD_LEVEL_LABELS_JA,
@@ -64,8 +65,15 @@ export function hazardPolicyJa(policy: HazardPolicy, penalty: HazardPenaltyId): 
   return `${groupJa}の危険度に応じて段階減点しました（${HAZARD_PENALTY_LABELS_JA[penalty]}・表のとおり）`
 }
 
-/** 絞り込みの日本語（「横浜市（東海道線・根岸線）」「全国（JR山手線）」）。路線（運行系統）は名前で出す。 */
-export function areaLabelJa(filter: ListStationsFilter, lines: readonly LineRef[] = []): string {
+/**
+ * 絞り込みの日本語（「横浜市（東海道線・根岸線）」「全国（JR山手線）」）。路線（運行系統）は名前で、
+ * 会社は表示名（`operatorLabels`・`filter.operators` と同じ順・261008 L4）で出す。
+ */
+export function areaLabelJa(
+  filter: ListStationsFilter,
+  lines: readonly LineRef[] = [],
+  operatorLabels: readonly string[] = [],
+): string {
   // 住所と同じ順（広い → 狭い）で並べる。「横浜市・神奈川県」は読みにくい。
   const places = [
     ...(filter.prefectures ?? []),
@@ -75,7 +83,7 @@ export function areaLabelJa(filter: ListStationsFilter, lines: readonly LineRef[
   const railways = [
     ...lines.map((line) => line.name),
     ...(filter.routes ?? []),
-    ...(filter.operators ?? []),
+    ...displayOperators(filter.operators ?? [], operatorLabels),
     ...(filter.routeTypes ?? []).map(routeTypeLabel),
   ]
   const head = places.length > 0 ? places.join('・') : '全国'

@@ -42,6 +42,8 @@ export type RecommendCriteria = {
   readonly operators: readonly string[]
   readonly routes: readonly string[]
   readonly routeTypes: readonly number[]
+  /** 路線（運行系統）の路線コード（GET /api/lines の lineCd・2026-10-08 L4）。 */
+  readonly lines: readonly number[]
   readonly preset: RecommendPresetId
   /** プリセットからの上書き（ファミリ名 → 重み）。空＝既定のまま。 */
   readonly weights: Readonly<Record<string, number>>
@@ -62,6 +64,7 @@ export const DEFAULT_CRITERIA: RecommendCriteria = {
   operators: [],
   routes: [],
   routeTypes: [],
+  lines: [],
   preset: 'family',
   weights: {},
   radiusM: 1000,
@@ -86,7 +89,8 @@ export function hasArea(criteria: RecommendCriteria): boolean {
     criteria.municipality.length > 0 ||
     criteria.operators.length > 0 ||
     criteria.routes.length > 0 ||
-    criteria.routeTypes.length > 0
+    criteria.routeTypes.length > 0 ||
+    criteria.lines.length > 0
   )
 }
 
@@ -130,6 +134,7 @@ export function recommendUrl(criteria: RecommendCriteria): string | null {
   if (criteria.operators.length > 0) params.set('operators', criteria.operators.join(','))
   if (criteria.routes.length > 0) params.set('routes', criteria.routes.join(','))
   if (criteria.routeTypes.length > 0) params.set('routeTypes', criteria.routeTypes.join(','))
+  if (criteria.lines.length > 0) params.set('lines', criteria.lines.join(','))
   const weights = changedWeightsParam(criteria)
   if (weights.length > 0) params.set('weights', weights)
   for (const [key, value] of hazardParams(criteria)) params.set(key, value)

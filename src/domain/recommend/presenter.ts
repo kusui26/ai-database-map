@@ -30,6 +30,7 @@ import type {
 import type { HazardPenaltyId } from '@/shared/recommend'
 import { HAZARD_SUMMARY_LIMITATIONS_JA, hazardSummarySources } from '@/domain/hazard/summary'
 import { sourcesForKeys } from '@/domain/sources'
+import { displayOperators } from '@/domain/scope'
 import {
   areaLabelJa,
   directionJa,
@@ -218,15 +219,17 @@ function hazardPolicyView(policy: HazardPolicy, penalty: HazardPenaltyId): Recom
 function areaView(input: RecommendRunInput): RecommendArea {
   const { filter } = input
   const lines = input.lines ?? []
+  const operators = filter.operators ?? []
   return {
     prefectures: [...(filter.prefectures ?? [])],
     municipality: filter.municipality ?? null,
-    operators: [...(filter.operators ?? [])],
+    operators: [...operators],
+    operatorLabels: displayOperators(operators, input.operatorLabels),
     routes: [...(filter.routes ?? [])],
     routeTypes: [...(filter.routeTypes ?? [])],
     lines: [...lines],
     bbox: filter.bbox === undefined ? null : { ...filter.bbox },
-    labelJa: areaLabelJa(filter, lines),
+    labelJa: areaLabelJa(filter, lines, input.operatorLabels),
   }
 }
 
@@ -236,7 +239,7 @@ function notes(context: RecommendPresentation, used: readonly ScoredMetric[]): s
   const dead = run.result.degenerate.map((item) => getEntry(item.key)?.labelJa ?? item.key)
   const unknownHazard = run.gathered.candidates.filter((item) => item.hazard === null).length
   return [
-    `「${areaLabelJa(input.filter, input.lines ?? [])}」の ${run.gathered.stationCount} 駅を候補にしました（候補が変われば順位も変わります）。`,
+    `「${areaLabelJa(input.filter, input.lines ?? [], input.operatorLabels)}」の ${run.gathered.stationCount} 駅を候補にしました（候補が変われば順位も変わります）。`,
     ...run.notes,
     ...(run.unresolved.length === 0
       ? []

@@ -78,6 +78,16 @@ export function toNumberList(value: string): readonly number[] {
     .filter((item) => Number.isInteger(item))
 }
 
+/**
+ * カンマ区切りの路線コード（2026-10-08 L4）。正の整数だけを、重ねずに選んだ順で。
+ * 知らないコード（廃止・手で書き換えた URL）は残す——サーバが「知らない路線コード」と理由を返すので、
+ * 黙って全路線の答えに化けない。
+ */
+export function toLineCodes(value: string): readonly number[] {
+  const codes = toNumberList(value).filter((code) => code > 0)
+  return [...new Set(codes)]
+}
+
 /** 「指標名:重み」の並び → 重み。壊れた要素は落とす（URL の 1 文字で全部が無になるのを避ける）。 */
 export function toWeights(value: string): Readonly<Record<string, number>> {
   const entries = toList(value).flatMap((part) => {

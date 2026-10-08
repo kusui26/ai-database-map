@@ -24,6 +24,7 @@ function input(overrides: Partial<AdviceInput> = {}): AdviceInput {
       routes: [],
       operators: [],
       routeTypes: [],
+      lines: [],
     },
     excludedCounts: NO_EXCLUSIONS,
     hazard: { mode: 'exclude', groupJa: '洪水', atOrAbove: 'danger' },
@@ -55,10 +56,30 @@ describe('候補が 0 件', () => {
           routes: ['東海道線'],
           operators: [],
           routeTypes: [],
+          lines: [],
         },
       }),
     )
     expect(advice?.hintsJa.some((hint) => hint.includes('路線'))).toBe(true)
+  })
+
+  it('路線（運行系統）で絞っているときも、外すよう言う（別のエリアを選べとは言わない）', () => {
+    const advice = resultAdvice(
+      input({
+        candidateCount: 0,
+        rankedCount: 0,
+        area: {
+          labelJa: '沖縄県（JR山手線）',
+          municipality: null,
+          routes: [],
+          operators: [],
+          routeTypes: [],
+          lines: [{ lineCd: 11302, name: 'JR山手線' }],
+        },
+      }),
+    )
+    expect(advice?.hintsJa.some((hint) => hint.includes('路線'))).toBe(true)
+    expect(advice?.hintsJa.some((hint) => hint.includes('別のエリア'))).toBe(false)
   })
 
   it('市区町村で絞っているなら、全域に戻すよう言う', () => {
@@ -77,6 +98,7 @@ describe('候補が 0 件', () => {
           routes: [],
           operators: [],
           routeTypes: [],
+          lines: [],
         },
       }),
     )

@@ -10,6 +10,9 @@
  * 260731：都道府県・路線との連動。`allowed` を渡すと、その条件に合わない会社は**グレーアウト**し
  * （0 件になる組合せを防ぐ）、選択中の会社の都道府県をまとめて選ぶボタンを出す。
  * 何で絞られているかは条件によって変わるため、説明文の主語は `allowedScope` で受け取る。
+ *
+ * 2026-10-08 L4：会社は**表示名**（駅データ.jp の事業者名「JR東日本」「東京メトロ」「東京都交通局」）で出す。
+ * 条件の鍵は S12 の会社名（「東日本旅客鉄道」）のままで、検索はどちらでも当たり、ホバーで S12 の名前も読める。
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -17,9 +20,31 @@ import { type Operator } from '@/shared/api'
 import { operatorLabel } from '@/shared/constants'
 import { cn } from '@/lib/utils'
 import { messageJaOf } from '@/lib/fetch-json'
+import { matchesTokens, searchTokens } from './search'
+import { placementStyle, usePopoverPlacement } from './usePopoverPlacement'
 
 /** 一覧に表示する最大件数（検索で絞り込めるため上限を設けて描画量を抑える）。 */
 const MAX_VISIBLE = 60
+
+/** ポップオーバーの幅（`w-72`）。画面からはみ出すときは左へずらす。 */
+const POPOVER_WIDTH_PX = 288
+
+/** 会社の表示名（一覧に表示名が無い・読み込み前は S12 の名前のまま）。 */
+function displayNameOf(operator: Operator): string {
+  return operator.label ?? operator.name
+}
+
+/** ボタンに出す言い方（選んだ会社の表示名・空＝全社）。 */
+function buttonLabel(selected: readonly string[], operators: readonly Operator[]): string {
+  const byName = new Map(operators.map((operator) => [operator.name, displayNameOf(operator)]))
+  return operatorLabel(selected.map((name) => byName.get(name) ?? name))
+}
+
+/** ホバー：表示名と S12 の会社名が違えば両方（「東京メトロ（東京地下鉄）」）。 */
+function operatorTitle(operator: Operator): string {
+  const label = displayNameOf(operator)
+  return label === operator.name ? label : `${label}（${operator.name}）`
+}
 
 export function OperatorMultiSelect({
   selected,
@@ -52,6 +77,7 @@ export function OperatorMultiSelect({
   const [query, setQuery] = useState('')
   const ref = useRef<HTMLDivElement>(null)
   const allowedSet = useMemo(() => (allowed === undefined ? null : new Set(allowed)), [allowed])
+  const placement = usePopoverPlacement(open, ref, POPOVER_WIDTH_PX)
 
   useEffect(() => {
     if (!open) return
@@ -70,9 +96,9 @@ export function OperatorMultiSelect({
 
   // 並びは「選択済み → 選べる → グレーアウト」。検索で消えて解除できなくなるのを防ぐ。
   const visible = useMemo(() => {
-    const keyword = query.trim()
-    const matched = operators.filter(
-      (operator) => keyword.length === 0 || operator.name.includes(keyword),
+    const tokens = searchTokens(query)
+    const matched = operators.filter((operator) =>
+      matchesTokens([operator.name, operator.label ?? null], tokens),
     )
     const rank = (operator: Operator): number => {
       if (selected.includes(operator.name)) return 0
@@ -92,10 +118,11 @@ export function OperatorMultiSelect({
       <button
         type="button"
         aria-label="運営会社"
+        aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
         className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 transition-colors hover:border-slate-300"
       >
-        <span className="max-w-[11rem] truncate">{operatorLabel(selected)}</span>
+        <span className="max-w-[11rem] truncate">{buttonLabel(selected, operators)}</span>
         <svg
           viewBox="0 0 24 24"
           className="size-3.5 text-slate-400"
@@ -108,12 +135,15 @@ export function OperatorMultiSelect({
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 z-50 mt-1 flex max-h-80 w-72 flex-col rounded-xl bg-white p-2 shadow-xl ring-1 ring-slate-200">
+        <div
+          className="absolute top-full left-0 z-50 mt-1 flex max-h-80 w-72 flex-col rounded-xl bg-white p-2 shadow-xl ring-1 ring-slate-200"
+          style={placementStyle(placement)}
+        >
           <input
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="会社名で検索（例：東日本旅客鉄道）"
+            placeholder="会社名で検索（例：JR東日本）"
             aria-label="運営会社を検索"
             className="mb-1 w-full rounded-md border border-slate-200 px-2 py-1 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none"
           />
@@ -154,6 +184,7 @@ export function OperatorMultiSelect({
               return (
                 <label
                   key={operator.name}
+                  title={operatorTitle(operator)}
                   className={cn(
                     'flex items-center gap-2 rounded-md px-2 py-1 text-sm',
                     disabled
@@ -168,7 +199,7 @@ export function OperatorMultiSelect({
                     onChange={() => toggle(operator.name)}
                     className="size-4 shrink-0 accent-indigo-600 disabled:opacity-40"
                   />
-                  <span className="min-w-0 flex-1 truncate">{operator.name}</span>
+                  <span className="min-w-0 flex-1 truncate">{displayNameOf(operator)}</span>
                   <span
                     className={cn(
                       'shrink-0 text-xs tabular-nums',

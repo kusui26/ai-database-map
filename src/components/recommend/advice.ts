@@ -21,7 +21,7 @@ export type AdviceInput = {
   readonly rankedCount: number
   readonly area: Pick<
     RecommendArea,
-    'labelJa' | 'municipality' | 'routes' | 'operators' | 'routeTypes'
+    'labelJa' | 'municipality' | 'routes' | 'operators' | 'routeTypes' | 'lines'
   >
   readonly excludedCounts: RecommendResponse['excludedCounts']
   readonly hazard: Pick<RecommendHazardPolicy, 'mode' | 'groupJa' | 'atOrAbove'>
@@ -50,7 +50,8 @@ function looserCutoff(level: HazardLevel): HazardLevel | null {
 /** 候補そのものが 0 だったとき——絞り込みのどれを外せば広がるかを言う。 */
 function noCandidates(response: AdviceInput): ResultAdvice {
   const { area } = response
-  const narrowed = area.routes.length + area.operators.length + area.routeTypes.length > 0
+  const narrowed =
+    area.routes.length + area.operators.length + area.routeTypes.length + area.lines.length > 0
   return {
     tone: 'empty',
     headlineJa: `${area.labelJa} に当てはまる駅がありませんでした。`,

@@ -12,11 +12,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_CRITERIA,
+  hasArea,
   recommendUrl,
   type RecommendCriteria,
 } from '@/components/recommend/query'
 import { criteriaFromUrl, criteriaToUrl } from '@/components/recommend/url'
-import { toNumberList, toWeights } from '@/components/recommend/parse'
+import { toLineCodes, toNumberList, toWeights } from '@/components/recommend/parse'
 
 function criteria(overrides: Partial<RecommendCriteria> = {}): RecommendCriteria {
   return { ...DEFAULT_CRITERIA, ...overrides }
@@ -51,6 +52,8 @@ describe('URL を往復しても同じリクエストになる', () => {
       }),
     ],
     ['災害を見ない', criteria({ prefectures: ['東京都'], hazard: 'off' })],
+    ['路線（運行系統）で絞る', criteria({ lines: [11302, 28010] })],
+    ['路線と都道府県を重ねる', criteria({ prefectures: ['東京都'], lines: [11302] })],
   ]
 
   for (const [label, value] of cases) {
@@ -83,6 +86,7 @@ describe('知らない値は既定に倒す（落ちない・黙って別条件�
     recOps: '',
     recRoutes: '',
     recTypes: '',
+    recLines: '',
     recPreset: 'nonsense',
     recW: '',
     recRadius: 1234,
@@ -131,5 +135,37 @@ describe('壊れた要素だけを落とす', () => {
 
   it('事業者種別は整数だけ', () => {
     expect(toNumberList('2,x,4,1.5')).toEqual([2, 4])
+  })
+
+  it('路線コードは正の整数だけを、重ねずに選んだ順で', () => {
+    expect(toLineCodes('11302,x,0,-5,28010,11302,1.5')).toEqual([11302, 28010])
+    expect(toLineCodes('')).toEqual([])
+  })
+
+  it('知らない路線コードは残す（サーバが理由を返す。黙って全路線にしない）', () => {
+    expect(toLineCodes('99999')).toEqual([99999])
+  })
+})
+
+describe('路線（運行系統）の条件（2026-10-08 L4）', () => {
+  it('路線だけでもエリアの指定になる（全国の 1 路線でおすすめを出せる）', () => {
+    expect(hasArea(criteria({ lines: [11302] }))).toBe(true)
+    expect(hasArea(DEFAULT_CRITERIA)).toBe(false)
+  })
+
+  it('リクエストに lines= で載る（選んだ順のまま）', () => {
+    const url = recommendUrl(criteria({ lines: [28010, 11302] }))
+    expect(new URL(url ?? '', 'http://x').searchParams.get('lines')).toBe('28010,11302')
+  })
+
+  it('路線を選ばなければ lines を載せない', () => {
+    const url = recommendUrl(criteria({ prefectures: ['東京都'] }))
+    expect(new URL(url ?? '', 'http://x').searchParams.has('lines')).toBe(false)
+  })
+
+  it('URL の recLines に載り、読み戻せる（既定＝空は載らない）', () => {
+    expect(criteriaToUrl(criteria({ lines: [11302, 28010] })).recLines).toBe('11302,28010')
+    expect(criteriaToUrl(DEFAULT_CRITERIA).recLines).toBe('')
+    expect(roundTrip(criteria({ lines: [11302] })).lines).toEqual([11302])
   })
 })

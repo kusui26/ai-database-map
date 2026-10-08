@@ -11,6 +11,7 @@
  * 候補に残すだけ（`weak`）。強い形で何も当たらなければ、弱い形が候補になる。
  */
 
+import { operatorLabelMap, type OperatorLabels } from '@/domain/operators'
 import { CATEGORY_WORD_HINTS, LINE_ALIASES } from './aliases'
 import {
   companyPrefixes,
@@ -43,6 +44,8 @@ export type NameIndex = {
   readonly operatorKeys: ReadonlyMap<string, readonly string[]>
   /** 会社の言い方の鍵（長い順）。名前の頭の会社名を探す。 */
   readonly operatorPrefixKeys: readonly string[]
+  /** S12 の会社名 → 表示名（駅データ.jp の事業者名・説明に使う・L4）。 */
+  readonly operatorLabels: OperatorLabels
 }
 
 function addHit(
@@ -79,6 +82,7 @@ export function buildNameIndex(catalog: NameCatalog): NameIndex {
     groups: new Map(catalog.lines.map((line) => [line.lineCd, groupKeys(line)])),
     operatorKeys,
     operatorPrefixKeys: [...operatorKeys.keys()].sort((a, b) => b.length - a.length),
+    operatorLabels: operatorLabelMap(catalog.lines),
   }
 }
 

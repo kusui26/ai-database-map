@@ -25,6 +25,7 @@ import {
   type LineMatch,
   type NameIndex,
 } from './match'
+import { operatorLabelOf } from '@/domain/operators'
 import { companyPrefixes, isJrOperator, nameKey, type CatalogLine } from './names'
 
 export type NameResolveDeps = {
@@ -139,6 +140,11 @@ function trimmed(inputs: readonly string[] | undefined): string[] {
 
 function codesOf(lines: readonly CatalogLine[]): number[] {
   return lines.map((line) => line.lineCd)
+}
+
+/** 会社の表示名の並び（説明に使う：「東京地下鉄」ではなく「東京メトロ」・L4）。 */
+function operatorsLabel(operators: readonly string[], index: NameIndex): string {
+  return operators.map((name) => operatorLabelOf(name, index.operatorLabels)).join('・')
 }
 
 // --- 候補（聞き返しに使う） ----------------------------------------------------
@@ -445,12 +451,12 @@ function mismatch(input: string, scope: readonly string[], index: NameIndex): Na
     anywhere.kind === 'lines'
       ? [...anywhere.strong, ...anywhere.weak].map((id) => namesLabel(id.lines, index)).join('／')
       : anywhere.kind === 'operators'
-        ? anywhere.operators.join('・')
+        ? operatorsLabel(anywhere.operators, index)
         : null
   if (owners === null) return null
   return {
     input,
-    problem: `「${input}」は ${owners} の路線で、operators の指定（${scope.join('・')}）と合いません。`,
+    problem: `「${input}」は ${owners} の路線で、operators の指定（${operatorsLabel(scope, index)}）と合いません。`,
   }
 }
 
@@ -464,7 +470,7 @@ async function resolveRoute(
 ): Promise<RouteOutcome> {
   const match = matchLine(input, index, operators.scope)
   if (match.kind === 'lines') return decideLines(input, match, area, index, deps)
-  if (match.kind === 'operators') return companyWide(input, match.operators)
+  if (match.kind === 'operators') return companyWide(input, match.operators, index)
   if (match.kind === 'category') return { kind: 'problem', problem: { input, problem: match.hint } }
   const unmatched = operators.scope === null ? null : mismatch(input, operators.scope, index)
   const unknown = {
@@ -476,9 +482,20 @@ async function resolveRoute(
 }
 
 /** 会社の全路線（「京急線」「小田急」）。路線名ではなく会社として扱ったことを説明に残す。 */
-function companyWide(input: string, operators: readonly string[]): RouteOutcome {
-  const note = `「${input}」は ${operators.join('・')} の全路線として扱いました。`
+function companyWide(input: string, operators: readonly string[], index: NameIndex): RouteOutcome {
+  const note = `「${input}」は ${operatorsLabel(operators, index)} の全路線として扱いました。`
   return { kind: 'operators', operators, notes: [note] }
+}
+
+/** 会社の言い方を読み替えたことの説明（言い方が会社名か表示名と同じなら書かない）。 */
+function operatorNote(input: string, operators: readonly string[], index: NameIndex): string[] {
+  const key = nameKey(input)
+  const names = [
+    ...operators,
+    ...operators.map((name) => operatorLabelOf(name, index.operatorLabels)),
+  ]
+  if (names.some((name) => nameKey(name) === key)) return []
+  return [`会社「${input}」は ${operatorsLabel(operators, index)} として扱いました。`]
 }
 
 /** 会社の指定を S12 の会社名へ。 */
@@ -496,9 +513,7 @@ function resolveOperators(inputs: readonly string[], index: NameIndex): Operator
     match.kind === 'operators' ? match.operators : [],
   )
   const notes = matches.flatMap(({ input, match }) =>
-    match.kind === 'operators' && !match.operators.some((name) => nameKey(name) === nameKey(input))
-      ? [`会社「${input}」は ${match.operators.join('・')} として扱いました。`]
-      : [],
+    match.kind === 'operators' ? operatorNote(input, match.operators, index) : [],
   )
   // 会社が 1 つも決まらなければ範囲は付けない（路線の理由を「会社と合わない」で隠さない）。
   return { scope: operators.length === 0 ? null : unique(operators), problems, notes }
@@ -547,15 +562,21 @@ function combine(
     (line) => line.operator !== null && companyWide.includes(line.operator),
   )
   const lines = uniqueLines([...chosen, ...opened])
-  if (lines.length > MAX_LINES_PER_QUERY) return { problem: tooManyLines(outcomes, lines.length) }
+  if (lines.length > MAX_LINES_PER_QUERY) {
+    return { problem: tooManyLines(outcomes, lines.length, index) }
+  }
   return { filters: { operators: [], lines: lines.map(lineRefOf) } }
 }
 
-function tooManyLines(outcomes: readonly RouteOutcome[], count: number): NameProblem {
+function tooManyLines(
+  outcomes: readonly RouteOutcome[],
+  count: number,
+  index: NameIndex,
+): NameProblem {
   const companies = outcomes.flatMap((o) => (o.kind === 'operators' ? o.operators : []))
   const problem =
     companies.length > 0
-      ? `会社の全路線（${unique(companies).join('・')}）と路線を一度に指定すると、路線が ${count} 本になります（${MAX_LINES_PER_QUERY} 本まで）。会社は operators だけで、路線は routes だけで、分けて呼んでください。`
+      ? `会社の全路線（${operatorsLabel(unique(companies), index)}）と路線を一度に指定すると、路線が ${count} 本になります（${MAX_LINES_PER_QUERY} 本まで）。会社は operators だけで、路線は routes だけで、分けて呼んでください。`
       : `路線が ${count} 本あります（${MAX_LINES_PER_QUERY} 本まで）。分けて呼んでください。`
   return { input: 'routes', problem }
 }

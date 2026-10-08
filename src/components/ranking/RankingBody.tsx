@@ -101,7 +101,6 @@ export function RankingBody({
           category={category}
           metricKey={metricKey}
           filters={filters}
-          lineNames={ranking?.lines ?? []}
           order={order}
           excludeLowN={excludeLowN}
           onCategory={onCategory}

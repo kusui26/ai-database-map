@@ -2,7 +2,7 @@
 
 /**
  * ランキングのピッカ（P6d → 260801）：3段構成。
- * 段A（絞り込み）＝都道府県・運営会社・路線。散布と同じ並び・同じ連動（StationFilterControls）。
+ * 段A（絞り込み）＝都道府県・運営会社・路線（＋詳しい条件）。散布と同じ並び・同じ連動（StationFilterControls）。
  * 段B（常に同一）＝カテゴリ・変種（年）・上位/下位・⚠除外。半径の有無で位置が動かない。
  * 段C（半径あり指標のときだけ）＝半径セグメントを単独で。
  *
@@ -11,7 +11,7 @@
  * （docs/260801_ranking_filter.md §4）。
  */
 
-import { type LineRef, type Order } from '@/shared/api'
+import { type Order } from '@/shared/api'
 import { type Category } from '@/shared/constants'
 import { cn } from '@/lib/utils'
 import {
@@ -27,7 +27,6 @@ export function MetricPicker({
   category,
   metricKey,
   filters,
-  lineNames,
   order,
   excludeLowN,
   onCategory,
@@ -38,8 +37,6 @@ export function MetricPicker({
   category: Category
   metricKey: string
   filters: StationFiltersState
-  /** 絞り込み中の路線（運行系統）の名前（図の応答の `lines`）。 */
-  lineNames: readonly LineRef[]
   order: Order
   excludeLowN: boolean
   onCategory: (category: Category) => void
@@ -53,7 +50,7 @@ export function MetricPicker({
     <div className="space-y-2">
       {/* 段A：絞り込み（散布と同じ並び・同じ連動） */}
       <div className="flex flex-wrap items-center gap-2">
-        <StationFilterControls state={filters} lineNames={lineNames} />
+        <StationFilterControls state={filters} />
       </div>
 
       {/* 段B：常に同じ並び・同じ位置 */}

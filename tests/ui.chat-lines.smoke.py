@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """チャットの送信に**地図の表示範囲**が載ること、チャットの図を ⤢ で開くと**同じ路線（運行系統）**で
-開き、その絞り込みが見えて外せることを、実ブラウザで確かめる（2026-10-08 L3）。
+開き、その絞り込みが見えて外せることを、実ブラウザで確かめる（2026-10-08 L3・L4 で路線のセレクタに替えた）。
 
 使い方:
     pnpm build && pnpm start -p 3399     # 別プロセスで（本物の DB を使う）
@@ -13,7 +13,7 @@
    地図を拡大すると、次の送信の範囲が狭くなる（地図が止まるたびに持ち直している）
 2. チャットの図（`lines: [11302]`＝JR山手線）を開くと、開いた図が `lines=11302` で取りに行く
    ——以前の条件の形（都道府県・会社・路線・種別）だけだと、全国の図に化ける
-3. 開いた図の絞り込みに「JR山手線」のチップが出て、✕ で外すと路線なしで取り直す
+3. 開いた図の路線のセレクタに「JR山手線」が出て、「全路線（すべて解除）」で外すと路線なしで取り直す
 
 `/api/chat` は差し替える（本番で流れる並び：ツールのパーツ・data-promotions・data-map）。モデルには触らない。
 開いた図のデータ（`/api/ranking`）は本物のサーバから取る。
@@ -122,12 +122,27 @@ def check_bbox(label: str, bbox: object) -> list[float]:
     return [west, south, east, north]
 
 
+def line_picker(page: Page):
+    """開いた図の路線のセレクタ（ボタン）。名前は一覧が届いてから出るので、待つ。"""
+    button = page.get_by_role("button", name="路線", exact=True).last
+    button.wait_for(state="visible", timeout=8000)
+    page.wait_for_function(
+        """() => [...document.querySelectorAll('button[aria-label="路線"]')].some((b) => b.innerText.includes('JR山手線'))""",
+        timeout=8000,
+    )
+    return button
+
+
+def picker_label(page: Page) -> str:
+    return page.get_by_role("button", name="路線", exact=True).last.inner_text().strip()
+
+
 def ranking_queries(urls: list[str]) -> list[dict[str, str]]:
     return [{key: values[0] for key, values in parse_qs(urlparse(url).query).items()} for url in urls]
 
 
 def run_wide(browser) -> None:
-    print("[広い画面：送信の範囲・キャンバスの図・チップ]")
+    print("[広い画面：送信の範囲・キャンバスの図・路線のセレクタ]")
     context = browser.new_context(viewport={"width": 1280, "height": 900})
     page = context.new_page()
     bodies: list[dict] = []
@@ -159,17 +174,18 @@ def run_wide(browser) -> None:
     last = queries[-1] if queries else {}
     check("開いた図は lines=11302（JR山手線）で取りに行く", last.get("lines") == str(YAMANOTE), json.dumps(last, ensure_ascii=False))
 
-    chip = page.get_by_role("button", name="JR山手線の絞り込みを外す")
-    chip.wait_for(state="visible", timeout=8000)
-    check("絞り込みに「JR山手線」のチップが出る", chip.is_visible())
+    picker = line_picker(page)
+    check("路線のセレクタに「JR山手線」が出る", picker_label(page) == "JR山手線", picker_label(page))
     page.screenshot(path=f"{OUT}/chat-lines-wide.png")
 
     before = len(rankings)
-    chip.click()
+    picker.click()
+    page.get_by_role("button", name="全路線（すべて解除）").click()
     page.wait_for_timeout(2500)
     after = ranking_queries(rankings[before:])
-    check("✕ で外すと路線なしで取り直す", bool(after) and "lines" not in after[-1], json.dumps(after[-1] if after else {}, ensure_ascii=False))
-    check("チップが消える", page.get_by_role("button", name="JR山手線の絞り込みを外す").count() == 0)
+    check("「全路線（すべて解除）」で外すと路線なしで取り直す", bool(after) and "lines" not in after[-1], json.dumps(after[-1] if after else {}, ensure_ascii=False))
+    picker.click()
+    check("セレクタは「全路線」に戻る", picker_label(page) == "全路線", picker_label(page))
 
     # 地図を拡大すると、次の送信の範囲が狭くなる（地図が止まるたびに持ち直している）。
     # キャンバスは地図の上に開くので、閉じてから地図の上でホイールを回す。
@@ -205,9 +221,8 @@ def run_phone(browser) -> None:
     queries = ranking_queries(rankings)
     last = queries[-1] if queries else {}
     check("⤢ で開いた図は lines=11302 で取りに行く", last.get("lines") == str(YAMANOTE), json.dumps(last, ensure_ascii=False))
-    chip = page.get_by_role("button", name="JR山手線の絞り込みを外す")
-    chip.wait_for(state="visible", timeout=8000)
-    check("絞り込みに「JR山手線」のチップが出る", chip.is_visible())
+    line_picker(page)
+    check("路線のセレクタに「JR山手線」が出る", picker_label(page) == "JR山手線", picker_label(page))
     page.screenshot(path=f"{OUT}/chat-lines-phone.png")
     context.close()
 

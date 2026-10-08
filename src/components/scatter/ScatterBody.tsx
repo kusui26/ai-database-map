@@ -99,7 +99,7 @@ export function ScatterBody({
     <>
       <div className="space-y-2 border-b border-slate-100 px-4 py-3">
         <div className="flex flex-wrap items-center gap-3">
-          <StationFilterControls state={filters} lineNames={growth?.lines ?? []} />
+          <StationFilterControls state={filters} />
           <label className="flex cursor-pointer items-center gap-1.5 text-sm text-slate-600">
             <input
               type="checkbox"

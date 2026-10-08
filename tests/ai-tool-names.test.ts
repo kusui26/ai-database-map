@@ -38,6 +38,8 @@ vi.mock('@/db/queries', async (importOriginal) => {
 
 const { TOOL_SPECS } = await import('@/ai/tool-specs')
 const { clearRouteNameCache } = await import('@/ai/routes/catalog')
+const { clearOperatorLabelCache } = await import('@/domain/operators')
+const { rankingPanel } = await import('@/domain/ranking/panel')
 
 const CTX = { origin: 'http://localhost:3000' }
 
@@ -76,6 +78,7 @@ async function fakeListStations(filter: ListStationsFilter): Promise<StationList
 
 beforeEach(() => {
   clearRouteNameCache()
+  clearOperatorLabelCache()
   db.lineNames.mockResolvedValue(lineRows())
   db.operatorNames.mockResolvedValue(OPERATORS)
   db.routeNames.mockResolvedValue(
@@ -223,6 +226,58 @@ describe('compareGrowth：名前の解決と 0 件', () => {
     const result = await TOOL_SPECS.compareGrowth.run({ x: 'pop_gr', y: 'rate_covid' }, CTX)
     expect(result.effects).toEqual([])
     expect(result.forLlm).toMatchObject({ total: 0 })
+  })
+})
+
+describe('会社は表示名で返す（鍵は S12 の会社名のまま・2026-10-08 L4）', () => {
+  it('ランキング：条件は「東京地下鉄」、LLM への返却・図の題・応答の表示名は「東京メトロ」', async () => {
+    const result = await TOOL_SPECS.rankStations.run(
+      { metric: 'pop_gr', operators: ['東京メトロ'] },
+      CTX,
+    )
+    expect(rankedWith().operators).toEqual(['東京地下鉄'])
+    expect(result.forLlm).toMatchObject({ operators: ['東京メトロ'] })
+    const [effect] = result.effects
+    if (effect?.kind !== 'ranking') throw new Error('ランキングの図が無い')
+    expect(effect.response.operators).toEqual(['東京地下鉄'])
+    expect(effect.response.operatorLabels).toEqual(['東京メトロ'])
+    expect(rankingPanel(effect.response).title).toContain('（全国・東京メトロ・上位）')
+  })
+
+  it('都営（S12 は「東京都」）は「東京都交通局」——題で都道府県の東京都と紛れない', async () => {
+    const result = await TOOL_SPECS.rankStations.run({ metric: 'pop_gr', operators: ['都営'] }, CTX)
+    expect(rankedWith().operators).toEqual(['東京都'])
+    const [effect] = result.effects
+    if (effect?.kind !== 'ranking') throw new Error('ランキングの図が無い')
+    expect(rankingPanel(effect.response).title).toContain('（全国・東京都交通局・上位）')
+    expect(result.forLlm).toMatchObject({ operators: ['東京都交通局'] })
+  })
+
+  it('散布：返却の会社も表示名（条件は鍵のまま）', async () => {
+    const result = await TOOL_SPECS.compareGrowth.run(
+      { x: 'pop_gr', y: 'rate_covid', operators: ['JR東日本'] },
+      CTX,
+    )
+    expect(db.scatterPoints.mock.calls[0]?.[4]).toMatchObject({ operators: ['東日本旅客鉄道'] })
+    expect(result.forLlm).toMatchObject({ operators: ['JR東日本'] })
+    const [effect] = result.effects
+    expect(effect?.kind === 'growth' && effect.response.operatorLabels).toEqual(['JR東日本'])
+  })
+
+  it('0 件のときの条件も表示名', async () => {
+    db.rankByColumn.mockResolvedValue({ rows: [], total: 0 })
+    const result = await TOOL_SPECS.rankStations.run(
+      { metric: 'pop_gr', operators: ['東京メトロ'] },
+      CTX,
+    )
+    expect(result.forLlm).toMatchObject({ total: 0, conditions: { operators: ['東京メトロ'] } })
+  })
+
+  it('会社を指定しなければ、表示名のために一覧を読まない', async () => {
+    const result = await TOOL_SPECS.rankStations.run({ metric: 'pop_gr' }, CTX)
+    expect(db.lineNames).not.toHaveBeenCalled()
+    const [effect] = result.effects
+    expect(effect?.kind === 'ranking' && effect.response.operatorLabels).toEqual([])
   })
 })
 

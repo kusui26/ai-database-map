@@ -153,6 +153,33 @@ def check_operators(checks: Checks, source: common.Source, links: list[dict[str,
     checks.add(not blank, "会社名の無い路線は、人が「対応なし」と決めた事業者のものだけ", f"{blank[:5]}" if blank else "")
 
 
+def check_company_names(checks: Checks, source: common.Source, lines: dict[str, dict[str, str]]) -> None:
+    """事業者名の読み替え：使われている・古い名前が残っていない・直した社名が S12 の会社名と同じ。"""
+    used = {source.companies[line["company_cd"]]["company_name"] for line in source.lines.values()}
+    unused = [fix.company for fix in rules.COMPANY_NAME_FIXES if fix.company not in used]
+    checks.add(not unused, "事業者名の読み替えがすべて使われている", f"使われない {unused}" if unused else "")
+    stale = {fix.company for fix in rules.COMPANY_NAME_FIXES}
+    left = sorted({line["company_name"] for line in lines.values() if line["company_name"] in stale})
+    checks.add(not left, "古い事業者名が路線に残っていない", f"{left}" if left else "")
+    fixed = {fix.name for fix in rules.COMPANY_NAME_FIXES}
+    off = sorted({f"{line['company_name']}≠{line['operator']}" for line in lines.values()
+                  if line["company_name"] in fixed and line["operator"] != line["company_name"]})
+    checks.add(not off, "直した事業者名が S12 の会社名と同じ", f"{off}" if off else f"{len(fixed)} 社")
+    check_display_names(checks, lines)
+
+
+def check_display_names(checks: Checks, lines: dict[str, dict[str, str]]) -> None:
+    """表示名（事業者名）が S12 の会社名と違うなら、人が確かめた通称だけ（古い社名を黙って出さない）。"""
+    differ = {(line["operator"], line["company_name"]) for line in lines.values()
+              if line["operator"] and line["company_name"] != line["operator"]}
+    unknown = sorted(f"{operator}→{name}" for operator, name in differ
+                     if rules.COMPANY_DISPLAY_NAMES.get(operator) != name)
+    unused = sorted(set(rules.COMPANY_DISPLAY_NAMES) - {operator for operator, _ in differ})
+    detail = f"未確認 {unknown}" if unknown else f"通称 {len(differ)} 社"
+    checks.add(not unknown, "表示名が S12 の会社名と違うのは確かめた通称だけ（社名変更は読み替えへ）", detail)
+    checks.add(not unused, "確かめた通称がすべて使われている", f"使われない {unused}" if unused else "")
+
+
 def check_fixed(checks: Checks, lines: dict[str, dict[str, str]], members: list[dict[str, str]], app: dict[str, AppStation]) -> None:
     names_by_line: dict[str, list[str]] = defaultdict(list)
     for row in members:
@@ -275,6 +302,7 @@ def main() -> int:
     check_shape(checks, lines, members, app)
     check_mislinks(checks, source, links, lines, app_list)
     check_operators(checks, source, links, lines, app)
+    check_company_names(checks, source, lines)
     check_fixed(checks, lines, members, app)
     check_unassigned(checks, members, unassigned, app)
     legal_route_summary(members, lines)

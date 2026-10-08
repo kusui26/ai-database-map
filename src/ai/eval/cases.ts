@@ -134,14 +134,16 @@ export const EVAL_CASES: readonly EvalCase[] = [
 
   {
     // 260801：ランキングでも会社×種別で絞れるか（散布と同じ語彙が通るか）。
+    // 2026-10-08 L4：会社はふだんの呼び方でも同じ会社に解決される（B1）ので、モデルが「東海旅客鉄道」のまま渡しても
+    // 「JR東海」と言い換えても正しい（10/8 に手元で見た 5 回のうち 2 回が言い換え）。見るのは渡した文字ではなく
+    // **解決した条件**——図の題の「JR東海・新幹線」（会社の表示名と種別）。
     id: 'rank-operator-shinkansen',
     category: 'ランキング',
     query: '東海旅客鉄道の新幹線駅で乗降客数が多い順に教えて',
     expect: {
-      toolCalls: [
-        { name: 'rankStations', inputIncludes: { operators: ['東海旅客鉄道'], routeTypes: [1] } },
-      ],
+      toolCalls: [{ name: 'rankStations', inputIncludes: { routeTypes: [1] } }],
       panels: ['rankingTable'],
+      contains: ['JR東海・新幹線'],
     },
   },
 

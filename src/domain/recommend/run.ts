@@ -33,6 +33,8 @@ export type RecommendRunInput = {
   readonly filter: ListStationsFilter
   /** 路線（運行系統）の名前つきの参照（filter.lines のコードと同じ順・対象の言い方に使う・261008 L2）。 */
   readonly lines?: readonly LineRef[]
+  /** 会社の表示名（filter.operators と同じ順・対象の言い方に使う・261008 L4）。 */
+  readonly operatorLabels?: readonly string[]
   /** プリセット（ファミリ名か正確な key ＋ 向き ＋ 重み）。 */
   readonly specs: readonly PresetMetric[]
   /** ファミリ名を解決するときの半径（m）。 */

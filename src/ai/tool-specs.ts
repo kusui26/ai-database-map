@@ -88,6 +88,8 @@ import { type StationDetailEffect, type ToolEffect } from './types'
 import { panelsForStationDetail, summarizePanels } from './assemble'
 import { metricsCatalogDigest } from './catalog-digest'
 import { resolveMetricKey, type MetricResolution } from './metric-resolver'
+import { labelsOfOperators } from '@/domain/operators'
+import { displayOperators } from '@/domain/scope'
 import { routeNameDeps } from './routes/catalog'
 import { resolveNameFilters, type NameResolution } from './routes/resolve'
 
@@ -370,6 +372,8 @@ function nameNotesOf(notes: readonly string[]): { nameNotes?: readonly string[] 
 type FigureFilters = {
   readonly prefectures: string[]
   readonly operators: string[]
+  /** 会社の表示名（`operators` と同じ順・題と LLM への返却に使う・L4）。 */
+  readonly operatorLabels: string[]
   readonly lines: LineRef[]
   readonly routeTypes: number[]
   readonly nameNotes: readonly string[]
@@ -405,7 +409,15 @@ async function resolveFigureFilters(
   )
   if (!names.ok) return { ok: false, forLlm: namesError(names) }
   const routeTypes = (input.routeTypes ?? []).filter((type) => ROUTE_TYPES.some((t) => t === type))
-  return { ok: true, prefectures, ...names.filters, routeTypes, nameNotes: names.notes }
+  const operatorLabels = await labelsOfOperators(names.filters.operators)
+  return {
+    ok: true,
+    prefectures,
+    ...names.filters,
+    operatorLabels,
+    routeTypes,
+    nameNotes: names.notes,
+  }
 }
 
 /**
@@ -418,7 +430,7 @@ function noFigureForLlm(subject: string, filters: FigureFilters, excludeLowN: bo
     noFigure: `${subject}：条件に当てはまる駅が 0 件だったので、図は出していません。`,
     conditions: {
       prefectures: filters.prefectures,
-      operators: filters.operators,
+      operators: filters.operatorLabels,
       routes: filters.lines.map((line) => line.name),
       routeTypes: filters.routeTypes.map(routeTypeLabel),
       excludeLowN,
@@ -732,7 +744,7 @@ function rankingForLlm(
     ...nameNotesOf(nameNotes),
     unit: response.metric.unit,
     prefectures: response.prefectures,
-    operators: response.operators,
+    operators: displayOperators(response.operators, response.operatorLabels),
     routes: routeNamesForLlm(response),
     routeTypes: response.routeTypes.map(routeTypeLabel),
     order: dir,
@@ -762,7 +774,7 @@ function growthForLlm(
     note,
     ...nameNotesOf(nameNotes),
     prefectures: response.prefectures,
-    operators: response.operators,
+    operators: displayOperators(response.operators, response.operatorLabels),
     routes: routeNamesForLlm(response),
     routeTypes: response.routeTypes.map(routeTypeLabel),
     pointCount: response.points.length,
@@ -1314,7 +1326,7 @@ export const TOOL_SPECS = {
       const dir = order ?? 'desc'
       const lim = Math.min(Math.max(limit ?? DEFAULT_RANK_LIMIT, 1), MAX_RANK_LIMIT)
       const exclude = excludeLowN ?? false
-      const { prefectures, operators, lines, routeTypes } = filters
+      const { prefectures, operators, operatorLabels, lines, routeTypes } = filters
       const { rows, total } = await rankByColumn(
         resolved.key,
         prefectures,
@@ -1327,7 +1339,7 @@ export const TOOL_SPECS = {
         routeTypes,
         lineCodesOf(lines),
       )
-      const scope = { operators, routeTypes, lines }
+      const scope = { operators, operatorLabels, routeTypes, lines }
       const response = buildRanking(resolved.key, prefectures, dir, rows, total, 0, scope)
       if (total === 0) return pure(noFigureForLlm(response.metric.labelJa, filters, exclude))
       return {
@@ -1395,7 +1407,7 @@ export const TOOL_SPECS = {
             requireEntry(yResolved.key).reliabilityFlagKey,
           ]
         : [null, null]
-      const { prefectures, operators, lines, routeTypes } = filters
+      const { prefectures, operators, operatorLabels, lines, routeTypes } = filters
       const valueRows = await scatterPoints(
         xResolved.key,
         yResolved.key,
@@ -1407,6 +1419,7 @@ export const TOOL_SPECS = {
         excludeLowN: exclude,
         prefectures,
         operators,
+        operatorLabels,
         routeTypes,
         lines,
       })

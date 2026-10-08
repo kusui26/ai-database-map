@@ -20,6 +20,7 @@
 import { recommendQuerySchema } from '@/shared/api'
 import { presentRecommendation } from '@/domain/recommend/presenter'
 import { resolveLineCodes } from '@/domain/lines'
+import { labelsOfOperators } from '@/domain/operators'
 import { buildRecommendInput } from '@/domain/recommend/request'
 import { runRecommendation } from '@/domain/recommend/run'
 import { checkRateLimit } from '@/ai/rate-limit'
@@ -81,9 +82,13 @@ export function GET(request: Request): Promise<Response> {
 
     const query = recommendQuerySchema.parse(queryFrom(new URL(request.url).searchParams))
     // 路線（運行系統）は名前を引いて確かめる（知らないコードは 400・指定が無ければ DB に行かない）。
-    const lines = await resolveLineCodes(query.lines)
+    // 会社は表示名を引く（対象の言い方に使う・指定が無ければ一覧も読まない）。
+    const [lines, operatorLabels] = await Promise.all([
+      resolveLineCodes(query.lines),
+      labelsOfOperators(query.operators),
+    ])
     if (!lines.ok) throw new BadRequestError(lines.messageJa)
-    const built = buildRecommendInput(query, lines.lines)
+    const built = buildRecommendInput(query, lines.lines, operatorLabels)
     if (!built.ok) throw new BadRequestError(built.messageJa)
 
     const run = await runRecommendation(built.input)

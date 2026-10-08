@@ -7,27 +7,36 @@
  * 運営会社を選んでいるとき、その会社が走らない県は 0 件になるため
  * （docs/260730_scatter_plot_prefecture_to_operaters.md）。すでに選択済みの県は
  * 解除できるよう活かしておく（行き止まりを作らない）。
+ * 路線（運行系統）を選んだときも、その路線の駅のある県に絞る（説明文の主語は `allowedScope`・2026-10-08 L4）。
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { PREFECTURES, prefectureLabel } from '@/shared/constants'
 import { cn } from '@/lib/utils'
+import { placementStyle, usePopoverPlacement } from './usePopoverPlacement'
+
+/** ポップオーバーの幅（`w-56`）。画面からはみ出すときは左へずらす。 */
+const POPOVER_WIDTH_PX = 224
 
 export function PrefectureMultiSelect({
   selected,
   onChange,
   allowed,
+  allowedScope,
   className,
 }: {
   selected: string[]
   onChange: (prefectures: string[]) => void
   /** 選べる都道府県（未指定＝全 47）。含まれない県はグレーアウト。 */
   allowed?: readonly string[]
+  /** 候補を絞っている条件の名前（例「会社・路線」）。説明文に出す。 */
+  allowedScope?: string
   className?: string
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const allowedSet = useMemo(() => (allowed === undefined ? null : new Set(allowed)), [allowed])
+  const placement = usePopoverPlacement(open, ref, POPOVER_WIDTH_PX)
 
   useEffect(() => {
     if (!open) return
@@ -49,6 +58,7 @@ export function PrefectureMultiSelect({
       <button
         type="button"
         aria-label="都道府県"
+        aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
         className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 transition-colors hover:border-slate-300"
       >
@@ -65,7 +75,10 @@ export function PrefectureMultiSelect({
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 z-50 mt-1 max-h-72 w-56 overflow-y-auto rounded-xl bg-white p-2 shadow-xl ring-1 ring-slate-200">
+        <div
+          className="absolute top-full left-0 z-50 mt-1 max-h-72 w-56 overflow-y-auto rounded-xl bg-white p-2 shadow-xl ring-1 ring-slate-200"
+          style={placementStyle(placement)}
+        >
           <button
             type="button"
             onClick={() => onChange([])}
@@ -75,7 +88,7 @@ export function PrefectureMultiSelect({
           </button>
           {allowedSet !== null && (
             <p className="mb-1 px-2 text-xs text-slate-400">
-              選択中の会社が走る {allowedSet.size} 県のみ選べます
+              選択中の{allowedScope ?? '会社'}が走る {allowedSet.size} 県のみ選べます
             </p>
           )}
           {PREFECTURES.map((p) => {

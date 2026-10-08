@@ -545,12 +545,31 @@ describe('resolveNameFilters：会社と路線のまとめ方', () => {
     expect(result.ok && result.filters).toEqual({ operators: ['東急電鉄'], lines: [] })
   })
 
+  it('会社の説明は表示名で書く。言い方が表示名・会社名と同じなら書かない（L4）', async () => {
+    const metro = await resolveNameFilters({ operators: ['メトロ'], prefectures: [] }, fakeDeps())
+    expect(metro.ok && metro.filters.operators).toEqual(['東京地下鉄'])
+    expect(metro.ok && metro.notes).toEqual(['会社「メトロ」は 東京メトロ として扱いました。'])
+    const jr = await resolveNameFilters({ operators: ['JR東日本'], prefectures: [] }, fakeDeps())
+    expect(jr.ok && jr.notes).toEqual([])
+    const legal = await resolveNameFilters(
+      { operators: ['東京地下鉄'], prefectures: [] },
+      fakeDeps(),
+    )
+    expect(legal.ok && legal.notes).toEqual([])
+  })
+
+  it('会社の指定と合わないときも、会社は表示名で示す（東横線 × JR東日本）', async () => {
+    const result = await resolveNameFilters(
+      { operators: ['JR東日本'], routes: ['東横線'], prefectures: [] },
+      fakeDeps(),
+    )
+    expect(!result.ok && result.problems[0]?.problem).toContain('operators の指定（JR東日本）')
+  })
+
   it('路線に「京急線」だけ → 会社の条件。会社の全路線として扱ったと書く', async () => {
     const result = await resolveNameFilters({ routes: ['京急線'], prefectures: [] }, fakeDeps())
     expect(result.ok && result.filters).toEqual({ operators: ['京浜急行電鉄'], lines: [] })
-    expect(result.ok && result.notes).toEqual([
-      '「京急線」は 京浜急行電鉄 の全路線として扱いました。',
-    ])
+    expect(result.ok && result.notes).toEqual(['「京急線」は 京急電鉄 の全路線として扱いました。'])
   })
 
   it('「京急線」と「東横線」→ 京急の全路線を路線に開いて並べる（会社と路線を掛け合わせない）', async () => {

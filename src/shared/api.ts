@@ -64,6 +64,12 @@ export const lineRefSchema = z.object({
 })
 export type LineRef = z.infer<typeof lineRefSchema>
 
+/**
+ * 応答の会社（`operators`＝S12 の会社名）の表示名（同じ順・駅データ.jp の事業者名・2026-10-08 L4）。
+ * 図の題・対象の言い方はこれで作る（「東京都」→「東京都交通局」で都道府県と紛れない）。古い応答には無い（空）。
+ */
+export const operatorLabelsSchema = z.array(z.string()).default([])
+
 export const stationsQuerySchema = z.object({
   q: z.string().min(1).optional(),
   bbox: z.string().optional(), // "west,south,east,north"
@@ -199,6 +205,7 @@ export const rankingResponseSchema = z.object({
   metric: metricRefSchema,
   prefectures: z.array(z.string()), // 空＝全国（P6c）
   operators: z.array(z.string()).default([]), // 空＝全社（260801）
+  operatorLabels: operatorLabelsSchema, // operators の表示名（同じ順・261008 L4）
   routes: z.array(z.string()).default([]), // 空＝全路線（260801）
   routeTypes: z.array(z.number()).default([]), // 空＝全種別（260801）
   lines: z.array(lineRefSchema).default([]), // 空＝絞らない（運行系統・261008 L2）
@@ -214,6 +221,7 @@ export const growthResponseSchema = z.object({
   y: metricRefSchema,
   prefectures: z.array(z.string()), // 空＝全国（P6c）
   operators: z.array(z.string()).default([]), // 空＝全社（260730）
+  operatorLabels: operatorLabelsSchema, // operators の表示名（同じ順・261008 L4）
   routes: z.array(z.string()).default([]), // 空＝全路線（260731）
   routeTypes: z.array(z.number()).default([]), // 空＝全種別（260731）
   lines: z.array(lineRefSchema).default([]), // 空＝絞らない（運行系統・261008 L2）
@@ -225,7 +233,13 @@ export type GrowthResponse = z.infer<typeof growthResponseSchema>
 
 /** 運営会社の一覧（GET /api/operators）。散布の会社セレクタが参照する。 */
 export const operatorSchema = z.object({
+  /** 会社の鍵（国土数値情報 S12 の会社名・条件や URL にはこれを使う）。 */
   name: z.string(),
+  /**
+   * 人に見せる名前（駅データ.jp の事業者名：「JR東日本」「東京メトロ」「東京都交通局」・2026-10-08 L4）。
+   * 路線の無い会社は `name` と同じ。古いキャッシュには無いことがあるので optional（無ければ `name` を出す）。
+   */
+  label: z.string().optional(),
   stationCount: z.number(),
   /**
    * その会社が走行する都道府県（260731・都道府県セレクタとの連動に使う）。
@@ -695,6 +709,7 @@ export const recommendAreaSchema = z.object({
   prefectures: z.array(z.string()),
   municipality: z.string().nullable(),
   operators: z.array(z.string()),
+  operatorLabels: operatorLabelsSchema, // operators の表示名（同じ順・261008 L4）
   routes: z.array(z.string()),
   routeTypes: z.array(z.number()),
   lines: z.array(lineRefSchema).default([]), // 路線（運行系統・261008 L2）

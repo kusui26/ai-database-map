@@ -1,7 +1,11 @@
 'use client'
 
 /**
- * 路線の複数選択（ポップオーバー＋種別チップ＋検索＋チェックボックス・260731）。
+ * **法令上の路線**（国土数値情報 S12）の複数選択（ポップオーバー＋種別チップ＋検索＋チェックボックス・260731）。
+ *
+ * 2026-10-08 L4：ふだんの路線は運行系統の `LineMultiSelect` で選ぶ。これは「詳しい条件」の中に置き、
+ * 以前の URL（`figRoutes`・`recRoutes`）の互換と、鉄道に詳しい人の指定に使う（山手線なら品川〜田端の法令上の区間）。
+ * 何も選んでいないときは「指定なし」と出す（運行系統の「全路線」と並ぶので、同じ言葉にしない）。
  *
  * 561 本あるため検索と「駅数の多い順」が要る。上段の**種別チップ**（新幹線／JR在来線／…）は
  * 独立したフィルタ（`routeTypes`）で、「新幹線駅だけ」が 1 クリックで済む（§9 決定 2）。
@@ -16,9 +20,18 @@ import { type Route } from '@/shared/api'
 import { ROUTE_TYPES, routeFilterLabel, routeOptionLabel, routeTypeLabel } from '@/shared/constants'
 import { cn } from '@/lib/utils'
 import { messageJaOf } from '@/lib/fetch-json'
+import { placementStyle, usePopoverPlacement } from './usePopoverPlacement'
 
 /** 一覧に表示する最大件数（検索で絞り込めるため上限を設けて描画量を抑える）。 */
 const MAX_VISIBLE = 60
+
+/** ポップオーバーの幅（`w-72`）。画面からはみ出すときは左へずらす（詳しい条件は行の右端に来やすい）。 */
+const POPOVER_WIDTH_PX = 288
+
+/** ボタンに出す言い方（何も選んでいなければ「指定なし」）。 */
+function buttonLabel(routes: readonly string[], routeTypes: readonly number[]): string {
+  return routes.length + routeTypes.length === 0 ? '指定なし' : routeFilterLabel(routes, routeTypes)
+}
 
 export function RouteMultiSelect({
   selected,
@@ -46,6 +59,7 @@ export function RouteMultiSelect({
   const [query, setQuery] = useState('')
   const ref = useRef<HTMLDivElement>(null)
   const allowedSet = useMemo(() => (allowed === undefined ? null : new Set(allowed)), [allowed])
+  const placement = usePopoverPlacement(open, ref, POPOVER_WIDTH_PX)
 
   useEffect(() => {
     if (!open) return
@@ -93,11 +107,12 @@ export function RouteMultiSelect({
     <div ref={ref} className={cn('relative', className)}>
       <button
         type="button"
-        aria-label="路線"
+        aria-label="法令上の路線"
+        aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
         className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 transition-colors hover:border-slate-300"
       >
-        <span className="max-w-[11rem] truncate">{routeFilterLabel(selected, selectedTypes)}</span>
+        <span className="max-w-[11rem] truncate">{buttonLabel(selected, selectedTypes)}</span>
         <svg
           viewBox="0 0 24 24"
           className="size-3.5 text-slate-400"
@@ -110,7 +125,13 @@ export function RouteMultiSelect({
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 z-50 mt-1 flex max-h-80 w-72 flex-col rounded-xl bg-white p-2 shadow-xl ring-1 ring-slate-200">
+        <div
+          className="absolute top-full left-0 z-50 mt-1 flex max-h-80 w-72 flex-col rounded-xl bg-white p-2 shadow-xl ring-1 ring-slate-200"
+          style={placementStyle(placement)}
+        >
+          <p className="mb-1.5 px-1 text-xs text-slate-500">
+            国土数値情報の路線名（法令上の路線）と事業者種別で絞ります。ふだん呼ぶ路線は「路線」から選べます。
+          </p>
           <div className="mb-1.5 flex flex-wrap gap-1" role="group" aria-label="事業者種別">
             {ROUTE_TYPES.map((type) => {
               const active = selectedTypes.includes(type)
@@ -137,7 +158,7 @@ export function RouteMultiSelect({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="路線名・会社名で検索（例：東海道新幹線）"
-            aria-label="路線を検索"
+            aria-label="法令上の路線を検索"
             className="mb-1 w-full rounded-md border border-slate-200 px-2 py-1 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none"
           />
           <button
@@ -148,7 +169,7 @@ export function RouteMultiSelect({
             }}
             className="mb-1 w-full rounded-md px-2 py-1 text-left text-xs font-medium text-indigo-600 hover:bg-indigo-50"
           >
-            全路線（すべて解除）
+            指定なし（すべて解除）
           </button>
           {showOrHint && (
             <p className="mb-1 px-2 text-xs text-slate-400">

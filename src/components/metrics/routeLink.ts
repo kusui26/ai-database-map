@@ -48,29 +48,40 @@ export function operatorsOfRouteFilter(
   return [...names]
 }
 
+/** 候補を絞っている条件の 1 つ（説明文に出す名前と、いま効いているか）。 */
+export type NarrowingScope = readonly [name: string, active: boolean]
+
+/** 効いている条件の名前だけを並べる（「都道府県・路線」）。 */
+export function activeScopeLabel(scopes: readonly NarrowingScope[]): string {
+  return scopes.flatMap(([name, active]) => (active ? [name] : [])).join('・')
+}
+
 /**
  * 会社の候補を絞っている条件の名前（説明文用・両方なら「都道府県・路線」）。
  * 候補が減った理由を取り違えて伝えないために、実際に効いている条件だけを並べる。
+ * 路線（運行系統・`lines`）も法令上の路線・種別も、利用者には同じ「路線」の条件（2026-10-08 L4）。
  */
 export function narrowedByLabel(
   prefectures: readonly string[],
   routes: readonly string[],
   routeTypes: readonly number[],
+  lines: readonly number[] = [],
 ): string {
-  const scopes: string[] = []
-  if (prefectures.length > 0) scopes.push('都道府県')
-  if (routes.length > 0 || routeTypes.length > 0) scopes.push('路線')
-  return scopes.join('・')
+  return activeScopeLabel([
+    ['都道府県', prefectures.length > 0],
+    ['路線', routes.length > 0 || routeTypes.length > 0 || lines.length > 0],
+  ])
 }
 
 /**
  * 2 つの候補集合を重ねる（`undefined` ＝ その軸では絞っていない）。
  * 会社の候補は「都道府県による絞り」と「路線による絞り」の**両方**を満たす必要がある（AND）。
+ * 路線コード（数）の候補にも使う（2026-10-08 L4）。
  */
-export function intersectAllowed(
-  a: readonly string[] | undefined,
-  b: readonly string[] | undefined,
-): readonly string[] | undefined {
+export function intersectAllowed<T>(
+  a: readonly T[] | undefined,
+  b: readonly T[] | undefined,
+): readonly T[] | undefined {
   if (a === undefined) return b
   if (b === undefined) return a
   const other = new Set(b)

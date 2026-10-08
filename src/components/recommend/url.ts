@@ -25,6 +25,7 @@ import {
   toGroup,
   toHazardMode,
   toLevel,
+  toLineCodes,
   toList,
   toMethod,
   toNumberList,
@@ -45,6 +46,8 @@ export const RECOMMEND_PARSERS = {
   recOps: parseAsString.withDefault(''),
   recRoutes: parseAsString.withDefault(''),
   recTypes: parseAsString.withDefault(''),
+  /** 路線（運行系統）の路線コード（2026-10-08 L4）。 */
+  recLines: parseAsString.withDefault(''),
   recPreset: parseAsString.withDefault(DEFAULT_CRITERIA.preset),
   recW: parseAsString.withDefault(''),
   recRadius: parseAsInteger.withDefault(DEFAULT_CRITERIA.radiusM),
@@ -65,6 +68,7 @@ export type RecommendUrlValues = {
   readonly recOps: string
   readonly recRoutes: string
   readonly recTypes: string
+  readonly recLines: string
   readonly recPreset: string
   readonly recW: string
   readonly recRadius: number
@@ -84,6 +88,7 @@ export function criteriaFromUrl(values: RecommendUrlValues): RecommendCriteria {
     operators: toList(values.recOps),
     routes: toList(values.recRoutes),
     routeTypes: toNumberList(values.recTypes),
+    lines: toLineCodes(values.recLines),
     preset: toPreset(values.recPreset),
     weights: toWeights(values.recW),
     radiusM: toRadiusM(values.recRadius),
@@ -105,6 +110,7 @@ export function criteriaToUrl(criteria: RecommendCriteria): RecommendUrlValues {
     recOps: criteria.operators.join(','),
     recRoutes: criteria.routes.join(','),
     recTypes: criteria.routeTypes.join(','),
+    recLines: criteria.lines.join(','),
     recPreset: criteria.preset,
     recW: changedWeightsParam(criteria),
     recRadius: criteria.radiusM,

@@ -225,6 +225,15 @@ def color(line: dict[str, str]) -> str:
     return f"#{code.upper()}" if len(code) == 6 else ""
 
 
+COMPANY_FIXES = {fix.company: fix for fix in rules.COMPANY_NAME_FIXES}
+
+
+def company_names(company: dict[str, str]) -> tuple[str, str]:
+    """事業者名と略称（古い社名は直しの表でいまの社名に・表示にだけ効く）。"""
+    fix = COMPANY_FIXES.get(company["company_name"])
+    return (fix.name, fix.short) if fix else (company["company_name"], company["company_name_r"])
+
+
 def line_rows(
     source: Source, members: dict[str, list[Member]], operators: dict[str, str], loops: set[str]
 ) -> list[dict[str, object]]:
@@ -232,11 +241,11 @@ def line_rows(
     for line_cd, line in sorted(source.lines.items(), key=lambda item: int(item[0])):
         if not members.get(line_cd):
             continue
-        company = source.companies[line["company_cd"]]
+        company_name, company_short = company_names(source.companies[line["company_cd"]])
         rows.append({
             "line_cd": int(line_cd), "name": line["line_name"], "formal_name": line["line_name_h"],
-            "company_cd": int(line["company_cd"]), "company_name": company["company_name"],
-            "company_short": company["company_name_r"], "operator": operators.get(line["company_cd"], ""),
+            "company_cd": int(line["company_cd"]), "company_name": company_name,
+            "company_short": company_short, "operator": operators.get(line["company_cd"], ""),
             "color": color(line), "color_name": line["line_color_t"],
             "line_type": line["line_type"], "is_loop": line_cd in loops,
             "station_count": len(members[line_cd]), "source": f"駅データ.jp {rules.SOURCE_VERSION}",

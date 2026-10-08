@@ -113,11 +113,13 @@ function filterOf(
 
 /**
  * 検証済みクエリ → 実行入力。失敗は日本語 1 文で返す（ルートが 400 にする）。
- * `lines` はクエリの路線コードを名前つきに確かめたもの（261008 L2・対象の言い方に名前で出す）。
+ * `lines` はクエリの路線コードを名前つきに確かめたもの（261008 L2）、`operatorLabels` は会社の表示名
+ * （`query.operators` と同じ順・261008 L4）。どちらも対象の言い方に使う。
  */
 export function buildRecommendInput(
   query: RecommendQuery,
   lines: readonly LineRef[] = [],
+  operatorLabels: readonly string[] = [],
 ): RecommendInputResult {
   if (!hasFilter(query)) {
     return {
@@ -144,6 +146,7 @@ export function buildRecommendInput(
     input: {
       filter: filterOf(query, bbox, lines),
       lines,
+      operatorLabels,
       specs,
       radiusM: query.radiusM,
       method: query.method,

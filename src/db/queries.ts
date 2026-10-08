@@ -363,13 +363,18 @@ const operatorRowSchema = z.object({
   prefectures: z.array(z.string()).nullable().default([]), // 走行する都道府県（260731）
 })
 
+/** 運営会社の一覧の 1 行（S12 の会社名・駅グループ数・走行する都道府県）。 */
+export type OperatorRow = {
+  readonly name: string
+  readonly stationCount: number
+  readonly prefectures: readonly string[]
+}
+
 /**
  * 運営会社の一覧（社名＋駅グループ数＋走行する都道府県・駅数の多い順）。
- * セレクタ・都道府県との連動・AI ツールが参照する。
+ * セレクタ・都道府県との連動・AI ツールが参照する。社名は S12 の会社名（表示名は `domain/operators.ts`）。
  */
-export async function operatorNames(): Promise<
-  { name: string; stationCount: number; prefectures: string[] }[]
-> {
+export async function operatorNames(): Promise<OperatorRow[]> {
   const rows = await rpcRows('operator_names', {}, operatorRowSchema)
   return rows.map((r) => ({
     name: r.name,

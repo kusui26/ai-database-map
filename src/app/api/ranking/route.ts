@@ -2,6 +2,7 @@ import { isRankableKey } from '@/shared/catalog'
 import { rankingQuerySchema } from '@/shared/api'
 import { rankByColumn } from '@/db/queries'
 import { resolveLineCodes } from '@/domain/lines'
+import { labelsOfOperators } from '@/domain/operators'
 import { buildRanking } from '@/domain/ranking/presenter'
 import { BadRequestError, CACHE, handle, json } from '@/lib/http'
 
@@ -35,7 +36,10 @@ export function GET(request: Request): Promise<Response> {
     if (!isRankableKey(query.metric)) {
       throw new BadRequestError(`ランキング不可の metric です: ${query.metric}`)
     }
-    const lines = await resolveLineCodes(query.lines)
+    const [lines, operatorLabels] = await Promise.all([
+      resolveLineCodes(query.lines),
+      labelsOfOperators(query.operators),
+    ])
     if (!lines.ok) throw new BadRequestError(lines.messageJa)
     const { rows, total } = await rankByColumn(
       query.metric,
@@ -52,6 +56,7 @@ export function GET(request: Request): Promise<Response> {
     return json(
       buildRanking(query.metric, query.prefectures, query.order, rows, total, query.offset, {
         operators: query.operators,
+        operatorLabels,
         routes: query.routes,
         routeTypes: query.routeTypes,
         lines: lines.lines,

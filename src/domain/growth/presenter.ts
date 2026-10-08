@@ -10,6 +10,7 @@
 import { requireEntry } from '@/shared/catalog'
 import { type GrowthResponse, type LineRef } from '@/shared/api'
 import { kmeans } from './kmeans'
+import { displayOperators } from '@/domain/scope'
 
 /** scatter_points RPC の 1 行（駅ごとに x・y と、それぞれの信頼性フラグ）。 */
 export type ScatterRow = {
@@ -27,6 +28,8 @@ export type GrowthOptions = {
   readonly prefectures?: readonly string[]
   /** 運営会社の絞り込み（絞り込み自体は DB 側・ここは応答へ載せて表示に使う・260730）。 */
   readonly operators?: readonly string[]
+  /** 会社の表示名（`operators` と同じ順・261008 L4）。無ければ会社名のまま。 */
+  readonly operatorLabels?: readonly string[]
   /** 路線の絞り込み（同上・260731）。 */
   readonly routes?: readonly string[]
   /** 事業者種別の絞り込み（1:新幹線 …・同上・260731）。 */
@@ -63,6 +66,7 @@ export function buildGrowth(
     y: { key: yEntry.key, labelJa: yEntry.labelJa, unit: yEntry.unit },
     prefectures: [...(options.prefectures ?? [])],
     operators: [...(options.operators ?? [])],
+    operatorLabels: displayOperators(options.operators ?? [], options.operatorLabels),
     routes: [...(options.routes ?? [])],
     routeTypes: [...(options.routeTypes ?? [])],
     lines: [...(options.lines ?? [])],

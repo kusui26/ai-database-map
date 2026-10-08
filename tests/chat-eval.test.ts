@@ -1,5 +1,5 @@
 /**
- * 評価 runner：ゴールデン 41 問を実 /api/chat（SSE）に投げ、score.ts で採点する。
+ * 評価 runner：ゴールデン 45 問を実 /api/chat（SSE）に投げ、score.ts で採点する。
  *
  * 通常の `pnpm test` では **スキップ**（LLM/DB/課金に依存）。実行は：
  *   1) 別端末で dev サーバ起動：`pnpm dev`（.env に GEMINI_API_KEY・SUPABASE_* が必要）
@@ -36,8 +36,10 @@ const BASE_URL = process.env.CHAT_BASE_URL ?? 'http://localhost:3000'
  * 36 へ上げる（問を足して閾値を据え置くと、上と同じ緩み方をする）。
  *
  * 2026-10-07：会社・路線の名前を 3 問足して 41 問（B1）。同じ理由で 39 へ上げる。
+ *
+ * 2026-10-08：路線（運行系統）と地図の表示範囲の 4 問を足して 45 問（L3）。同じ理由で 43 へ上げる。
  */
-const PASS_THRESHOLD = Number(process.env.EVAL_PASS ?? '39')
+const PASS_THRESHOLD = Number(process.env.EVAL_PASS ?? '43')
 
 /**
  * **1 問でも落としてはいけない分野。**
@@ -66,8 +68,12 @@ const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 
 type AskResult = EvalObserved & { errored: boolean }
 
-/** 1 クエリを /api/chat に投げ、ツール列・パネル・本文を SSE から収集する（P8e: 選択駅も同送）。 */
-async function ask(query: string, selectedGrp?: string, radiusM?: number): Promise<AskResult> {
+/**
+ * 1 クエリを /api/chat に投げ、ツール列・パネル・本文を SSE から収集する。地図の文脈（選択駅・P8e と
+ * 表示範囲・L3）は、問が持つときだけ同送する（画面の送信と同じ形・`components/chat/sendContext.ts`）。
+ */
+async function ask(testCase: EvalCase): Promise<AskResult> {
+  const { query, selectedGrp, radiusM, bbox } = testCase
   const toolCalls: { name: string; input: Record<string, unknown> }[] = []
   let panelTypes: string[] = []
   let actionTypes: string[] = []
@@ -83,6 +89,7 @@ async function ask(query: string, selectedGrp?: string, radiusM?: number): Promi
     body: JSON.stringify({
       messages: [{ role: 'user', parts: [{ type: 'text', text: query }] }],
       ...(selectedGrp !== undefined ? { selectedGrp, radiusM } : {}),
+      ...(bbox !== undefined ? { bbox } : {}),
     }),
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
@@ -158,7 +165,7 @@ async function timedAsk(
   testCase: EvalCase,
 ): Promise<{ readonly observed: AskResult; readonly elapsedMs: number }> {
   const startedAt = Date.now()
-  const observed = await ask(testCase.query, testCase.selectedGrp, testCase.radiusM)
+  const observed = await ask(testCase)
   return { observed, elapsedMs: Date.now() - startedAt }
 }
 

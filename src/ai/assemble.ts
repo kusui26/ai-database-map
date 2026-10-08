@@ -270,23 +270,25 @@ function promotionOf(effect: ToolEffect): PanelPromotion | null {
     case 'stationDetail':
       return { kind: 'detail', grp: effect.detail.station.grp, category: effect.category }
     case 'ranking': {
-      const { metric, order, prefectures, operators, routes, routeTypes } = effect.response
+      const { metric, order, prefectures, operators, routes, routeTypes, lines } = effect.response
       const filters = {
         prefectures,
         operators,
         routes,
         routeTypes,
+        lines: lines.map((line) => line.lineCd),
         excludeLowN: effect.excludeLowN,
       }
       return { kind: 'ranking', metricKey: metric.key, order, ...filters }
     }
     case 'growth': {
-      const { x, y, prefectures, operators, routes, routeTypes } = effect.response
+      const { x, y, prefectures, operators, routes, routeTypes, lines } = effect.response
       const filters = {
         prefectures,
         operators,
         routes,
         routeTypes,
+        lines: lines.map((line) => line.lineCd),
         excludeLowN: effect.excludeLowN,
       }
       return { kind: 'scatter', xKey: x.key, yKey: y.key, ...filters }

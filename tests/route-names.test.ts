@@ -1,393 +1,442 @@
 /**
- * src/ai/routes：会社・路線の名前を、データの正式名へ解決する（2026-10-07・B1）。
+ * src/ai/routes：会社・路線の名前を、データの会社と路線（運行系統）へ解決する（2026-10-07 B1 → 2026-10-08 L3）。
  *
- * フィードバック #5 の根の 1 つ（`docs/261001_fix_user_feedback_ui.md` §6.2-2）：データの名前は国土数値情報の
- * 正式名で、利用者の言い方では 0 件になった（「東急東横線」は「東横線」、「中央線快速」は「中央線」）。
- * さらに「東西線」は札幌・仙台・京都に当たり、東京メトロ（「5号線東西線」）は入らなかった——0 件より気づきにくい。
+ * 路線は駅データ.jp の路線（「JR山手線」＝環状 30 駅）。L3 で、名前の解決の行き先を法令上の路線（S12）から
+ * 路線（運行系統）に替えた（`docs/261001_fix_user_feedback_ui.md` §6.8.5）。ここで固定するのは：
  *
- * 一覧は本物のデータ（2026-10-07 の `/api/routes`・`/api/operators`）から、問いに要る行だけを写したもの。
+ * - 名前の一致の強さ：正式名・会社名や括弧書きの省略・別名は強く、「本線／線」の言い換えは弱い。
+ *   「中央線」は JR中央線(快速)（強い）に当て、JR中央本線（弱い）には当てない
+ * - 会社名を含むのが正式名の路線（西武有楽町線・JR東西線）は、会社名を省いた呼び方では弱い
+ * - 区間に分かれた路線（JR東海道本線の各区間・琵琶湖線・JR京都線）は 1 本として扱う
+ * - 同じ名前の路線は、明示の都道府県 → 地図の表示範囲 の順に決め、決まらなければ聞き返す（§6.8.6）
+ * - 路線を決めたら会社は条件に入れない（路線コードが駅の集合を決める）
  */
 
 import { describe, expect, it } from 'vitest'
+import { buildNameIndex, matchLine, matchOperator, type LineMatch } from '@/ai/routes/match'
 import {
-  buildNameIndex,
-  matchOperator,
-  matchRoute,
-  pairLabel,
-  type RouteMatch,
-} from '@/ai/routes/match'
-import { type CatalogOperator, type CatalogRoute } from '@/ai/routes/names'
-import { resolveNameFilters, type NameResolveDeps, type PairStations } from '@/ai/routes/resolve'
-import { type RoutePair } from '@/ai/routes/aliases'
+  groupKeys,
+  lineForms,
+  lineSuffixVariant,
+  nameKey,
+  operatorNameIndex,
+  splitQualifier,
+  type CatalogLine,
+} from '@/ai/routes/names'
+import { resolveNameFilters, type NameResolution } from '@/ai/routes/resolve'
+import { MAX_LINES_PER_QUERY } from '@/shared/constants'
+import { INDEX, LEGAL_ROUTES, LINES, OPERATORS, VIEW, fakeDeps } from './fixtures/line-catalog'
 
-function route(name: string, operators: string[], stationCount = 10): CatalogRoute {
-  return { route: name, operators, routeTypes: [4], stationCount }
+function lineNamed(name: string): CatalogLine {
+  const found = LINES.find((row) => row.name === name)
+  if (found === undefined) throw new Error(`一覧に無い路線: ${name}`)
+  return found
 }
 
-const ROUTES: CatalogRoute[] = [
-  route('東横線', ['東急電鉄'], 21),
-  route('田園都市線', ['東急電鉄'], 27),
-  route('東急多摩川線', ['東急電鉄'], 7),
-  route('東急新横浜線', ['東急電鉄'], 3),
-  route('4号線丸ノ内線', ['東京地下鉄'], 25),
-  route('4号線丸ノ内線分岐線', ['東京地下鉄'], 4),
-  route('5号線東西線', ['東京地下鉄'], 23),
-  route('8号線有楽町線', ['東京地下鉄'], 24),
-  route('7号線南北線', ['東京地下鉄'], 19),
-  route('東西線', ['京都市', '仙台市', '札幌市'], 49),
-  route('南北線', ['仙台市', '北大阪急行電鉄', '札幌市'], 40),
-  route('JR東西線', ['西日本旅客鉄道'], 9),
-  route('1号線浅草線', ['東京都'], 20),
-  route('6号線三田線', ['東京都'], 27),
-  route('10号線新宿線', ['東京都'], 21),
-  route('荒川線', ['東京都'], 30),
-  route('三田線', ['神戸電鉄'], 10),
-  route('新宿線', ['西武鉄道'], 29),
-  route('西武有楽町線', ['西武鉄道'], 3),
-  route('多摩川線', ['西武鉄道'], 6),
-  route('中央線', ['東日本旅客鉄道', '東海旅客鉄道'], 111),
-  route('4号線(中央線)', ['大阪市高速電気軌道'], 15),
-  route('1号線(御堂筋線)', ['大阪市高速電気軌道'], 20),
-  route('東海道線', ['東日本旅客鉄道', '東海旅客鉄道', '西日本旅客鉄道'], 174),
-  route('東北線', ['東日本旅客鉄道'], 145),
-  route('根岸線', ['東日本旅客鉄道'], 12),
-  route('山手線', ['東日本旅客鉄道', '神戸市'], 35),
-  route('西神線', ['神戸市'], 6),
-  route('東海道新幹線', ['東海旅客鉄道'], 17),
-  route('宇都宮線', ['東武鉄道'], 11),
-  route('東上本線', ['東武鉄道'], 39),
-  route('伊勢崎線', ['東武鉄道'], 55),
-  route('本線', ['京成電鉄', '京浜急行電鉄', '阪神電気鉄道'], 120),
-  route('空港線', ['京浜急行電鉄', '南海電気鉄道'], 9),
-  route('名古屋本線', ['名古屋鉄道'], 60),
-  route('相鉄本線', ['相模鉄道'], 18),
-  route('相鉄いずみ野線', ['相模鉄道'], 8),
-  route('相鉄新横浜線', ['相模鉄道'], 3),
-  route('1号線', ['横浜市'], 23),
-  route('3号線', ['横浜市'], 16),
-  route('常磐新線', ['首都圏新都市鉄道'], 20),
-  route('小田原線', ['小田急電鉄'], 47),
-  route('江ノ島線', ['小田急電鉄'], 17),
-  route('多摩線', ['小田急電鉄'], 8),
-  route('京王線', ['京王電鉄'], 34),
-  route('井の頭線', ['京王電鉄'], 17),
-]
-
-function operator(name: string, prefectures: string[]): CatalogOperator {
-  return { name, stationCount: 10, prefectures }
+/** 強い候補を「路線名+路線名」で読む（1 本の路線＝区間を + でつなぐ）。 */
+function strongOf(match: LineMatch): string[] {
+  if (match.kind !== 'lines') return []
+  return match.strong.map((identity) => identity.lines.map((row) => row.name).join('+'))
 }
 
-const OPERATORS: CatalogOperator[] = [
-  operator('東急電鉄', ['東京都', '神奈川県']),
-  operator('東京地下鉄', ['東京都', '千葉県', '埼玉県']),
-  operator('京都市', ['京都府']),
-  operator('仙台市', ['宮城県']),
-  operator('札幌市', ['北海道']),
-  operator('北大阪急行電鉄', ['大阪府']),
-  operator('西日本旅客鉄道', ['大阪府', '京都府', '兵庫県']),
-  operator('東京都', ['東京都', '千葉県']),
-  operator('神戸電鉄', ['兵庫県']),
-  operator('西武鉄道', ['東京都', '埼玉県']),
-  operator('東日本旅客鉄道', ['東京都', '神奈川県', '埼玉県', '千葉県', '栃木県']),
-  operator('東海旅客鉄道', ['東京都', '静岡県', '愛知県', '大阪府']),
-  operator('大阪市高速電気軌道', ['大阪府']),
-  operator('神戸市', ['兵庫県']),
-  operator('東武鉄道', ['東京都', '埼玉県', '栃木県']),
-  operator('京成電鉄', ['東京都', '千葉県']),
-  operator('京浜急行電鉄', ['東京都', '神奈川県']),
-  operator('阪神電気鉄道', ['大阪府', '兵庫県']),
-  operator('南海電気鉄道', ['大阪府', '和歌山県']),
-  operator('名古屋鉄道', ['愛知県', '岐阜県']),
-  operator('相模鉄道', ['神奈川県']),
-  operator('横浜市', ['神奈川県']),
-  operator('首都圏新都市鉄道', ['東京都', '埼玉県', '千葉県', '茨城県']),
-  operator('小田急電鉄', ['東京都', '神奈川県']),
-  operator('京王電鉄', ['東京都']),
-]
-
-const INDEX = buildNameIndex({ routes: ROUTES, operators: OPERATORS })
-
-/** 決まった・候補になった路線を「会社 路線」で読む（持ち主ごとに + でつなぐ）。 */
-function identities(match: RouteMatch): string[] {
-  if (match.kind !== 'routes') return []
-  return match.identities.map((identity) => identity.pairs.map(pairLabel).join(' + '))
+function weakOf(match: LineMatch): string[] {
+  if (match.kind !== 'lines') return []
+  return match.weak.map((identity) => identity.lines.map((row) => row.name).join('+'))
 }
 
-function resolved(input: string): string[] {
-  const match = matchRoute(input, INDEX, null)
-  expect(match.kind, input).toBe('routes')
-  return identities(match)
+function decided(input: string): string[] {
+  const match = matchLine(input, INDEX, null)
+  expect(match.kind, input).toBe('lines')
+  expect(strongOf(match), input).toHaveLength(1)
+  return strongOf(match)
 }
 
-describe('matchOperator（会社の言い方 → 正式名）', () => {
+/** 決まった路線の名前（決まらなければ失敗の理由をそのまま出す）。 */
+function linesOf(result: NameResolution): string[] {
+  if (!result.ok) throw new Error(JSON.stringify(result.problems))
+  return result.filters.lines.map((ref) => ref.name)
+}
+
+describe('nameKey・splitQualifier（照合の鍵）', () => {
+  it('全角・空白・中黒・波ダッシュ・「の／ノ」「ヶ／ケ」・大文字小文字を吸収する', () => {
+    expect(nameKey('ＪＲ中央・総武線')).toBe(nameKey('jr中央総武線'))
+    expect(nameKey('丸の内線')).toBe(nameKey('丸ノ内線'))
+    expect(nameKey('JR東海道本線(東京〜熱海)')).toBe(nameKey('JR東海道本線（東京～熱海）'))
+  })
+
+  it.each([
+    ['jr中央線(快速)', 'jr中央線', '快速'],
+    ['jr東海道本線(東京~熱海)', 'jr東海道本線', '東京~熱海'],
+    ['富山地鉄富山都心線【3系統(環状線)】', '富山地鉄富山都心線', '3系統(環状線)'],
+    ['jr山手線', 'jr山手線', null],
+  ])('「%s」→ 本体「%s」・括弧書き %j', (key, base, qualifier) => {
+    expect(splitQualifier(key)).toEqual({ base, qualifier })
+  })
+
+  it('本線と線の言い換え。会社名だけになる形（京急線）・新幹線は作らない', () => {
+    expect(lineSuffixVariant('jr東海道本線(東京~熱海)', ['jr'])).toBe('jr東海道線(東京~熱海)')
+    expect(lineSuffixVariant('東上線', ['東武'])).toBe('東上本線')
+    expect(lineSuffixVariant('京急本線', ['京急'])).toBeNull()
+    expect(lineSuffixVariant('東海道新幹線', ['jr東海'])).toBeNull()
+  })
+})
+
+describe('lineForms（1 本の路線から作る照合の形）', () => {
+  function forms(name: string, legal = false): Map<string, number> {
+    return new Map(lineForms(lineNamed(name), legal).map((form) => [form.key, form.tier]))
+  }
+
+  it('会社名・括弧書きを省いた形は強い（「中央線」「中央線快速」「jr中央線」）', () => {
+    const got = forms('JR中央線(快速)')
+    expect(got.get(nameKey('中央線'))).toBe(1)
+    expect(got.get(nameKey('中央線快速'))).toBe(1)
+    expect(got.get(nameKey('JR中央線'))).toBe(1)
+  })
+
+  it('「本線」と「線」の言い換えは弱い（「東海道線」→ JR東海道本線の区間）', () => {
+    expect(forms('JR東海道本線(東京～熱海)').get(nameKey('東海道線'))).toBe(2)
+  })
+
+  it('JR 東海の区間は「JR東海」でも「JR」でも始まる——「JR」を省いた「東海道本線」を作る', () => {
+    expect(forms('JR東海道本線(熱海～浜松)').get(nameKey('東海道本線'))).toBe(1)
+  })
+
+  it('会社名の無い路線名に会社名を足した形（「JR宇都宮線」「神鉄三田線」）', () => {
+    expect(forms('宇都宮線').get(nameKey('JR宇都宮線'))).toBe(1)
+    expect(forms('三田線').get(nameKey('神戸電鉄三田線'))).toBe(1)
+  })
+
+  it('会社名を含むのが正式名なら、会社名を省いた形は弱い（西武有楽町線 → 「有楽町線」）', () => {
+    expect(forms('西武有楽町線', true).get(nameKey('有楽町線'))).toBe(2)
+    expect(forms('西武有楽町線', false).get(nameKey('有楽町線'))).toBe(1)
+  })
+
+  it('括弧の中の別名も名前（「都電荒川線」→ さらに会社名を省いた「荒川線」）', () => {
+    const got = forms('東京さくらトラム（都電荒川線）')
+    expect(got.get(nameKey('都電荒川線'))).toBe(1)
+    expect(got.get(nameKey('荒川線'))).toBe(1)
+  })
+})
+
+describe('groupKeys（区間に分かれた路線を 1 本に束ねる鍵）', () => {
+  function shares(a: string, b: string): boolean {
+    const keys = groupKeys(lineNamed(a))
+    return groupKeys(lineNamed(b)).some((key) => keys.includes(key))
+  }
+
+  it('同じ路線の区間（会社が JR 6 社にまたがっても）・正式名がその区間の路線は束ねる', () => {
+    expect(shares('JR東海道本線(東京～熱海)', 'JR東海道本線(熱海～浜松)')).toBe(true)
+    expect(shares('JR東海道本線(東京～熱海)', 'JR京都線')).toBe(true)
+    expect(shares('宇都宮線', 'JR東北本線(黒磯～利府・盛岡)')).toBe(true)
+  })
+
+  it('会社の違う同じ名前の路線は束ねない（東京メトロ東西線と札幌の東西線）', () => {
+    expect(shares('東京メトロ東西線', '札幌市営地下鉄東西線')).toBe(false)
+    expect(shares('JR山手線', '神戸市営地下鉄山手線')).toBe(false)
+  })
+})
+
+describe('operatorNameIndex・matchOperator（会社の言い方 → S12 の会社名）', () => {
   it.each([
     ['東急', ['東急電鉄']],
     ['東京急行電鉄', ['東急電鉄']],
     ['東京メトロ', ['東京地下鉄']],
     ['都営', ['東京都']],
     ['JR東日本', ['東日本旅客鉄道']],
-    ['東急線', ['東急電鉄']],
     ['ＪＲ東日本', ['東日本旅客鉄道']],
-    ['東急電鉄', ['東急電鉄']],
+    ['大阪メトロ', ['大阪市高速電気軌道']],
+    ['Osaka Metro', ['大阪市高速電気軌道']],
+    ['京急', ['京浜急行電鉄']],
+    ['東急線', ['東急電鉄']],
   ])('「%s」→ %j', (input, expected) => {
     expect(matchOperator(input, INDEX)).toEqual({ kind: 'operators', operators: expected })
   })
 
-  it('「JR」はデータにある JR 各社すべて（一覧に無い会社は含めない）', () => {
+  it('事業者名・略称は路線の一覧から足す（別名表に書かなくてよい）', () => {
+    const index = operatorNameIndex({ lines: LINES, operators: OPERATORS, legalRoutes: [] })
+    expect(index.get(nameKey('名鉄'))).toEqual(['名古屋鉄道'])
+    expect(index.get(nameKey('神鉄'))).toEqual(['神戸電鉄'])
+  })
+
+  it('線路の持ち主の路線（会社が無い神戸高速）の名前は、会社の言い方にしない', () => {
+    expect(INDEX.operatorKeys.has(nameKey('神戸高速'))).toBe(false)
+  })
+
+  it('「JR」は一覧にある JR 各社だけ。「新幹線」は会社の名前ではない', () => {
     expect(matchOperator('JR', INDEX)).toEqual({
       kind: 'operators',
       operators: ['東日本旅客鉄道', '東海旅客鉄道', '西日本旅客鉄道'],
     })
-  })
-
-  it('「新幹線」「地下鉄」は会社の名前ではない（正しい指定のしかたを返す）', () => {
-    const shinkansen = matchOperator('新幹線', INDEX)
-    expect(shinkansen.kind).toBe('category')
-    expect(shinkansen.kind === 'category' && shinkansen.hint).toContain('routeTypes:[1]')
-    expect(matchOperator('地下鉄', INDEX).kind).toBe('category')
-  })
-
-  it('知らない会社は、近い正式名を返す', () => {
-    const match = matchOperator('東京急行鉄道', INDEX)
-    expect(match.kind).toBe('unknown')
-    expect(match.kind === 'unknown' && match.didYouMean).toContain('東急電鉄')
+    expect(matchOperator('新幹線', INDEX).kind).toBe('category')
   })
 })
 
-describe('matchRoute：1 本に決まる言い方', () => {
+describe('matchLine：1 本に決まる言い方', () => {
   it.each([
-    ['東急東横線', ['東急電鉄 東横線']],
-    ['東横線', ['東急電鉄 東横線']],
-    ['東横', ['東急電鉄 東横線']],
-    ['東横線沿線', ['東急電鉄 東横線']],
-    ['東横線の沿線', ['東急電鉄 東横線']],
-    ['東横線沿線の駅', ['東急電鉄 東横線']],
-    ['東京メトロ東西線', ['東京地下鉄 5号線東西線']],
-    ['都営浅草線', ['東京都 1号線浅草線']],
-    ['浅草線', ['東京都 1号線浅草線']],
-    ['都営三田線', ['東京都 6号線三田線']],
-    ['西武新宿線', ['西武鉄道 新宿線']],
-    ['都営新宿線', ['東京都 10号線新宿線']],
-    ['御堂筋線', ['大阪市高速電気軌道 1号線(御堂筋線)']],
-    ['大阪メトロ中央線', ['大阪市高速電気軌道 4号線(中央線)']],
-    ['JR山手線', ['東日本旅客鉄道 山手線']],
-    ['東上線', ['東武鉄道 東上本線']],
-    ['東武東上線', ['東武鉄道 東上本線']],
-    ['京急本線', ['京浜急行電鉄 本線']],
-    ['京急空港線', ['京浜急行電鉄 空港線']],
-    ['名鉄本線', ['名古屋鉄道 名古屋本線']],
-    ['いずみ野線', ['相模鉄道 相鉄いずみ野線']],
-    ['京王井の頭線', ['京王電鉄 井の頭線']],
-    ['つくばエクスプレス', ['首都圏新都市鉄道 常磐新線']],
-    ['ブルーライン', ['横浜市 1号線 + 横浜市 3号線']],
-    ['東海道新幹線', ['東海旅客鉄道 東海道新幹線']],
-  ])('「%s」→ %j', (input, expected) => {
-    expect(resolved(input)).toEqual(expected)
+    ['JR山手線', 'JR山手線'],
+    ['中央線快速', 'JR中央線(快速)'],
+    ['中央快速線', 'JR中央線(快速)'],
+    ['JR中央線', 'JR中央線(快速)'],
+    ['東京メトロ東西線', '東京メトロ東西線'],
+    ['メトロ東西線', '東京メトロ東西線'],
+    ['副都心線', '東京メトロ副都心線'],
+    ['丸ノ内線', '東京メトロ丸ノ内線'],
+    ['丸の内線', '東京メトロ丸ノ内線'],
+    ['浅草線', '都営浅草線'],
+    ['都営地下鉄三田線', '都営三田線'],
+    ['東横線', '東急東横線'],
+    ['東京急行電鉄東横線', '東急東横線'],
+    ['東横', '東急東横線'],
+    ['東横線沿線の駅', '東急東横線'],
+    ['井の頭線', '京王井の頭線'],
+    ['小田原線', '小田急線'],
+    ['JR宇都宮線', '宇都宮線'],
+    ['神鉄三田線', '三田線'],
+    ['大阪環状線', '大阪環状線'],
+    ['Osaka Metro中央線', '大阪メトロ中央線'],
+    ['都電', '東京さくらトラム（都電荒川線）'],
+    ['荒川線', '東京さくらトラム（都電荒川線）'],
+    ['総武線各駅停車', 'JR中央・総武線'],
+    ['中央・総武線', 'JR中央・総武線'],
+    ['東海道新幹線', '東海道新幹線'],
+    ['JR東海中央線', 'JR中央本線(名古屋～塩尻)'],
+  ])('「%s」→ %s', (input, expected) => {
+    expect(decided(input)).toEqual([expected])
   })
 
-  it('番号つきの地下鉄は番号を外して当てる。分岐線も同じ路線に含める（方南町支線）', () => {
-    expect(resolved('丸ノ内線')).toEqual([
-      '東京地下鉄 4号線丸ノ内線 + 東京地下鉄 4号線丸ノ内線分岐線',
+  it('区間に分かれた路線は 1 本（「東海道線」＝東京〜熱海・熱海〜浜松・琵琶湖線・JR京都線・JR神戸線(大阪～神戸)）', () => {
+    expect(decided('東海道線')).toEqual([
+      'JR東海道本線(東京～熱海)+JR東海道本線(熱海～浜松)+琵琶湖線+JR京都線+JR神戸線(大阪～神戸)',
     ])
-    expect(resolved('丸の内線')).toEqual(resolved('丸ノ内線'))
+    expect(decided('JR神戸線')).toEqual(['JR神戸線(大阪～神戸)+JR神戸線(神戸～姫路)'])
   })
 
-  it('JR 各社に分かれた 1 本の路線は 1 本（東海道線・中央本線）', () => {
-    expect(resolved('東海道線')).toEqual([
-      '東日本旅客鉄道 東海道線 + 東海旅客鉄道 東海道線 + 西日本旅客鉄道 東海道線',
-    ])
-    expect(resolved('東海道本線')).toEqual(resolved('東海道線'))
-    // 「中央本線」は JR の言い方。大阪メトロの「4号線(中央線)」には当てない。
-    expect(resolved('中央本線')).toEqual(['東日本旅客鉄道 中央線 + 東海旅客鉄道 中央線'])
+  it('束ねるのは当たった路線の中だけ（「山陽本線」に東海道本線の区間は混ざらない）', () => {
+    expect(decided('山陽本線')).toEqual(['JR神戸線(神戸～姫路)+JR山陽本線(姫路～岡山)'])
   })
 
-  it('「中央線快速」は路線全体（JR東日本の中央線）へ広げ、広げたことを残す', () => {
-    const match = matchRoute('中央線快速', INDEX, null)
-    expect(identities(match)).toEqual(['東日本旅客鉄道 中央線'])
-    expect(match.kind === 'routes' && match.widenedPair).toEqual({
-      operator: '東日本旅客鉄道',
-      route: '中央線',
-    })
+  it('強い形で決まれば、弱い形の路線は使わずに残す（「中央本線」と大阪メトロ中央線）', () => {
+    const match = matchLine('中央本線', INDEX, null)
+    expect(strongOf(match)).toEqual(['JR中央本線(東京～塩尻)+JR中央本線(名古屋～塩尻)'])
+    expect(weakOf(match)).toEqual(['JR中央線(快速)', '大阪メトロ中央線'])
   })
 
-  it('強い形で決まったら、会社名を外した弱い形の路線は使わずに残す（有楽町線 ≠ 西武有楽町線）', () => {
-    const match = matchRoute('有楽町線', INDEX, null)
-    expect(identities(match)).toEqual(['東京地下鉄 8号線有楽町線'])
-    expect(match.kind === 'routes' && match.others.map((o) => o.pairs.map(pairLabel))).toEqual([
-      ['西武鉄道 西武有楽町線'],
-    ])
+  it('会社名を含むのが正式名の路線は弱い（「有楽町線」は東京メトロ、西武有楽町線は残すだけ）', () => {
+    const match = matchLine('有楽町線', INDEX, null)
+    expect(strongOf(match)).toEqual(['東京メトロ有楽町線'])
+    expect(weakOf(match)).toEqual(['西武有楽町線'])
   })
 
-  it('会社の全路線（「小田急線」・会社名だけを路線に渡された）', () => {
-    expect(matchRoute('小田急線', INDEX, null)).toEqual({
+  it('会社の全路線（「京急線」・会社名だけを路線に渡された）', () => {
+    expect(matchLine('京急線', INDEX, null)).toEqual({
       kind: 'operators',
-      operators: ['小田急電鉄'],
+      operators: ['京浜急行電鉄'],
     })
-    expect(matchRoute('小田急', INDEX, null)).toEqual({
+    expect(matchLine('小田急', INDEX, null)).toEqual({
       kind: 'operators',
       operators: ['小田急電鉄'],
     })
   })
-})
 
-describe('matchRoute：同じ名前の別路線は 1 つに決めない', () => {
-  it('「東西線」は東京メトロ・札幌・仙台・京都（JR東西線は弱い候補）', () => {
-    const match = matchRoute('東西線', INDEX, null)
-    expect(identities(match).sort()).toEqual(
-      ['京都市 東西線', '仙台市 東西線', '札幌市 東西線', '東京地下鉄 5号線東西線'].sort(),
-    )
-    expect(match.kind === 'routes' && match.others.map((o) => o.owner)).toEqual(['JR:JR東西線'])
+  it('会社の名前の路線（「京王線」「小田急線」）は会社の全路線ではなく、その路線', () => {
+    expect(decided('京王線')).toEqual(['京王線'])
+    expect(decided('小田急線')).toEqual(['小田急線'])
   })
 
+  it('ブランド名は路線全体へ（東武スカイツリーライン → 東武伊勢崎線・広げたことを残す）', () => {
+    const match = matchLine('東武スカイツリーライン', INDEX, null)
+    expect(strongOf(match)).toEqual(['東武伊勢崎線'])
+    expect(match.kind === 'lines' && match.strong[0]?.widened).toBe(true)
+    expect(matchLine('アーバンパークライン', INDEX, null)).toMatchObject({
+      kind: 'lines',
+      strong: [{ widened: false }],
+    })
+  })
+})
+
+describe('matchLine：同じ名前の別路線は 1 つに決めない', () => {
   it.each([
-    ['中央線', ['東日本旅客鉄道 中央線 + 東海旅客鉄道 中央線', '大阪市高速電気軌道 4号線(中央線)']],
-    ['山手線', ['東日本旅客鉄道 山手線', '神戸市 山手線']],
-    ['三田線', ['東京都 6号線三田線', '神戸電鉄 三田線']],
-    ['新宿線', ['西武鉄道 新宿線', '東京都 10号線新宿線']],
-    ['新横浜線', ['東急電鉄 東急新横浜線', '相模鉄道 相鉄新横浜線']],
+    ['山手線', ['JR山手線', '神戸市営地下鉄山手線']],
+    ['中央線', ['JR中央線(快速)', '大阪メトロ中央線']],
+    ['新宿線', ['都営新宿線', '西武新宿線']],
+    ['三田線', ['都営三田線', '三田線']],
+    ['宇都宮線', ['宇都宮線', '東武宇都宮線']],
+    ['環状線', ['大阪環状線', '伊予鉄道環状線（１系統）+伊予鉄道環状線（２系統）']],
   ])('「%s」→ 候補 %j', (input, expected) => {
-    expect(resolved(input).sort()).toEqual([...expected].sort())
+    expect(strongOf(matchLine(input, INDEX, null)).sort()).toEqual([...expected].sort())
   })
 
-  it('「宇都宮線」は東武の宇都宮線と、JR の運行系統（東北線の一部）の 2 つ', () => {
-    expect(resolved('宇都宮線')).toEqual(['東武鉄道 宇都宮線', '東日本旅客鉄道 東北線'])
+  it('「東西線」は東京メトロ・札幌・仙台・京都・神戸高速。JR東西線（正式名が会社名つき）は弱い候補', () => {
+    const match = matchLine('東西線', INDEX, null)
+    expect(strongOf(match).sort()).toEqual(
+      [
+        '東京メトロ東西線',
+        '札幌市営地下鉄東西線',
+        '仙台市営地下鉄東西線',
+        '京都市営地下鉄東西線',
+        '神戸高速東西線',
+      ].sort(),
+    )
+    expect(weakOf(match)).toEqual(['JR東西線'])
   })
 
-  it('会社の範囲があれば、その中で決まる（東西線 × 札幌市）', () => {
-    expect(identities(matchRoute('東西線', INDEX, ['札幌市']))).toEqual(['札幌市 東西線'])
-  })
-})
-
-describe('matchRoute：決めない言い方', () => {
-  it('運行系統の名前（京浜東北線）は、正式な路線を候補として返す', () => {
-    const match = matchRoute('京浜東北線', INDEX, null)
-    expect(match.kind).toBe('span')
-    expect(
-      match.kind === 'span' && match.candidates.map((c) => c.pairs.map(pairLabel).join()),
-    ).toEqual(['東日本旅客鉄道 東北線', '東日本旅客鉄道 東海道線', '東日本旅客鉄道 根岸線'])
+  it('「南北線」には北大阪急行（法令上の名前が南北線）も入る', () => {
+    expect(strongOf(matchLine('南北線', INDEX, null))).toContain('北大阪急行電鉄')
   })
 
-  it('別名の行き先がデータに無ければ当てない（データの名前が変わっても、無い路線を出さない）', () => {
-    // この一覧には東京臨海高速鉄道（りんかい線の行き先）が無い。
-    expect(matchRoute('りんかい線', INDEX, null).kind).toBe('unknown')
-  })
-
-  it('「新幹線」は路線の名前ではない', () => {
-    expect(matchRoute('新幹線', INDEX, null).kind).toBe('category')
-  })
-
-  it('知らない路線は近い正式名を返す。会社名が分かればその会社の路線から（東武本線）', () => {
-    const tobu = matchRoute('東武本線', INDEX, null)
-    expect(tobu.kind === 'unknown' && tobu.didYouMean).toEqual(['東武鉄道 東上本線'])
-    const unknown = matchRoute('存在しない線', INDEX, null)
-    expect(unknown).toEqual({ kind: 'unknown', didYouMean: [] })
+  it('会社の範囲があれば、その中で決まる（中央線 × 大阪メトロ）。会社の無い神戸高速は範囲の外', () => {
+    expect(strongOf(matchLine('中央線', INDEX, ['大阪市高速電気軌道']))).toEqual([
+      '大阪メトロ中央線',
+    ])
+    expect(strongOf(matchLine('東西線', INDEX, ['東京地下鉄', '京都市']))).toEqual([
+      '東京メトロ東西線',
+      '京都市営地下鉄東西線',
+    ])
   })
 })
 
-/** 駅の一覧の代わり：組ごとの駅の数と都道府県（候補を見せる・都道府県で絞るのに使う）。 */
-const STATIONS: Readonly<Record<string, PairStations>> = {
-  '京都市 東西線': { count: 17, prefectures: ['京都府'] },
-  '仙台市 東西線': { count: 13, prefectures: ['宮城県'] },
-  '札幌市 東西線': { count: 19, prefectures: ['北海道'] },
-  '東京地下鉄 5号線東西線': { count: 23, prefectures: ['東京都', '千葉県'] },
-  '西日本旅客鉄道 JR東西線': { count: 9, prefectures: ['大阪府', '兵庫県'] },
-  '東武鉄道 宇都宮線': { count: 11, prefectures: ['栃木県'] },
-  '東日本旅客鉄道 東北線': { count: 145, prefectures: ['東京都', '埼玉県', '栃木県'] },
-}
+describe('matchLine：決めない言い方', () => {
+  it('「新幹線」は路線の名前ではない（指定のしかたを返す）', () => {
+    expect(matchLine('新幹線', INDEX, null).kind).toBe('category')
+  })
 
-function fakeDeps(): NameResolveDeps & { readonly calls: { index: number; stations: number } } {
-  const calls = { index: 0, stations: 0 }
-  return {
-    calls,
-    index: async () => {
-      calls.index += 1
-      return INDEX
-    },
-    stationsOf: async (pairs: readonly RoutePair[], prefectures: readonly string[]) => {
-      calls.stations += 1
-      const found = STATIONS[pairs.map(pairLabel).join(' + ')] ?? {
-        count: 5,
-        prefectures: ['東京都'],
-      }
-      if (prefectures.length === 0) return found
-      const inside = found.prefectures.filter((pref) => prefectures.includes(pref))
-      return { count: inside.length > 0 ? found.count : 0, prefectures: inside }
-    },
-  }
-}
+  it('別名の行き先がデータに無ければ当てない', () => {
+    const index = buildNameIndex({
+      lines: LINES.filter((row) => row.name !== '東武伊勢崎線'),
+      operators: OPERATORS,
+      legalRoutes: LEGAL_ROUTES,
+    })
+    expect(matchLine('東武スカイツリーライン', index, null).kind).toBe('unknown')
+  })
 
-describe('resolveNameFilters（ツール 1 回分）', () => {
+  it('知らない路線は近い路線名を返す。会社が分かればその会社の駅の多い路線も（「東武本線」）', () => {
+    const tobu = matchLine('東武本線', INDEX, null)
+    expect(tobu).toEqual({
+      kind: 'unknown',
+      didYouMean: ['東武伊勢崎線', '東武野田線', '東武宇都宮線'],
+    })
+    expect(matchLine('存在しない線', INDEX, null)).toEqual({ kind: 'unknown', didYouMean: [] })
+  })
+})
+
+describe('resolveNameFilters：同じ名前の路線を、都道府県 → 地図の表示範囲 → 聞き返し で決める', () => {
   it('会社・路線の指定が無ければ、一覧も読まない', async () => {
     const deps = fakeDeps()
     const result = await resolveNameFilters({ prefectures: [] }, deps)
-    expect(result).toEqual({ ok: true, filters: { operators: [], routes: [] }, notes: [] })
+    expect(result).toEqual({ ok: true, filters: { operators: [], lines: [] }, notes: [] })
     expect(deps.calls.index).toBe(0)
   })
 
-  it('「東急東横線」→ 東横線（東急電鉄にしか無いので会社は付けない＝図の題が短い）', async () => {
-    const result = await resolveNameFilters({ routes: ['東急東横線'], prefectures: [] }, fakeDeps())
-    expect(result.ok && result.filters).toEqual({ operators: [], routes: ['東横線'] })
-    expect(result.ok && result.notes.join()).toContain('東急電鉄 東横線')
-  })
-
-  it('同じ名前の別路線から 1 つを選ぶときは、その会社を付ける（他社の同名を除く）', async () => {
+  it('「山手線」× 首都圏の地図 → JR山手線（30 駅）。地図で決めたことを書く', async () => {
     const result = await resolveNameFilters(
-      { routes: ['東西線'], prefectures: ['北海道'] },
+      { routes: ['山手線'], prefectures: [], viewport: VIEW.tokyo },
       fakeDeps(),
     )
-    expect(result.ok && result.filters).toEqual({ operators: ['札幌市'], routes: ['東西線'] })
-    expect(result.ok && result.notes.join()).toContain('北海道に駅のある 札幌市 東西線')
+    expect(result.ok && result.filters).toEqual({
+      operators: [],
+      lines: [{ lineCd: 11302, name: 'JR山手線' }],
+    })
+    expect(result.ok && result.notes.join()).toContain(
+      '地図の表示範囲に駅のある JR山手線 に決めました',
+    )
+    expect(result.ok && result.notes.join()).toContain('神戸市営地下鉄山手線')
   })
 
-  it('都道府県で 1 つに決まる（東西線 × 東京都 → 東京メトロ）', async () => {
+  it('「中央線」× 大阪の地図 → 大阪メトロ中央線（聞き返さない）', async () => {
     const result = await resolveNameFilters(
-      { routes: ['東西線'], prefectures: ['東京都'] },
+      { routes: ['中央線'], prefectures: [], viewport: VIEW.osaka },
       fakeDeps(),
     )
-    expect(result.ok && result.filters).toEqual({ operators: [], routes: ['5号線東西線'] })
+    expect(linesOf(result)).toEqual(['大阪メトロ中央線'])
   })
 
-  it('決まらなければ図を作らずに候補（駅の数・都道府県・呼び直しの operators と routes）', async () => {
-    const result = await resolveNameFilters({ routes: ['東西線'], prefectures: [] }, fakeDeps())
+  it('「中央線」× 名古屋の地図 → 強い候補が範囲に無いので、弱い候補（JR中央本線）の範囲の区間', async () => {
+    const result = await resolveNameFilters(
+      { routes: ['中央線'], prefectures: [], viewport: VIEW.nagoya },
+      fakeDeps(),
+    )
+    expect(linesOf(result)).toEqual(['JR中央本線(名古屋～塩尻)'])
+    expect(result.ok && result.notes.join()).toContain('範囲の外の区間（JR中央本線(東京～塩尻)）')
+  })
+
+  it('「新宿線」× 首都圏の地図 → 範囲に 2 本（都営・西武）なので聞き返す', async () => {
+    const result = await resolveNameFilters(
+      { routes: ['新宿線'], prefectures: [], viewport: VIEW.tokyo },
+      fakeDeps(),
+    )
     expect(result.ok).toBe(false)
     if (result.ok) return
-    const problem = result.problems[0]
-    // 数は候補の数とそろえる（4 本の東西線と、近い名前の JR東西線）
-    expect(problem?.problem).toContain('複数あります（5 本）')
-    const rows = problem?.candidates?.map(
-      (c) => `${c.operators.join()} ${c.routes.join()} ${c.stationCount}`,
-    )
-    expect(rows?.sort()).toEqual(
-      [
-        '京都市 東西線 17',
-        '仙台市 東西線 13',
-        '札幌市 東西線 19',
-        '東京地下鉄 5号線東西線 23',
-        '西日本旅客鉄道 JR東西線 9',
-      ].sort(),
-    )
+    expect(result.problems[0]?.problem).toContain('地図の表示範囲に複数あります（2 本）')
+    expect(result.problems[0]?.candidates?.map((c) => c.routes)).toEqual([
+      ['都営新宿線'],
+      ['西武新宿線'],
+    ])
     expect(result.hint).toContain('推測で選ばない')
   })
 
-  it('近い名前の路線（JR東西線）も都道府県で絞る対象（東西線 × 大阪府 → JR東西線）', async () => {
+  it('範囲の中で聞き返すときは、弱い候補も範囲にあれば並べる（大阪の「東西線」に JR東西線）', async () => {
+    const result = await resolveNameFilters(
+      { routes: ['東西線'], prefectures: [], viewport: VIEW.osaka },
+      fakeDeps(),
+    )
+    expect(!result.ok && result.problems[0]?.candidates?.map((c) => c.routes[0])).toEqual([
+      '京都市営地下鉄東西線',
+      '神戸高速東西線',
+      'JR東西線',
+    ])
+  })
+
+  it('範囲の手がかりが無ければ聞き返す（候補は弱いものも含めてすべて・駅の数と都道府県つき）', async () => {
+    const result = await resolveNameFilters({ routes: ['東西線'], prefectures: [] }, fakeDeps())
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.problems[0]?.problem).toContain('複数あります（6 本）')
+    const rows = result.problems[0]?.candidates?.map(
+      (c) => `${c.routes.join()} ${c.stationCount} ${c.prefectures.join()}`,
+    )
+    expect(rows).toContain('JR東西線 9 大阪府,兵庫県')
+    expect(rows).toContain('東京メトロ東西線 23 東京都,千葉県')
+  })
+
+  it('候補は名前だけで 1 本に決まる言い方で返す（「三田線」→ 都営三田線・神鉄三田線、「宇都宮線」→ JR宇都宮線）', async () => {
+    const mita = await resolveNameFilters({ routes: ['三田線'], prefectures: [] }, fakeDeps())
+    expect(!mita.ok && mita.problems[0]?.candidates?.map((c) => c.routes)).toEqual([
+      ['都営三田線'],
+      ['神鉄三田線'],
+    ])
+    const utsunomiya = await resolveNameFilters(
+      { routes: ['宇都宮線'], prefectures: [] },
+      fakeDeps(),
+    )
+    expect(!utsunomiya.ok && utsunomiya.problems[0]?.candidates?.map((c) => c.routes)).toEqual([
+      ['JR宇都宮線'],
+      ['東武宇都宮線'],
+    ])
+  })
+
+  it('明示の都道府県は地図より強い（中央線 × 大阪府、地図は首都圏）', async () => {
+    const result = await resolveNameFilters(
+      { routes: ['中央線'], prefectures: ['大阪府'], viewport: VIEW.tokyo },
+      fakeDeps(),
+    )
+    expect(linesOf(result)).toEqual(['大阪メトロ中央線'])
+    expect(result.ok && result.notes.join()).toContain('大阪府に駅のある 大阪メトロ中央線')
+  })
+
+  it('明示の会社も地図より強い（大阪メトロ × 中央線、地図は首都圏）', async () => {
+    const result = await resolveNameFilters(
+      { operators: ['大阪メトロ'], routes: ['中央線'], prefectures: [], viewport: VIEW.tokyo },
+      fakeDeps(),
+    )
+    expect(linesOf(result)).toEqual(['大阪メトロ中央線'])
+  })
+
+  it('都道府県で強い候補が残らなければ、弱い候補から（東西線 × 大阪府 → JR東西線）', async () => {
     const result = await resolveNameFilters(
       { routes: ['東西線'], prefectures: ['大阪府'] },
       fakeDeps(),
     )
-    expect(result.ok && result.filters).toEqual({ operators: [], routes: ['JR東西線'] })
-    expect(result.ok && result.notes.join()).toContain('大阪府に駅のある 西日本旅客鉄道 JR東西線')
-  })
-
-  it('都道府県で絞って 2 本以上残れば、残った路線だけを候補にする', async () => {
-    const result = await resolveNameFilters(
-      { routes: ['東西線'], prefectures: ['東京都', '大阪府'] },
-      fakeDeps(),
-    )
-    expect(!result.ok && result.problems[0]?.problem).toContain('複数あります（2 本）')
-    expect(!result.ok && result.problems[0]?.candidates?.map((c) => c.routes)).toEqual([
-      ['5号線東西線'],
-      ['JR東西線'],
-    ])
+    expect(linesOf(result)).toEqual(['JR東西線'])
   })
 
   it('都道府県に駅のある路線が無ければ、そう言って候補を返す', async () => {
@@ -398,85 +447,187 @@ describe('resolveNameFilters（ツール 1 回分）', () => {
     expect(!result.ok && result.problems[0]?.problem).toContain('沖縄県に駅がありません')
   })
 
-  it('会社の指定と合わない路線は、持ち主を示す（東横線 × JR東日本）', async () => {
+  it('強い形で 1 本だけ当たれば、地図で別の路線に寄せない（大阪の地図でも「中央本線」は JR）', async () => {
+    const deps = fakeDeps()
     const result = await resolveNameFilters(
-      { operators: ['JR東日本'], routes: ['東横線'], prefectures: [] },
+      { routes: ['中央本線'], prefectures: [], viewport: VIEW.osaka },
+      deps,
+    )
+    expect(linesOf(result)).toEqual(['JR中央本線(東京～塩尻)', 'JR中央本線(名古屋～塩尻)'])
+    expect(result.ok && result.notes.join()).toContain(
+      '大阪メトロ中央線 も当たりますが含めていません',
+    )
+  })
+
+  it('名前で 1 本に決まる路線は、地図を見に行かない（駅の一覧を引かない）', async () => {
+    const deps = fakeDeps()
+    await resolveNameFilters({ routes: ['副都心線'], prefectures: [], viewport: VIEW.osaka }, deps)
+    expect(deps.calls.inView).toBe(0)
+  })
+})
+
+describe('resolveNameFilters：区間に分かれた路線', () => {
+  it('首都圏の地図の「東海道線」は東京〜熱海だけ。外した区間を書く', async () => {
+    const result = await resolveNameFilters(
+      { routes: ['東海道線'], prefectures: [], viewport: VIEW.tokyo },
       fakeDeps(),
     )
-    expect(!result.ok && result.problems[0]?.problem).toContain('東急電鉄 東横線 の路線で')
+    expect(linesOf(result)).toEqual(['JR東海道本線(東京～熱海)'])
+    expect(result.ok && result.notes.join()).toContain('地図の表示範囲の外の区間')
+    expect(result.ok && result.notes.join()).toContain('JR京都線')
   })
 
-  it('会社の指定と「会社の全路線」が食い違えば、持ち主を示す（東急 × 小田急線）', async () => {
+  it('大阪の地図なら琵琶湖線・JR京都線・JR神戸線(大阪～神戸)', async () => {
     const result = await resolveNameFilters(
-      { operators: ['東急'], routes: ['小田急線'], prefectures: [] },
+      { routes: ['東海道線'], prefectures: [], viewport: VIEW.osaka },
       fakeDeps(),
     )
-    expect(!result.ok && result.problems[0]?.problem).toContain('小田急電鉄 の路線で')
+    expect(linesOf(result)).toEqual(['琵琶湖線', 'JR京都線', 'JR神戸線(大阪～神戸)'])
   })
 
-  it('会社だけ（「東急」）→ 正式名の会社。読み替えを残す', async () => {
-    const result = await resolveNameFilters({ operators: ['東急'], prefectures: [] }, fakeDeps())
-    expect(result.ok && result.filters).toEqual({ operators: ['東急電鉄'], routes: [] })
-    expect(result.ok && result.notes).toEqual(['会社「東急」は 東急電鉄 として扱いました。'])
+  it('地図が無ければ全区間（MCP から呼ばれたとき）', async () => {
+    const result = await resolveNameFilters({ routes: ['東海道線'], prefectures: [] }, fakeDeps())
+    expect(linesOf(result)).toHaveLength(5)
   })
 
-  it('路線に「小田急線」だけ → 会社の指定にする（題は「小田急電鉄」）', async () => {
-    const result = await resolveNameFilters({ routes: ['小田急線'], prefectures: [] }, fakeDeps())
-    expect(result.ok && result.filters).toEqual({ operators: ['小田急電鉄'], routes: [] })
-  })
-
-  it('「小田急線」と「東横線」→ 小田急の全路線と東横線を並べる', async () => {
+  it('都道府県なら駅のある区間だけ（駅の集合は変わらないので、外した区間は書かない）', async () => {
     const result = await resolveNameFilters(
-      { routes: ['小田急線', '東横線'], prefectures: [] },
+      { routes: ['東海道線'], prefectures: ['神奈川県'] },
+      fakeDeps(),
+    )
+    expect(linesOf(result)).toEqual(['JR東海道本線(東京～熱海)'])
+    expect(result.ok && result.notes.join()).not.toContain('範囲の外')
+  })
+
+  it('区間の名前を言えば、その区間だけ（地図で絞らない）', async () => {
+    const result = await resolveNameFilters(
+      { routes: ['東海道本線(熱海～浜松)'], prefectures: [], viewport: VIEW.tokyo },
+      fakeDeps(),
+    )
+    expect(linesOf(result)).toEqual(['JR東海道本線(熱海～浜松)'])
+  })
+
+  it('束ねた路線の候補の駅の数は、重なる駅を 1 つに数える（駅の一覧で数える）', async () => {
+    const result = await resolveNameFilters({ routes: ['中央線'], prefectures: [] }, fakeDeps())
+    const candidate = !result.ok
+      ? result.problems[0]?.candidates?.find((c) => c.routes.length === 2)
+      : undefined
+    expect(candidate).toMatchObject({
+      routes: ['JR中央本線(東京～塩尻)', 'JR中央本線(名古屋～塩尻)'],
+      stationCount: 53 + 40 - 1,
+    })
+  })
+})
+
+describe('resolveNameFilters：会社と路線のまとめ方', () => {
+  it('路線を決めたら会社は条件に入れない（会社の指定は名前を当てる範囲だけ）', async () => {
+    const result = await resolveNameFilters(
+      { operators: ['東急'], routes: ['東横線'], prefectures: [] },
       fakeDeps(),
     )
     expect(result.ok && result.filters).toEqual({
       operators: [],
-      routes: ['東横線', '小田原線', '江ノ島線', '多摩線'],
+      lines: [{ lineCd: 26001, name: '東急東横線' }],
     })
+    expect(result.ok && result.notes).toContain('会社「東急」は 東急電鉄 として扱いました。')
   })
 
-  it('会社 × 路線の掛け合わせで意図しない路線が混ざるなら、分けて呼ぶよう返す', async () => {
-    // JR山手線（神戸市にも山手線がある）＋ 神戸市の西神線 → 会社に神戸市が入り、神戸市の山手線まで混ざる
+  it('会社の指定と合わない路線は、その路線を示す（東横線 × JR東日本）', async () => {
     const result = await resolveNameFilters(
-      { routes: ['JR山手線', '西神線'], prefectures: [] },
+      { operators: ['JR東日本'], routes: ['東横線'], prefectures: [] },
       fakeDeps(),
     )
-    expect(!result.ok && result.problems[0]?.problem).toContain('神戸市 山手線')
+    expect(!result.ok && result.problems[0]?.problem).toContain('東急東横線 の路線で')
   })
 
-  it('運行系統・種別語・知らない名前は、まとめて理由を返す', async () => {
-    const result = await resolveNameFilters(
-      { operators: ['新幹線'], routes: ['京浜東北線', '存在しない線'], prefectures: [] },
-      fakeDeps(),
-    )
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.problems.map((p) => p.input)).toEqual(['新幹線', '京浜東北線', '存在しない線'])
-    expect(result.problems[1]?.candidates?.map((c) => c.routes)).toEqual([
-      ['東北線'],
-      ['東海道線'],
-      ['根岸線'],
+  it('会社だけ → 会社の条件（読み替えを残す）', async () => {
+    const result = await resolveNameFilters({ operators: ['東急'], prefectures: [] }, fakeDeps())
+    expect(result.ok && result.filters).toEqual({ operators: ['東急電鉄'], lines: [] })
+  })
+
+  it('路線に「京急線」だけ → 会社の条件。会社の全路線として扱ったと書く', async () => {
+    const result = await resolveNameFilters({ routes: ['京急線'], prefectures: [] }, fakeDeps())
+    expect(result.ok && result.filters).toEqual({ operators: ['京浜急行電鉄'], lines: [] })
+    expect(result.ok && result.notes).toEqual([
+      '「京急線」は 京浜急行電鉄 の全路線として扱いました。',
     ])
   })
 
-  it('都道府県で決めた先が広げた読み替えでも、広げたことを書く（宇都宮線 × 埼玉県 → JR 東北線）', async () => {
+  it('「京急線」と「東横線」→ 京急の全路線を路線に開いて並べる（会社と路線を掛け合わせない）', async () => {
     const result = await resolveNameFilters(
-      { routes: ['宇都宮線'], prefectures: ['埼玉県'] },
+      { routes: ['京急線', '東横線'], prefectures: [] },
       fakeDeps(),
     )
-    expect(result.ok && result.filters).toEqual({ operators: [], routes: ['東北線'] })
-    expect(result.ok && result.notes.join()).toContain('埼玉県に駅のある 東日本旅客鉄道 東北線')
-    expect(result.ok && result.notes.join()).toContain('停車駅・区間に限りません')
+    expect(result.ok && result.filters.operators).toEqual([])
+    expect(linesOf(result)).toEqual(['東急東横線', '京急本線', '京急空港線'])
   })
 
-  it('「中央線快速」は広げたことを note に書く（停車駅に限らない）', async () => {
-    const result = await resolveNameFilters({ routes: ['中央線快速'], prefectures: [] }, fakeDeps())
-    // JR東海にも「中央線」があるので、JR東日本を付けて他社の同名を除く
-    expect(result.ok && result.filters).toEqual({
-      operators: ['東日本旅客鉄道'],
-      routes: ['中央線'],
+  it(`路線が ${MAX_LINES_PER_QUERY} 本を超えるなら分けて呼ぶよう返す`, async () => {
+    const many = Array.from({ length: MAX_LINES_PER_QUERY }, (_, i): CatalogLine => ({
+      ...lineNamed('京急本線'),
+      lineCd: 90000 + i,
+      name: `京急テスト${i}線`,
+      formalName: `京急テスト${i}線`,
+    }))
+    const index = buildNameIndex({
+      lines: [...LINES, ...many],
+      operators: OPERATORS,
+      legalRoutes: LEGAL_ROUTES,
     })
-    expect(result.ok && result.notes.join()).toContain('停車駅・区間に限りません')
+    const result = await resolveNameFilters(
+      { routes: ['京急線', '東横線'], prefectures: [] },
+      { ...fakeDeps(), index: async () => index },
+    )
+    expect(!result.ok && result.problems[0]?.problem).toContain(`${MAX_LINES_PER_QUERY} 本まで`)
+  })
+
+  it('同じ路線を 2 回言っても 1 本（重ねない）', async () => {
+    const result = await resolveNameFilters(
+      { routes: ['副都心線', '東京メトロ副都心線'], prefectures: [] },
+      fakeDeps(),
+    )
+    expect(linesOf(result)).toEqual(['東京メトロ副都心線'])
+  })
+
+  it('種別語・知らない名前は、まとめて理由を返す', async () => {
+    const result = await resolveNameFilters(
+      { operators: ['新幹線'], routes: ['存在しない線'], prefectures: [] },
+      fakeDeps(),
+    )
+    expect(!result.ok && result.problems.map((p) => p.input)).toEqual(['新幹線', '存在しない線'])
+  })
+})
+
+describe('resolveNameFilters：説明（nameNotes）', () => {
+  async function notesOf(input: string): Promise<string> {
+    const result = await resolveNameFilters({ routes: [input], prefectures: [] }, fakeDeps())
+    if (!result.ok) throw new Error(JSON.stringify(result.problems))
+    return result.notes.join('\n')
+  }
+
+  it('読み替えたら書く（「副都心線」→ 東京メトロ副都心線）。同じ名前なら書かない', async () => {
+    expect(await notesOf('副都心線')).toBe('「副都心線」は 東京メトロ副都心線 として集計しました。')
+    expect(await notesOf('東京メトロ副都心線')).toBe('')
+  })
+
+  it('ブランド名で路線全体に広げたら、その区間に限らないことを書く（読み替えの文とは重ねない）', async () => {
+    expect(await notesOf('東武スカイツリーライン')).toBe(
+      '「東武スカイツリーライン」は路線全体（東武伊勢崎線）で集計しました。その系統・区間の駅に限りません。',
+    )
+  })
+
+  it('会社の名前の路線（「小田急線」）は、会社のほかの路線を含まないことと、全路線の指定のしかたを書く', async () => {
+    const notes = await notesOf('小田急線')
+    expect(notes).toContain('小田急線（正式名 小田急小田原線）だけで集計しました')
+    expect(notes).toContain('小田急江ノ島線')
+    expect(notes).toContain('operators に「小田急」')
+  })
+
+  it('会社の名前の路線の注記は「〇〇線」と言ったときだけ（「都電」には付けない）', async () => {
+    expect(await notesOf('都電')).not.toContain('ほかの路線')
+  })
+
+  it('使わなかった弱い候補を書く（「有楽町線」に西武有楽町線）', async () => {
+    expect(await notesOf('有楽町線')).toContain('西武有楽町線 も当たりますが含めていません')
   })
 })

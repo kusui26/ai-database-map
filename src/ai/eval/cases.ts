@@ -1,5 +1,5 @@
 /**
- * 評価：ゴールデン 41 問（駅詳細・ランキング・会社と路線の名前・散布・比較・曖昧駅名・カタログ探索・データ外拒否・**災害**）。
+ * 評価：ゴールデン 45 問（駅詳細・ランキング・会社と路線の名前・散布・比較・曖昧駅名・カタログ探索・データ外拒否・**災害**）。
  * 各問は自然言語クエリと、機械判定できる期待（score.ts）を持つ。代表性を重視して分野を網羅する。
  *
  * **災害の 6 問だけは性格が違う**（`docs/260824_flood.md` §6.5・§10.4）。
@@ -17,8 +17,21 @@ export type EvalCase = {
   /** 地図で選択中の駅（P8e・文脈依存ケース）。runner が body で同送する。 */
   readonly selectedGrp?: string
   readonly radiusM?: number
+  /**
+   * 地図の表示範囲 [west, south, east, north]（2026-10-08 L3）。画面は送信のたびに同送する。
+   * 持たない問は範囲なし（MCP から呼ばれたのと同じ）で、同じ名前の路線は聞き返す。
+   */
+  readonly bbox?: readonly [number, number, number, number]
   readonly expect: EvalExpectation
 }
+
+/**
+ * 地図の初期表示（東京駅中心・ズーム 9・幅 1440×高さ 840px）の範囲。首都圏が入る（`MapView.tsx`）。
+ * 値は地図が送るのと同じく外向きに丸めたもの。
+ */
+const TOKYO_VIEW = [138.78, 35.21, 140.76, 36.15] as const
+/** 大阪駅中心・ズーム 9 の範囲（神戸・京都も入る）。 */
+const OSAKA_VIEW = [134.51, 34.23, 136.48, 35.18] as const
 
 export const EVAL_CASES: readonly EvalCase[] = [
   // --- 駅詳細（カテゴリの選択・半径・選択） ---
@@ -148,14 +161,14 @@ export const EVAL_CASES: readonly EvalCase[] = [
     },
   },
   {
-    // 番号つきの地下鉄の名前（データは「4号線丸ノ内線」）。
+    // 会社名を省いた名前（データは「東京メトロ丸ノ内線」・B1 では法令上の「4号線丸ノ内線」だった）。
     id: 'rank-route-metro',
     category: 'ランキング',
     query: '丸ノ内線の駅で乗降客数が多い順に教えて',
     expect: {
       toolCalls: [{ name: 'rankStations' }],
       panels: ['rankingTable'],
-      contains: ['4号線丸ノ内線'],
+      contains: ['東京メトロ丸ノ内線'],
       noEmptyFigures: true,
       maxCalls: { rankStations: 1 },
     },
@@ -163,6 +176,7 @@ export const EVAL_CASES: readonly EvalCase[] = [
   {
     // 同じ名前の別路線（東京メトロ・札幌・仙台・京都）は推測で選ばない：図を出さずに、どれかを聞く。
     // 以前は札幌・仙台・京都の東西線が黙って混ざり、東京メトロは入らなかった（§6.2-2）。
+    // 地図の範囲を送らない（MCP から呼ばれたのと同じ）——範囲があれば決まる場合は下の rank-line-* が見る。
     id: 'rank-route-ambiguous',
     category: 'ランキング',
     query: '東西線の駅で人口が増えているのはどこ？',
@@ -171,6 +185,65 @@ export const EVAL_CASES: readonly EvalCase[] = [
       noEmptyFigures: true,
       textNonEmpty: true,
       containsAny: ['どの', 'どちら', '札幌', '仙台', '京都'],
+    },
+  },
+
+  // --- 路線（運行系統）と地図の表示範囲（2026-10-08 L3・計画書 §6.6・§6.8） ---
+  {
+    // 山手線は環状の 30 駅。法令上の 17 駅では東京・有楽町・新橋・神田・秋葉原が入らない（§6.8.1）。
+    // 首都圏の地図なら、同じ名前の神戸市営地下鉄山手線ではなく JR山手線に 1 回で決まる。
+    id: 'rank-line-yamanote',
+    category: 'ランキング',
+    query: '山手線の駅で地価が高い順は？',
+    bbox: TOKYO_VIEW,
+    expect: {
+      toolCalls: [{ name: 'rankStations' }],
+      panels: ['rankingTable'],
+      contains: ['JR山手線'],
+      // 「東京」は都道府県名（東京都）にも出るので使わない。どれも法令上の山手線には無い駅。
+      containsAny: ['有楽町', '新橋', '神田', '秋葉原', '浜松町'],
+      noEmptyFigures: true,
+      maxCalls: { rankStations: 1 },
+    },
+  },
+  {
+    // 副都心線は和光市〜渋谷の 16 駅。法令上の副都心線（11 駅）には和光市〜氷川台の 5 駅が無い。
+    id: 'rank-line-fukutoshin',
+    category: 'ランキング',
+    query: '副都心線の駅で人口が増えているのは？',
+    expect: {
+      toolCalls: [{ name: 'rankStations' }],
+      contains: ['東京メトロ副都心線'],
+      containsAny: ['和光市', '地下鉄成増', '地下鉄赤塚', '平和台', '氷川台'],
+      noEmptyFigures: true,
+      maxCalls: { rankStations: 1 },
+    },
+  },
+  {
+    // 大阪を見ている人の「中央線」は大阪メトロ中央線。聞き返さない（地図の範囲の同送・§6.8.6）。
+    id: 'rank-line-osaka-chuo',
+    category: 'ランキング',
+    query: '中央線の駅で地価が高い順は？',
+    bbox: OSAKA_VIEW,
+    expect: {
+      toolCalls: [{ name: 'rankStations' }],
+      panels: ['rankingTable'],
+      contains: ['大阪メトロ中央線'],
+      noEmptyFigures: true,
+      maxCalls: { rankStations: 1 },
+    },
+  },
+  {
+    // 首都圏の地図に「新宿線」は 2 本（都営・西武）。推測で選ばず、両方を挙げて聞き返す。
+    id: 'rank-line-shinjuku',
+    category: 'ランキング',
+    query: '新宿線の駅で人口が増えているのは？',
+    bbox: TOKYO_VIEW,
+    expect: {
+      noRankScatter: true,
+      noEmptyFigures: true,
+      textNonEmpty: true,
+      contains: ['都営', '西武'],
     },
   },
 

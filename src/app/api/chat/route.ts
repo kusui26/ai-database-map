@@ -22,6 +22,7 @@ import {
 import { z } from 'zod'
 import { mapResponseSchema } from '@/shared/protocol'
 import { RADII_M } from '@/shared/constants'
+import { viewportFromTuple, type Viewport } from '@/shared/viewport'
 import { apiError, clientIp } from '@/lib/http'
 import { stationByGrp } from '@/db/queries'
 import {
@@ -66,6 +67,9 @@ const inboundSchema = z.object({
   // 地図で選択中の駅・半径（P8e）。クライアントが sendMessage の body で同送する。
   selectedGrp: z.string().optional(),
   radiusM: z.number().optional(),
+  // 地図の表示範囲 [west, south, east, north]（丸め済み・2026-10-08 L3）。同じ名前の路線を決めるのに使う。
+  // 形が崩れていても会話は止めない（範囲なしとして続ける・選択駅の文脈と同じ安全側）。
+  bbox: z.array(z.number()).optional().catch(undefined),
 })
 
 type InboundMessage = z.infer<typeof inboundMessageSchema>
@@ -156,6 +160,11 @@ function logToolFailures(failures: readonly ToolFailure[], utterances: string[])
   for (const failure of failures) console.warn(toolFailureLogLine(failure, context))
 }
 
+/** 同送された地図の表示範囲（無い・範囲として使えなければ null＝範囲なしで名前を決める）。 */
+function viewportOf(bbox: readonly number[] | undefined): Viewport | null {
+  return bbox === undefined ? null : viewportFromTuple(bbox)
+}
+
 /** text だけの UIMessage を構築（id は convertToModelMessages で不要）。 */
 function textMessage(role: 'user' | 'assistant', text: string): Omit<UIMessage, 'id'> {
   const parts: UIMessage['parts'] = [{ type: 'text', text }]
@@ -230,6 +239,8 @@ export async function POST(request: Request): Promise<Response> {
 
   // 地図で選択中の駅を LLM の文脈に（P8e）。未選択・解決失敗なら文脈なしで続行（安全側）。
   const mapContext = await resolveMapContext(parsed.data.selectedGrp, parsed.data.radiusM)
+  // 地図の表示範囲はツールの文脈へ（LLM には見せない。同じ名前の路線をサーバが決め、nameNotes で伝える）。
+  const viewport = viewportOf(parsed.data.bbox)
   // 失敗を記録するとき、提供元の説明に紛れた発話を伏せるために使う（ログには決して出さない）。
   const utterances = conversation.map((message) => message.text)
 
@@ -254,7 +265,7 @@ export async function POST(request: Request): Promise<Response> {
       const result = streamText({
         model: chatModel(),
         system: buildSystemPrompt() + mapContext,
-        tools: createTools(collector, new URL(request.url).origin),
+        tools: createTools(collector, new URL(request.url).origin, viewport),
         stopWhen: stepCountIs(MAX_TOOL_STEPS),
         temperature: CHAT_TEMPERATURE,
         // 対話は fail-fast 寄りに。既定 2 だと無料枠 429 の retry-after を待って長く固まる。

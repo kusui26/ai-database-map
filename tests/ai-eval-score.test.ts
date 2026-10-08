@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import { emptyFigureCount, scoreCase, type EvalObserved } from '@/ai/eval/score'
 import { EVAL_CASES } from '@/ai/eval/cases'
+import { viewportFromTuple } from '@/shared/viewport'
 
 const base: EvalObserved = {
   toolCalls: [],
@@ -128,12 +129,24 @@ describe('scoreCase: 空の図と呼び出し回数（2026-10-07 B1）', () => {
 })
 
 describe('EVAL_CASES', () => {
-  it('41 問・id 一意・全問に期待あり', () => {
-    expect(EVAL_CASES.length).toBe(41)
-    expect(new Set(EVAL_CASES.map((c) => c.id)).size).toBe(41)
+  it('45 問・id 一意・全問に期待あり', () => {
+    expect(EVAL_CASES.length).toBe(45)
+    expect(new Set(EVAL_CASES.map((c) => c.id)).size).toBe(45)
     for (const testCase of EVAL_CASES) {
       expect(testCase.query.length).toBeGreaterThan(0)
       expect(Object.keys(testCase.expect).length).toBeGreaterThan(0)
+    }
+  })
+
+  it('地図の表示範囲を持つ問は、画面が送るのと同じく使える範囲（[west, south, east, north]）', () => {
+    const withViewport = EVAL_CASES.filter((testCase) => testCase.bbox !== undefined)
+    expect(withViewport.map((testCase) => testCase.id)).toEqual([
+      'rank-line-yamanote',
+      'rank-line-osaka-chuo',
+      'rank-line-shinjuku',
+    ])
+    for (const testCase of withViewport) {
+      expect(viewportFromTuple(testCase.bbox ?? []), testCase.id).not.toBeNull()
     }
   })
 

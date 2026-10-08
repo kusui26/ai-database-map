@@ -61,6 +61,7 @@ describe('⤢ の条件（data-promotions）', () => {
     operators: [],
     routes: [],
     routeTypes: [],
+    lines: [],
     excludeLowN: false,
   }
 

@@ -22,6 +22,11 @@ const filtersShape = {
   routes: z.array(z.string()),
   /** 事業者種別のコード（表示名ではない）。 */
   routeTypes: z.array(z.number()),
+  /**
+   * 路線（運行系統）の路線コード。チャットの図は路線をこれで絞る（2026-10-08 L3）——⤢ で開いた図も
+   * 同じ駅の集合になるように、条件に必ず載せる。
+   */
+  lines: z.array(z.number()).default([]),
   /** 信頼性の低い値（⚠）を除外する。 */
   excludeLowN: z.boolean(),
 }

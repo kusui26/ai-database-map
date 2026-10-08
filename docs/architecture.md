@@ -124,7 +124,7 @@ type MapResponse = {
 | `GET /api/growth?x=…&y=…&prefecture=…` | 増減率散布＋クラスタリング（絞り込みはランキングと同じ）| `domain/growth` |
 | `GET /api/lines` | **路線（運行系統）の一覧**（JR山手線＝環状 30 駅など・駅データ.jp。共通の条件 `lines` に渡す `lineCd`）| `domain/lines` |
 | `GET /api/recommend?municipality=…&preset=…` | **おすすめ駅**（正規化 → 重み付き合成・災害の足切り／段階減点・±20% 敏感度）| `domain/recommend` |
-| `POST /api/chat`（**Step2**）| 自然言語 → GUI Chat Protocol | `domain/*` via `ai/tools` |
+| `POST /api/chat`（**Step2**）| 自然言語 → GUI Chat Protocol（送信に地図の選択駅と**表示範囲 `bbox`** を同送。表示範囲は同じ名前の路線——「中央線」＝JR・大阪メトロ——を決めるのに使う）| `domain/*` via `ai/tools` |
 
 - **原則**：①生カラム名のパススルー禁止（`metric` は catalog で列挙・検証）、②応答は**意味づけ済み**（label/unit/format 付き）、③各エンドポイントを **Gemini の function calling ツール**として設計（Step2 でそのまま tool 化）。
 

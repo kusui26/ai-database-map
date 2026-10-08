@@ -38,6 +38,7 @@ const rankingPromotion: RankingPromotion = {
   operators: ['東日本旅客鉄道'],
   routes: ['総武線'],
   routeTypes: [2, 4],
+  lines: [11302],
   excludeLowN: false,
 }
 const scatterPromotion: ScatterPromotion = {
@@ -48,6 +49,7 @@ const scatterPromotion: ScatterPromotion = {
   operators: [],
   routes: [],
   routeTypes: [1],
+  lines: [],
   excludeLowN: true,
 }
 
@@ -82,6 +84,12 @@ describe('図 → URL → 図（往復）', () => {
   it('FAB の既定の図', () => {
     expect(roundTrip(DEFAULT_RANKING_FIGURE)).toEqual(DEFAULT_RANKING_FIGURE)
     expect(roundTrip(DEFAULT_SCATTER_FIGURE)).toEqual(DEFAULT_SCATTER_FIGURE)
+  })
+
+  it('路線（運行系統）の路線コードも往復する（チャットの図を ⤢ で開いたとき・2026-10-08 L3）', () => {
+    const figure: Figure = { ...scatterPromotion, lines: [11302, 28010] }
+    expect(roundTrip(figure)).toEqual(figure)
+    expect(serialize(figureToUrl(figure))).toContain('figLines=11302,28010')
   })
 
   it('名前にカンマ（区切りと同じ文字）を含んでも崩れない', () => {

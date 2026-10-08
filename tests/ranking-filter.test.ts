@@ -87,6 +87,7 @@ describe('rankingUrl（ランキングの SWR キー）', () => {
     operators: [],
     routes: [],
     routeTypes: [],
+    lines: [],
     order: 'desc',
     excludeLowN: false,
   }
@@ -119,5 +120,11 @@ describe('rankingUrl（ランキングの SWR キー）', () => {
     expect(url.searchParams.get('routes')).toBe('東海道新幹線')
     expect(url.searchParams.get('routeTypes')).toBe('1,2')
     expect(url.searchParams.get('excludeLowN')).toBe('true')
+  })
+
+  it('路線（運行系統）の路線コードが載る（チャットの図の ⤢・2026-10-08 L3）', () => {
+    const url = new URL(rankingUrl({ ...base, lines: [11302, 28010] }, 0), 'https://example.test')
+    expect(url.searchParams.get('lines')).toBe('11302,28010')
+    expect(rankingUrl(base, 0)).not.toContain('lines=')
   })
 })

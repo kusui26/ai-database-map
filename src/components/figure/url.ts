@@ -40,6 +40,8 @@ export type FigureFilters = {
   readonly routes: readonly string[]
   /** 事業者種別のコード（表示名ではない）。 */
   readonly routeTypes: readonly number[]
+  /** 路線（運行系統）の路線コード（チャットの図の条件・2026-10-08 L3）。 */
+  readonly lines: readonly number[]
   /** 信頼性の低い値（⚠）を除外する。 */
   readonly excludeLowN: boolean
 }
@@ -65,6 +67,7 @@ const NO_FILTERS: FigureFilters = {
   operators: [],
   routes: [],
   routeTypes: [],
+  lines: [],
   excludeLowN: true,
 }
 
@@ -95,6 +98,7 @@ export const FIGURE_PARSERS = {
   figOps: parseAsArrayOf(parseAsString).withDefault(NO_NAMES),
   figRoutes: parseAsArrayOf(parseAsString).withDefault(NO_NAMES),
   figTypes: parseAsArrayOf(parseAsInteger).withDefault(NO_CODES),
+  figLines: parseAsArrayOf(parseAsInteger).withDefault(NO_CODES),
   figLowN: parseAsBoolean.withDefault(true),
 }
 
@@ -107,6 +111,7 @@ export function figureFromUrl(values: FigureUrlValues): Figure | null {
     operators: values.figOps,
     routes: values.figRoutes,
     routeTypes: values.figTypes,
+    lines: values.figLines,
     excludeLowN: values.figLowN,
   }
   if (values.fig === 'ranking') {
@@ -128,6 +133,7 @@ function filtersToUrl(filters: FigureFilters): FilterUrlValues {
     figOps: [...filters.operators],
     figRoutes: [...filters.routes],
     figTypes: [...filters.routeTypes],
+    figLines: [...filters.lines],
     figLowN: filters.excludeLowN,
   }
 }

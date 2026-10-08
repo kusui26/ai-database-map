@@ -60,6 +60,7 @@ const rankingPromotion: PanelPromotion = {
   operators: [],
   routes: [],
   routeTypes: [],
+  lines: [],
   excludeLowN: true,
 }
 function scatterPromotion(operators: string[]): ScatterPromotion {
@@ -71,6 +72,7 @@ function scatterPromotion(operators: string[]): ScatterPromotion {
     operators,
     routes: [],
     routeTypes: [1],
+    lines: [],
     excludeLowN: false,
   }
 }

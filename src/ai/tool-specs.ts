@@ -28,9 +28,11 @@ import {
   type HazardEscapeResponse,
   type HazardEvacuationResponse,
   type HazardPointResponse,
+  type LineRef,
   type RankingResponse,
   type StationListItem,
 } from '@/shared/api'
+import { type Viewport } from '@/shared/viewport'
 import { signedUrlSecret } from './signed-url'
 import { defaultTitleJa, reportNotesJa, sceneFor } from './map-report/build'
 import { MAP_MAX_ACTIONS, mapQuerySchema, signMapToken } from './map-report/token'
@@ -105,19 +107,27 @@ const MAX_REASONS_FOR_LLM = 3
 const ROUTE_TYPE_HINT = ROUTE_TYPES.map((type) => `${type}:${routeTypeLabel(type)}`).join(' ')
 
 /**
- * 会社・路線の引数の説明（一覧・ランキング・散布で同じ）。名前はサーバが正式名へ解決する
- * （`routes/resolve.ts`・2026-10-07 B1）。以前は「正式名称で」とだけ書いてあり、AI は「東急東横線」
+ * 会社・路線の引数の説明（一覧・ランキング・散布・データセットで同じ）。名前はサーバが解決する
+ * （`routes/resolve.ts`・2026-10-07 B1）。路線は利用者の呼ぶ路線（運行系統・駅データ.jp）で、
+ * 「山手線」は環状の 30 駅（2026-10-08 L3）。以前は「正式名称で」とだけ書いてあり、AI は「東急東横線」
  * 「中央線快速」を推測で渡しては 0 件の図を出していた。
  */
 const OPERATORS_DESCRIPTION =
-  '運営会社の配列。ふだんの呼び方でよい（例 ["東急"]・["JR東日本"]・["東京メトロ"]・["都営"]）——サーバが正式名に解決し、読み替えを返却の nameNotes に書く。どれか1社でも運営する駅が対象。省略で全社'
+  '運営会社の配列。ふだんの呼び方でよい（例 ["東急"]・["JR東日本"]・["東京メトロ"]・["都営"]）——サーバが正式名に解決し、読み替えを返却の nameNotes に書く。どれか1社でも運営する駅が対象。routes と併せると、routes の名前を当てる会社の範囲になる。省略で全社'
 const ROUTES_DESCRIPTION =
-  '路線名の配列。ふだんの呼び方でよい（例 ["東急東横線"]・["丸ノ内線"]・["都営浅草線"]・["中央線快速"]）——サーバが正式名に解決する。' +
-  '同じ名前の路線が複数ある（東西線・山手線・中央線・新宿線など）ときは、地域が分かれば prefectures を、会社が分かれば operators を添える。決まらなければ候補（problems の candidates）が返る。省略で全路線'
+  '路線名の配列。ふだんの呼び方でよい（例 ["山手線"]・["東急東横線"]・["丸ノ内線"]・["中央線快速"]・["京浜東北線"]）——サーバが利用者の呼ぶ路線（運行系統）に解決し、どれかの路線の駅が対象。' +
+  '同じ名前の路線が複数ある（山手線・中央線・東西線・新宿線など）ときは、会話から地域が分かれば prefectures を添える（地図の表示範囲より強い）。決まらなければ候補（problems の candidates）が返る。省略で全路線'
+/** 事業者種別の説明（路線と併せると「その路線の、その種別の駅」）。 */
+const ROUTE_TYPES_DESCRIPTION = `事業者種別の配列（${ROUTE_TYPE_HINT}）。「新幹線の駅だけ」は [1]。routes と併せると両方に当てはまる駅。省略で全種別`
 
-/** 実行の文脈（消費側が渡す）。`origin`＝共通API の絶対 URL を組むための自ホスト。 */
+/**
+ * 実行の文脈（消費側が渡す）。`origin`＝共通API の絶対 URL を組むための自ホスト。
+ * `viewport`＝地図の表示範囲（アプリのチャットだけが同送する・MCP には無い）。同じ名前の路線を決めるのに使う
+ * （2026-10-08 L3・計画書 §6.8.6）。
+ */
 export type ToolRunContext = {
   readonly origin: string
+  readonly viewport?: Viewport | null
 }
 
 /** `run` の返り値：副産物（順序どおり）と、LLM に見せる要約。 */
@@ -250,10 +260,7 @@ const stationSelectorSchema = z.object({
     .describe('市区町村名の前方一致（例: 横浜市、世田谷区）。JIS コードの前方一致も可'),
   operators: z.array(z.string()).optional().describe(OPERATORS_DESCRIPTION),
   routes: z.array(z.string()).optional().describe(ROUTES_DESCRIPTION),
-  routeTypes: z
-    .array(z.number().int())
-    .optional()
-    .describe(`事業者種別の配列（${ROUTE_TYPE_HINT}）。routes とは OR。省略で全種別`),
+  routeTypes: z.array(z.number().int()).optional().describe(ROUTE_TYPES_DESCRIPTION),
   bbox: z
     .array(z.number())
     .length(4)
@@ -271,8 +278,17 @@ const stationSelectorSchema = z.object({
 })
 type StationSelector = z.output<typeof stationSelectorSchema>
 
+/** 会社・路線の言い方（解決する前・前後の空白を落としたもの）。 */
+type NameInputs = { readonly operators: string[]; readonly routes: string[] }
+
 type SelectorResolution =
-  | { readonly ok: true; readonly filter: ListStationsFilter; readonly requested: number }
+  | {
+      readonly ok: true
+      /** 会社・路線を除いた条件（会社・路線は名前を解決してから足す）。 */
+      readonly filter: ListStationsFilter
+      readonly names: NameInputs
+      readonly requested: number
+    }
   | { readonly ok: false; readonly error: HintErrorJa }
 
 /** セレクタ → DB フィルタ（正規化と検証。曖昧・不正は構造化エラーで返す）。 */
@@ -315,11 +331,10 @@ function selectorToFilter(input: StationSelector, defaultLimit: number): Selecto
   return {
     ok: true,
     requested,
+    names: { operators: nonEmptyNames(input.operators), routes: nonEmptyNames(input.routes) },
     filter: {
       prefectures: prefs,
       municipality: municipality === undefined || municipality === '' ? undefined : municipality,
-      operators: nonEmptyNames(input.operators),
-      routes: nonEmptyNames(input.routes),
       routeTypes: (input.routeTypes ?? []).filter((type) => ROUTE_TYPES.some((t) => t === type)),
       bbox,
       near,
@@ -330,7 +345,7 @@ function selectorToFilter(input: StationSelector, defaultLimit: number): Selecto
 
 /** 駅の集合が 0 件のとき（会社・路線の名前は解決済み＝条件の組合せに当てはまる駅が無い）。 */
 const EMPTY_SELECTION_NOTE =
-  '該当 0 件でした。会社・路線の名前は正式名に解決済みなので、条件（都道府県・市区町村・会社・路線・範囲）の組合せに当てはまる駅がありません。条件を緩めて呼び直すか、0 件だったことを伝えてください。'
+  '該当 0 件でした。会社・路線の名前は解決済みなので、条件（都道府県・市区町村・会社・路線・範囲）の組合せに当てはまる駅がありません。条件を緩めて呼び直すか、0 件だったことを伝えてください。'
 
 /** 会社・路線の名前を決められなかった → LLM 向けの構造化エラー（候補つき・図は作らない）。 */
 type NamesErrorJa = {
@@ -348,11 +363,14 @@ function nameNotesOf(notes: readonly string[]): { nameNotes?: readonly string[] 
   return notes.length > 0 ? { nameNotes: notes } : {}
 }
 
-/** ランキング・散布の絞り込み（正規化・名前の解決済み）。 */
+/**
+ * ランキング・散布の絞り込み（正規化・名前の解決済み）。路線は利用者の呼ぶ路線（運行系統）の路線コードで
+ * 絞る（`lines`）——法令上の路線（S12 の `routes`）はツールからは使わない（2026-10-08 L3）。
+ */
 type FigureFilters = {
   readonly prefectures: string[]
   readonly operators: string[]
-  readonly routes: string[]
+  readonly lines: LineRef[]
   readonly routeTypes: number[]
   readonly nameNotes: readonly string[]
 }
@@ -361,17 +379,28 @@ type ResolvedFigureFilters =
   | ({ readonly ok: true } & FigureFilters)
   | { readonly ok: false; readonly forLlm: HintErrorJa | NamesErrorJa }
 
-/** ランキング・散布の絞り込みを正規化し、会社・路線の名前を正式名へ解決する（2 つのツールで同じ）。 */
-async function resolveFigureFilters(input: {
-  readonly prefectures?: readonly string[]
-  readonly operators?: readonly string[]
-  readonly routes?: readonly string[]
-  readonly routeTypes?: readonly number[]
-}): Promise<ResolvedFigureFilters> {
+/** 路線の参照 → 路線コード（SQL の条件 `line_cds`）。 */
+function lineCodesOf(lines: readonly LineRef[]): number[] {
+  return lines.map((line) => line.lineCd)
+}
+
+/**
+ * ランキング・散布の絞り込みを正規化し、会社・路線の名前を解決する（2 つのツールで同じ）。
+ * 地図の表示範囲（`viewport`）は、同じ名前の路線を決めるのにだけ使う（駅を範囲で絞りはしない）。
+ */
+async function resolveFigureFilters(
+  input: {
+    readonly prefectures?: readonly string[]
+    readonly operators?: readonly string[]
+    readonly routes?: readonly string[]
+    readonly routeTypes?: readonly number[]
+  },
+  viewport: Viewport | null,
+): Promise<ResolvedFigureFilters> {
   const { names: prefectures, unknown } = normalizePrefectures(input.prefectures ?? [])
   if (unknown.length > 0) return { ok: false, forLlm: unknownPrefectures(unknown) }
   const names = await resolveNameFilters(
-    { operators: input.operators, routes: input.routes, prefectures },
+    { operators: input.operators, routes: input.routes, prefectures, viewport },
     routeNameDeps(),
   )
   if (!names.ok) return { ok: false, forLlm: namesError(names) }
@@ -390,7 +419,7 @@ function noFigureForLlm(subject: string, filters: FigureFilters, excludeLowN: bo
     conditions: {
       prefectures: filters.prefectures,
       operators: filters.operators,
-      routes: filters.routes,
+      routes: filters.lines.map((line) => line.name),
       routeTypes: filters.routeTypes.map(routeTypeLabel),
       excludeLowN,
     },
@@ -408,20 +437,23 @@ type ResolvedSelector =
     }
   | { readonly ok: false; readonly error: HintErrorJa | NamesErrorJa }
 
-/** セレクタ → DB フィルタ（検証のあと、会社・路線の名前を正式名へ解決する・2026-10-07 B1）。 */
+/**
+ * セレクタ → DB フィルタ（検証のあと、会社・路線の名前を解決する・2026-10-07 B1 → 2026-10-08 L3）。
+ * 路線は路線コード（`lines`）で絞る。地図の表示範囲（`viewport`）は同じ名前の路線を決めるのにだけ使い、
+ * セレクタの `bbox`（駅を範囲で絞る）とは別物。
+ */
 async function resolveSelector(
   input: StationSelector,
   defaultLimit: number,
+  viewport: Viewport | null,
 ): Promise<ResolvedSelector> {
   const base = selectorToFilter(input, defaultLimit)
   if (!base.ok) return base
-  const { operators, routes, prefectures } = base.filter
-  const names = await resolveNameFilters(
-    { operators, routes, prefectures: prefectures ?? [] },
-    routeNameDeps(),
-  )
+  const prefectures = base.filter.prefectures ?? []
+  const names = await resolveNameFilters({ ...base.names, prefectures, viewport }, routeNameDeps())
   if (!names.ok) return { ok: false, error: namesError(names) }
-  const filter = { ...base.filter, ...names.filters }
+  const { operators, lines } = names.filters
+  const filter = { ...base.filter, operators, lines: lineCodesOf(lines) }
   return { ok: true, filter, requested: base.requested, nameNotes: names.notes }
 }
 
@@ -435,6 +467,7 @@ function tokenSelectorOf(filter: ListStationsFilter, requested: number): Dataset
     operators: nonEmpty(filter.operators),
     routes: nonEmpty(filter.routes),
     routeTypes: nonEmpty(filter.routeTypes),
+    lines: nonEmpty(filter.lines),
     bbox: filter.bbox === undefined ? undefined : { ...filter.bbox },
     near: filter.near === undefined ? undefined : { ...filter.near },
     limit: requested,
@@ -676,6 +709,14 @@ function stationDetailForLlm(
   }
 }
 
+/**
+ * LLM に返す「どの路線で絞ったか」。引数 `routes` と同じ名前で、利用者の呼ぶ路線（運行系統）の名前を返す——
+ * ツールは法令上の路線（応答の `routes`）を使わない（2026-10-08 L3）。
+ */
+function routeNamesForLlm(response: { readonly lines: readonly LineRef[] }): string[] {
+  return response.lines.map((line) => line.name)
+}
+
 /** ランキング → LLM 向けの要約（上位 10 行に絞る）。 */
 function rankingForLlm(
   resolvedKey: string,
@@ -692,7 +733,7 @@ function rankingForLlm(
     unit: response.metric.unit,
     prefectures: response.prefectures,
     operators: response.operators,
-    routes: response.routes,
+    routes: routeNamesForLlm(response),
     routeTypes: response.routeTypes.map(routeTypeLabel),
     order: dir,
     total: response.total,
@@ -722,7 +763,7 @@ function growthForLlm(
     ...nameNotesOf(nameNotes),
     prefectures: response.prefectures,
     operators: response.operators,
-    routes: response.routes,
+    routes: routeNamesForLlm(response),
     routeTypes: response.routeTypes.map(routeTypeLabel),
     pointCount: response.points.length,
     clusterCount: response.clusterCount,
@@ -877,18 +918,19 @@ export const TOOL_SPECS = {
     name: 'listStations',
     description:
       '条件に合う駅の一覧（grp・駅名・位置だけ）を返す。「横浜市の駅」「神奈川県の駅」「東急電鉄の駅」のような対象集合づくりの起点。' +
-      'municipality は市区町村名の前方一致（例「横浜市」で全区を束ねる。「世田谷区」も可）。operators / routes / routeTypes・bbox・near でも絞れる（条件は AND・routes と routeTypes は OR）。値の取得や比較は他のツールで行う。',
+      'municipality は市区町村名の前方一致（例「横浜市」で全区を束ねる。「世田谷区」も可）。operators / routes / routeTypes・bbox・near でも絞れる（条件は AND）。値の取得や比較は他のツールで行う。',
     inputSchema: stationSelectorSchema,
     errorFallbackJa: '駅一覧の取得に失敗しました',
     run: async (
       input,
+      ctx,
     ): Promise<
       ToolRunResult<HintErrorJa | NamesErrorJa | ReturnType<typeof listStationsForLlm>>
     > => {
-      const resolved = await resolveSelector(input, LIST_DEFAULT_LIMIT)
+      const resolved = await resolveSelector(input, LIST_DEFAULT_LIMIT, ctx.viewport ?? null)
       if (!resolved.ok) return pure(resolved.error)
       const stations = await listStations(resolved.filter)
-      // 名前はもう正式名に解決してある。0 件は条件の組合せのせい（綴りの当てずっぽうをさせない）。
+      // 名前はもう解決してある。0 件は条件の組合せのせい（綴りの当てずっぽうをさせない）。
       const emptyNote = stations.length === 0 ? EMPTY_SELECTION_NOTE : undefined
       return pure(listStationsForLlm(stations, resolved.requested, resolved.nameNotes, emptyNote))
     },
@@ -999,6 +1041,7 @@ export const TOOL_SPECS = {
         const resolvedSelector = await resolveSelector(
           selector ?? {},
           DATASET_DEFAULT_STATION_LIMIT,
+          ctx.viewport ?? null,
         )
         if (!resolvedSelector.ok) return pure(resolvedSelector.error)
         extraNotes.push(...resolvedSelector.nameNotes)
@@ -1213,13 +1256,13 @@ export const TOOL_SPECS = {
 
   /**
    * 都道府県×指標のランキング（上位/下位）。指標はキーでもファミリ名でもよい。
-   * 会社・路線の名前は正式名へ解決し、決まらない・0 件のときは図を作らない（2026-10-07 B1）。
+   * 会社・路線の名前を解決し（路線は運行系統の路線コード・2026-10-08 L3）、決まらない・0 件のときは図を作らない（2026-10-07 B1）。
    */
   rankStations: defineSpec({
     name: 'rankStations',
     description:
       '指標で駅を並べ替え上位/下位を返す。metric はカタログキー（pop_gr_2020_2015_1km）でも指標ファミリ（pop_gr）でもよく、ファミリなら radiusM / year で確定する（未指定は 1km・直近5年）。prefectures 未指定は全国、operators 未指定は全社、routes/routeTypes 未指定は全路線。' +
-      '会社・路線の名前はサーバが正式名へ解決する（決まらなければ図を作らずに候補を返す）。該当が 0 件のときも図は作らない。',
+      '会社・路線の名前はサーバが解決する（決まらなければ図を作らずに候補を返す）。該当が 0 件のときも図は作らない。',
     inputSchema: z.object({
       metric: z
         .string()
@@ -1238,12 +1281,7 @@ export const TOOL_SPECS = {
         .describe('都道府県名の配列。例: ["神奈川県"]。省略で全国'),
       operators: z.array(z.string()).optional().describe(OPERATORS_DESCRIPTION),
       routes: z.array(z.string()).optional().describe(ROUTES_DESCRIPTION),
-      routeTypes: z
-        .array(z.number().int())
-        .optional()
-        .describe(
-          `事業者種別の配列（${ROUTE_TYPE_HINT}）。「新幹線の駅だけ」は [1]。routes とは OR。省略で全種別`,
-        ),
+      routeTypes: z.array(z.number().int()).optional().describe(ROUTE_TYPES_DESCRIPTION),
       order: z.enum(['asc', 'desc']).optional().describe('desc=上位(既定)/asc=下位'),
       limit: z
         .number()
@@ -1258,6 +1296,7 @@ export const TOOL_SPECS = {
     errorFallbackJa: 'ランキングに失敗しました',
     run: async (
       input,
+      ctx,
     ): Promise<
       ToolRunResult<
         | ReturnType<typeof metricError>
@@ -1270,13 +1309,12 @@ export const TOOL_SPECS = {
       const { metric, radiusM, year, yearBase, order, limit, excludeLowN } = input
       const resolved = resolveMetricKey({ metric, radiusM, year, yearBase })
       if (!resolved.ok) return pure(metricError(resolved))
-      const filters = await resolveFigureFilters(input)
+      const filters = await resolveFigureFilters(input, ctx.viewport ?? null)
       if (!filters.ok) return pure(filters.forLlm)
       const dir = order ?? 'desc'
       const lim = Math.min(Math.max(limit ?? DEFAULT_RANK_LIMIT, 1), MAX_RANK_LIMIT)
       const exclude = excludeLowN ?? false
-      const { prefectures, operators, routes, routeTypes } = filters
-      const scope = { operators, routes, routeTypes }
+      const { prefectures, operators, lines, routeTypes } = filters
       const { rows, total } = await rankByColumn(
         resolved.key,
         prefectures,
@@ -1285,9 +1323,11 @@ export const TOOL_SPECS = {
         0,
         exclude,
         operators,
-        routes,
+        [],
         routeTypes,
+        lineCodesOf(lines),
       )
+      const scope = { operators, routeTypes, lines }
       const response = buildRanking(resolved.key, prefectures, dir, rows, total, 0, scope)
       if (total === 0) return pure(noFigureForLlm(response.metric.labelJa, filters, exclude))
       return {
@@ -1308,7 +1348,7 @@ export const TOOL_SPECS = {
     name: 'compareGrowth',
     description:
       '2 つの指標(x,y)で駅を散布しクラスタ化する。x/y はカタログキーでも指標ファミリ（pop_gr, lp_gr, rate_covid …）でもよく、radiusM を添えれば半径依存の指標がそれで確定する（未指定は 1km・直近5年）。prefectures 未指定は全国、operators 未指定は全社、routes/routeTypes 未指定は全路線。' +
-      '会社・路線の名前はサーバが正式名へ解決する（決まらなければ図を作らずに候補を返す）。該当が 0 件のときも図は作らない。',
+      '会社・路線の名前はサーバが解決する（決まらなければ図を作らずに候補を返す）。該当が 0 件のときも図は作らない。',
     inputSchema: z.object({
       x: z
         .string()
@@ -1321,12 +1361,7 @@ export const TOOL_SPECS = {
       prefectures: z.array(z.string()).optional().describe('都道府県名の配列。省略で全国'),
       operators: z.array(z.string()).optional().describe(OPERATORS_DESCRIPTION),
       routes: z.array(z.string()).optional().describe(ROUTES_DESCRIPTION),
-      routeTypes: z
-        .array(z.number().int())
-        .optional()
-        .describe(
-          `事業者種別の配列（${ROUTE_TYPE_HINT}）。「新幹線の駅だけ」は [1]。routes とは OR。省略で全種別`,
-        ),
+      routeTypes: z.array(z.number().int()).optional().describe(ROUTE_TYPES_DESCRIPTION),
       excludeLowN: z
         .boolean()
         .optional()
@@ -1335,6 +1370,7 @@ export const TOOL_SPECS = {
     errorFallbackJa: '散布の集計に失敗しました',
     run: async (
       input,
+      ctx,
     ): Promise<
       ToolRunResult<
         | ReturnType<typeof metricError>
@@ -1349,7 +1385,7 @@ export const TOOL_SPECS = {
       if (!xResolved.ok) return pure(metricError(xResolved))
       const yResolved = resolveMetricKey({ metric: y, radiusM })
       if (!yResolved.ok) return pure(metricError(yResolved))
-      const filters = await resolveFigureFilters(input)
+      const filters = await resolveFigureFilters(input, ctx.viewport ?? null)
       if (!filters.ok) return pure(filters.forLlm)
       const exclude = excludeLowN ?? false
       // 信頼性フラグは除外するときだけ引く（引かなければ DB 側の集計も軽い）。
@@ -1359,20 +1395,20 @@ export const TOOL_SPECS = {
             requireEntry(yResolved.key).reliabilityFlagKey,
           ]
         : [null, null]
-      const { prefectures, operators, routes, routeTypes } = filters
+      const { prefectures, operators, lines, routeTypes } = filters
       const valueRows = await scatterPoints(
         xResolved.key,
         yResolved.key,
         flags[0] ?? null,
         flags[1] ?? null,
-        { prefectures, operators, routes, routeTypes },
+        { prefectures, operators, routes: [], routeTypes, lines: lineCodesOf(lines) },
       )
       const response = buildGrowth(valueRows, xResolved.key, yResolved.key, {
         excludeLowN: exclude,
         prefectures,
         operators,
-        routes,
         routeTypes,
+        lines,
       })
       if (response.points.length === 0) {
         const subject = `${response.x.labelJa} × ${response.y.labelJa}`

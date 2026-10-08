@@ -62,6 +62,9 @@ describe('⤢ の条件（data-promotions）', () => {
     routes: [],
     routeTypes: [],
     lines: [],
+    municipality: '',
+    bbox: null,
+    near: null,
     excludeLowN: false,
   }
 

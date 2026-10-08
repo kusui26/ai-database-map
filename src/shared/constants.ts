@@ -405,6 +405,35 @@ export const LINE_SOURCE = {
   versionJa: '2024-04-26 版',
 } as const
 
+// --- エリア（市区町村・範囲・近傍・2026-10-08 B2） ---------------------------
+// 一覧・ランキング・散布の共通の条件（docs/261001_fix_user_feedback_ui.md §6.4 B2）。言い方はここで 1 か所に決め、
+// 図の題・おすすめの対象・AI への返却・画面のチップが同じ言葉を使う。
+
+/** 地図の範囲で絞ったときの言い方。 */
+export const MAP_AREA_LABEL_JA = '地図の表示範囲'
+
+/** 近傍の半径（m）の下限・上限（共通 API と AI のツールで同じ）。 */
+export const NEAR_MIN_RADIUS_M = 100
+export const NEAR_MAX_RADIUS_M = 100_000
+
+const METERS_PER_KM = 1000
+
+/**
+ * 距離の言い方。1km 未満は m（「850m」）、1km 以上は km で小数 1 桁（「4.9km」）、ちょうどなら小数なし（「5km」）。
+ * 起点からの距離（順位表・AI への返却）と、近傍の半径（「竹橋から 5km」）で同じ言い方にする。
+ */
+export function distanceLabel(meters: number): string {
+  const rounded = Math.round(meters)
+  if (rounded < METERS_PER_KM) return `${rounded}m`
+  const km = Math.round(meters / 100) / 10
+  return Number.isInteger(km) ? `${km}km` : `${km.toFixed(1)}km`
+}
+
+/** 近傍の言い方（「竹橋から 5km」）。起点は駅の表示名（同じ名前の駅は「大塚（東日本旅客鉄道）」）。 */
+export function nearLabel(originLabel: string, radiusM: number): string {
+  return `${originLabel}から ${distanceLabel(radiusM)}`
+}
+
 // --- ハザード（水害・docs/260824_flood.md §5.4） --------------------------
 // 水害レイヤは「駅×半径の指標」ではなく**地図のレイヤ**という別の軸なので、
 // `Category` とは混ぜず、ここに独立した語彙を置く（metric_catalog に水害を混ぜない）。

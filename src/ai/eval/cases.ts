@@ -1,5 +1,5 @@
 /**
- * 評価：ゴールデン 45 問（駅詳細・ランキング・会社と路線の名前・散布・比較・曖昧駅名・カタログ探索・データ外拒否・**災害**）。
+ * 評価：ゴールデン 48 問（駅詳細・ランキング・会社と路線の名前・場所（市区町村・起点から N km）・散布・比較・曖昧駅名・カタログ探索・データ外拒否・**災害**）。
  * 各問は自然言語クエリと、機械判定できる期待（score.ts）を持つ。代表性を重視して分野を網羅する。
  *
  * **災害の 6 問だけは性格が違う**（`docs/260824_flood.md` §6.5・§10.4）。
@@ -246,6 +246,53 @@ export const EVAL_CASES: readonly EvalCase[] = [
       noEmptyFigures: true,
       textNonEmpty: true,
       contains: ['都営', '西武'],
+    },
+  },
+
+  // --- 場所（市区町村・起点から N km・2026-10-08 B2・計画書 §6.6） ---
+  {
+    // 以前は神奈川県の順位表で代用し、上位 20 に入った横浜市の駅を拾っていた（§6.1.2）。
+    // 題の「（神奈川県・横浜市・上位）」で、市区町村で絞ったことを見る。
+    id: 'rank-municipality',
+    category: 'ランキング',
+    query: '横浜市で人口が増えている駅は？',
+    bbox: TOKYO_VIEW,
+    expect: {
+      toolCalls: [{ name: 'rankStations', inputIncludes: { municipality: '横浜市' } }],
+      panels: ['rankingTable'],
+      contains: ['横浜市・上位'],
+      noEmptyFigures: true,
+      maxCalls: { rankStations: 1 },
+    },
+  },
+  {
+    // 郊外の駅で判定する（都心の竹橋は全国の順位でも 1 位がたまたま 5km の中にある・§6.1.1）。
+    // 以前は 6 回呼んでも答えが出なかった。都心の駅（新宿三丁目・銀座）が出たら 5km で絞れていない。
+    id: 'rank-near-suburb',
+    category: 'ランキング',
+    query: '立川５km範囲で最も地価が高い駅はどれ？',
+    bbox: TOKYO_VIEW,
+    expect: {
+      toolCalls: [{ name: 'rankStations', inputIncludes: { near: { withinM: 5000 } } }],
+      panels: ['rankingTable'],
+      contains: ['立川から 5km'],
+      notContains: ['新宿三丁目', '銀座'],
+      noEmptyFigures: true,
+    },
+  },
+  {
+    // スクリーンショットの質問（9/30）。以前は「5km範囲」を集計半径（radiusM）に入れて全国の順位で答え、
+    // 「圏内ではありません」と距離も誤った（新宿三丁目は 4.9km で圏内）。集計半径に入れると題が「5km圏」になる。
+    id: 'rank-near-screenshot',
+    category: 'ランキング',
+    query: '竹橋５km範囲で最も地価が高い駅はどれ？',
+    bbox: TOKYO_VIEW,
+    expect: {
+      toolCalls: [{ name: 'rankStations', inputIncludes: { near: { withinM: 5000 } } }],
+      panels: ['rankingTable'],
+      contains: ['竹橋から 5km'],
+      notContains: ['圏内ではありません', '5km圏'],
+      noEmptyFigures: true,
     },
   },
 

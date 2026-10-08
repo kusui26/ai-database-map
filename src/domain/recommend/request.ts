@@ -14,6 +14,7 @@
 
 import type { ListStationsFilter } from '@/db/queries'
 import type { LineRef, RecommendQuery } from '@/shared/api'
+import { BBOX_ERROR_JA, parseBbox } from '@/domain/area'
 import { HAZARD_PENALTY_STEPS, RECOMMEND_PRESETS, type PresetMetric } from './presets'
 import type { RecommendRunInput } from './run'
 import type { HazardPolicy } from './types'
@@ -50,17 +51,6 @@ function hasFilter(query: RecommendQuery): boolean {
     query.lines.length > 0 ||
     query.bbox !== undefined
   )
-}
-
-/** "west,south,east,north" → bbox。数が合わない・数値でないときは null（呼び側が 400 にする）。 */
-export function parseBbox(raw: string): ListStationsFilter['bbox'] | null {
-  const parts = raw.split(',').map(Number)
-  if (parts.length !== 4 || parts.some((value) => !Number.isFinite(value))) return null
-  const [west, south, east, north] = parts
-  if (west === undefined || south === undefined || east === undefined || north === undefined) {
-    return null
-  }
-  return { west, south, east, north }
 }
 
 /** 災害の方針を組む。`penalty` の表は名前で選ぶ（数値の羅列を URL に載せない）。 */
@@ -128,9 +118,8 @@ export function buildRecommendInput(
     }
   }
   const bbox = query.bbox === undefined ? undefined : parseBbox(query.bbox)
-  if (bbox === null) {
-    return { ok: false, messageJa: 'bbox は「西,南,東,北」の 4 つの数値で指定してください。' }
-  }
+  // 範囲の読み方は一覧・ランキング・散布と同じ（並びが逆・経度緯度の外も 400・261008 B2）。
+  if (bbox === null) return { ok: false, messageJa: BBOX_ERROR_JA }
   const preset = RECOMMEND_PRESETS[query.preset]
   const { specs, unknown } = overrideWeights(preset.metrics, query.weights ?? {})
   if (unknown.length > 0) {

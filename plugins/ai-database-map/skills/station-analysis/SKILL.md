@@ -20,7 +20,8 @@ AI Database Map の MCP ツール（`station-data` サーバ）で駅周辺の�
    返った `grp` を以後のツールに渡す。同名駅（例：三田・府中）は候補の都道府県で確認する。
    「横浜市の駅」のような**地域から対象集合を作る**ときは
    `list_stations`（municipality は前方一致・
-   「横浜市」で全区を束ねる）。
+   「横浜市」で全区を束ねる）。ランキング・散布も `municipality` と `near`（「竹橋から 5km 以内」）で
+   直接絞れる（都道府県で代用しない。`near` は集計半径 `radiusM` とは別物）。
 2. **多数の駅を比べる・合成するなら CSV**：おおむね 10 駅を超える比較・スコアリング・相関は
    `build_dataset` で駅×指標の CSV（短命 URL）を
    1 回で作り、ローカルの pandas で分析する（実務は [analyze-csv](../analyze-csv/SKILL.md)）。

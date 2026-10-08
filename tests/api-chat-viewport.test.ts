@@ -181,14 +181,14 @@ describe('/api/chat：地図の表示範囲で、同じ名前の路線を決め�
   it('大阪の地図を見ていれば「中央線」は大阪メトロ中央線（聞き返さずに図を出す）', async () => {
     const { status, chunks } = await askChuo({ bbox: viewportToTuple(VIEW.osaka) })
     expect(status).toBe(200)
-    expect(db.rankByColumn.mock.calls[0]?.[9]).toEqual([99621])
+    expect(db.rankByColumn.mock.calls[0]?.[1]?.lines).toEqual([99621])
     expect(lastPromotions(chunks)).toEqual([expect.objectContaining({ lines: [99621] })])
     expect(toolOutputs(chunks)).toContain('地図の表示範囲に駅のある 大阪メトロ中央線')
   })
 
   it('首都圏の地図なら JR中央線(快速)', async () => {
     await askChuo({ bbox: viewportToTuple(VIEW.tokyo) })
-    expect(db.rankByColumn.mock.calls[0]?.[9]).toEqual([11312])
+    expect(db.rankByColumn.mock.calls[0]?.[1]?.lines).toEqual([11312])
   })
 
   it('範囲を送らなければ、同じ名前の路線は聞き返す（図を作らない・集計しない）', async () => {

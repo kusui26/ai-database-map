@@ -1,11 +1,14 @@
 'use client'
 
 /**
- * 絞り込みのセレクタ（都道府県・運営会社・路線＋詳しい条件）を 1 かたまりで描く（260801）。
+ * 絞り込みのセレクタ（都道府県・市区町村・運営会社・路線＋詳しい条件）を 1 かたまりで描く（260801）。
  *
  * 散布・ランキング・おすすめが**同じ並び・同じ連動**で使う。並べる順は
  * 「どこを → どの会社を → どの路線を」＝広い条件から狭い条件へ。
  * 状態と連動は `useStationFilters` が持ち、ここは描画だけを担う。
+ *
+ * 2026-10-08 B2：市区町村は都道府県の隣（都道府県を 1 つ選んだときに選べる）。起点から N km・地図の範囲は
+ * チャットの図の ⤢ からだけ入るので、外せるチップで最後に出す（`AreaChips`）。
  *
  * 2026-10-08 L4：「路線」は運行系統（利用者が呼ぶ路線・`LineMultiSelect`）。法令上の路線と事業者種別は
  * 「詳しい条件」の中に置く（以前の URL の互換・鉄道に詳しい人向け）。詳しい条件が効いているときは、
@@ -15,7 +18,9 @@
 import { useId, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { type StationFiltersState } from './useStationFilters'
+import { AreaChips } from './AreaChips'
 import { LineMultiSelect } from './LineMultiSelect'
+import { MunicipalitySelect } from './MunicipalitySelect'
 import { OperatorMultiSelect } from './OperatorMultiSelect'
 import { PrefectureMultiSelect } from './PrefectureMultiSelect'
 import { RouteMultiSelect } from './RouteMultiSelect'
@@ -82,11 +87,43 @@ function DetailConditions({ id, state }: { id: string; state: StationFiltersStat
   )
 }
 
-export function StationFilterControls({ state }: { state: StationFiltersState }) {
+/** 場所のチップ（起点・範囲と、選択の部品で出せない市区町村）。 */
+function AreaChipsOf({
+  state,
+  originLabel,
+}: {
+  state: StationFiltersState
+  originLabel: string | null
+}) {
+  const { area } = state
+  const muniChip =
+    area.singlePrefecture === null && area.municipality !== '' ? area.municipality : null
+  return (
+    <AreaChips
+      near={area.near}
+      originLabel={originLabel}
+      hasBbox={area.bbox !== null}
+      municipality={muniChip}
+      onClearNear={area.clearNear}
+      onClearBbox={area.clearBbox}
+      onClearMunicipality={() => area.setMunicipality('')}
+    />
+  )
+}
+
+export function StationFilterControls({
+  state,
+  originLabel = null,
+}: {
+  state: StationFiltersState
+  /** 起点の駅の表示名（図の応答の `near.label`・チップに出す）。 */
+  originLabel?: string | null
+}) {
   const count = detailCount(state)
   // 詳しい条件が効いていれば開いて始める（URL・チャットから来た条件を隠さない）。
   const [detailOpen, setDetailOpen] = useState(count > 0)
   const detailId = useId()
+  const { area } = state
   return (
     <>
       <PrefectureMultiSelect
@@ -94,6 +131,12 @@ export function StationFilterControls({ state }: { state: StationFiltersState })
         onChange={state.setPrefectures}
         allowed={state.allowedPrefectures}
         allowedScope={state.prefectureScope}
+      />
+      <MunicipalitySelect
+        value={area.municipality}
+        prefecture={area.singlePrefecture}
+        state={area.municipalities}
+        onChange={area.setMunicipality}
       />
       <OperatorMultiSelect
         selected={[...state.values.operators]}
@@ -122,6 +165,7 @@ export function StationFilterControls({ state }: { state: StationFiltersState })
         onToggle={() => setDetailOpen((open) => !open)}
       />
       {detailOpen && <DetailConditions id={detailId} state={state} />}
+      <AreaChipsOf state={state} originLabel={originLabel} />
     </>
   )
 }

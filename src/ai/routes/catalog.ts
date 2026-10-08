@@ -9,16 +9,13 @@
 
 import { lineNames, listStations, operatorNames, routeNames } from '@/db/queries'
 import { type Viewport } from '@/shared/viewport'
+import { ttlCache } from '@/lib/ttl-cache'
 import { buildNameIndex, type NameIndex } from './match'
 import { type NameResolveDeps } from './resolve'
 
 const INDEX_TTL_MS = 60 * 60 * 1000
 /** 束ねた路線の駅は多くても 300 未満（JR東海道本線の全区間）。PostgREST の行の上限（1,000）より下に置く。 */
 const STATIONS_LIMIT = 1000
-
-type CacheEntry = { readonly loadedAt_ms: number; readonly index: Promise<NameIndex> }
-
-const cache: { entry: CacheEntry | null } = { entry: null }
 
 async function loadIndex(): Promise<NameIndex> {
   const [lines, operators, legalRoutes] = await Promise.all([
@@ -29,17 +26,7 @@ async function loadIndex(): Promise<NameIndex> {
   return buildNameIndex({ lines, operators, legalRoutes })
 }
 
-function cachedIndex(now_ms: number): Promise<NameIndex> {
-  const entry = cache.entry
-  if (entry !== null && now_ms - entry.loadedAt_ms < INDEX_TTL_MS) return entry.index
-  const index = loadIndex()
-  cache.entry = { loadedAt_ms: now_ms, index }
-  // 失敗は持たない（次の呼び出しで読み直す）。呼び出し側へは元の失敗がそのまま届く。
-  index.catch(() => {
-    if (cache.entry?.index === index) cache.entry = null
-  })
-  return index
-}
+const indexCache = ttlCache(loadIndex, INDEX_TTL_MS)
 
 async function countStations(lineCds: readonly number[]): Promise<number> {
   const rows = await listStations({ lines: lineCds, limit: STATIONS_LIMIT })
@@ -53,10 +40,10 @@ async function hasStationsIn(lineCds: readonly number[], viewport: Viewport): Pr
 
 /** ツールが使う依存（索引はキャッシュから・駅は DB から）。 */
 export function routeNameDeps(): NameResolveDeps {
-  return { index: () => cachedIndex(Date.now()), countStations, hasStationsIn }
+  return { index: () => indexCache.get(), countStations, hasStationsIn }
 }
 
 /** キャッシュを捨てる（テストと、データを入れ替えたあとの読み直し）。 */
 export function clearRouteNameCache(): void {
-  cache.entry = null
+  indexCache.clear()
 }

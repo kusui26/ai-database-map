@@ -150,6 +150,18 @@ describe('システムプロンプト：会社・路線の名前', () => {
     expect(prompt).toContain('どの路線かを利用者に聞く')
   })
 
+  it('名前は図を作るツールにそのまま渡し、一覧・検索で先に確かめない（2026-10-08 B2：先に listStations で候補を受け、推測で選んだ）', () => {
+    const prompt = buildSystemPrompt()
+    expect(prompt).toContain('rankStations / compareGrowth にそのまま渡す')
+    expect(prompt).toContain('listStations・searchStations で先に名前を確かめない')
+  })
+
+  it('候補が返ったのは地図でも決まらなかったから——地図を理由に選ばない（2026-10-08 B2 の評価で「新宿線」を地図で選んだ）', () => {
+    const prompt = buildSystemPrompt()
+    expect(prompt).toContain('地図でも決まらなかった')
+    expect(prompt).toContain('地図を理由に選ばない')
+  })
+
   it('路線全体へ広げた読み替えは本文で断る（その区間の駅に限らない）', () => {
     expect(buildSystemPrompt()).toContain('その区間の駅に限らないことを一言断る')
   })
@@ -163,5 +175,29 @@ describe('システムプロンプト：会社・路線の名前', () => {
 
   it('「運行系統の名前はデータに無い」とは言わせない（京浜東北線もデータの路線になった）', () => {
     expect(buildSystemPrompt()).not.toContain('運行系統の名前（京浜東北線など）はデータに無い')
+  })
+})
+
+/**
+ * 場所（2026-10-08 B2）。以前は「横浜市で」を神奈川県で代用し、「竹橋から 5km 範囲で」を集計半径（radiusM）に入れて
+ * 全国の順位で答え、「圏内ではありません」と距離も誤った（計画書 §6.1）。実際の応答は `rank-municipality`・`rank-near-*` が見る。
+ */
+describe('システムプロンプト：場所で絞る', () => {
+  it('市区町村は municipality で、都道府県で代用しない', () => {
+    const prompt = buildSystemPrompt()
+    expect(prompt).toContain('municipality')
+    expect(prompt).toContain('都道府県で代用しない')
+  })
+
+  it('「○km 範囲」は near で、集計半径 radiusM とは別物', () => {
+    const prompt = buildSystemPrompt()
+    expect(prompt).toContain('near:{station:"竹橋", withinM:5000}')
+    expect(prompt).toContain('radiusM（各駅の周りを何 km で集計するか）とは別物')
+  })
+
+  it('距離は返却の distance を使い、自分で計算・推測しない', () => {
+    const prompt = buildSystemPrompt()
+    expect(prompt).toContain('distance')
+    expect(prompt).toContain('自分で計算・推測しない')
   })
 })

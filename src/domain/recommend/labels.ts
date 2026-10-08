@@ -16,6 +16,7 @@ import { displayOperators } from '@/domain/scope'
 import {
   HAZARD_GROUP_LABELS_JA,
   HAZARD_LEVEL_LABELS_JA,
+  MAP_AREA_LABEL_JA,
   radiusLabel,
   routeTypeLabel,
 } from '@/shared/constants'
@@ -78,7 +79,7 @@ export function areaLabelJa(
   const places = [
     ...(filter.prefectures ?? []),
     ...(filter.municipality === undefined ? [] : [filter.municipality]),
-    ...(filter.bbox === undefined ? [] : ['地図の表示範囲']),
+    ...(filter.bbox === undefined ? [] : [MAP_AREA_LABEL_JA]),
   ]
   const railways = [
     ...lines.map((line) => line.name),

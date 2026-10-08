@@ -39,6 +39,9 @@ const rankingPromotion: RankingPromotion = {
   routes: ['総武線'],
   routeTypes: [2, 4],
   lines: [11302],
+  municipality: '',
+  bbox: null,
+  near: null,
   excludeLowN: false,
 }
 const scatterPromotion: ScatterPromotion = {
@@ -50,6 +53,9 @@ const scatterPromotion: ScatterPromotion = {
   routes: [],
   routeTypes: [1],
   lines: [],
+  municipality: '',
+  bbox: null,
+  near: null,
   excludeLowN: true,
 }
 
@@ -96,6 +102,42 @@ describe('図 → URL → 図（往復）', () => {
     const figure: Figure = { ...rankingPromotion, routes: ['本線,支線', '東横線'] }
     expect(roundTrip(figure)).toEqual(figure)
   })
+
+  it('市区町村・範囲・起点の駅と半径も往復する（チャットの図を ⤢ で開いたとき・2026-10-08 B2）', () => {
+    const figure: Figure = {
+      ...rankingPromotion,
+      prefectures: ['神奈川県'],
+      municipality: '横浜市港北区',
+      bbox: { west: 139.5, south: 35.4, east: 139.8, north: 35.6 },
+      near: { grp: '竹橋#0', radiusM: 5000 },
+    }
+    expect(roundTrip(figure)).toEqual(figure)
+    const url = decodeURIComponent(serialize(figureToUrl(figure)))
+    expect(url).toContain('figMuni=横浜市港北区')
+    expect(url).toContain('figBbox=139.5,35.4,139.8,35.6')
+    expect(url).toContain('figNear=竹橋#0&figWithin=5000')
+  })
+})
+
+describe('場所の URL が崩れていたら、その条件は絞らない（開けない図にしない）', () => {
+  it('範囲の数が足りない・逆さ', () => {
+    expect(figureFromUrl(load('?fig=ranking&figBbox=139.5,35.4,139.8'))?.bbox).toBeNull()
+    expect(figureFromUrl(load('?fig=ranking&figBbox=139.8,35.4,139.5,35.6'))?.bbox).toBeNull()
+  })
+
+  it('起点と半径の片方だけ・空の起点', () => {
+    expect(figureFromUrl(load('?fig=scatter&figNear=%E7%AB%B9%E6%A9%8B%230'))?.near).toBeNull()
+    expect(figureFromUrl(load('?fig=scatter&figWithin=5000'))?.near).toBeNull()
+    expect(figureFromUrl(load('?fig=scatter&figNear=&figWithin=5000'))?.near).toBeNull()
+  })
+
+  it('場所を外した図の URL には、場所のパラメータを残さない', () => {
+    const url = serialize(figureToUrl({ ...rankingPromotion, municipality: '', near: null }))
+    expect(url).not.toContain('figMuni')
+    expect(url).not.toContain('figNear')
+    expect(url).not.toContain('figWithin')
+    expect(url).not.toContain('figBbox')
+  })
 })
 
 describe('figureToUrl（既定は書かない・前の図の条件を残さない）', () => {
@@ -133,6 +175,8 @@ describe('figureKey（同じ図かを見分ける）', () => {
     expect(figureKey({ ...rankingPromotion, order: 'desc' })).not.toBe(key)
     expect(figureKey({ ...rankingPromotion, excludeLowN: true })).not.toBe(key)
     expect(figureKey({ ...rankingPromotion, prefectures: ['東京都', '千葉県'] })).not.toBe(key)
+    expect(figureKey({ ...rankingPromotion, municipality: '千代田区' })).not.toBe(key)
+    expect(figureKey({ ...rankingPromotion, near: { grp: '竹橋#0', radiusM: 3000 } })).not.toBe(key)
   })
 
   it('FAB の図と、同じ既定の指標を書き戻した図は別の鍵（作り直しの判定は入れ物が持つ）', () => {

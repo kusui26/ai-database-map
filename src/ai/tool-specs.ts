@@ -15,6 +15,9 @@
 import { z } from 'zod'
 import { categorySchema, requireEntry } from '@/shared/catalog'
 import {
+  distanceLabel,
+  NEAR_MAX_RADIUS_M,
+  NEAR_MIN_RADIUS_M,
   PREFECTURES,
   RADII_M,
   type Category,
@@ -74,6 +77,7 @@ import {
   stationHazardSummaries,
   scatterPoints,
   type ListStationsFilter,
+  type StationFilter,
   type StationHazardRow,
 } from '@/db/queries'
 import { buildStationDetail } from '@/domain/stations/presenter'
@@ -89,9 +93,12 @@ import { panelsForStationDetail, summarizePanels } from './assemble'
 import { metricsCatalogDigest } from './catalog-digest'
 import { resolveMetricKey, type MetricResolution } from './metric-resolver'
 import { labelsOfOperators } from '@/domain/operators'
-import { displayOperators } from '@/domain/scope'
+import { areaEcho, areaFilter, type ResolvedArea } from '@/domain/area'
+import { displayOperators, placeLabel } from '@/domain/scope'
 import { routeNameDeps } from './routes/catalog'
 import { resolveNameFilters, type NameResolution } from './routes/resolve'
+import { areaDeps } from './area/catalog'
+import { resolveAreaInput, type AreaInput, type AreaInputResolution } from './area/resolve'
 
 /** 既定の集約半径（1km＝アプリ既定）。 */
 const DEFAULT_RADIUS_M: RadiusM = 1000
@@ -121,6 +128,26 @@ const ROUTES_DESCRIPTION =
   '同じ名前の路線が複数ある（山手線・中央線・東西線・新宿線など）ときは、会話から地域が分かれば prefectures を添える（地図の表示範囲より強い）。決まらなければ候補（problems の candidates）が返る。省略で全路線'
 /** 事業者種別の説明（路線と併せると「その路線の、その種別の駅」）。 */
 const ROUTE_TYPES_DESCRIPTION = `事業者種別の配列（${ROUTE_TYPE_HINT}）。「新幹線の駅だけ」は [1]。routes と併せると両方に当てはまる駅。省略で全種別`
+
+/**
+ * 市区町村・起点の駅・範囲の引数の説明（一覧・ランキング・散布・データセットで同じ・2026-10-08 B2）。
+ * 以前はランキング・散布に市区町村も範囲も無く、「横浜市で」を神奈川県で代用し、「竹橋から 5km」を各駅の集計半径
+ * （radiusM）に入れて全国の順位で答えていた（計画書 §6.1）。名前はサーバが決める（`src/ai/area/`）。
+ */
+const MUNICIPALITY_DESCRIPTION =
+  '市区町村（例「横浜市」で全区・「世田谷区」・区だけの「港北区」・「東京都港区」）。「横浜市で」は都道府県で代用せずこれを使う。サーバが決めてその都道府県を添え、読み替えを nameNotes に書く。同じ名前が複数あれば候補（problems）が返る'
+const NEAR_DESCRIPTION =
+  `起点の駅から何 m 以内の駅に絞る（「竹橋から 5km 範囲で」「立川の 3km 以内で」）。station は起点の駅名（例「竹橋」）か searchStations の grp、withinM は m（5km → 5000・${NEAR_MIN_RADIUS_M}〜${NEAR_MAX_RADIUS_M}）。` +
+  '**集計半径 radiusM とは別物**——「5km 範囲」を radiusM に入れない。返却の各駅に起点からの距離（distance）が付くので、距離は自分で計算しない'
+const BBOX_DESCRIPTION = '範囲 [west, south, east, north]（経度・緯度）。その範囲の駅だけ'
+
+/** 起点の駅と半径（ランキング・散布。図の条件は ⤢ で開き直せるよう駅で受ける）。 */
+const nearStationSchema = z
+  .object({
+    station: z.string().describe('起点の駅名（例「竹橋」）か searchStations が返した grp'),
+    withinM: z.number().describe('起点から何 m 以内か（5km → 5000）'),
+  })
+  .describe(NEAR_DESCRIPTION)
 
 /**
  * 実行の文脈（消費側が渡す）。`origin`＝共通API の絶対 URL を組むための自ホスト。
@@ -236,10 +263,6 @@ function unknownPrefectures(unknown: readonly string[]): { error: string; hint: 
   }
 }
 
-/** near セレクタの半径の下限・上限（m）。 */
-const NEAR_MIN_RADIUS_M = 100
-const NEAR_MAX_RADIUS_M = 100_000
-
 /** build_dataset の grps 指定の上限（署名 URL に埋め込むため・URL 長の実用範囲）。 */
 const DATASET_MAX_GRPS = 500
 /** build_dataset のセレクタ既定上限（対象集合は原則全件＝RPC 上限まで）。 */
@@ -249,29 +272,29 @@ const HAZARD_SUMMARY_MAX_GRPS = 500
 
 /**
  * 対象集合セレクタ（listStations と buildDataset.stations で**同一**・§5.3 の共通化）。
- * operators/routes/routeTypes の述語は rank/scatter と同じ station_matches_filters（DB 側で共有）。
+ * 絞り込みはランキング・散布と同じ述語（DB 側で共有）。市区町村・起点の駅・範囲は、ランキング・散布と同じく
+ * 名前をサーバが決める（`src/ai/area/`・2026-10-08 B2）。起点は駅でない地点（lon・lat）でもよい。
  */
 const stationSelectorSchema = z.object({
   prefectures: z
     .array(z.string())
     .optional()
     .describe('都道府県名の配列（正式名・例 ["神奈川県"]）。省略で全国'),
-  municipality: z
-    .string()
-    .optional()
-    .describe('市区町村名の前方一致（例: 横浜市、世田谷区）。JIS コードの前方一致も可'),
+  municipality: z.string().optional().describe(MUNICIPALITY_DESCRIPTION),
   operators: z.array(z.string()).optional().describe(OPERATORS_DESCRIPTION),
   routes: z.array(z.string()).optional().describe(ROUTES_DESCRIPTION),
   routeTypes: z.array(z.number().int()).optional().describe(ROUTE_TYPES_DESCRIPTION),
-  bbox: z
-    .array(z.number())
-    .length(4)
-    .optional()
-    .describe('地図範囲 [west, south, east, north]（経度・緯度）'),
+  bbox: z.array(z.number()).length(4).optional().describe(BBOX_DESCRIPTION),
   near: z
-    .object({ lon: z.number(), lat: z.number(), radiusM: z.number() })
+    .object({
+      station: z.string().optional().describe('起点の駅名（例「竹橋」）か searchStations の grp'),
+      lon: z.number().optional().describe('起点の経度（駅でない地点のとき）'),
+      lat: z.number().optional().describe('起点の緯度（駅でない地点のとき）'),
+      withinM: z.number().optional().describe('起点から何 m 以内か（5km → 5000）'),
+      radiusM: z.number().optional().describe('withinM の以前の名前（互換のため受ける）'),
+    })
     .optional()
-    .describe(`中心座標と半径(m)で絞る（半径 ${NEAR_MIN_RADIUS_M}〜${NEAR_MAX_RADIUS_M}）`),
+    .describe(`${NEAR_DESCRIPTION}。駅でない地点は lon・lat で`),
   limit: z
     .number()
     .int()
@@ -286,60 +309,42 @@ type NameInputs = { readonly operators: string[]; readonly routes: string[] }
 type SelectorResolution =
   | {
       readonly ok: true
-      /** 会社・路線を除いた条件（会社・路線は名前を解決してから足す）。 */
+      /** 会社・路線・エリアを除いた条件（会社・路線・エリアは名前を解決してから足す）。 */
       readonly filter: ListStationsFilter
+      readonly prefectures: readonly string[]
       readonly names: NameInputs
+      readonly area: AreaInput
       readonly requested: number
     }
   | { readonly ok: false; readonly error: HintErrorJa }
 
-/** セレクタ → DB フィルタ（正規化と検証。曖昧・不正は構造化エラーで返す）。 */
-function selectorToFilter(input: StationSelector, defaultLimit: number): SelectorResolution {
-  const { names: prefs, unknown } = normalizePrefectures(input.prefectures ?? [])
-  if (unknown.length > 0) return { ok: false, error: unknownPrefectures(unknown) }
-  let bbox: ListStationsFilter['bbox']
-  if (input.bbox !== undefined) {
-    const [west, south, east, north] = input.bbox
-    if (west === undefined || south === undefined || east === undefined || north === undefined) {
-      return {
-        ok: false,
-        error: {
-          error: 'bbox が不正です',
-          hint: 'bbox は [west, south, east, north] の 4 値です。',
-        },
-      }
-    }
-    if (!(west < east && south < north)) {
-      return {
-        ok: false,
-        error: {
-          error: 'bbox の範囲が不正です',
-          hint: '[west, south, east, north]（経度・緯度）で west < east・south < north にしてください。',
-        },
-      }
-    }
-    bbox = { west, south, east, north }
-  }
+/** セレクタの市区町村・起点・範囲（以前の名前 near.radiusM は withinM として受ける）。 */
+function areaInputOf(input: StationSelector): AreaInput {
   const near =
     input.near === undefined
       ? undefined
       : {
+          station: input.near.station,
           lon: input.near.lon,
           lat: input.near.lat,
-          radiusM: Math.min(Math.max(input.near.radiusM, NEAR_MIN_RADIUS_M), NEAR_MAX_RADIUS_M),
+          withinM: input.near.withinM ?? input.near.radiusM,
         }
-  const municipality = input.municipality?.trim()
+  return { municipality: input.municipality, near, bbox: input.bbox }
+}
+
+/** セレクタ → DB フィルタの土台（都道府県の正規化と件数。名前の解決は `resolveSelector`）。 */
+function selectorToFilter(input: StationSelector, defaultLimit: number): SelectorResolution {
+  const { names: prefectures, unknown } = normalizePrefectures(input.prefectures ?? [])
+  if (unknown.length > 0) return { ok: false, error: unknownPrefectures(unknown) }
   const requested = Math.min(Math.max(input.limit ?? defaultLimit, 1), LIST_MAX_LIMIT)
   return {
     ok: true,
     requested,
+    prefectures,
     names: { operators: nonEmptyNames(input.operators), routes: nonEmptyNames(input.routes) },
+    area: areaInputOf(input),
     filter: {
-      prefectures: prefs,
-      municipality: municipality === undefined || municipality === '' ? undefined : municipality,
       routeTypes: (input.routeTypes ?? []).filter((type) => ROUTE_TYPES.some((t) => t === type)),
-      bbox,
-      near,
       limit: requested,
     },
   }
@@ -360,6 +365,17 @@ function namesError(resolution: Extract<NameResolution, { ok: false }>): NamesEr
   return { error: resolution.error, hint: resolution.hint, problems: resolution.problems }
 }
 
+/** 市区町村・起点の駅・範囲を決められなかった → LLM 向けの構造化エラー（候補つき・図は作らない・B2）。 */
+type AreaErrorJa = {
+  error: string
+  hint: string
+  problems: Extract<AreaInputResolution, { ok: false }>['problems']
+}
+
+function areaError(resolution: Extract<AreaInputResolution, { ok: false }>): AreaErrorJa {
+  return { error: resolution.error, hint: resolution.hint, problems: resolution.problems }
+}
+
 /** 名前をどう読んだか（無ければ返却に載せない）。 */
 function nameNotesOf(notes: readonly string[]): { nameNotes?: readonly string[] } {
   return notes.length > 0 ? { nameNotes: notes } : {}
@@ -376,33 +392,53 @@ type FigureFilters = {
   readonly operatorLabels: string[]
   readonly lines: LineRef[]
   readonly routeTypes: number[]
+  /** 市区町村・範囲・起点の駅と半径（B2）。 */
+  readonly area: ResolvedArea
   readonly nameNotes: readonly string[]
 }
 
 type ResolvedFigureFilters =
   | ({ readonly ok: true } & FigureFilters)
-  | { readonly ok: false; readonly forLlm: HintErrorJa | NamesErrorJa }
+  | { readonly ok: false; readonly forLlm: HintErrorJa | NamesErrorJa | AreaErrorJa }
+
+/** 図の絞り込み → DB の絞り込み（ランキング・散布で同じ・法令上の路線はツールからは使わない）。 */
+function figureFilter(filters: FigureFilters): StationFilter {
+  return {
+    prefectures: filters.prefectures,
+    operators: filters.operators,
+    routeTypes: filters.routeTypes,
+    lines: lineCodesOf(filters.lines),
+    ...areaFilter(filters.area),
+  }
+}
 
 /** 路線の参照 → 路線コード（SQL の条件 `line_cds`）。 */
 function lineCodesOf(lines: readonly LineRef[]): number[] {
   return lines.map((line) => line.lineCd)
 }
 
+/** ランキング・散布の絞り込みの入力（2 つのツールで同じ）。 */
+type FigureInput = AreaInput & {
+  readonly prefectures?: readonly string[]
+  readonly operators?: readonly string[]
+  readonly routes?: readonly string[]
+  readonly routeTypes?: readonly number[]
+}
+
 /**
- * ランキング・散布の絞り込みを正規化し、会社・路線の名前を解決する（2 つのツールで同じ）。
- * 地図の表示範囲（`viewport`）は、同じ名前の路線を決めるのにだけ使う（駅を範囲で絞りはしない）。
+ * ランキング・散布の絞り込みを正規化し、エリア（市区町村・起点の駅・範囲）と会社・路線の名前を解決する
+ * （2 つのツールで同じ）。エリアを先に決める——決めた市区町村の都道府県が、同じ名前の路線を決める手がかりになる。
+ * 地図の表示範囲（`viewport`）は、同じ名前を決めるのにだけ使う（駅を範囲で絞るのは `bbox`）。
  */
 async function resolveFigureFilters(
-  input: {
-    readonly prefectures?: readonly string[]
-    readonly operators?: readonly string[]
-    readonly routes?: readonly string[]
-    readonly routeTypes?: readonly number[]
-  },
+  input: FigureInput,
   viewport: Viewport | null,
 ): Promise<ResolvedFigureFilters> {
-  const { names: prefectures, unknown } = normalizePrefectures(input.prefectures ?? [])
+  const { names: requested, unknown } = normalizePrefectures(input.prefectures ?? [])
   if (unknown.length > 0) return { ok: false, forLlm: unknownPrefectures(unknown) }
+  const area = await resolveAreaInput(input, { prefectures: requested, viewport }, areaDeps())
+  if (!area.ok) return { ok: false, forLlm: areaError(area) }
+  const prefectures = [...area.prefectures]
   const names = await resolveNameFilters(
     { operators: input.operators, routes: input.routes, prefectures, viewport },
     routeNameDeps(),
@@ -410,13 +446,15 @@ async function resolveFigureFilters(
   if (!names.ok) return { ok: false, forLlm: namesError(names) }
   const routeTypes = (input.routeTypes ?? []).filter((type) => ROUTE_TYPES.some((t) => t === type))
   const operatorLabels = await labelsOfOperators(names.filters.operators)
+  const nameNotes = [...area.notes, ...names.notes]
   return {
     ok: true,
     prefectures,
     ...names.filters,
     operatorLabels,
     routeTypes,
-    nameNotes: names.notes,
+    area: area.area,
+    nameNotes,
   }
 }
 
@@ -429,13 +467,14 @@ function noFigureForLlm(subject: string, filters: FigureFilters, excludeLowN: bo
     total: 0,
     noFigure: `${subject}：条件に当てはまる駅が 0 件だったので、図は出していません。`,
     conditions: {
+      place: placeLabel({ prefectures: filters.prefectures, ...areaEcho(filters.area) }),
       prefectures: filters.prefectures,
       operators: filters.operatorLabels,
       routes: filters.lines.map((line) => line.name),
       routeTypes: filters.routeTypes.map(routeTypeLabel),
       excludeLowN,
     },
-    hint: '条件（都道府県・会社・路線・事業者種別・⚠除外）の組合せに当てはまる駅がありません。条件を緩めて呼び直すか、0 件だったことを利用者に伝えてください（「データが無い」とは言わない）。',
+    hint: '条件（場所・会社・路線・事業者種別・⚠除外）の組合せに当てはまる駅がありません。条件を緩めて呼び直すか、0 件だったことを利用者に伝えてください（「データが無い」とは言わない）。',
     ...nameNotesOf(filters.nameNotes),
   }
 }
@@ -447,12 +486,12 @@ type ResolvedSelector =
       readonly requested: number
       readonly nameNotes: readonly string[]
     }
-  | { readonly ok: false; readonly error: HintErrorJa | NamesErrorJa }
+  | { readonly ok: false; readonly error: HintErrorJa | NamesErrorJa | AreaErrorJa }
 
 /**
- * セレクタ → DB フィルタ（検証のあと、会社・路線の名前を解決する・2026-10-07 B1 → 2026-10-08 L3）。
- * 路線は路線コード（`lines`）で絞る。地図の表示範囲（`viewport`）は同じ名前の路線を決めるのにだけ使い、
- * セレクタの `bbox`（駅を範囲で絞る）とは別物。
+ * セレクタ → DB フィルタ（検証のあと、エリアと会社・路線の名前を解決する・2026-10-07 B1 → L3 → B2）。
+ * エリアを先に決める（決めた市区町村の都道府県が、同じ名前の路線を決める手がかりになる）。路線は路線コード
+ * （`lines`）で絞る。地図の表示範囲（`viewport`）は同じ名前を決めるのにだけ使い、セレクタの `bbox`（駅を範囲で絞る）とは別物。
  */
 async function resolveSelector(
   input: StationSelector,
@@ -461,12 +500,24 @@ async function resolveSelector(
 ): Promise<ResolvedSelector> {
   const base = selectorToFilter(input, defaultLimit)
   if (!base.ok) return base
-  const prefectures = base.filter.prefectures ?? []
+  const area = await resolveAreaInput(
+    base.area,
+    { prefectures: base.prefectures, viewport },
+    areaDeps(),
+  )
+  if (!area.ok) return { ok: false, error: areaError(area) }
+  const prefectures = [...area.prefectures]
   const names = await resolveNameFilters({ ...base.names, prefectures, viewport }, routeNameDeps())
   if (!names.ok) return { ok: false, error: namesError(names) }
   const { operators, lines } = names.filters
-  const filter = { ...base.filter, operators, lines: lineCodesOf(lines) }
-  return { ok: true, filter, requested: base.requested, nameNotes: names.notes }
+  const filter = {
+    ...base.filter,
+    prefectures,
+    operators,
+    lines: lineCodesOf(lines),
+    ...areaFilter(area.area),
+  }
+  return { ok: true, filter, requested: base.requested, nameNotes: [...area.notes, ...names.notes] }
 }
 
 /** 正規化済みフィルタ → 署名トークンに埋めるセレクタ（空の条件は載せない）。 */
@@ -548,6 +599,7 @@ function listStationsForLlm(
       municipality: station.municipality,
       lon: station.lon,
       lat: station.lat,
+      ...distanceOf(station.distM),
     })),
   }
 }
@@ -729,6 +781,11 @@ function routeNamesForLlm(response: { readonly lines: readonly LineRef[] }): str
   return response.lines.map((line) => line.name)
 }
 
+/** 起点からの距離（サーバが整形・近傍で絞ったときだけ。AI に距離を作らせない・B2）。 */
+function distanceOf(distM: number | undefined): { readonly distance?: string } {
+  return distM === undefined ? {} : { distance: distanceLabel(distM) }
+}
+
 /** ランキング → LLM 向けの要約（上位 10 行に絞る）。 */
 function rankingForLlm(
   resolvedKey: string,
@@ -743,6 +800,7 @@ function rankingForLlm(
     note,
     ...nameNotesOf(nameNotes),
     unit: response.metric.unit,
+    place: placeLabel(response),
     prefectures: response.prefectures,
     operators: displayOperators(response.operators, response.operatorLabels),
     routes: routeNamesForLlm(response),
@@ -755,6 +813,7 @@ function rankingForLlm(
       prefecture: row.prefecture,
       value: row.formatted,
       flagged: row.flagged,
+      ...distanceOf(row.distM),
     })),
   }
 }
@@ -773,6 +832,7 @@ function growthForLlm(
     resolvedMetrics: { x: xKey, y: yKey },
     note,
     ...nameNotesOf(nameNotes),
+    place: placeLabel(response),
     prefectures: response.prefectures,
     operators: displayOperators(response.operators, response.operatorLabels),
     routes: routeNamesForLlm(response),
@@ -930,7 +990,7 @@ export const TOOL_SPECS = {
     name: 'listStations',
     description:
       '条件に合う駅の一覧（grp・駅名・位置だけ）を返す。「横浜市の駅」「神奈川県の駅」「東急電鉄の駅」のような対象集合づくりの起点。' +
-      'municipality は市区町村名の前方一致（例「横浜市」で全区を束ねる。「世田谷区」も可）。operators / routes / routeTypes・bbox・near でも絞れる（条件は AND）。値の取得や比較は他のツールで行う。',
+      'municipality は市区町村（例「横浜市」で全区を束ねる。「世田谷区」「港北区」も可）。operators / routes / routeTypes・bbox・near（起点の駅から N m 以内・各駅に距離が付く）でも絞れる（条件は AND）。値の取得や比較は他のツールで行う。',
     inputSchema: stationSelectorSchema,
     errorFallbackJa: '駅一覧の取得に失敗しました',
     run: async (
@@ -1274,7 +1334,8 @@ export const TOOL_SPECS = {
     name: 'rankStations',
     description:
       '指標で駅を並べ替え上位/下位を返す。metric はカタログキー（pop_gr_2020_2015_1km）でも指標ファミリ（pop_gr）でもよく、ファミリなら radiusM / year で確定する（未指定は 1km・直近5年）。prefectures 未指定は全国、operators 未指定は全社、routes/routeTypes 未指定は全路線。' +
-      '会社・路線の名前はサーバが解決する（決まらなければ図を作らずに候補を返す）。該当が 0 件のときも図は作らない。',
+      '「横浜市で」は municipality、「竹橋から 5km 範囲で」は near（radiusM ではない）、範囲は bbox で絞れる（条件は AND）。' +
+      '会社・路線・市区町村・起点の駅の名前はサーバが解決する（決まらなければ図を作らずに候補を返す）。該当が 0 件のときも図は作らない。',
     inputSchema: z.object({
       metric: z
         .string()
@@ -1291,6 +1352,9 @@ export const TOOL_SPECS = {
         .array(z.string())
         .optional()
         .describe('都道府県名の配列。例: ["神奈川県"]。省略で全国'),
+      municipality: z.string().optional().describe(MUNICIPALITY_DESCRIPTION),
+      near: nearStationSchema.optional(),
+      bbox: z.array(z.number()).length(4).optional().describe(BBOX_DESCRIPTION),
       operators: z.array(z.string()).optional().describe(OPERATORS_DESCRIPTION),
       routes: z.array(z.string()).optional().describe(ROUTES_DESCRIPTION),
       routeTypes: z.array(z.number().int()).optional().describe(ROUTE_TYPES_DESCRIPTION),
@@ -1326,20 +1390,14 @@ export const TOOL_SPECS = {
       const dir = order ?? 'desc'
       const lim = Math.min(Math.max(limit ?? DEFAULT_RANK_LIMIT, 1), MAX_RANK_LIMIT)
       const exclude = excludeLowN ?? false
-      const { prefectures, operators, operatorLabels, lines, routeTypes } = filters
-      const { rows, total } = await rankByColumn(
-        resolved.key,
-        prefectures,
-        dir,
-        lim,
-        0,
-        exclude,
-        operators,
-        [],
-        routeTypes,
-        lineCodesOf(lines),
-      )
-      const scope = { operators, operatorLabels, routeTypes, lines }
+      const { prefectures, operators, operatorLabels, lines, routeTypes, area } = filters
+      const { rows, total } = await rankByColumn(resolved.key, figureFilter(filters), {
+        order: dir,
+        limit: lim,
+        offset: 0,
+        excludeLowN: exclude,
+      })
+      const scope = { operators, operatorLabels, routeTypes, lines, area: areaEcho(area) }
       const response = buildRanking(resolved.key, prefectures, dir, rows, total, 0, scope)
       if (total === 0) return pure(noFigureForLlm(response.metric.labelJa, filters, exclude))
       return {
@@ -1360,7 +1418,8 @@ export const TOOL_SPECS = {
     name: 'compareGrowth',
     description:
       '2 つの指標(x,y)で駅を散布しクラスタ化する。x/y はカタログキーでも指標ファミリ（pop_gr, lp_gr, rate_covid …）でもよく、radiusM を添えれば半径依存の指標がそれで確定する（未指定は 1km・直近5年）。prefectures 未指定は全国、operators 未指定は全社、routes/routeTypes 未指定は全路線。' +
-      '会社・路線の名前はサーバが解決する（決まらなければ図を作らずに候補を返す）。該当が 0 件のときも図は作らない。',
+      '市区町村（municipality）・起点の駅から N m 以内（near）・範囲（bbox）でも絞れる（ランキングと同じ）。' +
+      '会社・路線・市区町村・起点の駅の名前はサーバが解決する（決まらなければ図を作らずに候補を返す）。該当が 0 件のときも図は作らない。',
     inputSchema: z.object({
       x: z
         .string()
@@ -1371,6 +1430,9 @@ export const TOOL_SPECS = {
         .optional()
         .describe('集約半径(m): 500/1000/2000/5000/10000/20000。x/y の半径依存の指標に適用'),
       prefectures: z.array(z.string()).optional().describe('都道府県名の配列。省略で全国'),
+      municipality: z.string().optional().describe(MUNICIPALITY_DESCRIPTION),
+      near: nearStationSchema.optional(),
+      bbox: z.array(z.number()).length(4).optional().describe(BBOX_DESCRIPTION),
       operators: z.array(z.string()).optional().describe(OPERATORS_DESCRIPTION),
       routes: z.array(z.string()).optional().describe(ROUTES_DESCRIPTION),
       routeTypes: z.array(z.number().int()).optional().describe(ROUTE_TYPES_DESCRIPTION),
@@ -1407,13 +1469,13 @@ export const TOOL_SPECS = {
             requireEntry(yResolved.key).reliabilityFlagKey,
           ]
         : [null, null]
-      const { prefectures, operators, operatorLabels, lines, routeTypes } = filters
+      const { prefectures, operators, operatorLabels, lines, routeTypes, area } = filters
       const valueRows = await scatterPoints(
         xResolved.key,
         yResolved.key,
         flags[0] ?? null,
         flags[1] ?? null,
-        { prefectures, operators, routes: [], routeTypes, lines: lineCodesOf(lines) },
+        figureFilter(filters),
       )
       const response = buildGrowth(valueRows, xResolved.key, yResolved.key, {
         excludeLowN: exclude,
@@ -1422,6 +1484,7 @@ export const TOOL_SPECS = {
         operatorLabels,
         routeTypes,
         lines,
+        area: areaEcho(area),
       })
       if (response.points.length === 0) {
         const subject = `${response.x.labelJa} × ${response.y.labelJa}`

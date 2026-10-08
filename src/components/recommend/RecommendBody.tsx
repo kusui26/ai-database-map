@@ -33,7 +33,6 @@ import {
 import { RecommendTable, WeightLegend } from './RecommendTable'
 import { hasArea, type RecommendCriteria } from './query'
 import { criteriaFromUrl, criteriaToUrl, RECOMMEND_PARSERS } from './url'
-import { useMunicipalities } from './useMunicipalities'
 import { useDebounced, useRecommend } from './useRecommend'
 
 /** URL の書き換えは、取得と同じ間隔で落ち着かせる（スライダ 1 回で何十回も書かない）。 */
@@ -64,22 +63,9 @@ export function RecommendBody({
   const [urlValues, setUrlValues] = useQueryStates(RECOMMEND_PARSERS, { history: 'replace' })
   // URL は**開いたときにだけ**読む（以後は書くだけ。戻る/進むで途中に戻らないよう replace にしてある）。
   const [initial] = useState<RecommendCriteria>(() => criteriaFromUrl(urlValues))
+  // 絞り込み（市区町村を含む）はランキング・散布と同じ部品と規則（都道府県が変わったら市区町村を外す・2026-10-08 B2）。
   const filters = useStationFilters(active, initial)
   const [recipe, setRecipe] = useState<RecommendCriteria>(initial)
-  const prefectures = filters.values.prefectures
-  const prefecture = prefectures.length === 1 ? (prefectures[0] ?? null) : null
-  const municipalities = useMunicipalities(active ? prefecture : null)
-
-  // 都道府県が**変わったら**市区町村は捨てる（別の県の市区町村が残ると 0 件になる）。
-  // 初回は捨てない——URL で渡された条件が、開いた瞬間に消えてしまう。
-  const lastPrefecture = useRef(prefecture)
-  useEffect(() => {
-    if (lastPrefecture.current === prefecture) return
-    lastPrefecture.current = prefecture
-    setRecipe((current) =>
-      current.municipality === '' ? current : { ...current, municipality: '' },
-    )
-  }, [prefecture])
 
   const criteria = useMemo<RecommendCriteria>(
     () => ({ ...recipe, ...filters.values }),
@@ -129,12 +115,7 @@ export function RecommendBody({
       <div className="border-b border-slate-100 px-4 py-3">
         {openControls ? (
           <>
-            <RecommendControls
-              criteria={criteria}
-              filters={filters}
-              municipalities={municipalities}
-              onChange={onChange}
-            />
+            <RecommendControls criteria={criteria} filters={filters} onChange={onChange} />
             {!isDesktop && hasResult && (
               <button
                 type="button"

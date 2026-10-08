@@ -262,7 +262,7 @@ describe('GET /api/ranking・/api/growth：応答に表示名', () => {
       request('/api/ranking?metric=pop_2020_1km&operators=東京地下鉄,東京都'),
     )
     expect(response.status).toBe(200)
-    expect(db.rankByColumn.mock.calls[0]?.[6]).toEqual(['東京地下鉄', '東京都'])
+    expect(db.rankByColumn.mock.calls[0]?.[1]?.operators).toEqual(['東京地下鉄', '東京都'])
     const parsed = rankingResponseSchema.parse(await response.json())
     expect(parsed.operatorLabels).toEqual(['東京メトロ', '東京都交通局'])
   })

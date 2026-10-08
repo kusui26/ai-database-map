@@ -1,4 +1,5 @@
 import { lineCdsQuerySchema, type StationSummary, stationsQuerySchema } from '@/shared/api'
+import { areaFilter, resolveArea } from '@/domain/area'
 import { resolveLineCodes } from '@/domain/lines'
 import { listStations, nearestStations, searchStations, stationsInBbox } from '@/db/queries'
 import { BadRequestError, CACHE, handle, json } from '@/lib/http'
@@ -44,8 +45,10 @@ async function lineCodes(raw: string | undefined): Promise<number[] | undefined>
 
 /**
  * GET /api/stations?q= | bbox=w,s,e,n | near=lon,lat — 駅サマリ（≤50）。
- * GET /api/stations?municipality= | prefecture= | operators= | routes= | routeTypes= | lines= [&limit=]
- *   — 駅一覧（対象集合・≤2000・260902 / セレクタ共通化 260903）。
+ * GET /api/stations?municipality= | prefecture= | operators= | routes= | routeTypes= | lines= | nearStation=&withinM=
+ *   [&bbox=][&limit=] — 駅一覧（対象集合・≤2000・260902 / セレクタ共通化 260903）。
+ *   nearStation（起点の駅の grp）と withinM（m）は組で「起点から N m 以内」（各駅に起点からの距離 distM が付く）。
+ *   一覧のときは bbox も絞り込みとして効く（261008 B2）。
  * MCP の `list_stations` と同じ RPC を通る（AI と人間で別 API を作らない・CLAUDE.md §2）。
  */
 export function GET(request: Request): Promise<Response> {
@@ -61,6 +64,8 @@ export function GET(request: Request): Promise<Response> {
       routes: params.get('routes') ?? undefined,
       routeTypes: params.get('routeTypes') ?? undefined,
       lines: params.get('lines') ?? undefined,
+      nearStation: params.get('nearStation') ?? undefined,
+      withinM: params.get('withinM') ?? undefined,
       limit: params.get('limit') ?? undefined,
     })
 
@@ -71,15 +76,24 @@ export function GET(request: Request): Promise<Response> {
       query.operators !== undefined ||
       query.routes !== undefined ||
       query.routeTypes !== undefined ||
-      query.lines !== undefined
+      query.lines !== undefined ||
+      query.nearStation !== undefined ||
+      query.withinM !== undefined
     if (wantsList) {
+      const area = await resolveArea({
+        municipality: query.municipality,
+        bbox: query.bbox,
+        nearStation: query.nearStation,
+        withinM: query.withinM,
+      })
+      if (!area.ok) throw new BadRequestError(area.messageJa)
       const stations = await listStations({
         prefectures: query.prefecture === undefined ? undefined : [query.prefecture],
-        municipality: query.municipality,
         operators: parseNames(query.operators),
         routes: parseNames(query.routes),
         routeTypes: parseTypes(query.routeTypes),
         lines: await lineCodes(query.lines),
+        ...areaFilter(area.area),
         limit: query.limit,
       })
       return json(stations, CACHE.short)

@@ -75,6 +75,9 @@ function scatterPromotion(
     routes: [],
     routeTypes: [],
     lines: [],
+    municipality: '',
+    bbox: null,
+    near: null,
     excludeLowN: false,
     ...filters,
   }
@@ -89,6 +92,9 @@ const rankingPromotion: RankingPromotion = {
   routes: [],
   routeTypes: [],
   lines: [],
+  municipality: '',
+  bbox: null,
+  near: null,
   excludeLowN: false,
 }
 

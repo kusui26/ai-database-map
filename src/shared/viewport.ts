@@ -52,13 +52,16 @@ export function roundViewport(bounds: Viewport): Viewport {
   }
 }
 
+/** 経度・緯度として使えるか（有限・経度は ±180・緯度は ±90 の内）。 */
+export function isValidLonLat(lon: number, lat: number): boolean {
+  const finite = Number.isFinite(lon) && Number.isFinite(lat)
+  return finite && Math.abs(lon) <= MAX_LON_DEG && Math.abs(lat) <= MAX_LAT_DEG
+}
+
 /** 範囲として使えるか（有限・西 < 東・南 < 北・経度緯度の範囲内）。 */
 export function isValidViewport(viewport: Viewport): boolean {
   const { west, south, east, north } = viewport
-  const finite = [west, south, east, north].every(Number.isFinite)
-  const inRange = [west, east].every((lon) => Math.abs(lon) <= MAX_LON_DEG)
-  const latInRange = [south, north].every((lat) => Math.abs(lat) <= MAX_LAT_DEG)
-  return finite && inRange && latInRange && west < east && south < north
+  return isValidLonLat(west, south) && isValidLonLat(east, north) && west < east && south < north
 }
 
 export function viewportToTuple(viewport: Viewport): ViewportTuple {

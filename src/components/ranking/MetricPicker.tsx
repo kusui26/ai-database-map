@@ -27,6 +27,7 @@ export function MetricPicker({
   category,
   metricKey,
   filters,
+  originLabel,
   order,
   excludeLowN,
   onCategory,
@@ -37,6 +38,8 @@ export function MetricPicker({
   category: Category
   metricKey: string
   filters: StationFiltersState
+  /** 起点の駅の表示名（図の応答の `near.label`・場所のチップに出す・2026-10-08 B2）。 */
+  originLabel: string | null
   order: Order
   excludeLowN: boolean
   onCategory: (category: Category) => void
@@ -50,7 +53,7 @@ export function MetricPicker({
     <div className="space-y-2">
       {/* 段A：絞り込み（散布と同じ並び・同じ連動） */}
       <div className="flex flex-wrap items-center gap-2">
-        <StationFilterControls state={filters} />
+        <StationFilterControls state={filters} originLabel={originLabel} />
       </div>
 
       {/* 段B：常に同じ並び・同じ位置 */}

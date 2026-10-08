@@ -5,6 +5,7 @@
 import useSWR from 'swr'
 import { type GrowthResponse, growthResponseSchema } from '@/shared/api'
 import { fetchJson } from '@/lib/fetch-json'
+import { appendFilterParams, type FilterQueryValues } from '@/components/metrics/filterQuery'
 
 const FETCH_TIMEOUT_MS = 15_000
 
@@ -15,16 +16,10 @@ function fetchGrowth(url: string): Promise<GrowthResponse> {
   })
 }
 
-/** 散布の絞り込み条件（そのままクエリ文字列になる・空配列＝絞らない）。 */
-export type GrowthQuery = {
+/** 散布の条件（そのままクエリ文字列になる・空＝絞らない）。絞り込みはランキング・おすすめと同じ形。 */
+export type GrowthQuery = FilterQueryValues & {
   readonly x: string
   readonly y: string
-  readonly prefectures: readonly string[]
-  readonly operators: readonly string[]
-  readonly routes: readonly string[]
-  readonly routeTypes: readonly number[]
-  /** 路線（運行系統）の路線コード（チャットの図の ⤢ から・2026-10-08 L3）。 */
-  readonly lines: readonly number[]
   readonly excludeLowN: boolean
 }
 
@@ -38,11 +33,7 @@ export type GrowthState = {
 /** 条件 → SWR キー（＝リクエスト URL）。絞っていない軸は載せない＝キャッシュが効く。 */
 export function growthUrl(query: GrowthQuery): string {
   const params = new URLSearchParams({ x: query.x, y: query.y })
-  if (query.prefectures.length > 0) params.set('prefecture', query.prefectures.join(','))
-  if (query.operators.length > 0) params.set('operators', query.operators.join(','))
-  if (query.routes.length > 0) params.set('routes', query.routes.join(','))
-  if (query.routeTypes.length > 0) params.set('routeTypes', query.routeTypes.join(','))
-  if (query.lines.length > 0) params.set('lines', query.lines.join(','))
+  appendFilterParams(params, query)
   if (query.excludeLowN) params.set('excludeLowN', 'true')
   return `/api/growth?${params.toString()}`
 }

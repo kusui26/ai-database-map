@@ -11,7 +11,8 @@ description: AI Database Map の build_dataset で駅×指標の CSV を作り�
 ## 手順
 
 1. **対象集合**：`list_stations`
-   （municipality は前方一致・「横浜市」で全区。operators / routes・bbox・near でも絞れる）。
+   （municipality は前方一致・「横浜市」で全区。operators / routes・bbox・near〔起点の駅名か grp と withinM・
+   各駅に起点からの距離〕でも絞れる）。
    `truncated: true` なら全件ではない——limit を上げるか条件を絞り、漏れの可能性を本文で言う。
 2. **データセット生成**：`build_dataset` に
    `stations`（list_stations と同じセレクタ）か `grps` と、`metrics`（ファミリ名で足りる。

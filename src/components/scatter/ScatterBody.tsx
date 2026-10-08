@@ -64,20 +64,10 @@ export function ScatterBody({
   // AI が実際に使った条件をそのまま反映する＝開いた図の値を優先）。
   const [excludeLowN, setExcludeLowN] = useState<boolean>(initial.excludeLowN)
 
-  const { prefectures, operators, routes, routeTypes, lines } = filters.values
+  const { values } = filters
   useEffect(() => {
-    onConditions?.({
-      kind: 'scatter',
-      xKey,
-      yKey,
-      prefectures,
-      operators,
-      routes,
-      routeTypes,
-      lines,
-      excludeLowN,
-    })
-  }, [onConditions, xKey, yKey, prefectures, operators, routes, routeTypes, lines, excludeLowN])
+    onConditions?.({ kind: 'scatter', xKey, yKey, ...values, excludeLowN })
+  }, [onConditions, xKey, yKey, values, excludeLowN])
 
   const { growth, isLoading, isValidating, error } = useGrowth(
     { x: xKey, y: yKey, ...filters.values, excludeLowN },
@@ -99,7 +89,7 @@ export function ScatterBody({
     <>
       <div className="space-y-2 border-b border-slate-100 px-4 py-3">
         <div className="flex flex-wrap items-center gap-3">
-          <StationFilterControls state={filters} />
+          <StationFilterControls state={filters} originLabel={growth?.near?.label ?? null} />
           <label className="flex cursor-pointer items-center gap-1.5 text-sm text-slate-600">
             <input
               type="checkbox"

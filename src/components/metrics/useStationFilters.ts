@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * 駅の絞り込み（都道府県 × 運営会社 × 路線 × 法令上の路線・事業者種別）の状態と連動（260801）。
+ * 駅の絞り込み（都道府県・市区町村 × 運営会社 × 路線 × 法令上の路線・事業者種別 × 範囲・起点）の状態と連動（260801）。
  *
  * 散布・ランキング・おすすめは同じ条件で絞る。連動の規則（0 件になる組合せを出さない・
  * 会社を外したら自動で入った県だけ外す・候補は都道府県 ∩ 路線）を **1 か所**にまとめ、
@@ -10,12 +10,21 @@
  * 路線（運行系統・`lines`）は 2026-10-08 L4 で選べるようにした：都道府県・会社を選べば路線の候補が、
  * 路線を選べば都道府県・会社の候補が絞られる（`lineLink.ts`）。
  *
+ * 市区町村・範囲・起点（2026-10-08 B2）は `useAreaFilters` が持つ。
+ *
  * 純粋な計算は `operatorLink.ts` / `routeLink.ts` / `lineLink.ts` にあり、ここは状態と取得の束ね役。
  */
 
 import { useCallback, useMemo, useState } from 'react'
 import { type Line, type Operator, type Route } from '@/shared/api'
-import { allowedCandidates, narrowingScopes, type StationFilterValues } from './filterLink'
+import { type Viewport } from '@/shared/viewport'
+import {
+  allowedCandidates,
+  narrowingScopes,
+  type NearFilter,
+  type StationFilterValues,
+} from './filterLink'
+import { type AreaFiltersState, useAreaFilters } from './useAreaFilters'
 import { useLines } from './useLines'
 import { useOperators } from './useOperators'
 import { useRoutes } from './useRoutes'
@@ -32,14 +41,19 @@ import {
 /** チャットからの昇格で初期値を preset する（未指定は絞らない）。 */
 export type StationFilterInitial = {
   readonly prefectures?: readonly string[]
+  readonly municipality?: string
   readonly operators?: readonly string[]
   readonly routes?: readonly string[]
   readonly routeTypes?: readonly number[]
   readonly lines?: readonly number[]
+  readonly bbox?: Viewport | null
+  readonly near?: NearFilter | null
 }
 
 export type StationFiltersState = {
   readonly values: StationFilterValues
+  /** 市区町村・範囲・起点（選択肢と、外す操作）。 */
+  readonly area: AreaFiltersState
   /** 一覧（セレクタの選択肢）。 */
   readonly operatorList: readonly Operator[]
   readonly routeList: readonly Route[]
@@ -86,6 +100,7 @@ export function useStationFilters(
   const [lines, setLines] = useState<number[]>([...(initial?.lines ?? [])])
 
   const prefectures = link.prefectures
+  const area = useAreaFilters(open, prefectures, initial)
   const {
     operators: operatorList,
     isLoading: operatorsLoading,
@@ -95,9 +110,10 @@ export function useStationFilters(
   const { lines: lineList, isLoading: linesLoading, error: linesError } = useLines(open)
   const index = useMemo(() => prefectureIndex(operatorList), [operatorList])
 
+  const { municipality, bbox, near } = area
   const values = useMemo<StationFilterValues>(
-    () => ({ prefectures, operators, routes, routeTypes, lines }),
-    [prefectures, operators, routes, routeTypes, lines],
+    () => ({ prefectures, municipality, operators, routes, routeTypes, lines, bbox, near }),
+    [prefectures, municipality, operators, routes, routeTypes, lines, bbox, near],
   )
   // 双方向の連動：会社・路線を選べば県の候補が、県や路線を選べば会社の候補が絞られる（`filterLink.ts`）。
   const allowed = useMemo(
@@ -135,6 +151,7 @@ export function useStationFilters(
 
   return {
     values,
+    area,
     operatorList,
     routeList,
     lineList,

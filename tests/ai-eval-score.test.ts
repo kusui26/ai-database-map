@@ -40,6 +40,34 @@ describe('scoreCase', () => {
     expect(result.pass).toBe(true)
   })
 
+  it('入れ子のオブジェクトは部分一致（near: { withinM: 5000 }・2026-10-08 B2）', () => {
+    const observed: EvalObserved = {
+      ...base,
+      toolCalls: [
+        {
+          name: 'rankStations',
+          input: { metric: 'lp_near_price', near: { station: '立川', withinM: 5000 } },
+        },
+      ],
+    }
+    const expectNear = (near: Record<string, unknown>) =>
+      scoreCase({ toolCalls: [{ name: 'rankStations', inputIncludes: { near } }] }, observed).pass
+    expect(expectNear({ withinM: 5000 })).toBe(true)
+    expect(expectNear({ withinM: 5000, station: '立川' })).toBe(true)
+    expect(expectNear({ withinM: 3000 })).toBe(false)
+    expect(expectNear({ radiusM: 5000 })).toBe(false)
+    const flat: EvalObserved = {
+      ...base,
+      toolCalls: [{ name: 'rankStations', input: { near: 'たちかわ' } }],
+    }
+    expect(
+      scoreCase(
+        { toolCalls: [{ name: 'rankStations', inputIncludes: { near: { withinM: 5000 } } }] },
+        flat,
+      ).pass,
+    ).toBe(false)
+  })
+
   it('期待ツールが呼ばれない／パネルが出ないと不合格', () => {
     const result = scoreCase(
       {
@@ -129,9 +157,9 @@ describe('scoreCase: 空の図と呼び出し回数（2026-10-07 B1）', () => {
 })
 
 describe('EVAL_CASES', () => {
-  it('45 問・id 一意・全問に期待あり', () => {
-    expect(EVAL_CASES.length).toBe(45)
-    expect(new Set(EVAL_CASES.map((c) => c.id)).size).toBe(45)
+  it('48 問・id 一意・全問に期待あり', () => {
+    expect(EVAL_CASES.length).toBe(48)
+    expect(new Set(EVAL_CASES.map((c) => c.id)).size).toBe(48)
     for (const testCase of EVAL_CASES) {
       expect(testCase.query.length).toBeGreaterThan(0)
       expect(Object.keys(testCase.expect).length).toBeGreaterThan(0)
@@ -144,6 +172,9 @@ describe('EVAL_CASES', () => {
       'rank-line-yamanote',
       'rank-line-osaka-chuo',
       'rank-line-shinjuku',
+      'rank-municipality',
+      'rank-near-suburb',
+      'rank-near-screenshot',
     ])
     for (const testCase of withViewport) {
       expect(viewportFromTuple(testCase.bbox ?? []), testCase.id).not.toBeNull()

@@ -191,6 +191,11 @@ export const rankingRowSchema = z.object({
   value: z.number(),
   formatted: z.string(),
   flagged: z.boolean(),
+  /**
+   * 起点からの距離（m・整数）。「竹橋から 5km」のように起点から何 m 以内で絞った順位表だけが持つ（2026-10-08 B2）。
+   * 受け手は無ければ出さない（以前の順位表と同じ形のまま読める）。
+   */
+  distM: z.number().optional(),
 })
 export type RankingRow = z.infer<typeof rankingRowSchema>
 

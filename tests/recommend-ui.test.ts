@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest'
 import { shareOfWeights } from '@/domain/recommend/compose'
 import { RECOMMEND_PRESETS } from '@/domain/recommend/presets'
 import { colorIndexes } from '@/components/recommend/colors'
-import { municipalityOptions } from '@/components/recommend/municipalities'
+import { municipalityOptions } from '@/components/metrics/municipalities'
 import {
   DEFAULT_CRITERIA,
   hasArea,

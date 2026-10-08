@@ -9,7 +9,8 @@
 
 import { describe, expect, it } from 'vitest'
 import { recommendQuerySchema, type RecommendQuery } from '@/shared/api'
-import { buildRecommendInput, MAX_CANDIDATE_STATIONS, parseBbox } from '@/domain/recommend/request'
+import { buildRecommendInput, MAX_CANDIDATE_STATIONS } from '@/domain/recommend/request'
+import { parseBbox } from '@/domain/area'
 import { HAZARD_PENALTY_STEPS, RECOMMEND_PRESETS } from '@/domain/recommend/presets'
 
 function query(raw: Record<string, unknown> = {}): RecommendQuery {

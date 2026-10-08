@@ -130,8 +130,9 @@ def check_compat(checks: Checks, cur: psycopg.Cursor) -> None:
     checks.add(listed(cur, ops=["東急電鉄"]) == tokyu, "line_cds なしの一覧（会社）は以前と同じ集合", f"{len(tokyu)} 駅")
     cur.execute("select pg_get_function_identity_arguments(oid) from pg_proc where proname = 'station_matches_filters'")
     signatures = [row[0] for row in cur.fetchall()]
-    one = len(signatures) == 1 and len(signatures[0].split(", ")) == 6 and signatures[0].endswith("line_cds integer[]")
-    checks.add(one, "述語は 6 引数（末尾 line_cds）の 1 つだけ（旧 5 引数は落とした）", f"{signatures}")
+    # 述語の形は B2（20261008210000）で駅の列＋条件 13 に作り直した（路線は内側の station_matches_railway）。
+    one = len(signatures) == 1 and "line_cds integer[]" in signatures[0]
+    checks.add(one, "述語は 1 つだけで line_cds を受ける（旧版は落とした）", f"{len(signatures)} 個")
     missing = []
     for fn in ("rank_by_column", "scatter_points", "list_stations", "line_names", "station_matches_filters"):
         cur.execute("select bool_and(has_function_privilege('anon', oid, 'execute')) from pg_proc where proname = %s", (fn,))

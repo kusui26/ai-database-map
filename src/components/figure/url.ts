@@ -25,6 +25,7 @@ import {
   type inferParserType,
 } from 'nuqs'
 import type { Order } from '@/shared/api'
+import { viewportFromTuple, type Viewport } from '@/shared/viewport'
 
 /** 図の種類（URL の `?fig` の値）。 */
 export const FIGURE_KINDS = ['ranking', 'scatter'] as const
@@ -36,6 +37,11 @@ const NO_CODES: number[] = []
 /** 絞り込み（空＝絞らない）。ランキングと散布で同じ意味（`shared/promotion.ts` と同じ形）。 */
 export type FigureFilters = {
   readonly prefectures: readonly string[]
+  /** 市区町村（前方一致の値・空＝絞らない・2026-10-08 B2）。 */
+  readonly municipality: string
+  /** 範囲・起点の駅と半径（チャットの図の条件・null＝絞らない・B2）。 */
+  readonly bbox: Viewport | null
+  readonly near: { readonly grp: string; readonly radiusM: number } | null
   readonly operators: readonly string[]
   readonly routes: readonly string[]
   /** 事業者種別のコード（表示名ではない）。 */
@@ -64,6 +70,9 @@ export type Figure = RankingFigure | ScatterFigure
 
 const NO_FILTERS: FigureFilters = {
   prefectures: [],
+  municipality: '',
+  bbox: null,
+  near: null,
   operators: [],
   routes: [],
   routeTypes: [],
@@ -95,6 +104,11 @@ export const FIGURE_PARSERS = {
   figY: parseAsString,
   figO: parseAsStringLiteral(ORDERS).withDefault('desc'),
   figPref: parseAsArrayOf(parseAsString).withDefault(NO_NAMES),
+  /** 市区町村・範囲（「西,南,東,北」）・起点の駅（grp）と半径（m）（2026-10-08 B2）。 */
+  figMuni: parseAsString.withDefault(''),
+  figBbox: parseAsString,
+  figNear: parseAsString,
+  figWithin: parseAsInteger,
   figOps: parseAsArrayOf(parseAsString).withDefault(NO_NAMES),
   figRoutes: parseAsArrayOf(parseAsString).withDefault(NO_NAMES),
   figTypes: parseAsArrayOf(parseAsInteger).withDefault(NO_CODES),
@@ -104,10 +118,23 @@ export const FIGURE_PARSERS = {
 
 export type FigureUrlValues = inferParserType<typeof FIGURE_PARSERS>
 
+/** URL の範囲（「西,南,東,北」）→ 範囲（形が崩れていれば null＝絞らない）。 */
+function bboxOfUrl(raw: string | null): Viewport | null {
+  return raw === null ? null : viewportFromTuple(raw.split(',').map(Number))
+}
+
+/** URL の起点（grp と半径の組）。片方だけなら null（絞らない）。 */
+function nearOfUrl(grp: string | null, radiusM: number | null): FigureFilters['near'] {
+  return grp === null || grp === '' || radiusM === null ? null : { grp, radiusM }
+}
+
 /** URL → 開いている図（開いていなければ null）。 */
 export function figureFromUrl(values: FigureUrlValues): Figure | null {
   const filters: FigureFilters = {
     prefectures: values.figPref,
+    municipality: values.figMuni,
+    bbox: bboxOfUrl(values.figBbox),
+    near: nearOfUrl(values.figNear, values.figWithin),
     operators: values.figOps,
     routes: values.figRoutes,
     routeTypes: values.figTypes,
@@ -128,8 +155,13 @@ type FilterUrlValues = Omit<FigureUrlValues, 'fig' | 'figM' | 'figX' | 'figY' | 
 
 /** 絞り込み → URL の値（ランキングと散布で同じ）。 */
 function filtersToUrl(filters: FigureFilters): FilterUrlValues {
+  const { bbox, near } = filters
   return {
     figPref: [...filters.prefectures],
+    figMuni: filters.municipality,
+    figBbox: bbox === null ? null : [bbox.west, bbox.south, bbox.east, bbox.north].join(','),
+    figNear: near?.grp ?? null,
+    figWithin: near?.radiusM ?? null,
     figOps: [...filters.operators],
     figRoutes: [...filters.routes],
     figTypes: [...filters.routeTypes],

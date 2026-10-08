@@ -11,6 +11,7 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { dataSources } from '@/domain/sources'
 import { hazardDataSources } from '@/domain/hazard/sources'
+import { LINE_SOURCE } from '@/shared/constants'
 import { cn } from '@/lib/utils'
 
 export function AboutDialog({
@@ -161,6 +162,22 @@ export function AboutDialog({
                   </li>
                 ))}
               </ul>
+            </section>
+
+            <section className="space-y-1">
+              <h3 className="font-semibold text-slate-900">路線</h3>
+              <p className="text-xs text-slate-500">
+                路線（JR山手線・東京メトロ東西線など、利用者が呼ぶ路線）と駅の対応：{' '}
+                <a
+                  href={LINE_SOURCE.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-indigo-600 underline underline-offset-2 hover:text-indigo-700"
+                >
+                  {LINE_SOURCE.nameJa}
+                </a>
+                （{LINE_SOURCE.versionJa}を加工して使用）。
+              </p>
             </section>
 
             <section className="space-y-1">

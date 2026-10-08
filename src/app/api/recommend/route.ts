@@ -19,6 +19,7 @@
 
 import { recommendQuerySchema } from '@/shared/api'
 import { presentRecommendation } from '@/domain/recommend/presenter'
+import { resolveLineCodes } from '@/domain/lines'
 import { buildRecommendInput } from '@/domain/recommend/request'
 import { runRecommendation } from '@/domain/recommend/run'
 import { checkRateLimit } from '@/ai/rate-limit'
@@ -53,6 +54,7 @@ function queryFrom(params: URLSearchParams): Record<string, unknown> {
     operators: listParam(params.get('operators')),
     routes: listParam(params.get('routes')),
     routeTypes: listParam(params.get('routeTypes'))?.map(Number),
+    lines: listParam(params.get('lines'))?.map(Number),
     bbox: params.get('bbox') ?? undefined,
     preset: params.get('preset') ?? undefined,
     weights: params.get('weights') ?? undefined,
@@ -78,7 +80,10 @@ export function GET(request: Request): Promise<Response> {
     if (!limit.ok) return rateLimited(limit.retryAfterMs)
 
     const query = recommendQuerySchema.parse(queryFrom(new URL(request.url).searchParams))
-    const built = buildRecommendInput(query)
+    // 路線（運行系統）は名前を引いて確かめる（知らないコードは 400・指定が無ければ DB に行かない）。
+    const lines = await resolveLineCodes(query.lines)
+    if (!lines.ok) throw new BadRequestError(lines.messageJa)
+    const built = buildRecommendInput(query, lines.lines)
     if (!built.ok) throw new BadRequestError(built.messageJa)
 
     const run = await runRecommendation(built.input)

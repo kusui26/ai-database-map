@@ -13,7 +13,7 @@
  */
 
 import type { ListStationsFilter } from '@/db/queries'
-import type { RecommendQuery } from '@/shared/api'
+import type { LineRef, RecommendQuery } from '@/shared/api'
 import { HAZARD_PENALTY_STEPS, RECOMMEND_PRESETS, type PresetMetric } from './presets'
 import type { RecommendRunInput } from './run'
 import type { HazardPolicy } from './types'
@@ -47,6 +47,7 @@ function hasFilter(query: RecommendQuery): boolean {
     query.operators.length > 0 ||
     query.routes.length > 0 ||
     query.routeTypes.length > 0 ||
+    query.lines.length > 0 ||
     query.bbox !== undefined
   )
 }
@@ -90,20 +91,34 @@ function overrideWeights(
   }
 }
 
-/** 何を候補にするか（市区町村は前方一致・路線などは OR）。 */
-function filterOf(query: RecommendQuery, bbox: ListStationsFilter['bbox']): ListStationsFilter {
+/**
+ * 何を候補にするか（市区町村は前方一致・路線などは OR）。路線（運行系統）は**名前を引けたもの**の
+ * コードだけを渡す（`lines` はルートが `resolveLineCodes` で確かめた結果）。
+ */
+function filterOf(
+  query: RecommendQuery,
+  bbox: ListStationsFilter['bbox'],
+  lines: readonly LineRef[],
+): ListStationsFilter {
   return {
     prefectures: query.prefectures,
     ...(query.municipality === undefined ? {} : { municipality: query.municipality }),
     operators: query.operators,
     routes: query.routes,
     routeTypes: query.routeTypes,
+    ...(lines.length === 0 ? {} : { lines: lines.map((line) => line.lineCd) }),
     ...(bbox === undefined ? {} : { bbox }),
   }
 }
 
-/** 検証済みクエリ → 実行入力。失敗は日本語 1 文で返す（ルートが 400 にする）。 */
-export function buildRecommendInput(query: RecommendQuery): RecommendInputResult {
+/**
+ * 検証済みクエリ → 実行入力。失敗は日本語 1 文で返す（ルートが 400 にする）。
+ * `lines` はクエリの路線コードを名前つきに確かめたもの（261008 L2・対象の言い方に名前で出す）。
+ */
+export function buildRecommendInput(
+  query: RecommendQuery,
+  lines: readonly LineRef[] = [],
+): RecommendInputResult {
   if (!hasFilter(query)) {
     return {
       ok: false,
@@ -127,7 +142,8 @@ export function buildRecommendInput(query: RecommendQuery): RecommendInputResult
     ok: true,
     customized: specs.some((spec, index) => spec.weight !== preset.metrics[index]?.weight),
     input: {
-      filter: filterOf(query, bbox),
+      filter: filterOf(query, bbox, lines),
+      lines,
       specs,
       radiusM: query.radiusM,
       method: query.method,

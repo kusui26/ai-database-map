@@ -24,7 +24,7 @@ import {
   normalizeMethodSchema,
   recommendPresetIdSchema,
 } from './recommend'
-import { ALERT_LEVELS, RADII_M } from './constants'
+import { ALERT_LEVELS, MAX_LINES_PER_QUERY, RADII_M } from './constants'
 import { hazardItemSchema, rankingRowSchema, scatterPointSchema, sourceRefSchema } from './protocol'
 import { evacuationDisasterKeySchema } from './evacuation'
 
@@ -40,6 +40,30 @@ export type Order = z.infer<typeof orderSchema>
 // --- クエリ入力（?query= から。数値は coerce） --------------------------
 export const metricsQuerySchema = z.object({ category: categorySchema.optional() })
 
+/**
+ * 路線（運行系統・駅データ.jp）の指定：路線コード（GET /api/lines の lineCd）の配列。空＝絞らない（261008 L2）。
+ * 法令上の路線（routes＝S12）とは別の条件で、意味は「どれかの路線の駅」。ほかの条件とは AND。
+ * 数でないコードは**黙って捨てずに 400**（routeTypes と違い、捨てると別の駅の集合で答えてしまう）。
+ */
+export const lineCdsQuerySchema = z
+  .array(
+    z
+      .number({
+        error: 'lines は路線コード（/api/lines の lineCd）を数でカンマ区切りに指定してください',
+      })
+      .int({ error: 'lines の路線コードは整数です' })
+      .positive({ error: 'lines の路線コードは正の整数です' }),
+  )
+  .max(MAX_LINES_PER_QUERY, { error: `lines は ${MAX_LINES_PER_QUERY} 本までです` })
+  .default([])
+
+/** どの路線（運行系統）で絞ったか（応答に名前つきで返す・題もこの名前で作る）。 */
+export const lineRefSchema = z.object({
+  lineCd: z.number().int(),
+  name: z.string(), // 利用者の呼び方（「JR山手線」「東京メトロ東西線」）
+})
+export type LineRef = z.infer<typeof lineRefSchema>
+
 export const stationsQuerySchema = z.object({
   q: z.string().min(1).optional(),
   bbox: z.string().optional(), // "west,south,east,north"
@@ -50,6 +74,7 @@ export const stationsQuerySchema = z.object({
   operators: z.string().min(1).optional(), // カンマ区切り（一覧の絞り込み・260903 PR-5）
   routes: z.string().min(1).optional(), // カンマ区切り（同上）
   routeTypes: z.string().min(1).optional(), // カンマ区切りの整数（1:新幹線 …・routes とは OR）
+  lines: z.string().min(1).optional(), // カンマ区切りの路線コード（運行系統・261008 L2・どれかの路線の駅）
   limit: z.coerce.number().int().min(1).max(2000).optional(),
 })
 
@@ -64,6 +89,7 @@ export const rankingQuerySchema = z.object({
   operators: z.array(z.string()).default([]), // 空＝全社（260801・散布と同じ意味）
   routes: z.array(z.string()).default([]), // 空＝全路線（260801）
   routeTypes: z.array(z.number().int()).default([]), // 空＝全種別（routes とは OR）
+  lines: lineCdsQuerySchema, // 空＝絞らない（運行系統・261008 L2）
   order: orderSchema.default('desc'),
   limit: z.coerce.number().int().min(1).max(100).default(50), // P6c: ページサイズ
   offset: z.coerce.number().int().min(0).default(0), // P6c: ページング
@@ -77,6 +103,7 @@ export const growthQuerySchema = z.object({
   operators: z.array(z.string()).default([]), // 空＝全社（260730・「・」分割の完全一致 OR）
   routes: z.array(z.string()).default([]), // 空＝全路線（260731）
   routeTypes: z.array(z.number().int()).default([]), // 空＝全種別（1:新幹線 …・routes とは OR）
+  lines: lineCdsQuerySchema, // 空＝絞らない（運行系統・261008 L2）
   excludeLowN: boolFlag,
 })
 
@@ -174,6 +201,7 @@ export const rankingResponseSchema = z.object({
   operators: z.array(z.string()).default([]), // 空＝全社（260801）
   routes: z.array(z.string()).default([]), // 空＝全路線（260801）
   routeTypes: z.array(z.number()).default([]), // 空＝全種別（260801）
+  lines: z.array(lineRefSchema).default([]), // 空＝絞らない（運行系統・261008 L2）
   order: orderSchema,
   offset: z.number(), // このページの先頭順位-1（P6c）
   total: z.number(), // フィルタ後の総件数（P6c）
@@ -188,6 +216,7 @@ export const growthResponseSchema = z.object({
   operators: z.array(z.string()).default([]), // 空＝全社（260730）
   routes: z.array(z.string()).default([]), // 空＝全路線（260731）
   routeTypes: z.array(z.number()).default([]), // 空＝全種別（260731）
+  lines: z.array(lineRefSchema).default([]), // 空＝絞らない（運行系統・261008 L2）
   clusterCount: z.number(),
   excludedLowN: z.number(),
   points: z.array(scatterPointSchema),
@@ -226,6 +255,36 @@ export const routesResponseSchema = z.object({
   routes: z.array(routeSchema), // 駅グループ数の多い順
 })
 export type RoutesResponse = z.infer<typeof routesResponseSchema>
+
+/**
+ * 路線（運行系統）の一覧（GET /api/lines・261008 L2）。**利用者が呼ぶ路線**で、JR山手線は環状 30 駅
+ * （上の routes＝法令上の路線では 17 駅）。共通の条件 `lines` には lineCd を渡す。
+ */
+export const lineSchema = z.object({
+  lineCd: z.number().int(),
+  name: z.string(), // 利用者の呼び方（「JR山手線」「JR中央線(快速)」「東京メトロ東西線」）
+  formalName: z.string(), // 正式名（「JR京都線」→「JR東海道本線(京都～大阪)」）
+  companyName: z.string(), // 事業者名（「JR東日本」「東京メトロ」「東京都交通局」）
+  companyShort: z.string(), // 略称（「相鉄」「南海」）
+  /** S12 の会社名（`operators` の条件と同じ語彙）。自分の会社名が S12 に無い事業者（線路の持ち主）は null。 */
+  operator: z.string().nullable(),
+  color: z.string().nullable(), // 路線色（"#80C241"）
+  colorName: z.string().nullable(),
+  lineType: z.number().int(),
+  lineTypeLabel: z.string(), // 「一般」「地下鉄」「路面電車」…
+  isLoop: z.boolean(), // 環状（並びの最初と最後がつながる）
+  stationCount: z.number().int(), // 駅グループの数
+  prefectures: z.array(z.string()), // 駅のある都道府県（駅の多い順）
+})
+export type Line = z.infer<typeof lineSchema>
+
+export const linesResponseSchema = z.object({
+  /** 出典と版（「駅データ.jp 2024-04-26」）。 */
+  source: z.string(),
+  sourceUrl: z.string(),
+  lines: z.array(lineSchema), // 路線コードの順（事業者ごとにまとまる）
+})
+export type LinesResponse = z.infer<typeof linesResponseSchema>
 
 // --- ハザード・レイヤカタログ（GET /api/hazard/catalog・260824_flood §6） ---
 
@@ -609,6 +668,7 @@ export const recommendQuerySchema = z.object({
   operators: z.array(z.string().min(1)).max(20).default([]),
   routes: z.array(z.string().min(1)).max(20).default([]),
   routeTypes: z.array(z.number().int().min(1).max(9)).max(9).default([]),
+  lines: lineCdsQuerySchema, // 路線（運行系統・261008 L2）
   bbox: z.string().optional(), // "west,south,east,north"
   // レシピ
   preset: recommendPresetIdSchema.default('family'),
@@ -637,6 +697,7 @@ export const recommendAreaSchema = z.object({
   operators: z.array(z.string()),
   routes: z.array(z.string()),
   routeTypes: z.array(z.number()),
+  lines: z.array(lineRefSchema).default([]), // 路線（運行系統・261008 L2）
   bbox: z
     .object({ west: z.number(), south: z.number(), east: z.number(), north: z.number() })
     .nullable(),

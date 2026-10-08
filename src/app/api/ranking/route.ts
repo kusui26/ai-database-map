@@ -1,6 +1,7 @@
 import { isRankableKey } from '@/shared/catalog'
 import { rankingQuerySchema } from '@/shared/api'
 import { rankByColumn } from '@/db/queries'
+import { resolveLineCodes } from '@/domain/lines'
 import { buildRanking } from '@/domain/ranking/presenter'
 import { BadRequestError, CACHE, handle, json } from '@/lib/http'
 
@@ -11,7 +12,10 @@ function listParam(value: string | null): string[] | undefined {
   return value === null ? undefined : value.split(',').filter(Boolean)
 }
 
-/** GET /api/ranking?metric=&prefecture=&operators=&routes=&routeTypes=&order=&limit= — 順位表。 */
+/**
+ * GET /api/ranking?metric=&prefecture=&operators=&routes=&routeTypes=&lines=&order=&limit= — 順位表。
+ * lines は路線（運行系統）の路線コード（GET /api/lines の lineCd・261008 L2）。題にも路線の名前が入る。
+ */
 export function GET(request: Request): Promise<Response> {
   return handle(async () => {
     const params = new URL(request.url).searchParams
@@ -22,6 +26,7 @@ export function GET(request: Request): Promise<Response> {
       operators: listParam(params.get('operators')),
       routes: listParam(params.get('routes')),
       routeTypes: typesParam?.map(Number).filter((type) => Number.isInteger(type)),
+      lines: listParam(params.get('lines'))?.map(Number),
       order: params.get('order') ?? undefined,
       limit: params.get('limit') ?? undefined,
       offset: params.get('offset') ?? undefined,
@@ -30,6 +35,8 @@ export function GET(request: Request): Promise<Response> {
     if (!isRankableKey(query.metric)) {
       throw new BadRequestError(`ランキング不可の metric です: ${query.metric}`)
     }
+    const lines = await resolveLineCodes(query.lines)
+    if (!lines.ok) throw new BadRequestError(lines.messageJa)
     const { rows, total } = await rankByColumn(
       query.metric,
       query.prefectures,
@@ -40,12 +47,14 @@ export function GET(request: Request): Promise<Response> {
       query.operators,
       query.routes,
       query.routeTypes,
+      lines.lines.map((line) => line.lineCd),
     )
     return json(
       buildRanking(query.metric, query.prefectures, query.order, rows, total, query.offset, {
         operators: query.operators,
         routes: query.routes,
         routeTypes: query.routeTypes,
+        lines: lines.lines,
       }),
       CACHE.hour,
     )

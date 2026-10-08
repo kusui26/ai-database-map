@@ -4,7 +4,12 @@
  */
 
 import { z } from 'zod'
-import { type StationListItem, type StationRow, type StationSummary } from '@/shared/api'
+import {
+  type LineRef,
+  type StationListItem,
+  type StationRow,
+  type StationSummary,
+} from '@/shared/api'
 import { stationHazardSummarySchema, type StationHazardSummary } from '@/shared/hazard-summary'
 import { db, DbError } from './client'
 
@@ -74,6 +79,8 @@ export type ListStationsFilter = {
   readonly operators?: readonly string[]
   readonly routes?: readonly string[]
   readonly routeTypes?: readonly number[]
+  /** 路線（運行系統）の路線コード。どれかの路線の駅（ほかの条件とは AND・261008 L2）。 */
+  readonly lines?: readonly number[]
   /** 地図範囲（4 値すべて揃ったときだけ効く）。 */
   readonly bbox?: {
     readonly west: number
@@ -111,6 +118,7 @@ export async function listStations(filter: ListStationsFilter): Promise<StationL
       ops: arrayOrNull(filter.operators),
       routes_in: arrayOrNull(filter.routes),
       route_types: arrayOrNull(filter.routeTypes),
+      line_cds: arrayOrNull(filter.lines),
       west: filter.bbox?.west ?? null,
       south: filter.bbox?.south ?? null,
       east: filter.bbox?.east ?? null,
@@ -251,6 +259,7 @@ export async function rankByColumn(
   operators: readonly string[] = [],
   routes: readonly string[] = [],
   routeTypes: readonly number[] = [],
+  lines: readonly number[] = [],
 ): Promise<{ rows: RankRow[]; total: number }> {
   const args = {
     column_key: columnKey,
@@ -264,6 +273,7 @@ export async function rankByColumn(
     ops: operators.length > 0 ? operators : null,
     routes: routes.length > 0 ? routes : null,
     route_types: routeTypes.length > 0 ? routeTypes : null,
+    line_cds: lines.length > 0 ? lines : null, // 路線（運行系統・261008 L2）
   }
   const raw = await rpcRows('rank_by_column', args, rankRowSchema)
   return {
@@ -305,6 +315,8 @@ export type ScatterFilters = {
   readonly operators: readonly string[]
   readonly routes: readonly string[]
   readonly routeTypes: readonly number[]
+  /** 路線（運行系統）の路線コード（261008 L2）。省略・空＝絞らない。 */
+  readonly lines?: readonly number[]
 }
 
 /**
@@ -331,6 +343,7 @@ export async function scatterPoints(
     ops: filters.operators.length > 0 ? [...filters.operators] : null,
     routes: filters.routes.length > 0 ? [...filters.routes] : null,
     route_types: filters.routeTypes.length > 0 ? [...filters.routeTypes] : null,
+    line_cds: arrayOrNull(filters.lines),
   })
   const rows = z.array(scatterRowSchema).parse(raw)
   return rows.map((r) => ({
@@ -387,6 +400,79 @@ export async function routeNames(): Promise<
     operators: r.operators ?? [],
     routeTypes: r.route_types ?? [],
   }))
+}
+
+// --- 路線（運行系統・駅データ.jp・261008 L2） -----------------------------
+const lineRowSchema = z.object({
+  line_cd: z.number(),
+  name: z.string(),
+  formal_name: z.string(),
+  company_name: z.string(),
+  company_short: z.string(),
+  operator: z.string().nullable(),
+  color: z.string().nullable(),
+  color_name: z.string().nullable(),
+  line_type: z.number(),
+  is_loop: z.boolean(),
+  station_count: z.number(),
+  prefectures: z.array(z.string()).nullable().default([]),
+  source: z.string(),
+})
+
+/** 路線の一覧の 1 行（DB の形を camelCase にしたもの・表示名は付けない＝下位層）。 */
+export type LineRow = {
+  readonly lineCd: number
+  readonly name: string
+  readonly formalName: string
+  readonly companyName: string
+  readonly companyShort: string
+  readonly operator: string | null
+  readonly color: string | null
+  readonly colorName: string | null
+  readonly lineType: number
+  readonly isLoop: boolean
+  readonly stationCount: number
+  readonly prefectures: readonly string[]
+  readonly source: string
+}
+
+/** 路線の一覧（`line_names` RPC・路線コードの順。601 行なので PostgREST の行上限に届かない）。 */
+export async function lineNames(): Promise<LineRow[]> {
+  const rows = await rpcRows('line_names', {}, lineRowSchema)
+  return rows.map((r) => ({
+    lineCd: r.line_cd,
+    name: r.name,
+    formalName: r.formal_name,
+    companyName: r.company_name,
+    companyShort: r.company_short,
+    operator: r.operator,
+    color: r.color,
+    colorName: r.color_name,
+    lineType: r.line_type,
+    isLoop: r.is_loop,
+    stationCount: r.station_count,
+    prefectures: r.prefectures ?? [],
+    source: r.source,
+  }))
+}
+
+const lineRefRowSchema = z.object({ line_cd: z.number(), name: z.string() })
+
+/**
+ * 路線コード → 名前（主キーで引くだけ・知らないコードは返らない）。
+ * 応答に「どの路線で絞ったか」を名前で返すため・知らないコードを 400 にするために使う。
+ */
+export async function linesByCodes(codes: readonly number[]): Promise<LineRef[]> {
+  if (codes.length === 0) return []
+  const { data, error } = await db()
+    .from('lines')
+    .select('line_cd,name')
+    .in('line_cd', [...codes])
+  if (error) throw new DbError(error.message)
+  return z
+    .array(lineRefRowSchema)
+    .parse(data)
+    .map((r) => ({ lineCd: r.line_cd, name: r.name }))
 }
 
 // --- 駅詳細 -------------------------------------------------------------

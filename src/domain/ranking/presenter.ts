@@ -4,7 +4,7 @@
  */
 
 import { requireEntry } from '@/shared/catalog'
-import { type Order, type RankingResponse } from '@/shared/api'
+import { type LineRef, type Order, type RankingResponse } from '@/shared/api'
 import { formatNumber } from '@/shared/format'
 
 /** rank_by_column RPC の1行（生）。 */
@@ -22,6 +22,8 @@ export type RankingOptions = {
   readonly operators?: readonly string[]
   readonly routes?: readonly string[]
   readonly routeTypes?: readonly number[]
+  /** 路線（運行系統・名前つき・261008 L2）。絞り込みは DB 側、ここは応答へ載せて題に使う。 */
+  readonly lines?: readonly LineRef[]
 }
 
 export function buildRanking(
@@ -41,6 +43,7 @@ export function buildRanking(
     operators: [...(options.operators ?? [])],
     routes: [...(options.routes ?? [])],
     routeTypes: [...(options.routeTypes ?? [])],
+    lines: [...(options.lines ?? [])],
     order,
     offset,
     total,

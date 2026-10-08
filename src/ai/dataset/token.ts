@@ -33,6 +33,7 @@ export const datasetSelectorSchema = z.object({
   operators: z.array(z.string()).optional(),
   routes: z.array(z.string()).optional(),
   routeTypes: z.array(z.number().int()).optional(),
+  lines: z.array(z.number().int()).optional(), // 路線（運行系統）の路線コード（261008 L2）
   bbox: z
     .object({ west: z.number(), south: z.number(), east: z.number(), north: z.number() })
     .optional(),

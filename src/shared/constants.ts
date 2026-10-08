@@ -341,6 +341,11 @@ export function routeLabel(routes: readonly string[]): string {
   return selectionLabel(routes, '全路線')
 }
 
+/** 選択した路線（運行系統）の表示ラベル（名前・空＝全路線・261008 L2）。 */
+export function lineLabel(names: readonly string[]): string {
+  return selectionLabel(names, '全路線')
+}
+
 /**
  * 路線セレクタのボタン表示（路線と種別は 1 つのコントロールで扱う・空＝全路線）。
  * 種別を先に並べる：「新幹線」だけを押す使い方が最も多く、先頭に出したほうが読み取りやすい。
@@ -362,6 +367,43 @@ export function routeFilterLabel(routes: readonly string[], routeTypes: readonly
 export function routeOptionLabel(route: string, operators: readonly string[]): string {
   return operators.length <= 1 ? route : `${route}（${operators.length}社）`
 }
+
+// --- 路線（運行系統・駅データ.jp・261008 L2） ------------------------------
+// 上の「路線」（S12 の法令上の路線）とは別物。利用者が呼ぶ路線（JR山手線＝環状 30 駅）で、
+// 共通の条件 `lines`（路線コード）で絞る（docs/261001_fix_user_feedback_ui.md §6.8）。
+
+/** 路線区分（駅データ.jp の line_type）。 */
+export const LINE_TYPES = [0, 1, 2, 3, 4, 5] as const
+export type LineType = (typeof LINE_TYPES)[number]
+
+/** 路線区分の表示名。 */
+export const LINE_TYPE_LABELS: Readonly<Record<LineType, string>> = {
+  0: 'その他',
+  1: '新幹線',
+  2: '一般',
+  3: '地下鉄',
+  4: '路面電車',
+  5: 'モノレール・新交通',
+}
+
+/** コード → 表示名（未知のコードは「その他」）。 */
+export function lineTypeLabel(code: number): string {
+  const known = LINE_TYPES.find((type) => type === code)
+  return known === undefined ? LINE_TYPE_LABELS[0] : LINE_TYPE_LABELS[known]
+}
+
+/** 1 回の指定で受ける路線の数の上限（URL・SQL の any を大きくしない）。 */
+export const MAX_LINES_PER_QUERY = 30
+
+/**
+ * 路線データの出典（About と `/api/lines` で共用）。版は取り直さないので固定（計画書 §12-19）。
+ * 規約上の表示義務は無いが、歓迎とあるので出す。
+ */
+export const LINE_SOURCE = {
+  nameJa: '駅データ.jp',
+  url: 'https://ekidata.jp/',
+  versionJa: '2024-04-26 版',
+} as const
 
 // --- ハザード（水害・docs/260824_flood.md §5.4） --------------------------
 // 水害レイヤは「駅×半径の指標」ではなく**地図のレイヤ**という別の軸なので、

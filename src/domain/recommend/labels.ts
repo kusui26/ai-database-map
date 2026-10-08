@@ -10,6 +10,7 @@
  */
 
 import type { ListStationsFilter } from '@/db/queries'
+import type { LineRef } from '@/shared/api'
 import { getEntry } from '@/shared/catalog'
 import {
   HAZARD_GROUP_LABELS_JA,
@@ -63,21 +64,22 @@ export function hazardPolicyJa(policy: HazardPolicy, penalty: HazardPenaltyId): 
   return `${groupJa}の危険度に応じて段階減点しました（${HAZARD_PENALTY_LABELS_JA[penalty]}・表のとおり）`
 }
 
-/** 絞り込みの日本語（「横浜市（東海道線・根岸線）」）。 */
-export function areaLabelJa(filter: ListStationsFilter): string {
+/** 絞り込みの日本語（「横浜市（東海道線・根岸線）」「全国（JR山手線）」）。路線（運行系統）は名前で出す。 */
+export function areaLabelJa(filter: ListStationsFilter, lines: readonly LineRef[] = []): string {
   // 住所と同じ順（広い → 狭い）で並べる。「横浜市・神奈川県」は読みにくい。
   const places = [
     ...(filter.prefectures ?? []),
     ...(filter.municipality === undefined ? [] : [filter.municipality]),
     ...(filter.bbox === undefined ? [] : ['地図の表示範囲']),
   ]
-  const lines = [
+  const railways = [
+    ...lines.map((line) => line.name),
     ...(filter.routes ?? []),
     ...(filter.operators ?? []),
     ...(filter.routeTypes ?? []).map(routeTypeLabel),
   ]
   const head = places.length > 0 ? places.join('・') : '全国'
-  return lines.length > 0 ? `${head}（${lines.join('・')}）` : head
+  return railways.length > 0 ? `${head}（${railways.join('・')}）` : head
 }
 
 /** 指標 key の並び → 日本語（多すぎるときは頭だけ）。 */

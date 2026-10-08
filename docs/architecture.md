@@ -118,10 +118,11 @@ type MapResponse = {
 | エンドポイント | 用途 | ドメイン |
 |---|---|---|
 | `GET /api/metrics` | **メトリクス・カタログ**（機械可読・自己記述）| `domain/metrics` |
-| `GET /api/stations?bbox=…&q=…` | 駅検索・bbox・最寄 | `domain/stations` |
+| `GET /api/stations?bbox=…&q=…` | 駅検索・bbox・最寄（`municipality`・`lines` などを付けると対象集合の一覧）| `domain/stations` |
 | `GET /api/stations/:grp` | 駅詳細（指標・年次推移）| `domain/stations` |
-| `GET /api/ranking?metric=…&prefecture=…` | ランキング | `domain/ranking` |
-| `GET /api/growth?x=…&y=…&prefecture=…` | 増減率散布＋クラスタリング | `domain/growth` |
+| `GET /api/ranking?metric=…&prefecture=…` | ランキング（`operators`・`routes`・`routeTypes`・`lines` で絞る）| `domain/ranking` |
+| `GET /api/growth?x=…&y=…&prefecture=…` | 増減率散布＋クラスタリング（絞り込みはランキングと同じ）| `domain/growth` |
+| `GET /api/lines` | **路線（運行系統）の一覧**（JR山手線＝環状 30 駅など・駅データ.jp。共通の条件 `lines` に渡す `lineCd`）| `domain/lines` |
 | `GET /api/recommend?municipality=…&preset=…` | **おすすめ駅**（正規化 → 重み付き合成・災害の足切り／段階減点・±20% 敏感度）| `domain/recommend` |
 | `POST /api/chat`（**Step2**）| 自然言語 → GUI Chat Protocol | `domain/*` via `ai/tools` |
 

@@ -217,14 +217,16 @@ function hazardPolicyView(policy: HazardPolicy, penalty: HazardPenaltyId): Recom
 
 function areaView(input: RecommendRunInput): RecommendArea {
   const { filter } = input
+  const lines = input.lines ?? []
   return {
     prefectures: [...(filter.prefectures ?? [])],
     municipality: filter.municipality ?? null,
     operators: [...(filter.operators ?? [])],
     routes: [...(filter.routes ?? [])],
     routeTypes: [...(filter.routeTypes ?? [])],
+    lines: [...lines],
     bbox: filter.bbox === undefined ? null : { ...filter.bbox },
-    labelJa: areaLabelJa(filter),
+    labelJa: areaLabelJa(filter, lines),
   }
 }
 
@@ -234,7 +236,7 @@ function notes(context: RecommendPresentation, used: readonly ScoredMetric[]): s
   const dead = run.result.degenerate.map((item) => getEntry(item.key)?.labelJa ?? item.key)
   const unknownHazard = run.gathered.candidates.filter((item) => item.hazard === null).length
   return [
-    `「${areaLabelJa(input.filter)}」の ${run.gathered.stationCount} 駅を候補にしました（候補が変われば順位も変わります）。`,
+    `「${areaLabelJa(input.filter, input.lines ?? [])}」の ${run.gathered.stationCount} 駅を候補にしました（候補が変われば順位も変わります）。`,
     ...run.notes,
     ...(run.unresolved.length === 0
       ? []

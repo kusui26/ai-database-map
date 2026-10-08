@@ -181,6 +181,7 @@ python3 pipeline/build_lines.py              # 駅レコード → アプリの�
 python3 pipeline/validate_lines.py           # 独立の検証（全 PASS で exit 0）
 python3 pipeline/validate_lines.py --osm     # ＋ OpenStreetMap の主な 12 系統と突き合わせ（ネットワーク・キャッシュあり）
 python3 pipeline/load_lines.py               # lines / line_stations へ投入（単一トランザクション・投入後の確認つき）
+python3 pipeline/golden_lines_test.py        # 投入後：共通の条件 line_cds（L2）を本物の DB で確かめる（REST 経由も）
 ```
 
 | ファイル | 役割 |
@@ -190,6 +191,7 @@ python3 pipeline/load_lines.py               # lines / line_stations へ投入�
 | `build_lines.py` | 駅レコード（路線 × 駅）を、駅名の鍵が同じで 1.5km 以内の駅へ結ぶ。候補が複数なら**会社名 → 駅名の完全一致 → 近さ**。事業者 → S12 の会社名は数で決める |
 | `validate_lines.py` | build の照合を使わずに確かめる：網羅・形・取り違えの兆候 2 つ・事業者の対応・固定の確認・どの路線にも属さない駅 |
 | `load_lines.py` | `copy_lines()`。`load_to_supabase.py` の全量投入からも呼ぶ（`line_stations` は `stations` の truncate cascade で消える） |
+| `golden_lines_test.py` | L2 の共通の条件 `line_cds` を本物の DB で確かめる：路線ごとの駅の集合が `line_stations` と完全一致（抜き取り 44 路線）・路線どうし OR／会社・都道府県と AND・ランキングと散布の件数・`line_names()`・以前の呼び方の互換・REST（anon） |
 
 **生成物**（`data/derived/`・gitignore）：`lines.csv`（601 路線）・`line_stations.csv`（10,618 行）が DB に入るもの。
 `line_links.csv`（駅レコードごとの結びつけ・方法・距離）と `line_unassigned.csv`（どの路線にも属さない駅）は監査用。

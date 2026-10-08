@@ -1,4 +1,5 @@
-import { type StationSummary, stationsQuerySchema } from '@/shared/api'
+import { lineCdsQuerySchema, type StationSummary, stationsQuerySchema } from '@/shared/api'
+import { resolveLineCodes } from '@/domain/lines'
 import { listStations, nearestStations, searchStations, stationsInBbox } from '@/db/queries'
 import { BadRequestError, CACHE, handle, json } from '@/lib/http'
 
@@ -33,9 +34,17 @@ function parseTypes(raw: string | undefined): number[] | undefined {
   return types
 }
 
+/** カンマ区切りの路線コード → 確かめた路線コード（数でない・知らないコードは黙って捨てずに 400・261008 L2）。 */
+async function lineCodes(raw: string | undefined): Promise<number[] | undefined> {
+  if (raw === undefined) return undefined
+  const lines = await resolveLineCodes(lineCdsQuerySchema.parse(parseNames(raw)?.map(Number) ?? []))
+  if (!lines.ok) throw new BadRequestError(lines.messageJa)
+  return lines.lines.map((line) => line.lineCd)
+}
+
 /**
  * GET /api/stations?q= | bbox=w,s,e,n | near=lon,lat — 駅サマリ（≤50）。
- * GET /api/stations?municipality= | prefecture= | operators= | routes= | routeTypes= [&limit=]
+ * GET /api/stations?municipality= | prefecture= | operators= | routes= | routeTypes= | lines= [&limit=]
  *   — 駅一覧（対象集合・≤2000・260902 / セレクタ共通化 260903）。
  * MCP の `list_stations` と同じ RPC を通る（AI と人間で別 API を作らない・CLAUDE.md §2）。
  */
@@ -51,6 +60,7 @@ export function GET(request: Request): Promise<Response> {
       operators: params.get('operators') ?? undefined,
       routes: params.get('routes') ?? undefined,
       routeTypes: params.get('routeTypes') ?? undefined,
+      lines: params.get('lines') ?? undefined,
       limit: params.get('limit') ?? undefined,
     })
 
@@ -60,7 +70,8 @@ export function GET(request: Request): Promise<Response> {
       query.prefecture !== undefined ||
       query.operators !== undefined ||
       query.routes !== undefined ||
-      query.routeTypes !== undefined
+      query.routeTypes !== undefined ||
+      query.lines !== undefined
     if (wantsList) {
       const stations = await listStations({
         prefectures: query.prefecture === undefined ? undefined : [query.prefecture],
@@ -68,6 +79,7 @@ export function GET(request: Request): Promise<Response> {
         operators: parseNames(query.operators),
         routes: parseNames(query.routes),
         routeTypes: parseTypes(query.routeTypes),
+        lines: await lineCodes(query.lines),
         limit: query.limit,
       })
       return json(stations, CACHE.short)

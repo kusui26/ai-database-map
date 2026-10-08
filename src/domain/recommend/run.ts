@@ -15,6 +15,7 @@
  */
 
 import type { ListStationsFilter } from '@/db/queries'
+import type { LineRef } from '@/shared/api'
 import { gatherCandidates, type GatheredCandidates } from './gather'
 import { recommendStations } from './index'
 import { resolveMetrics } from './metrics'
@@ -30,6 +31,8 @@ import type {
 export type RecommendRunInput = {
   /** 対象集合の絞り込み（市区町村・路線・bbox…）。 */
   readonly filter: ListStationsFilter
+  /** 路線（運行系統）の名前つきの参照（filter.lines のコードと同じ順・対象の言い方に使う・261008 L2）。 */
+  readonly lines?: readonly LineRef[]
   /** プリセット（ファミリ名か正確な key ＋ 向き ＋ 重み）。 */
   readonly specs: readonly PresetMetric[]
   /** ファミリ名を解決するときの半径（m）。 */

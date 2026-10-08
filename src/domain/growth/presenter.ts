@@ -8,7 +8,7 @@
  */
 
 import { requireEntry } from '@/shared/catalog'
-import { type GrowthResponse } from '@/shared/api'
+import { type GrowthResponse, type LineRef } from '@/shared/api'
 import { kmeans } from './kmeans'
 
 /** scatter_points RPC の 1 行（駅ごとに x・y と、それぞれの信頼性フラグ）。 */
@@ -31,6 +31,8 @@ export type GrowthOptions = {
   readonly routes?: readonly string[]
   /** 事業者種別の絞り込み（1:新幹線 …・同上・260731）。 */
   readonly routeTypes?: readonly number[]
+  /** 路線（運行系統・名前つき・同上・261008 L2）。 */
+  readonly lines?: readonly LineRef[]
 }
 
 export function buildGrowth(
@@ -63,6 +65,7 @@ export function buildGrowth(
     operators: [...(options.operators ?? [])],
     routes: [...(options.routes ?? [])],
     routeTypes: [...(options.routeTypes ?? [])],
+    lines: [...(options.lines ?? [])],
     clusterCount: new Set(clusters).size,
     excludedLowN,
     points,

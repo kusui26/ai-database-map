@@ -262,6 +262,7 @@ export function MapView() {
   const highlightedPoints = useMapStore((state) => state.highlightedPoints)
   const setHovered = useMapStore((state) => state.setHovered)
   const setCenter = useMapStore((state) => state.setCenter)
+  const setViewport = useMapStore((state) => state.setViewport)
   const highlightedGrps = useMapStore((state) => state.highlightedGrps)
   const flyToReq = useMapStore((state) => state.flyTo)
   const chatOpen = useChatStore((state) => state.open)
@@ -317,9 +318,17 @@ export function MapView() {
 
     // いま見ている場所（警戒バナーが「この地域に何が出ているか」を引く・§7.4）。
     // **止まってから**報告する——ドラッグ中に流すと、動かすたびに問い合わせが走る。
+    // 表示範囲も同じときに報告する（チャットが同じ名前の路線を決めるのに使う・2026-10-08 L3）。
     const reportCenter = (): void => {
       const center = map.getCenter()
       setCenter({ lon: center.lng, lat: center.lat })
+      const bounds = map.getBounds()
+      setViewport({
+        west: bounds.getWest(),
+        south: bounds.getSouth(),
+        east: bounds.getEast(),
+        north: bounds.getNorth(),
+      })
     }
     map.on('moveend', reportCenter)
 

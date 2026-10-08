@@ -1,55 +1,57 @@
 /**
- * ツール 1 回分の会社・路線の指定を、データの正式名へ解決する（2026-10-07・B1・計画書 §6.4）。
+ * ツール 1 回分の会社・路線の指定を、データの会社と路線（運行系統）へ解決する
+ * （2026-10-07 B1 → 2026-10-08 L3・計画書 §6.8.5〜§6.8.6）。
  *
- * - 決まれば、正式名の `operators`・`routes` と、どう読んだかの説明（`notes`・LLM が本文で正しい名前を使えるように）
+ * - 決まれば、会社（S12 の会社名）か路線（路線コードと名前）と、どう読んだかの説明（`notes`・LLM が本文で
+ *   正しい名前を使えるように）
  * - 決まらなければ、**図を作らずに**候補つきの理由を返す（`problems`）。推測で 1 つ選ばない
- *   - 同じ名前の別路線（東西線＝東京メトロ・札幌・仙台・京都）は、都道府県の指定があればそれで絞る。
- *     それでも残れば候補（呼び直しにそのまま使える operators・routes と、駅の数・都道府県）を返す
- *   - 運行系統の名前（京浜東北線）は、正式な路線を候補として返す
  *
- * 会社の指定と路線は、SQL では**同じ行**で照らす（`station_matches_filters`）。会社が要るのは、同じ名前の
- * 別の会社の路線を除くときだけ（「東横線」は東急電鉄にしか無いので会社は付けない＝図の題が長くならない）。
+ * 同じ名前の路線（「山手線」＝JR・神戸市営地下鉄、「中央線」＝JR中央線(快速)・大阪メトロ中央線）は、
+ * **明示の都道府県 → 地図の表示範囲**の順に絞り、1 本に決まらなければ聞き返す。名前ごとの既定（「山手線＝JR」）は
+ * 持たない——大阪を見ている人の「中央線」は大阪メトロ。区間に分かれた路線（JR東海道本線）は 1 本として扱い、
+ * 地図の範囲で区間を絞る。
+ *
+ * 路線を決めたら、会社は条件に入れない。路線コードが駅の集合を決めるので、会社を掛け合わせると他社の駅を通る路線
+ * （北陸新幹線の金沢・相鉄・JR直通線の武蔵小杉）の駅が落ちる。会社の指定は、名前を当てる範囲にだけ使う。
  */
 
-import { type RoutePair } from './aliases'
+import { MAX_LINES_PER_QUERY } from '@/shared/constants'
+import { type LineRef } from '@/shared/api'
+import { type Viewport } from '@/shared/viewport'
 import {
-  hasPair,
+  matchLine,
   matchOperator,
-  matchRoute,
-  pairLabel,
-  uniquePairs,
+  type LineIdentity,
+  type LineMatch,
   type NameIndex,
-  type RouteIdentity,
-  type RouteMatch,
 } from './match'
-import { nameKey, samePair } from './names'
-
-/** 駅の数と都道府県。 */
-export type PairStations = { readonly count: number; readonly prefectures: readonly string[] }
+import { companyPrefixes, isJrOperator, nameKey, type CatalogLine } from './names'
 
 export type NameResolveDeps = {
   /** 照合の索引（データの一覧から作る）。 */
   readonly index: () => Promise<NameIndex>
-  /** 会社 × 路線の組の駅（`prefectures` を渡すとその中だけ数える）。 */
-  readonly stationsOf: (
-    pairs: readonly RoutePair[],
-    prefectures: readonly string[],
-  ) => Promise<PairStations>
+  /** 路線（束ねたもの）の駅の数（重なる駅は 1 つ）。 */
+  readonly countStations: (lineCds: readonly number[]) => Promise<number>
+  /** 路線（束ねたもの）の駅が、範囲の中に 1 つでもあるか。 */
+  readonly hasStationsIn: (lineCds: readonly number[], viewport: Viewport) => Promise<boolean>
 }
 
 export type NameRequest = {
   readonly operators?: readonly string[]
   readonly routes?: readonly string[]
-  /** 正規化済みの都道府県（同じ名前の路線を絞るのに使う）。 */
+  /** 正規化済みの都道府県（同じ名前の路線を絞るのに使う・地図の範囲より強い）。 */
   readonly prefectures: readonly string[]
+  /** 地図の表示範囲（チャットの送信に同送される。MCP には無い）。 */
+  readonly viewport?: Viewport | null
 }
 
-export type NameFilters = { readonly operators: string[]; readonly routes: string[] }
+/** 会社（S12 の会社名）か路線（運行系統）のどちらか（両方は入れない・路線が駅の集合を決める）。 */
+export type NameFilters = { readonly operators: string[]; readonly lines: LineRef[] }
 
 /** 呼び直しにそのまま使える候補。 */
 export type NameCandidate = {
-  readonly operators: readonly string[]
   readonly routes: readonly string[]
+  readonly operators: readonly string[]
   readonly stationCount: number
   readonly prefectures: readonly string[]
 }
@@ -71,19 +73,28 @@ export type NameResolution =
     }
 
 const MAX_CANDIDATES = 10
+/** 説明に並べるほかの候補の数（多ければ「など」）。 */
+const MAX_LISTED = 3
 
 const NAME_HINT =
-  'problems の各項目を見て呼び直してください。candidates は呼び直しにそのまま使える operators と routes です。' +
+  'problems の各項目を見て呼び直してください。candidates は呼び直しにそのまま使える routes（と operators）です。' +
   '会話から地域や会社が分かるときだけ選び（地域が分かれば prefectures を添えてもよい）、分からなければどの路線かを利用者に聞いてください（推測で選ばない）。' +
-  'didYouMean は近い正式名です。運行系統の名前（京浜東北線など）はデータに無く、正式な路線で集計するとその系統が走らない区間の駅も含むので、そう断って使うか利用者に確かめてください。'
+  'didYouMean は近い路線名・会社名です。'
+
+/** 名前を当てる範囲（都道府県は明示の指定、地図の範囲はチャットの同送）。 */
+type Area = { readonly prefectures: readonly string[]; readonly viewport: Viewport | null }
 
 type RouteOutcome =
   | {
-      readonly kind: 'pairs'
-      readonly pairs: readonly RoutePair[]
+      readonly kind: 'lines'
+      readonly lines: readonly CatalogLine[]
       readonly notes: readonly string[]
     }
-  | { readonly kind: 'operators'; readonly operators: readonly string[] }
+  | {
+      readonly kind: 'operators'
+      readonly operators: readonly string[]
+      readonly notes: readonly string[]
+    }
   | { readonly kind: 'problem'; readonly problem: NameProblem }
 
 type OperatorOutcome = {
@@ -91,6 +102,31 @@ type OperatorOutcome = {
   readonly scope: string[] | null
   readonly problems: NameProblem[]
   readonly notes: string[]
+}
+
+type LinesMatch = Extract<LineMatch, { kind: 'lines' }>
+
+/** 同じ名前の路線から 1 本を選んだ理由（null＝候補が 1 本だった）。 */
+type ChoiceReason = 'prefectures' | 'viewport' | null
+
+type Decision =
+  | {
+      readonly kind: 'chosen'
+      readonly identity: LineIdentity
+      readonly reason: ChoiceReason
+      /** 選ばなかったほかの候補（説明に使う）。 */
+      readonly others: readonly LineIdentity[]
+    }
+  | {
+      readonly kind: 'ask'
+      readonly problem: string
+      readonly candidates: readonly LineIdentity[]
+    }
+
+/** 範囲で絞った結果：範囲に合う最初の層の路線と、それより弱い層で範囲に合う路線。 */
+type Narrowed = {
+  readonly identities: readonly LineIdentity[]
+  readonly lower: readonly LineIdentity[]
 }
 
 function unique<T>(items: readonly T[]): T[] {
@@ -101,144 +137,313 @@ function trimmed(inputs: readonly string[] | undefined): string[] {
   return (inputs ?? []).map((input) => input.trim()).filter((input) => input.length > 0)
 }
 
-function identityLabel(identity: RouteIdentity): string {
-  return identity.pairs.map(pairLabel).join('・')
+function codesOf(lines: readonly CatalogLine[]): number[] {
+  return lines.map((line) => line.lineCd)
 }
 
-/** 候補（駅の数と都道府県つき）。 */
-async function candidatesOf(
-  identities: readonly RouteIdentity[],
+// --- 候補（聞き返しに使う） ----------------------------------------------------
+
+/** 名前だけで（会社の範囲も地図も無しに）その 1 本に決まるか。 */
+function resolvesTo(name: string, line: CatalogLine, index: NameIndex): boolean {
+  const match = matchLine(name, index, null)
+  if (match.kind !== 'lines' || match.strong.length !== 1) return false
+  const lines = match.strong[0]?.lines ?? []
+  return lines.length === 1 && lines[0]?.lineCd === line.lineCd
+}
+
+/**
+ * 呼び直しにそのまま使える言い方（名前だけで 1 本に決まるもの）。「三田線」は都営と神戸電鉄にあるので
+ * 「神鉄三田線」（正式名）、JR の「宇都宮線」は東武にもあるので「JR宇都宮線」。どれでも決まらなければ会社を添える。
+ */
+function handleOf(
+  line: CatalogLine,
+  index: NameIndex,
+): { readonly route: string; readonly operators: readonly string[] } {
+  const prefixes = isJrOperator(line.operator) ? ['JR'] : [line.companyShort, line.companyName]
+  const names = [line.name, line.formalName, ...prefixes.map((prefix) => `${prefix}${line.name}`)]
+  const found = names.find((name) => resolvesTo(name, line, index))
+  if (found !== undefined) return { route: found, operators: [] }
+  return { route: line.name, operators: line.operator === null ? [] : [line.operator] }
+}
+
+async function candidateOf(
+  identity: LineIdentity,
+  index: NameIndex,
+  deps: NameResolveDeps,
+): Promise<NameCandidate> {
+  const handles = identity.lines.map((line) => handleOf(line, index))
+  const [only] = identity.lines
+  const stationCount =
+    identity.lines.length === 1 && only !== undefined
+      ? only.stationCount
+      : await deps.countStations(codesOf(identity.lines))
+  return {
+    routes: handles.map((handle) => handle.route),
+    operators: unique(handles.flatMap((handle) => handle.operators)),
+    stationCount,
+    prefectures: unique(identity.lines.flatMap((line) => line.prefectures)),
+  }
+}
+
+function candidatesOf(
+  identities: readonly LineIdentity[],
+  index: NameIndex,
   deps: NameResolveDeps,
 ): Promise<NameCandidate[]> {
   return Promise.all(
-    identities.slice(0, MAX_CANDIDATES).map(async (identity) => {
-      const stations = await deps.stationsOf(identity.pairs, [])
-      return {
-        operators: unique(identity.pairs.map((pair) => pair.operator)),
-        routes: unique(identity.pairs.map((pair) => pair.route)),
-        stationCount: stations.count,
-        prefectures: stations.prefectures,
-      }
-    }),
+    identities.slice(0, MAX_CANDIDATES).map((identity) => candidateOf(identity, index, deps)),
   )
 }
 
-/** 会社の指定を正式名へ。 */
-function resolveOperators(inputs: readonly string[], index: NameIndex): OperatorOutcome {
-  const matches = inputs.map((input) => ({ input, match: matchOperator(input, index) }))
-  const problems = matches.flatMap(({ input, match }): NameProblem[] => {
-    if (match.kind === 'category') return [{ input, problem: match.hint }]
-    if (match.kind === 'unknown') {
-      return [
-        {
-          input,
-          problem: `「${input}」という会社はデータにありません。`,
-          didYouMean: match.didYouMean,
-        },
-      ]
-    }
-    return []
-  })
-  const operators = matches.flatMap(({ match }) =>
-    match.kind === 'operators' ? match.operators : [],
-  )
-  const notes = matches.flatMap(({ input, match }) =>
-    match.kind === 'operators' && !match.operators.some((name) => nameKey(name) === nameKey(input))
-      ? [`会社「${input}」は ${match.operators.join('・')} として扱いました。`]
-      : [],
-  )
-  // 会社が 1 つも決まらなければ範囲は付けない（路線の理由を「会社と合わない」で隠さない）。
-  return { scope: operators.length === 0 ? null : unique(operators), problems, notes }
+// --- 同じ名前の路線から 1 本を決める ----------------------------------------------
+
+function inPrefectures(identity: LineIdentity, prefectures: readonly string[]): boolean {
+  return identity.lines.some((line) => line.prefectures.some((pref) => prefectures.includes(pref)))
 }
 
-type RoutesMatch = Extract<RouteMatch, { kind: 'routes' }>
-
-/** 路線全体へ広げた読み替え（中央線快速 → 中央線）で決まったなら、そう断る説明。 */
-function widenedNote(input: string, identity: RouteIdentity, match: RoutesMatch): string | null {
-  const part = match.widenedPair
-  if (part === null || !identity.pairs.some((pair) => samePair(pair, part))) return null
-  return `「${input}」はデータに無い区間の名前なので、路線全体（${identityLabel(identity)}）で集計しました。その系統の停車駅・区間に限りません。`
+async function inViewport(
+  identities: readonly LineIdentity[],
+  viewport: Viewport,
+  deps: NameResolveDeps,
+): Promise<LineIdentity[]> {
+  const inside = await Promise.all(
+    identities.map((identity) => deps.hasStationsIn(codesOf(identity.lines), viewport)),
+  )
+  return identities.filter((_, i) => inside[i] === true)
 }
 
-/** 決まった 1 本の説明（名前を読み替えた・路線全体へ広げた・弱い候補を使わなかった）。 */
-function notesFor(input: string, identity: RouteIdentity, match: RoutesMatch): string[] {
-  const renamed = !identity.pairs.some((pair) => nameKey(pair.route) === nameKey(input))
+/**
+ * 強い形の候補から順に、範囲に合う路線が 1 本でもある最初の層（無ければ null）。`lower` は、それより弱い層で
+ * 範囲に合う路線（聞き返すときは候補に並べる：大阪で「東西線」なら、京都市営・神戸高速に JR東西線も）。
+ */
+async function firstTier(
+  tiers: readonly (readonly LineIdentity[])[],
+  keep: (identities: readonly LineIdentity[]) => Promise<LineIdentity[]>,
+): Promise<Narrowed | null> {
+  const kept = await Promise.all(tiers.map(keep))
+  const tier = kept.findIndex((identities) => identities.length > 0)
+  const identities = kept[tier]
+  if (identities === undefined) return null
+  return { identities, lower: kept.slice(tier + 1).flat() }
+}
+
+/** 範囲で絞った結果から決める（1 本なら決める・2 本以上なら範囲の中の候補で聞く）。 */
+function fromNarrowed(
+  input: string,
+  narrowed: Narrowed,
+  match: LinesMatch,
+  reason: Exclude<ChoiceReason, null>,
+  areaLabel: string,
+): Decision {
+  const [only] = narrowed.identities
+  if (narrowed.identities.length === 1 && only !== undefined) {
+    const others = [...match.strong, ...match.weak].filter((identity) => identity !== only)
+    return { kind: 'chosen', identity: only, reason, others }
+  }
+  const candidates = [...narrowed.identities, ...narrowed.lower]
+  const problem = `「${input}」に当たる路線が、${areaLabel}に複数あります（${candidates.length} 本）。`
+  return { kind: 'ask', problem, candidates }
+}
+
+/** 範囲の手がかりが無い・効かないときは聞き返す（候補はすべて）。 */
+function askAll(input: string, match: LinesMatch): Decision {
+  const all = [...match.strong, ...match.weak]
+  const problem = `「${input}」に当たる路線が複数あります（${all.length} 本）。`
+  return { kind: 'ask', problem, candidates: all }
+}
+
+/** 明示の都道府県で絞る（2 本以上残れば、その中を地図の範囲でさらに絞る）。 */
+async function byPrefectures(
+  input: string,
+  match: LinesMatch,
+  area: Area,
+  deps: NameResolveDeps,
+): Promise<Decision> {
+  const prefs = area.prefectures
+  const keep = async (ids: readonly LineIdentity[]) => ids.filter((id) => inPrefectures(id, prefs))
+  const narrowed = await firstTier([match.strong, match.weak], keep)
+  if (narrowed === null) {
+    const problem = `「${input}」に当たる路線は、${prefs.join('・')}に駅がありません。`
+    return { kind: 'ask', problem, candidates: [...match.strong, ...match.weak] }
+  }
+  const viewport = area.viewport
+  if (narrowed.identities.length > 1 && viewport !== null) {
+    const inView = await inViewport(narrowed.identities, viewport, deps)
+    const viewed = { identities: inView, lower: narrowed.lower }
+    if (inView.length > 0) return fromNarrowed(input, viewed, match, 'viewport', '地図の表示範囲')
+  }
+  return fromNarrowed(input, narrowed, match, 'prefectures', prefs.join('・'))
+}
+
+/**
+ * 1 本に決める。強い形で 1 本だけ当たればそれ（地図の範囲で別の路線に寄せない——大阪を見ていても
+ * 「中央本線」は JR）。2 本以上なら、明示の都道府県 → 地図の表示範囲の順に絞り、決まらなければ聞き返す。
+ */
+async function decide(
+  input: string,
+  match: LinesMatch,
+  area: Area,
+  deps: NameResolveDeps,
+): Promise<Decision> {
+  const [only] = match.strong
+  if (match.strong.length === 1 && only !== undefined) {
+    return { kind: 'chosen', identity: only, reason: null, others: match.weak }
+  }
+  if (area.prefectures.length > 0) return byPrefectures(input, match, area, deps)
+  const viewport = area.viewport
+  if (viewport === null) return askAll(input, match)
+  const keep = (ids: readonly LineIdentity[]) => inViewport(ids, viewport, deps)
+  const narrowed = await firstTier([match.strong, match.weak], keep)
+  if (narrowed === null) return askAll(input, match)
+  return fromNarrowed(input, narrowed, match, 'viewport', '地図の表示範囲')
+}
+
+// --- 決めた路線の区間と説明 ----------------------------------------------------
+
+/** 区間を絞った結果（残した区間と、範囲の外で外した区間）。 */
+type Sections = { readonly lines: readonly CatalogLine[]; readonly dropped: readonly CatalogLine[] }
+
+/**
+ * 区間に分かれた路線（束ねた 2 本以上）を、範囲で絞る。都道府県なら駅のある区間だけ（駅の集合は変わらない＝
+ * 題が短くなるだけ）。地図の範囲なら範囲に駅のある区間だけ（「東海道線」を首都圏で見ていれば東京〜熱海）。
+ * どの区間も範囲に無い・すべてが範囲にあるなら絞らない。
+ */
+async function narrowSections(
+  identity: LineIdentity,
+  area: Area,
+  deps: NameResolveDeps,
+): Promise<Sections> {
+  const all = identity.lines
+  if (all.length < 2) return { lines: all, dropped: [] }
+  if (area.prefectures.length > 0) {
+    const kept = all.filter((line) => line.prefectures.some((p) => area.prefectures.includes(p)))
+    return { lines: kept.length > 0 ? kept : all, dropped: [] }
+  }
+  const viewport = area.viewport
+  if (viewport === null) return { lines: all, dropped: [] }
+  const inside = await Promise.all(all.map((line) => deps.hasStationsIn([line.lineCd], viewport)))
+  const kept = all.filter((_, i) => inside[i] === true)
+  if (kept.length === 0 || kept.length === all.length) return { lines: all, dropped: [] }
+  return { lines: kept, dropped: all.filter((line) => !kept.includes(line)) }
+}
+
+/** 説明に書く路線の名前（名前だけで 1 本に決まる言い方。「三田線」は「神鉄三田線」）。 */
+function displayName(line: CatalogLine, index: NameIndex): string {
+  const handle = handleOf(line, index)
+  return handle.operators.length === 0 ? handle.route : `${line.name}（${line.companyName}）`
+}
+
+function namesLabel(lines: readonly CatalogLine[], index: NameIndex): string {
+  return lines.map((line) => displayName(line, index)).join('・')
+}
+
+/** ほかの候補の並び（多ければ先頭だけ＋「など」）。 */
+function othersLabel(identities: readonly LineIdentity[], index: NameIndex): string {
+  const labels = identities.map((identity) => namesLabel(identity.lines, index))
+  const listed = labels.slice(0, MAX_LISTED).join('、')
+  return labels.length > MAX_LISTED ? `${listed} など` : listed
+}
+
+/** 同じ名前の路線から選んだ理由の説明（理由が無ければ null）。 */
+function reasonNote(
+  input: string,
+  decision: Extract<Decision, { kind: 'chosen' }>,
+  label: string,
+  area: Area,
+  index: NameIndex,
+): string | null {
+  if (decision.reason === null) return null
+  const where = decision.reason === 'viewport' ? '地図の表示範囲' : area.prefectures.join('・')
+  const others = othersLabel(decision.others, index)
+  return `「${input}」に当たる路線が複数あるため、${where}に駅のある ${label} に決めました（ほかの候補：${others}）。`
+}
+
+/** 名前を読み替えたことの説明（言い方とデータの名前が同じなら書かない）。 */
+function renamedNote(input: string, lines: readonly CatalogLine[], label: string): string | null {
+  const same = lines.some((line) => nameKey(line.name) === nameKey(input))
+  return same ? null : `「${input}」は ${label} として集計しました。`
+}
+
+/**
+ * 会社の名前の路線（「小田急線」＝小田急小田原線・「京王線」）を指したとき、会社のほかの路線は含まないことの説明。
+ * 「小田急線の沿線」は会社の全路線のつもりのこともあるので、そちらの指定のしかたも添える。
+ */
+function companyLineNote(
+  input: string,
+  lines: readonly CatalogLine[],
+  index: NameIndex,
+): string | null {
+  const [line] = lines
+  if (lines.length !== 1 || line === undefined || line.operator === null) return null
+  const key = nameKey(input)
+  if (!key.endsWith('線') || !companyPrefixes(line).includes(key.slice(0, -1))) return null
+  const siblings = index.catalog.lines.filter(
+    (other) => other.operator === line.operator && other.lineCd !== line.lineCd,
+  )
+  if (siblings.length === 0) return null
+  const listed = siblings
+    .slice(0, MAX_LISTED)
+    .map((other) => other.name)
+    .join('・')
+  const more = siblings.length > MAX_LISTED ? ` など ${siblings.length} 本` : ''
+  const formal = line.formalName === line.name ? '' : `（正式名 ${line.formalName}）`
+  return `「${input}」は ${line.name}${formal}だけで集計しました。${line.companyName}のほかの路線（${listed}${more}）は含めていません（会社の全路線なら operators に「${line.companyShort}」）。`
+}
+
+/** 決めた 1 本の説明（選んだ理由か読み替え・広げた別名・外した区間・使わなかった候補・会社の名前の路線）。 */
+function chosenNotes(
+  input: string,
+  decision: Extract<Decision, { kind: 'chosen' }>,
+  sections: Sections,
+  area: Area,
+  index: NameIndex,
+): string[] {
+  const label = namesLabel(sections.lines, index)
+  const widened = decision.identity.widened
   const reading =
-    widenedNote(input, identity, match) ??
-    (renamed ? `「${input}」は ${identityLabel(identity)} として集計しました。` : null)
-  const others = match.others.map(
-    (other) =>
-      `「${input}」には ${identityLabel(other)} も当たりますが含めていません（そちらなら routes にその名前を指定）。`,
-  )
-  return [...(reading === null ? [] : [reading]), ...others]
+    reasonNote(input, decision, label, area, index) ??
+    (widened ? null : renamedNote(input, sections.lines, label))
+  const wide = widened
+    ? `「${input}」は路線全体（${label}）で集計しました。その系統・区間の駅に限りません。`
+    : null
+  const section =
+    sections.dropped.length === 0
+      ? null
+      : `区間に分かれた路線のため、地図の表示範囲の外の区間（${namesLabel(sections.dropped, index)}）は含めていません（含めるなら routes に区間の名前を指定）。`
+  const unused =
+    decision.reason !== null || decision.others.length === 0
+      ? null
+      : `「${input}」には ${othersLabel(decision.others, index)} も当たりますが含めていません（そちらなら routes にその名前を指定）。`
+  const company = companyLineNote(input, sections.lines, index)
+  return [reading, wide, section, unused, company].filter((note) => note !== null)
 }
 
-/** 同じ名前の別路線を、都道府県で 1 つに絞る（駅のある路線だけ残す）。 */
-async function narrowByPrefectures(
-  identities: readonly RouteIdentity[],
-  prefectures: readonly string[],
-  deps: NameResolveDeps,
-): Promise<RouteIdentity[]> {
-  const counts = await Promise.all(
-    identities.map((identity) => deps.stationsOf(identity.pairs, prefectures)),
-  )
-  return identities.filter((_, i) => (counts[i]?.count ?? 0) > 0)
-}
-
-/** 都道府県で 1 本に決めた（広げた読み替えの路線なら、そのことも書く）。 */
-function chosenOutcome(
-  input: string,
-  chosen: RouteIdentity,
-  match: RoutesMatch,
-  prefectures: readonly string[],
-): RouteOutcome {
-  const note = `「${input}」に当たる路線が複数あるため、${prefectures.join('・')}に駅のある ${identityLabel(chosen)} に決めました。`
-  const widened = widenedNote(input, chosen, match)
-  return { kind: 'pairs', pairs: chosen.pairs, notes: widened === null ? [note] : [note, widened] }
-}
-
-/** 決まらなかった理由と候補（都道府県で絞って 2 本以上残ればそれだけ、0 本・指定なしならすべて）。 */
-async function ambiguousOutcome(
-  input: string,
-  all: readonly RouteIdentity[],
-  narrowed: readonly RouteIdentity[] | null,
-  prefectures: readonly string[],
-  deps: NameResolveDeps,
-): Promise<RouteOutcome> {
-  const remaining = narrowed !== null && narrowed.length > 1 ? narrowed : all
-  const problem =
-    narrowed?.length === 0
-      ? `「${input}」に当たる路線は、${prefectures.join('・')}に駅がありません。`
-      : `「${input}」に当たる路線が複数あります（${remaining.length} 本）。`
-  const candidates = await candidatesOf(remaining, deps)
-  return { kind: 'problem', problem: { input, problem, candidates } }
-}
+// --- 1 つの名前 → 結果 ----------------------------------------------------------
 
 /** 当たった路線から 1 本に決める（決まらなければ候補つきの理由）。 */
-async function decideRoutes(
+async function decideLines(
   input: string,
-  match: RoutesMatch,
-  prefectures: readonly string[],
+  match: LinesMatch,
+  area: Area,
+  index: NameIndex,
   deps: NameResolveDeps,
 ): Promise<RouteOutcome> {
-  const only = match.identities.length === 1 ? match.identities[0] : undefined
-  if (only !== undefined) {
-    return { kind: 'pairs', pairs: only.pairs, notes: notesFor(input, only, match) }
+  const decision = await decide(input, match, area, deps)
+  if (decision.kind === 'ask') {
+    const candidates = await candidatesOf(decision.candidates, index, deps)
+    return { kind: 'problem', problem: { input, problem: decision.problem, candidates } }
   }
-  // 弱い候補（「東西線」に対する JR東西線）も、都道府県で絞る対象に入れる（大阪府なら JR東西線に決まる）。
-  const all = [...match.identities, ...match.others]
-  const narrowed = prefectures.length > 0 ? await narrowByPrefectures(all, prefectures, deps) : null
-  const chosen = narrowed?.length === 1 ? narrowed[0] : undefined
-  if (chosen !== undefined) return chosenOutcome(input, chosen, match, prefectures)
-  return ambiguousOutcome(input, all, narrowed, prefectures, deps)
+  const sections = await narrowSections(decision.identity, area, deps)
+  const notes = chosenNotes(input, decision, sections, area, index)
+  return { kind: 'lines', lines: sections.lines, notes }
 }
 
-/** 会社の指定と合わないとき、その路線の持ち主を示す（「東横線」は東急電鉄、「小田急線」は小田急電鉄）。 */
+/** 会社の指定と合わないとき、その路線の持ち主を示す（「東横線」は東急東横線、「小田急線」は小田急電鉄）。 */
 function mismatch(input: string, scope: readonly string[], index: NameIndex): NameProblem | null {
-  const anywhere = matchRoute(input, index, null)
+  const anywhere = matchLine(input, index, null)
   const owners =
-    anywhere.kind === 'routes'
-      ? anywhere.identities.map(identityLabel).join('／')
+    anywhere.kind === 'lines'
+      ? [...anywhere.strong, ...anywhere.weak].map((id) => namesLabel(id.lines, index)).join('／')
       : anywhere.kind === 'operators'
         ? anywhere.operators.join('・')
         : null
@@ -254,21 +459,13 @@ async function resolveRoute(
   input: string,
   index: NameIndex,
   operators: OperatorOutcome,
-  prefectures: readonly string[],
+  area: Area,
   deps: NameResolveDeps,
 ): Promise<RouteOutcome> {
-  const match = matchRoute(input, index, operators.scope)
-  if (match.kind === 'operators') return { kind: 'operators', operators: match.operators }
-  if (match.kind === 'routes') return decideRoutes(input, match, prefectures, deps)
+  const match = matchLine(input, index, operators.scope)
+  if (match.kind === 'lines') return decideLines(input, match, area, index, deps)
+  if (match.kind === 'operators') return companyWide(input, match.operators)
   if (match.kind === 'category') return { kind: 'problem', problem: { input, problem: match.hint } }
-  if (match.kind === 'span') {
-    const lines = match.candidates.map(identityLabel).join('・')
-    const problem = `「${input}」は運行系統の名前で、データ（国土数値情報）の路線名にはありません。正式には ${lines} にまたがります。`
-    return {
-      kind: 'problem',
-      problem: { input, problem, candidates: await candidatesOf(match.candidates, deps) },
-    }
-  }
   const unmatched = operators.scope === null ? null : mismatch(input, operators.scope, index)
   const unknown = {
     input,
@@ -278,36 +475,36 @@ async function resolveRoute(
   return { kind: 'problem', problem: unmatched ?? unknown }
 }
 
-/** 会社の全路線（路線の指定に混ざった「小田急線」を、ほかの路線と並べられるようにする）。 */
-function allPairsOf(operators: readonly string[], index: NameIndex): RoutePair[] {
-  return index.catalog.routes.flatMap((row) =>
-    row.operators
-      .filter((operator) => operators.includes(operator))
-      .map((operator) => ({ operator, route: row.route })),
-  )
+/** 会社の全路線（「京急線」「小田急」）。路線名ではなく会社として扱ったことを説明に残す。 */
+function companyWide(input: string, operators: readonly string[]): RouteOutcome {
+  const note = `「${input}」は ${operators.join('・')} の全路線として扱いました。`
+  return { kind: 'operators', operators, notes: [note] }
 }
 
-/** 同じ名前の別の会社の路線を除くのに、会社の指定が要るか。 */
-function needsOperators(pairs: readonly RoutePair[], index: NameIndex): boolean {
-  return unique(pairs.map((pair) => pair.route)).some((route) => {
-    const owners = index.catalog.routes.find((row) => row.route === route)?.operators ?? []
-    const used = pairs.filter((pair) => pair.route === route).map((pair) => pair.operator)
-    return owners.some((owner) => !used.includes(owner))
+/** 会社の指定を S12 の会社名へ。 */
+function resolveOperators(inputs: readonly string[], index: NameIndex): OperatorOutcome {
+  const matches = inputs.map((input) => ({ input, match: matchOperator(input, index) }))
+  const problems = matches.flatMap(({ input, match }): NameProblem[] => {
+    if (match.kind === 'category') return [{ input, problem: match.hint }]
+    if (match.kind === 'unknown') {
+      const problem = `「${input}」という会社はデータにありません。`
+      return [{ input, problem, didYouMean: match.didYouMean }]
+    }
+    return []
   })
+  const operators = matches.flatMap(({ match }) =>
+    match.kind === 'operators' ? match.operators : [],
+  )
+  const notes = matches.flatMap(({ input, match }) =>
+    match.kind === 'operators' && !match.operators.some((name) => nameKey(name) === nameKey(input))
+      ? [`会社「${input}」は ${match.operators.join('・')} として扱いました。`]
+      : [],
+  )
+  // 会社が 1 つも決まらなければ範囲は付けない（路線の理由を「会社と合わない」で隠さない）。
+  return { scope: operators.length === 0 ? null : unique(operators), problems, notes }
 }
 
-/** 会社 × 路線の掛け合わせで、意図しない組（データにある組）が混ざらないか。 */
-function leakedPairs(
-  filters: NameFilters,
-  intended: readonly RoutePair[],
-  index: NameIndex,
-): RoutePair[] {
-  return filters.operators.flatMap((operator) =>
-    filters.routes
-      .map((route) => ({ operator, route }))
-      .filter((pair) => !intended.some((used) => samePair(used, pair)) && hasPair(pair, index)),
-  )
-}
+// --- まとめ ----------------------------------------------------------------------
 
 function failure(problems: readonly NameProblem[]): NameResolution {
   const inputs = problems.map((problem) => `「${problem.input}」`).join('・')
@@ -319,35 +516,68 @@ function failure(problems: readonly NameProblem[]): NameResolution {
   }
 }
 
-/** まとめた条件と、意図した会社 × 路線の組（掛け合わせの漏れを見るのに使う）。 */
-type Combined = { readonly filters: NameFilters; readonly intended: readonly RoutePair[] }
+/** 同じ路線を 1 回にする（現れた順）。 */
+function uniqueLines(lines: readonly CatalogLine[]): CatalogLine[] {
+  return lines.filter((line, i) => lines.findIndex((other) => other.lineCd === line.lineCd) === i)
+}
 
-/** 路線の指定を正式名の条件へまとめる（会社は要るときだけ付ける）。 */
+function lineRefOf(line: CatalogLine): LineRef {
+  return { lineCd: line.lineCd, name: line.name }
+}
+
+/**
+ * 路線の指定を条件へまとめる。路線が 1 本も無ければ会社（指定と「小田急」のような会社の全路線）。
+ * 路線と会社の全路線が混ざれば、会社をその路線に開いて並べる（会社と路線を AND で掛けない）。
+ */
 function combine(
   outcomes: readonly RouteOutcome[],
   operators: OperatorOutcome,
   index: NameIndex,
-): Combined {
-  const routePairs = outcomes.flatMap((outcome) => (outcome.kind === 'pairs' ? outcome.pairs : []))
-  const companyWide = outcomes.flatMap((outcome) =>
-    outcome.kind === 'operators' ? outcome.operators : [],
+): { readonly filters: NameFilters } | { readonly problem: NameProblem } {
+  const chosen = outcomes.flatMap((outcome) => (outcome.kind === 'lines' ? outcome.lines : []))
+  const companyWide = unique(
+    outcomes.flatMap((outcome) => (outcome.kind === 'operators' ? outcome.operators : [])),
   )
-  if (routePairs.length === 0) {
+  if (chosen.length === 0) {
     return {
-      filters: { operators: unique([...(operators.scope ?? []), ...companyWide]), routes: [] },
-      intended: [],
+      filters: { operators: unique([...(operators.scope ?? []), ...companyWide]), lines: [] },
     }
   }
-  const intended = uniquePairs([...routePairs, ...allPairsOf(companyWide, index)])
-  const constrained = operators.scope !== null || needsOperators(intended, index)
-  const filters = {
-    operators: constrained ? unique(intended.map((pair) => pair.operator)) : [],
-    routes: unique(intended.map((pair) => pair.route)),
-  }
-  return { filters, intended }
+  const opened = index.catalog.lines.filter(
+    (line) => line.operator !== null && companyWide.includes(line.operator),
+  )
+  const lines = uniqueLines([...chosen, ...opened])
+  if (lines.length > MAX_LINES_PER_QUERY) return { problem: tooManyLines(outcomes, lines.length) }
+  return { filters: { operators: [], lines: lines.map(lineRefOf) } }
 }
 
-/** 会社・路線の指定を正式名へ解決する。どちらも無ければ一覧も読まない。 */
+function tooManyLines(outcomes: readonly RouteOutcome[], count: number): NameProblem {
+  const companies = outcomes.flatMap((o) => (o.kind === 'operators' ? o.operators : []))
+  const problem =
+    companies.length > 0
+      ? `会社の全路線（${unique(companies).join('・')}）と路線を一度に指定すると、路線が ${count} 本になります（${MAX_LINES_PER_QUERY} 本まで）。会社は operators だけで、路線は routes だけで、分けて呼んでください。`
+      : `路線が ${count} 本あります（${MAX_LINES_PER_QUERY} 本まで）。分けて呼んでください。`
+  return { input: 'routes', problem }
+}
+
+/** 名前ごとの結果をまとめる（決まらない名前が 1 つでもあれば、図を作らずに理由をまとめて返す）。 */
+function summarize(
+  outcomes: readonly RouteOutcome[],
+  operators: OperatorOutcome,
+  index: NameIndex,
+): NameResolution {
+  const problems = [
+    ...operators.problems,
+    ...outcomes.flatMap((o) => (o.kind === 'problem' ? [o.problem] : [])),
+  ]
+  if (problems.length > 0) return failure(problems)
+  const combined = combine(outcomes, operators, index)
+  if ('problem' in combined) return failure([combined.problem])
+  const routeNotes = outcomes.flatMap((o) => (o.kind === 'problem' ? [] : o.notes))
+  return { ok: true, filters: combined.filters, notes: [...operators.notes, ...routeNotes] }
+}
+
+/** 会社・路線の指定を、データの会社と路線へ解決する。どちらも無ければ一覧も読まない。 */
 export async function resolveNameFilters(
   request: NameRequest,
   deps: NameResolveDeps,
@@ -355,32 +585,13 @@ export async function resolveNameFilters(
   const operatorInputs = trimmed(request.operators)
   const routeInputs = trimmed(request.routes)
   if (operatorInputs.length === 0 && routeInputs.length === 0) {
-    return { ok: true, filters: { operators: [], routes: [] }, notes: [] }
+    return { ok: true, filters: { operators: [], lines: [] }, notes: [] }
   }
   const index = await deps.index()
   const operators = resolveOperators(operatorInputs, index)
+  const area = { prefectures: request.prefectures, viewport: request.viewport ?? null }
   const outcomes = await Promise.all(
-    routeInputs.map((input) => resolveRoute(input, index, operators, request.prefectures, deps)),
+    routeInputs.map((input) => resolveRoute(input, index, operators, area, deps)),
   )
-  const problems = [
-    ...operators.problems,
-    ...outcomes.flatMap((o) => (o.kind === 'problem' ? [o.problem] : [])),
-  ]
-  if (problems.length > 0) return failure(problems)
-  const { filters, intended } = combine(outcomes, operators, index)
-  const leaked = leakedPairs(filters, intended, index)
-  if (leaked.length > 0) return failure([combinationProblem(routeInputs, leaked)])
-  const notes = [
-    ...operators.notes,
-    ...outcomes.flatMap((o) => (o.kind === 'pairs' ? o.notes : [])),
-  ]
-  return { ok: true, filters, notes }
-}
-
-function combinationProblem(inputs: readonly string[], leaked: readonly RoutePair[]): NameProblem {
-  const pairs = leaked.map(pairLabel).join('・')
-  return {
-    input: inputs.join('・'),
-    problem: `一度に指定すると、意図しない組合せ（${pairs}）まで含まれます。路線ごとに分けて呼んでください。`,
-  }
+  return summarize(outcomes, operators, index)
 }

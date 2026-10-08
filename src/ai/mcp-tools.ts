@@ -149,7 +149,7 @@ export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
     mcpName: 'list_stations',
     titleJa: '駅の一覧（対象集合）',
     descriptionEn:
-      'List stations by prefecture / municipality (prefix match; 横浜市 bundles its wards), operator, route, bbox or near. Operator and route names may be colloquial (resolved server-side). Returns ids and coordinates only.',
+      'List stations by prefecture / municipality (prefix match; 横浜市 bundles its wards), operator, route, bbox or near. Operator and route names may be colloquial (resolved server-side); routes are lines as passengers call them (山手線 = the 30-station loop). Returns ids and coordinates only.',
     maxResultSizeChars: 40_000,
     perMinute: 30,
   },
@@ -192,7 +192,7 @@ export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
     mcpName: 'rank_stations',
     titleJa: '駅ランキング',
     descriptionEn:
-      'Rank stations by a catalog metric, filtered by prefecture/operator/route. Operator and route names may be colloquial (resolved server-side); ambiguous names return candidates and no chart.',
+      'Rank stations by a catalog metric, filtered by prefecture/operator/route. Operator and route names may be colloquial (resolved server-side to lines as passengers call them, e.g. 山手線 = the 30-station loop); names shared by several lines (東西線, 中央線) return candidates and no chart unless prefectures settle them.',
     maxResultSizeChars: 60_000,
     perMinute: 30,
     chartable: true, // rankingTable
@@ -201,7 +201,7 @@ export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
     mcpName: 'compare_growth',
     titleJa: '2 指標の散布',
     descriptionEn:
-      'Scatter stations on two metrics with deterministic clustering. Operator and route names may be colloquial (resolved server-side); ambiguous names return candidates and no chart.',
+      'Scatter stations on two metrics with deterministic clustering. Operator and route names may be colloquial (resolved server-side to lines as passengers call them); names shared by several lines return candidates and no chart unless prefectures settle them.',
     maxResultSizeChars: 60_000,
     perMinute: 30,
     chartable: true, // scatter

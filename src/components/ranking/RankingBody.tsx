@@ -58,7 +58,7 @@ export function RankingBody({
   // 2 画面で母集団が違う、という食い違いを無くす（チャットからの昇格は AI が使った条件を優先）。
   const [excludeLowN, setExcludeLowN] = useState<boolean>(initial.excludeLowN)
 
-  const { prefectures, operators, routes, routeTypes } = filters.values
+  const { prefectures, operators, routes, routeTypes, lines } = filters.values
   useEffect(() => {
     onConditions?.({
       kind: 'ranking',
@@ -68,9 +68,20 @@ export function RankingBody({
       operators,
       routes,
       routeTypes,
+      lines,
       excludeLowN,
     })
-  }, [onConditions, metricKey, order, prefectures, operators, routes, routeTypes, excludeLowN])
+  }, [
+    onConditions,
+    metricKey,
+    order,
+    prefectures,
+    operators,
+    routes,
+    routeTypes,
+    lines,
+    excludeLowN,
+  ])
 
   const { ranking, total, isLoading, isLoadingMore, canLoadMore, loadMore, error } = useRanking(
     { metric: metricKey, ...filters.values, order, excludeLowN },
@@ -90,6 +101,7 @@ export function RankingBody({
           category={category}
           metricKey={metricKey}
           filters={filters}
+          lineNames={ranking?.lines ?? []}
           order={order}
           excludeLowN={excludeLowN}
           onCategory={onCategory}

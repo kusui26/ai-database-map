@@ -11,7 +11,7 @@
  * （docs/260801_ranking_filter.md §4）。
  */
 
-import { type Order } from '@/shared/api'
+import { type LineRef, type Order } from '@/shared/api'
 import { type Category } from '@/shared/constants'
 import { cn } from '@/lib/utils'
 import {
@@ -27,6 +27,7 @@ export function MetricPicker({
   category,
   metricKey,
   filters,
+  lineNames,
   order,
   excludeLowN,
   onCategory,
@@ -37,6 +38,8 @@ export function MetricPicker({
   category: Category
   metricKey: string
   filters: StationFiltersState
+  /** 絞り込み中の路線（運行系統）の名前（図の応答の `lines`）。 */
+  lineNames: readonly LineRef[]
   order: Order
   excludeLowN: boolean
   onCategory: (category: Category) => void
@@ -50,7 +53,7 @@ export function MetricPicker({
     <div className="space-y-2">
       {/* 段A：絞り込み（散布と同じ並び・同じ連動） */}
       <div className="flex flex-wrap items-center gap-2">
-        <StationFilterControls state={filters} />
+        <StationFilterControls state={filters} lineNames={lineNames} />
       </div>
 
       {/* 段B：常に同じ並び・同じ位置 */}

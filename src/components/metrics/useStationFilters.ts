@@ -37,6 +37,8 @@ export type StationFilterValues = {
   readonly operators: readonly string[]
   readonly routes: readonly string[]
   readonly routeTypes: readonly number[]
+  /** 路線（運行系統）の路線コード。いまはチャットの図の ⤢ からだけ入る（選ぶ部品は L4・2026-10-08 L3）。 */
+  readonly lines: readonly number[]
 }
 
 /** チャットからの昇格で初期値を preset する（未指定は絞らない）。 */
@@ -45,6 +47,7 @@ export type StationFilterInitial = {
   readonly operators?: readonly string[]
   readonly routes?: readonly string[]
   readonly routeTypes?: readonly number[]
+  readonly lines?: readonly number[]
 }
 
 export type StationFiltersState = {
@@ -68,6 +71,7 @@ export type StationFiltersState = {
   readonly setOperators: (operators: string[]) => void
   readonly setRoutes: (routes: string[]) => void
   readonly setRouteTypes: (routeTypes: number[]) => void
+  readonly setLines: (lines: number[]) => void
   readonly applyOperatorPrefectures: () => void
 }
 
@@ -85,6 +89,7 @@ export function useStationFilters(
   const [operators, setOperators] = useState<string[]>([...(initial?.operators ?? [])])
   const [routes, setRoutes] = useState<string[]>([...(initial?.routes ?? [])])
   const [routeTypes, setRouteTypes] = useState<number[]>([...(initial?.routeTypes ?? [])])
+  const [lines, setLines] = useState<number[]>([...(initial?.lines ?? [])])
 
   const prefectures = link.prefectures
   const {
@@ -136,7 +141,7 @@ export function useStationFilters(
   }, [operators, index])
 
   return {
-    values: { prefectures, operators, routes, routeTypes },
+    values: { prefectures, operators, routes, routeTypes, lines },
     operatorList,
     routeList,
     operatorsLoading,
@@ -152,6 +157,7 @@ export function useStationFilters(
     setOperators: onOperators,
     setRoutes,
     setRouteTypes,
+    setLines,
     applyOperatorPrefectures,
   }
 }

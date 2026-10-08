@@ -5,6 +5,7 @@
  */
 
 import { create } from 'zustand'
+import { roundViewport, sameViewport, type Viewport } from '@/shared/viewport'
 
 export type HoverInfo = {
   readonly name: string
@@ -88,6 +89,14 @@ type MapStore = {
   center: MapCenter | null
   /** 地図が止まったときに呼ぶ。**丸めて変化が無ければ何もしない**（無駄な再描画を作らない）。 */
   setCenter: (center: MapCenter) => void
+
+  /**
+   * いま地図に出している範囲（外向きに丸め済み・未初期化は null）。チャットの送信に同送し、同じ名前の路線
+   * （「中央線」＝JR・大阪メトロ）を決めるのに使う（2026-10-08 L3・`shared/viewport.ts`）。
+   */
+  viewport: Viewport | null
+  /** 地図が止まったときに呼ぶ。中心と同じく、丸めて変化が無ければ何もしない。 */
+  setViewport: (bounds: Viewport) => void
 }
 
 function roundCenter(center: MapCenter): MapCenter {
@@ -123,5 +132,12 @@ export const useMapStore = create<MapStore>((set, get) => ({
     const current = get().center
     if (current?.lon === rounded.lon && current.lat === rounded.lat) return
     set({ center: rounded })
+  },
+
+  viewport: null,
+  setViewport: (bounds) => {
+    const rounded = roundViewport(bounds)
+    if (sameViewport(get().viewport, rounded)) return
+    set({ viewport: rounded })
   },
 }))

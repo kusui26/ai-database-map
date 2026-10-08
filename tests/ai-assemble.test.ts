@@ -267,9 +267,33 @@ describe('promotionsFor（⤢ の条件・パネルと同じ並び）', () => {
         operators: ['東日本旅客鉄道'],
         routes: ['常磐線'],
         routeTypes: [2],
+        lines: [],
         excludeLowN: true,
       },
     ])
+  })
+
+  it('路線（運行系統）は路線コードで載る——⤢ で開いた図も同じ駅の集合（2026-10-08 L3）', () => {
+    const effect: RankingEffect = {
+      kind: 'ranking',
+      response: buildRanking('lp_near_price', [], 'desc', rankRows, 2, 0, {
+        lines: [{ lineCd: 11302, name: 'JR山手線' }],
+      }),
+      excludeLowN: false,
+    }
+    expect(promotionsFor([effect])[0]).toMatchObject({
+      kind: 'ranking',
+      lines: [11302],
+      routes: [],
+    })
+    const growth: GrowthEffect = {
+      kind: 'growth',
+      response: buildGrowth([], 'pop_gr_2020_2015_2km', 'rate_covid', {
+        lines: [{ lineCd: 28010, name: '東京メトロ副都心線' }],
+      }),
+      excludeLowN: false,
+    }
+    expect(promotionsFor([growth])[0]).toMatchObject({ kind: 'scatter', lines: [28010] })
   })
 
   it('散布：x/y のキーと絞り込み・除外の指定', () => {
@@ -282,6 +306,7 @@ describe('promotionsFor（⤢ の条件・パネルと同じ並び）', () => {
         operators: [],
         routes: [],
         routeTypes: [],
+        lines: [],
         excludeLowN: false,
       },
     ])

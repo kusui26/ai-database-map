@@ -18,6 +18,7 @@
 import { tool, type InferUITools, type UIMessage } from 'ai'
 import { type PanelPromotions } from '@/shared/promotion'
 import { type MapResponse } from '@/shared/protocol'
+import { type Viewport } from '@/shared/viewport'
 import { type EffectCollector } from './types'
 import { TOOL_SPECS, type ToolRunContext, type ToolRunResult } from './tool-specs'
 
@@ -37,11 +38,11 @@ type RunnableSpec<In, Out> = {
 export function executeFromSpec<In, Out>(
   spec: RunnableSpec<In, Out>,
   collector: EffectCollector,
-  origin: string,
+  ctx: ToolRunContext,
 ): (input: In) => Promise<Out | { error: string }> {
   return async (input) => {
     const runOnce = async (): Promise<Out> => {
-      const { effects, forLlm } = await spec.run(input, { origin })
+      const { effects, forLlm } = await spec.run(input, ctx)
       for (const effect of effects) collector.push(effect)
       return forLlm
     }
@@ -57,59 +58,65 @@ export function executeFromSpec<In, Out>(
 /**
  * リクエストごとにツール群を生成する（collector をクロージャで束ねる）。
  * ツール記述はカタログ由来のダイジェスト（system-prompt.ts）と合わせて LLM を誘導する。
+ * `viewport`＝送信時の地図の表示範囲（同じ名前の路線を決めるのに使う・2026-10-08 L3）。
  */
-export function createTools(collector: EffectCollector, origin: string) {
+export function createTools(
+  collector: EffectCollector,
+  origin: string,
+  viewport: Viewport | null = null,
+) {
   const s = TOOL_SPECS
+  const ctx: ToolRunContext = { origin, viewport }
   return {
     searchStations: tool({
       description: s.searchStations.description,
       inputSchema: s.searchStations.inputSchema,
-      execute: executeFromSpec(s.searchStations, collector, origin),
+      execute: executeFromSpec(s.searchStations, collector, ctx),
     }),
     listStations: tool({
       description: s.listStations.description,
       inputSchema: s.listStations.inputSchema,
-      execute: executeFromSpec(s.listStations, collector, origin),
+      execute: executeFromSpec(s.listStations, collector, ctx),
     }),
     getStationDetail: tool({
       description: s.getStationDetail.description,
       inputSchema: s.getStationDetail.inputSchema,
-      execute: executeFromSpec(s.getStationDetail, collector, origin),
+      execute: executeFromSpec(s.getStationDetail, collector, ctx),
     }),
     rankStations: tool({
       description: s.rankStations.description,
       inputSchema: s.rankStations.inputSchema,
-      execute: executeFromSpec(s.rankStations, collector, origin),
+      execute: executeFromSpec(s.rankStations, collector, ctx),
     }),
     compareGrowth: tool({
       description: s.compareGrowth.description,
       inputSchema: s.compareGrowth.inputSchema,
-      execute: executeFromSpec(s.compareGrowth, collector, origin),
+      execute: executeFromSpec(s.compareGrowth, collector, ctx),
     }),
     getHazardAtPoint: tool({
       description: s.getHazardAtPoint.description,
       inputSchema: s.getHazardAtPoint.inputSchema,
-      execute: executeFromSpec(s.getHazardAtPoint, collector, origin),
+      execute: executeFromSpec(s.getHazardAtPoint, collector, ctx),
     }),
     getHazardAlerts: tool({
       description: s.getHazardAlerts.description,
       inputSchema: s.getHazardAlerts.inputSchema,
-      execute: executeFromSpec(s.getHazardAlerts, collector, origin),
+      execute: executeFromSpec(s.getHazardAlerts, collector, ctx),
     }),
     findEvacuationSites: tool({
       description: s.findEvacuationSites.description,
       inputSchema: s.findEvacuationSites.inputSchema,
-      execute: executeFromSpec(s.findEvacuationSites, collector, origin),
+      execute: executeFromSpec(s.findEvacuationSites, collector, ctx),
     }),
     findEscapeDirection: tool({
       description: s.findEscapeDirection.description,
       inputSchema: s.findEscapeDirection.inputSchema,
-      execute: executeFromSpec(s.findEscapeDirection, collector, origin),
+      execute: executeFromSpec(s.findEscapeDirection, collector, ctx),
     }),
     getMetricsCatalog: tool({
       description: s.getMetricsCatalog.description,
       inputSchema: s.getMetricsCatalog.inputSchema,
-      execute: executeFromSpec(s.getMetricsCatalog, collector, origin),
+      execute: executeFromSpec(s.getMetricsCatalog, collector, ctx),
     }),
   }
 }

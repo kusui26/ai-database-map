@@ -135,8 +135,9 @@ describe('システムプロンプト：合成スコアの推薦は画面へ引�
 })
 
 /**
- * 会社・路線の名前（2026-10-07・B1）。サーバが正式名へ解決し、決まらなければ候補を返す。
- * 実際の応答は `tests/chat-eval.test.ts` の `rank-route-*` が見る。ここで固定するのは指示が消えていないこと。
+ * 会社・路線の名前（2026-10-07 B1 → 2026-10-08 L3）。サーバが路線（運行系統）へ解決し、同じ名前の路線は
+ * 地図の表示範囲で決め、決まらなければ候補を返す。実際の応答は `tests/chat-eval.test.ts` の `rank-route-*`・
+ * `rank-line-*` が見る。ここで固定するのは指示が消えていないこと。
  */
 describe('システムプロンプト：会社・路線の名前', () => {
   it('言い方のまま渡してよい（正式名を推測で組み立てさせない）', () => {
@@ -149,7 +150,18 @@ describe('システムプロンプト：会社・路線の名前', () => {
     expect(prompt).toContain('どの路線かを利用者に聞く')
   })
 
-  it('路線全体へ広げた読み替えは本文で断る（停車駅に限らない）', () => {
-    expect(buildSystemPrompt()).toContain('快速の停車駅に限らない')
+  it('路線全体へ広げた読み替えは本文で断る（その区間の駅に限らない）', () => {
+    expect(buildSystemPrompt()).toContain('その区間の駅に限らないことを一言断る')
+  })
+
+  it('地図の表示範囲で決めた路線は、本文で言い切りで一言添える。会話の地域は prefectures（地図より強い）', () => {
+    const prompt = buildSystemPrompt()
+    expect(prompt).toContain('サーバが地図の表示範囲で決めることがある')
+    expect(prompt).toContain('言い切りで')
+    expect(prompt).toContain('地図より強い')
+  })
+
+  it('「運行系統の名前はデータに無い」とは言わせない（京浜東北線もデータの路線になった）', () => {
+    expect(buildSystemPrompt()).not.toContain('運行系統の名前（京浜東北線など）はデータに無い')
   })
 })

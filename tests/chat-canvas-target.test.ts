@@ -74,6 +74,7 @@ function scatterPromotion(
     operators: [],
     routes: [],
     routeTypes: [],
+    lines: [],
     excludeLowN: false,
     ...filters,
   }
@@ -87,6 +88,7 @@ const rankingPromotion: RankingPromotion = {
   operators: [],
   routes: [],
   routeTypes: [],
+  lines: [],
   excludeLowN: false,
 }
 

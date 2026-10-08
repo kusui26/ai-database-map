@@ -24,6 +24,7 @@ const ranking: PanelPromotion = {
   operators: [],
   routes: [],
   routeTypes: [],
+  lines: [],
   excludeLowN: false,
 }
 
@@ -35,6 +36,7 @@ const scatter: PanelPromotion = {
   operators: [],
   routes: [],
   routeTypes: [],
+  lines: [],
   excludeLowN: false,
 }
 

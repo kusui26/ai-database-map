@@ -54,6 +54,7 @@ vi.mock('@/db/queries', async (importOriginal) => {
       total: RANK_ROWS.length,
     }),
     // 会社・路線の名前の解決が読む一覧（DB に行かせない）。
+    lineNames: async () => [],
     routeNames: async () => [
       { route: '東海道新幹線', stationCount: 17, operators: ['東海旅客鉄道'], routeTypes: [1] },
     ],
@@ -242,6 +243,7 @@ describe('図と一緒に、その図を生んだ条件を送る', () => {
         operators: [],
         routes: [],
         routeTypes: [],
+        lines: [],
         excludeLowN: true,
       },
     ])

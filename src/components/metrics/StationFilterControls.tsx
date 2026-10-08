@@ -6,14 +6,24 @@
  * 散布とランキングが**同じ並び・同じ連動**で使う。並べる順は
  * 「どこを → どの会社を → どの路線を」＝広い条件から狭い条件へ。
  * 状態と連動は `useStationFilters` が持ち、ここは描画だけを担う。
+ * 路線（運行系統）の絞り込みがあれば、外せるチップを最後に出す（`LineChips`・2026-10-08 L3）。
  */
 
+import { type LineRef } from '@/shared/api'
 import { type StationFiltersState } from './useStationFilters'
+import { LineChips } from './LineChips'
 import { OperatorMultiSelect } from './OperatorMultiSelect'
 import { PrefectureMultiSelect } from './PrefectureMultiSelect'
 import { RouteMultiSelect } from './RouteMultiSelect'
 
-export function StationFilterControls({ state }: { state: StationFiltersState }) {
+export function StationFilterControls({
+  state,
+  lineNames = [],
+}: {
+  state: StationFiltersState
+  /** 路線コードの名前（図の応答の `lines`）。 */
+  lineNames?: readonly LineRef[]
+}) {
   return (
     <>
       <PrefectureMultiSelect
@@ -42,6 +52,7 @@ export function StationFilterControls({ state }: { state: StationFiltersState })
         error={state.routesError}
         allowed={state.allowedRoutes}
       />
+      <LineChips selected={state.values.lines} known={lineNames} onChange={state.setLines} />
     </>
   )
 }

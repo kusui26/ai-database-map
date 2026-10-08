@@ -27,6 +27,7 @@ import { useMapStore } from '@/stores/mapStore'
 import { useChatStore } from '@/stores/chatStore'
 import { type ChatUIMessage } from './types'
 import { createAnswerHistory } from './answerHistory'
+import { chatBody } from './sendContext'
 import { ChatMessage } from './ChatMessage'
 import { JumpToLatest } from './JumpToLatest'
 import { viewportOf, type Viewport } from './presentation'
@@ -121,10 +122,10 @@ function ChatBody() {
     detailFocus.reset() // 新しい回答の焦点は、前の回答と同じでも当て直す
     answerHistory.reset() // 新しい回答は、最初に URL を書くときに履歴を 1 つ積む
     // 地図で駅を選択中なら、その選択を文脈として同送する（「この駅」等の解決に使う・P8e）。
-    void sendMessage(
-      { text: trimmed },
-      grp === null ? undefined : { body: { selectedGrp: grp, radiusM } },
-    )
+    // 地図の表示範囲も同送する（同じ名前の路線を決めるのに使う・2026-10-08 L3）。送る瞬間の値を読む
+    // （地図を動かすたびにチャットを描き直さない）。
+    const viewport = useMapStore.getState().viewport
+    void sendMessage({ text: trimmed }, chatBody(grp, radiusM, viewport))
     scroll.scrollToLatest() // 上を読んでいても、送った質問と「考え中」は必ず見せる
     setInput('')
   }

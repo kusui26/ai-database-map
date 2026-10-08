@@ -99,12 +99,17 @@ describe('executeFromSpec（アダプタの不変条件）', () => {
     return { errorFallbackJa, run: behavior }
   }
 
+  const VIEWPORT = { west: 139.5, south: 35.5, east: 140, north: 35.9 }
+
   async function call<Out>(spec: {
     errorFallbackJa: string | null
     run: (input: StubInput, ctx: ToolRunContext) => Promise<ToolRunResult<Out>>
   }): Promise<{ result: Out | { error: string }; drained: readonly ToolEffect[] }> {
     const collector = createCollector()
-    const execute = executeFromSpec(spec, collector, 'http://origin')
+    const execute = executeFromSpec(spec, collector, {
+      origin: 'http://origin',
+      viewport: VIEWPORT,
+    })
     const result = await execute({ value: 'x' })
     return { result, drained: collector.drain() }
   }
@@ -154,15 +159,15 @@ describe('executeFromSpec（アダプタの不変条件）', () => {
     ).rejects.toThrow('カタログ破損')
   })
 
-  it('run へ origin が渡る（共通API の絶対 URL を組むための文脈）', async () => {
-    const seen: string[] = []
+  it('run へ origin と地図の表示範囲が渡る（共通API の絶対 URL・同じ名前の路線を決める文脈）', async () => {
+    const seen: ToolRunContext[] = []
     await call(
       stub(async (_input, ctx) => {
-        seen.push(ctx.origin)
+        seen.push(ctx)
         return { effects: [], forLlm: { ok: true } }
       }),
     )
-    expect(seen).toEqual(['http://origin'])
+    expect(seen).toEqual([{ origin: 'http://origin', viewport: VIEWPORT }])
   })
 })
 

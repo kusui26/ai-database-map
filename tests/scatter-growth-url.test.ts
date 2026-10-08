@@ -8,6 +8,7 @@ const BASE: GrowthQuery = {
   operators: [],
   routes: [],
   routeTypes: [],
+  lines: [],
   excludeLowN: false,
 }
 
@@ -42,5 +43,11 @@ describe('growthUrl（散布の SWR キー）', () => {
     expect(url.searchParams.get('routes')).toBe('東海道新幹線,東海道線')
     expect(url.searchParams.get('routeTypes')).toBe('1,2')
     expect(url.searchParams.get('excludeLowN')).toBe('true')
+  })
+
+  it('路線（運行系統）の路線コードが載る（チャットの図の ⤢・2026-10-08 L3）', () => {
+    const url = new URL(growthUrl({ ...BASE, lines: [28010] }), 'https://example.test')
+    expect(url.searchParams.get('lines')).toBe('28010')
+    expect(growthUrl(BASE)).not.toContain('lines=')
   })
 })

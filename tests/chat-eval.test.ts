@@ -1,5 +1,5 @@
 /**
- * 評価 runner：ゴールデン 48 問を実 /api/chat（SSE）に投げ、score.ts で採点する。
+ * 評価 runner：ゴールデン 53 問を実 /api/chat（SSE）に投げ、score.ts で採点する。
  *
  * 通常の `pnpm test` では **スキップ**（LLM/DB/課金に依存）。実行は：
  *   1) 別端末で dev サーバ起動：`pnpm dev`（.env に GEMINI_API_KEY・SUPABASE_* が必要）
@@ -40,8 +40,10 @@ const BASE_URL = process.env.CHAT_BASE_URL ?? 'http://localhost:3000'
  * 2026-10-08：路線（運行系統）と地図の表示範囲の 4 問を足して 45 問（L3）。同じ理由で 43 へ上げる。
  *
  * 2026-10-08：市区町村・起点から N km の 3 問を足して 48 問（B2）。同じ理由で 46 へ上げる。
+ *
+ * 2026-10-09：地図の「このあたり」の 5 問を足して 53 問（B3）。同じ理由で 51 へ上げる。
  */
-const PASS_THRESHOLD = Number(process.env.EVAL_PASS ?? '46')
+const PASS_THRESHOLD = Number(process.env.EVAL_PASS ?? '51')
 
 /**
  * **1 問でも落としてはいけない分野。**

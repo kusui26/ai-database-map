@@ -13,6 +13,7 @@ import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { ACCENT_COLOR, PANEL_WIDTH_PX } from '@/shared/constants'
 import { circlePolygon } from '@/shared/geo'
+import { type Viewport } from '@/shared/viewport'
 import { type HoverInfo, useMapStore } from '@/stores/mapStore'
 import { useChatStore } from '@/stores/chatStore'
 import { useGeoStore } from '@/stores/geoStore'
@@ -27,6 +28,7 @@ import { addEvacuationPointLayers, syncEvacuationPoints } from './evacuationPoin
 import { loadStations } from './stationsSource'
 import { useHazardUrlState } from './useHazardUrlState'
 import { useHazardTileTimes } from '@/hooks/useHazardTileTimes'
+import { boundsOf, mapInsets, type MapInsets, visibleCorners } from './visibleBounds'
 import { useMapUrlState } from './useMapUrlState'
 
 const STYLE_URL = process.env.NEXT_PUBLIC_MAP_STYLE_URL ?? '/map/gsi-pale-style.json'
@@ -49,6 +51,16 @@ function flyPadding(
     left: isDesktop && chatOpen ? PANEL_WIDTH_PX + BASE_PAD : BASE_PAD,
     right: isDesktop && drawerOpen ? PANEL_WIDTH_PX + BASE_PAD : BASE_PAD,
   }
+}
+
+/**
+ * パネルに隠れていない部分の範囲（2026-10-09 B3）。チャットの「このあたり」が、チャット欄・駅詳細の裏の駅を
+ * 含まないように（`visibleBounds.ts`）。
+ */
+function visibleViewport(map: maplibregl.Map, insets: MapInsets): Viewport {
+  const { clientWidth, clientHeight } = map.getContainer()
+  const corners = visibleCorners(clientWidth, clientHeight, insets)
+  return boundsOf(corners.map(([x, y]) => map.unproject([x, y])))
 }
 
 type Coord = { readonly lon: number; readonly lat: number; readonly name: string }
@@ -280,6 +292,10 @@ export function MapView() {
     flyPadding(isDesktop, chatOpen, grp !== null),
   )
   paddingRef.current = flyPadding(isDesktop, chatOpen, grp !== null)
+  // 表示範囲の報告（moveend）も、開いているパネルを ref で読む（パネルの開閉だけで地図を作り直さない）。
+  const drawerOpen = grp !== null
+  const insetsRef = useRef<MapInsets>(mapInsets(isDesktop, chatOpen, drawerOpen))
+  insetsRef.current = mapInsets(isDesktop, chatOpen, drawerOpen)
   // ハイライト効果内で「選択駅の有無」を参照するための ref（grp 変化で効果を再走させない）。
   const grpRef = useRef(grp)
   grpRef.current = grp
@@ -318,17 +334,12 @@ export function MapView() {
 
     // いま見ている場所（警戒バナーが「この地域に何が出ているか」を引く・§7.4）。
     // **止まってから**報告する——ドラッグ中に流すと、動かすたびに問い合わせが走る。
-    // 表示範囲も同じときに報告する（チャットが同じ名前の路線を決めるのに使う・2026-10-08 L3）。
+    // 表示範囲も同じときに報告する（チャットが同じ名前の路線を決める・2026-10-08 L3、「このあたり」・B3）。
+    // 範囲はパネルに隠れていない部分だけ（チャット欄・駅詳細の裏の駅を「このあたり」に入れない）。
     const reportCenter = (): void => {
       const center = map.getCenter()
       setCenter({ lon: center.lng, lat: center.lat })
-      const bounds = map.getBounds()
-      setViewport({
-        west: bounds.getWest(),
-        south: bounds.getSouth(),
-        east: bounds.getEast(),
-        north: bounds.getNorth(),
-      })
+      setViewport(visibleViewport(map, insetsRef.current))
     }
     map.on('moveend', reportCenter)
 
@@ -369,6 +380,13 @@ export function MapView() {
       setReady(false)
     }
   }, [])
+
+  // パネルを開閉したら、地図が動かなくても見えている範囲が変わる（チャットを閉じれば左が見える）。
+  useEffect(() => {
+    const map = mapRef.current
+    if (!ready || map === null) return
+    setViewport(visibleViewport(map, mapInsets(isDesktop, chatOpen, drawerOpen)))
+  }, [ready, isDesktop, chatOpen, drawerOpen, setViewport])
 
   // 選択：ハイライト更新＋flyTo
   useEffect(() => {

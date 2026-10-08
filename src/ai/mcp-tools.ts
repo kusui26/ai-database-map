@@ -122,10 +122,24 @@ const PRESENT_FIELD = z
       'structuredContent.presenters.echarts, ready to hand to a presentChart-style tool.',
   )
 
-/** 広告用の入力スキーマ（`chartable` のツールにだけ `present` を足す。Spec 本体は無改変）。 */
+/**
+ * アプリのチャットだけの引数（2026-10-09 B3）。`inMapView`＝「このあたり」（利用者の地図に表示中の範囲）は、
+ * MCP の呼び出しには地図が無いので広告しない（送られてきても、範囲が無いので理由つきで断る＝二重の守り）。
+ */
+const CHAT_ONLY_FIELDS: readonly string[] = ['inMapView']
+
+/** チャットだけの引数を外したスキーマ（無ければ同じ参照のまま＝Gemini と MCP でずれない）。 */
+function withoutChatOnly(schema: z.ZodObject): z.ZodObject {
+  const entries = Object.entries(schema.shape)
+  const kept = entries.filter(([key]) => !CHAT_ONLY_FIELDS.includes(key))
+  return kept.length === entries.length ? schema : z.object(Object.fromEntries(kept))
+}
+
+/** 広告用の入力スキーマ（チャットだけの引数を外し、`chartable` のツールにだけ `present` を足す。Spec 本体は無改変）。 */
 function advertisedSchema(schema: z.ZodTypeAny, chartable: boolean): z.ZodTypeAny {
-  if (!chartable || !(schema instanceof z.ZodObject)) return schema
-  return schema.extend({ present: PRESENT_FIELD })
+  if (!(schema instanceof z.ZodObject)) return schema
+  const base = withoutChatOnly(schema)
+  return chartable ? base.extend({ present: PRESENT_FIELD }) : base
 }
 
 /**

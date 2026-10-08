@@ -58,7 +58,7 @@ export function executeFromSpec<In, Out>(
 /**
  * リクエストごとにツール群を生成する（collector をクロージャで束ねる）。
  * ツール記述はカタログ由来のダイジェスト（system-prompt.ts）と合わせて LLM を誘導する。
- * `viewport`＝送信時の地図の表示範囲（同じ名前の路線を決めるのに使う・2026-10-08 L3）。
+ * `viewport`＝送信時の地図の表示範囲（同じ名前の路線を決める・2026-10-08 L3、「このあたり」の inMapView・2026-10-09 B3）。
  */
 export function createTools(
   collector: EffectCollector,

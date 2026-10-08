@@ -14,8 +14,9 @@
  * そちらへ引き渡す。チャットからも呼べるようにするか（W6）は、必要になってから決める。
  */
 
-import { RADII_M, radiusLabel } from '@/shared/constants'
+import { distanceLabel, RADII_M, radiusLabel } from '@/shared/constants'
 import { RECOMMEND_PRESETS } from '@/domain/recommend/presets'
+import { type MapView } from './area/map-view'
 import { systemCatalogSummary } from './catalog-digest'
 
 /** 集約半径の表示（例 "500m/1km/2km/5km/10km/20km"）。 */
@@ -135,6 +136,61 @@ export function mapContextPrompt(
     '- 過去の会話に別の駅が出ていても、**現在の選択駅を優先**してください。',
     '- ただし、ユーザーが**別の駅名を明示**したらその駅を、**一般質問**（都道府県ランキング・散布・カタログ照会など）では選択に縛られず答えてください。',
     `- この駅は searchStations を省き、getStationDetail に grp="${station.grp}"（必要なら radiusM=${radiusM}）を直接渡して取得できます。`,
+  ].join('\n')
+}
+
+const M_PER_KM = 1000
+/** 地図の広さを整数の km で書く境（これより狭ければ小数 1 桁）。 */
+const MAP_SIZE_INTEGER_KM = 10
+
+/** 地図の広さの言い方（「7.2km」「179km」）。 */
+function mapSizeLabel(km: number): string {
+  const meters = km >= MAP_SIZE_INTEGER_KM ? Math.round(km) * M_PER_KM : km * M_PER_KM
+  return distanceLabel(meters)
+}
+
+/** 地図の中心の書き方（中心に近い駅とその市区町村。調べていなければ何も書かない）。 */
+function mapCenterText(view: MapView): string {
+  const { center } = view
+  if (center !== null) {
+    return `（中心に近い駅は ${center.name}（${center.prefecture}${center.municipality ?? ''}））`
+  }
+  return view.centerSearched ? '（中心の近くに駅はありません）' : ''
+}
+
+/** 「この区」「この市」の指し先（区や市が画面の主役になるほど寄っていて、中心の駅の市区町村があるときだけ）。 */
+function mapWardRule(view: MapView): string[] {
+  const { center } = view
+  if (!view.wardScale || center === null || center.municipality === null) return []
+  return [
+    `- 「この区」「この市」「この町」は、中心の駅の市区町村。municipality:"${center.municipality}"・prefectures:["${center.prefecture}"] を渡す（地図の範囲では絞らない）。`,
+  ]
+}
+
+/**
+ * 地図の表示範囲のとき `buildSystemPrompt()` に連結する文脈（2026-10-09 B3・`docs/261001_fix_user_feedback_ui.md` §6.4）。
+ * 「このあたり」の駅を並べる・比べる質問を、地図の範囲で絞らせる。範囲の数（経度・緯度）は見せない——
+ * 絞るのはツールの inMapView で、範囲はサーバが持っている（`src/ai/area/map-view.ts`）。
+ * 頼まれていない質問まで地図に縛らないよう、それも明記する（選択駅の文脈 `mapContextPrompt` と同じ考え方）。
+ */
+export function mapViewPrompt(view: MapView): string {
+  const size = `約 ${mapSizeLabel(view.widthKm)} × ${mapSizeLabel(view.heightKm)}`
+  const head = ['', '# 地図の表示範囲（「このあたり」）']
+  if (view.tooWide) {
+    return [
+      ...head,
+      `利用者の地図は、日本全体に近い広さ（${size}）を表示しています。`,
+      '- 「このあたり」「この辺」と言われても、どこか決められない。inMapView は使わず、どのあたりかを利用者に聞く（地名・駅名を聞くか、地図を拡大してもらう）。',
+    ].join('\n')
+  }
+  return [
+    ...head,
+    `利用者の地図は、いま ${size} の範囲を表示しています${mapCenterText(view)}。`,
+    '- 駅を並べる・比べる・一覧にする質問の「このあたり」「この辺」「地図に出ている範囲」は、この範囲。',
+    '  rankStations / compareGrowth / listStations に **inMapView:true** を渡す（範囲はサーバが持っている。bbox に数を書かない）。',
+    '  本文では「地図に表示中の範囲で」と、どこで絞ったかを一言添える。「この駅」は 1 つの駅のことで、地図の範囲ではない。',
+    ...mapWardRule(view),
+    '- **頼まれていないのに地図の範囲で絞らない**。「全国で」「神奈川県で」「山手線の駅で」などは、そのとおりに答える（地図は話題を決めない）。',
   ].join('\n')
 }
 

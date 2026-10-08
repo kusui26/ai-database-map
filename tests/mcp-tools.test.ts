@@ -25,6 +25,8 @@ import { PANEL_FIXTURES, panelFixture } from './fixtures/panels'
  * 決定 11）。`ui://` リソースも `_meta.ui` も `map_probe` も戻ってこないことを固定する。
  * ⑦表示用パラメータ `present`（PR-12）が**数値パネルを返すツールにだけ**広告され、
  * **ドメインには届かない**こと。指定しなければ応答は従来と 1 バイトも変わらない。
+ * ⑧アプリのチャットだけの引数 `inMapView`（「このあたり」＝利用者の地図の範囲・2026-10-09 B3）は、
+ * 地図の無い MCP には**広告しない**こと。送られてきても、範囲が無いので理由つきで断る。
  */
 
 /** 偽サーバ：登録内容を記録するだけ。`McpToolRegistry` をそのまま実装（キャスト不要）。 */
@@ -123,12 +125,14 @@ describe('registerMcpTools（登録の網羅と中身）', () => {
       const tool = tools[index]
       expect(tool, key).toBeDefined()
       if (tool === undefined) continue
-      // ドメインの引数は Spec と同じ。`chartable` のツールだけ、表示用の `present` が 1 つ増える。
+      // ドメインの引数は Spec と同じ（アプリのチャットだけの `inMapView` を除く）。
+      // `chartable` のツールだけ、表示用の `present` が 1 つ増える。
+      const specKeys = shapeKeysOf(TOOL_SPECS[key].inputSchema)
+      const domainKeys = specKeys.filter((name) => name !== 'inMapView')
       if (MCP_TOOL_CONFIGS[key].chartable === true) {
-        expect(shapeKeysOf(tool.config.inputSchema), key).toEqual([
-          ...shapeKeysOf(TOOL_SPECS[key].inputSchema),
-          'present',
-        ])
+        expect(shapeKeysOf(tool.config.inputSchema), key).toEqual([...domainKeys, 'present'])
+      } else if (domainKeys.length !== specKeys.length) {
+        expect(shapeKeysOf(tool.config.inputSchema), key).toEqual(domainKeys)
       } else {
         // それ以外は**同一の参照**（Gemini と MCP でずれない）。
         expect(tool.config.inputSchema, key).toBe(TOOL_SPECS[key].inputSchema)
@@ -161,6 +165,36 @@ describe('registerMcpTools（登録の網羅と中身）', () => {
     for (const key of ['getHazardAtPoint', 'listStations', 'buildDataset'] as const) {
       expect(MCP_TOOL_CONFIGS[key].chartable, key).not.toBe(true)
     }
+  })
+
+  it('「このあたり」（inMapView）は、Spec にはあるが MCP には広告しない（地図が無い・B3）', () => {
+    const { tools, server } = fakeServer()
+    registerMcpTools(server, 'http://localhost:3000')
+    const keys = ['rankStations', 'compareGrowth', 'listStations'] as const
+    for (const key of keys) {
+      expect(shapeKeysOf(TOOL_SPECS[key].inputSchema), key).toContain('inMapView')
+      const tool = tools.find((registered) => registered.name === MCP_TOOL_CONFIGS[key].mcpName)
+      if (tool === undefined) throw new Error(`${key} が登録されていない`)
+      expect(shapeKeysOf(tool.config.inputSchema), key).not.toContain('inMapView')
+      // ほかの場所の条件（市区町村・範囲・起点）は MCP でも使える
+      expect(shapeKeysOf(tool.config.inputSchema), key).toEqual(
+        expect.arrayContaining(['municipality', 'bbox', 'near']),
+      )
+    }
+    // データセット（MCP だけ）の対象集合には、はじめから足さない（アプリのチャットに出していない）
+    const dataset = TOOL_SPECS.buildDataset.inputSchema.shape.stations.unwrap()
+    expect(shapeKeysOf(dataset)).not.toContain('inMapView')
+  })
+
+  it('MCP に inMapView が送られてきても、地図の範囲が無いので理由つきで断る（集計しない）', async () => {
+    const { tools, server } = fakeServer()
+    registerMcpTools(server, 'http://localhost:3000')
+    const rank = tools.find((tool) => tool.name === 'rank_stations')
+    if (rank === undefined) throw new Error('rank_stations が登録されていない')
+    const result = await rank.callback({ metric: 'pop_gr', inMapView: true })
+    expect(result.isError).toBeUndefined()
+    expect(firstText(result)).toContain('地図の表示範囲が届いていません')
+    expect(result.structuredContent).toMatchObject({ panels: [] })
   })
 
   it('`present` はドメインへ届かない（Spec の Zod が落とす）', () => {

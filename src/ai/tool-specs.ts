@@ -140,6 +140,13 @@ const NEAR_DESCRIPTION =
   `起点の駅から何 m 以内の駅に絞る（「竹橋から 5km 範囲で」「立川の 3km 以内で」）。station は起点の駅名（例「竹橋」）か searchStations の grp、withinM は m（5km → 5000・${NEAR_MIN_RADIUS_M}〜${NEAR_MAX_RADIUS_M}）。` +
   '**集計半径 radiusM とは別物**——「5km 範囲」を radiusM に入れない。返却の各駅に起点からの距離（distance）が付くので、距離は自分で計算しない'
 const BBOX_DESCRIPTION = '範囲 [west, south, east, north]（経度・緯度）。その範囲の駅だけ'
+/**
+ * 地図に表示中の範囲（「このあたり」・2026-10-09 B3）。範囲はサーバが持っている（送信時の地図の表示範囲）ので、
+ * LLM に 4 つの数を書き写させない。地図の無い呼び出し（MCP）には広告しない（`mcp-tools.ts`）。
+ */
+const IN_MAP_VIEW_DESCRIPTION =
+  'true で、利用者の地図に表示中の範囲の駅だけ（「このあたり」「この辺」「地図に出ている範囲で」）。範囲はサーバが持っているので数は書かない（bbox と一緒に使わない）。' +
+  '頼まれていないのに使わない（「全国で」「神奈川県で」はそのとおりに）。地図が日本全体に近い広さだと使えない'
 
 /** 起点の駅と半径（ランキング・散布。図の条件は ⤢ で開き直せるよう駅で受ける）。 */
 const nearStationSchema = z
@@ -151,8 +158,8 @@ const nearStationSchema = z
 
 /**
  * 実行の文脈（消費側が渡す）。`origin`＝共通API の絶対 URL を組むための自ホスト。
- * `viewport`＝地図の表示範囲（アプリのチャットだけが同送する・MCP には無い）。同じ名前の路線を決めるのに使う
- * （2026-10-08 L3・計画書 §6.8.6）。
+ * `viewport`＝地図の表示範囲（アプリのチャットだけが同送する・MCP には無い）。同じ名前の路線を決めるのに使い
+ * （2026-10-08 L3・計画書 §6.8.6）、「このあたり」（`inMapView`）ではこの範囲で駅を絞る（2026-10-09 B3）。
  */
 export type ToolRunContext = {
   readonly origin: string
@@ -271,7 +278,7 @@ const DATASET_DEFAULT_STATION_LIMIT = LIST_MAX_LIMIT
 const HAZARD_SUMMARY_MAX_GRPS = 500
 
 /**
- * 対象集合セレクタ（listStations と buildDataset.stations で**同一**・§5.3 の共通化）。
+ * 対象集合セレクタ（listStations と buildDataset.stations で**同一**・§5.3 の共通化。一覧だけ「このあたり」の inMapView を足す）。
  * 絞り込みはランキング・散布と同じ述語（DB 側で共有）。市区町村・起点の駅・範囲は、ランキング・散布と同じく
  * 名前をサーバが決める（`src/ai/area/`・2026-10-08 B2）。起点は駅でない地点（lon・lat）でもよい。
  */
@@ -303,6 +310,15 @@ const stationSelectorSchema = z.object({
 })
 type StationSelector = z.output<typeof stationSelectorSchema>
 
+/**
+ * 一覧の入力＝セレクタ＋「このあたり」（地図に表示中の範囲・2026-10-09 B3）。`inMapView` はアプリのチャットの
+ * 一覧だけ——データセット（MCP だけ）の `stations` には足さない（MCP には地図が無い）。
+ */
+const listStationsInputSchema = stationSelectorSchema.extend({
+  inMapView: z.boolean().optional().describe(IN_MAP_VIEW_DESCRIPTION),
+})
+type SelectorInput = StationSelector & { readonly inMapView?: boolean }
+
 /** 会社・路線の言い方（解決する前・前後の空白を落としたもの）。 */
 type NameInputs = { readonly operators: string[]; readonly routes: string[] }
 
@@ -319,7 +335,7 @@ type SelectorResolution =
   | { readonly ok: false; readonly error: HintErrorJa }
 
 /** セレクタの市区町村・起点・範囲（以前の名前 near.radiusM は withinM として受ける）。 */
-function areaInputOf(input: StationSelector): AreaInput {
+function areaInputOf(input: SelectorInput): AreaInput {
   const near =
     input.near === undefined
       ? undefined
@@ -329,11 +345,11 @@ function areaInputOf(input: StationSelector): AreaInput {
           lat: input.near.lat,
           withinM: input.near.withinM ?? input.near.radiusM,
         }
-  return { municipality: input.municipality, near, bbox: input.bbox }
+  return { municipality: input.municipality, near, bbox: input.bbox, inMapView: input.inMapView }
 }
 
 /** セレクタ → DB フィルタの土台（都道府県の正規化と件数。名前の解決は `resolveSelector`）。 */
-function selectorToFilter(input: StationSelector, defaultLimit: number): SelectorResolution {
+function selectorToFilter(input: SelectorInput, defaultLimit: number): SelectorResolution {
   const { names: prefectures, unknown } = normalizePrefectures(input.prefectures ?? [])
   if (unknown.length > 0) return { ok: false, error: unknownPrefectures(unknown) }
   const requested = Math.min(Math.max(input.limit ?? defaultLimit, 1), LIST_MAX_LIMIT)
@@ -428,7 +444,8 @@ type FigureInput = AreaInput & {
 /**
  * ランキング・散布の絞り込みを正規化し、エリア（市区町村・起点の駅・範囲）と会社・路線の名前を解決する
  * （2 つのツールで同じ）。エリアを先に決める——決めた市区町村の都道府県が、同じ名前の路線を決める手がかりになる。
- * 地図の表示範囲（`viewport`）は、同じ名前を決めるのにだけ使う（駅を範囲で絞るのは `bbox`）。
+ * 地図の表示範囲（`viewport`）は、同じ名前を決めるのと、頼まれたとき（「このあたり」の `inMapView`・B3）に駅を絞るのに使う
+ * （数の範囲で絞るのは `bbox`）。
  */
 async function resolveFigureFilters(
   input: FigureInput,
@@ -491,10 +508,11 @@ type ResolvedSelector =
 /**
  * セレクタ → DB フィルタ（検証のあと、エリアと会社・路線の名前を解決する・2026-10-07 B1 → L3 → B2）。
  * エリアを先に決める（決めた市区町村の都道府県が、同じ名前の路線を決める手がかりになる）。路線は路線コード
- * （`lines`）で絞る。地図の表示範囲（`viewport`）は同じ名前を決めるのにだけ使い、セレクタの `bbox`（駅を範囲で絞る）とは別物。
+ * （`lines`）で絞る。地図の表示範囲（`viewport`）は同じ名前を決めるのと「このあたり」（`inMapView`・B3）に使い、
+ * セレクタの `bbox`（数で範囲を絞る）とは別物。
  */
 async function resolveSelector(
-  input: StationSelector,
+  input: SelectorInput,
   defaultLimit: number,
   viewport: Viewport | null,
 ): Promise<ResolvedSelector> {
@@ -991,7 +1009,7 @@ export const TOOL_SPECS = {
     description:
       '条件に合う駅の一覧（grp・駅名・位置だけ）を返す。「横浜市の駅」「神奈川県の駅」「東急電鉄の駅」のような対象集合づくりの起点。' +
       'municipality は市区町村（例「横浜市」で全区を束ねる。「世田谷区」「港北区」も可）。operators / routes / routeTypes・bbox・near（起点の駅から N m 以内・各駅に距離が付く）でも絞れる（条件は AND）。値の取得や比較は他のツールで行う。',
-    inputSchema: stationSelectorSchema,
+    inputSchema: listStationsInputSchema,
     errorFallbackJa: '駅一覧の取得に失敗しました',
     run: async (
       input,
@@ -1355,6 +1373,7 @@ export const TOOL_SPECS = {
       municipality: z.string().optional().describe(MUNICIPALITY_DESCRIPTION),
       near: nearStationSchema.optional(),
       bbox: z.array(z.number()).length(4).optional().describe(BBOX_DESCRIPTION),
+      inMapView: z.boolean().optional().describe(IN_MAP_VIEW_DESCRIPTION),
       operators: z.array(z.string()).optional().describe(OPERATORS_DESCRIPTION),
       routes: z.array(z.string()).optional().describe(ROUTES_DESCRIPTION),
       routeTypes: z.array(z.number().int()).optional().describe(ROUTE_TYPES_DESCRIPTION),
@@ -1433,6 +1452,7 @@ export const TOOL_SPECS = {
       municipality: z.string().optional().describe(MUNICIPALITY_DESCRIPTION),
       near: nearStationSchema.optional(),
       bbox: z.array(z.number()).length(4).optional().describe(BBOX_DESCRIPTION),
+      inMapView: z.boolean().optional().describe(IN_MAP_VIEW_DESCRIPTION),
       operators: z.array(z.string()).optional().describe(OPERATORS_DESCRIPTION),
       routes: z.array(z.string()).optional().describe(ROUTES_DESCRIPTION),
       routeTypes: z.array(z.number().int()).optional().describe(ROUTE_TYPES_DESCRIPTION),

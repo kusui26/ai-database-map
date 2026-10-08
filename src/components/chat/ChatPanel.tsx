@@ -122,7 +122,7 @@ function ChatBody() {
     detailFocus.reset() // 新しい回答の焦点は、前の回答と同じでも当て直す
     answerHistory.reset() // 新しい回答は、最初に URL を書くときに履歴を 1 つ積む
     // 地図で駅を選択中なら、その選択を文脈として同送する（「この駅」等の解決に使う・P8e）。
-    // 地図の表示範囲も同送する（同じ名前の路線を決めるのに使う・2026-10-08 L3）。送る瞬間の値を読む
+    // 地図の表示範囲も同送する（同じ名前の路線を決める・2026-10-08 L3、「このあたり」・B3）。送る瞬間の値を読む
     // （地図を動かすたびにチャットを描き直さない）。
     const viewport = useMapStore.getState().viewport
     void sendMessage({ text: trimmed }, chatBody(grp, radiusM, viewport))

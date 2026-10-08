@@ -48,6 +48,12 @@ export type EvalExpectation = {
    * 以前は名前の当てずっぽうの呼び直しで、上限 6 回のうち 5 回を使っていた（計画書 §6.1）。
    */
   readonly maxCalls?: Readonly<Record<string, number>>
+  /**
+   * ツールごとに、**どの呼び出しにも付けてはいけない**引数（例 `{ rankStations: ['inMapView', 'bbox'] }`）。
+   * 地図の表示範囲を LLM に見せると（2026-10-09 B3）、頼まれていない「全国で」「神奈川県で」まで地図で絞りうる。
+   * 値が無い・null・false は「付けていない」とみなす。
+   */
+  readonly forbidInputs?: Readonly<Record<string, readonly string[]>>
   /** これらを**すべて**含む（本文＋パネル）。 */
   readonly contains?: readonly string[]
   /** これらの**いずれか**を含む（拒否・言い換えの許容）。 */
@@ -94,6 +100,11 @@ function valueMatches(actual: unknown, expected: unknown): boolean {
   }
   if (isRecord(expected)) return isRecord(actual) && inputMatches(actual, expected)
   return actual === expected
+}
+
+/** 引数が付いているか（値が無い・null・false は付けていない）。 */
+function isSet(value: unknown): boolean {
+  return value !== undefined && value !== null && value !== false
 }
 
 /** input の期待キーがすべて観測に含まれるか（配列は部分集合、オブジェクトは部分一致、他は厳密一致）。 */
@@ -147,6 +158,11 @@ export function scoreCase(expectation: EvalExpectation, observed: EvalObserved):
   for (const [name, max] of Object.entries(expectation.maxCalls ?? {})) {
     const count = observed.toolCalls.filter((call) => call.name === name).length
     checks.push({ name: `${name} の呼び出しは ${max} 回まで（${count} 回）`, ok: count <= max })
+  }
+  for (const [name, keys] of Object.entries(expectation.forbidInputs ?? {})) {
+    const calls = observed.toolCalls.filter((call) => call.name === name)
+    const ok = calls.every((call) => keys.every((key) => !isSet(call.input[key])))
+    checks.push({ name: `${name} に ${keys.join('・')} を付けない`, ok })
   }
   for (const needle of expectation.contains ?? []) {
     checks.push({ name: `「${needle}」を含む`, ok: observed.haystack.includes(needle) })

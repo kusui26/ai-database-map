@@ -24,7 +24,13 @@ import {
   normalizeMethodSchema,
   recommendPresetIdSchema,
 } from './recommend'
-import { ALERT_LEVELS, MAX_LINES_PER_QUERY, RADII_M } from './constants'
+import {
+  ALERT_LEVELS,
+  MAX_LINES_PER_QUERY,
+  NEAR_MAX_RADIUS_M,
+  NEAR_MIN_RADIUS_M,
+  RADII_M,
+} from './constants'
 import { hazardItemSchema, rankingRowSchema, scatterPointSchema, sourceRefSchema } from './protocol'
 import { evacuationDisasterKeySchema } from './evacuation'
 
@@ -70,6 +76,55 @@ export type LineRef = z.infer<typeof lineRefSchema>
  */
 export const operatorLabelsSchema = z.array(z.string()).default([])
 
+/**
+ * エリアの条件（一覧・ランキング・散布で同じ・261008 B2・SQL の述語 station_matches_filters）。
+ * municipality は市区町村名か JIS コードの前方一致（「横浜市」で全区）、bbox は "west,south,east,north"（経度・緯度）、
+ * nearStation は起点の駅（GET /api/stations?q= の grp）で、withinM（m）と組で使う（起点から何 m 以内）。
+ * 形の検証（bbox の並び・起点の有無）はドメイン（`src/domain/area.ts`）がする。
+ */
+const WITHIN_M_ERROR = `withinM は ${NEAR_MIN_RADIUS_M}〜${NEAR_MAX_RADIUS_M} の整数（m）で指定してください`
+
+export const areaQueryShape = {
+  municipality: z
+    .string()
+    .trim()
+    .min(1, { error: 'municipality が空です' })
+    .max(40, { error: 'municipality は 40 文字までです' })
+    .optional(),
+  bbox: z.string().optional(),
+  nearStation: z.string().min(1).max(80).optional(),
+  withinM: z.coerce
+    .number({ error: WITHIN_M_ERROR })
+    .int({ error: WITHIN_M_ERROR })
+    .min(NEAR_MIN_RADIUS_M, { error: WITHIN_M_ERROR })
+    .max(NEAR_MAX_RADIUS_M, { error: WITHIN_M_ERROR })
+    .optional(),
+}
+
+/** 範囲（経度・緯度の箱）。 */
+export const bboxSchema = z.object({
+  west: z.number(),
+  south: z.number(),
+  east: z.number(),
+  north: z.number(),
+})
+
+/** 近傍（起点の駅と半径）。応答に返す（題・⤢ の条件・画面のチップに使う）。 */
+export const nearRefSchema = z.object({
+  grp: z.string(),
+  /** 起点の駅の表示名（同じ名前の駅は「大塚（東日本旅客鉄道）」）。 */
+  label: z.string(),
+  radiusM: z.number(),
+})
+export type NearRef = z.infer<typeof nearRefSchema>
+
+/** 応答に返すエリア（どれも null＝絞っていない・古い応答には無い）。 */
+const areaEchoShape = {
+  municipality: z.string().nullable().default(null), // 市区町村（前方一致の値・261008 B2）
+  bbox: bboxSchema.nullable().default(null), // 範囲（261008 B2）
+  near: nearRefSchema.nullable().default(null), // 起点と半径（261008 B2）
+}
+
 export const stationsQuerySchema = z.object({
   q: z.string().min(1).optional(),
   bbox: z.string().optional(), // "west,south,east,north"
@@ -81,6 +136,9 @@ export const stationsQuerySchema = z.object({
   routes: z.string().min(1).optional(), // カンマ区切り（同上）
   routeTypes: z.string().min(1).optional(), // カンマ区切りの整数（1:新幹線 …・routes とは OR）
   lines: z.string().min(1).optional(), // カンマ区切りの路線コード（運行系統・261008 L2・どれかの路線の駅）
+  // 起点の駅（grp）から withinM 以内（一覧のとき・261008 B2）。near（"lon,lat"＝最寄りの駅）とは別。
+  nearStation: areaQueryShape.nearStation,
+  withinM: areaQueryShape.withinM,
   limit: z.coerce.number().int().min(1).max(2000).optional(),
 })
 
@@ -96,6 +154,7 @@ export const rankingQuerySchema = z.object({
   routes: z.array(z.string()).default([]), // 空＝全路線（260801）
   routeTypes: z.array(z.number().int()).default([]), // 空＝全種別（routes とは OR）
   lines: lineCdsQuerySchema, // 空＝絞らない（運行系統・261008 L2）
+  ...areaQueryShape, // 市区町村・範囲・近傍（261008 B2）
   order: orderSchema.default('desc'),
   limit: z.coerce.number().int().min(1).max(100).default(50), // P6c: ページサイズ
   offset: z.coerce.number().int().min(0).default(0), // P6c: ページング
@@ -110,6 +169,7 @@ export const growthQuerySchema = z.object({
   routes: z.array(z.string()).default([]), // 空＝全路線（260731）
   routeTypes: z.array(z.number().int()).default([]), // 空＝全種別（1:新幹線 …・routes とは OR）
   lines: lineCdsQuerySchema, // 空＝絞らない（運行系統・261008 L2）
+  ...areaQueryShape, // 市区町村・範囲・近傍（261008 B2）
   excludeLowN: boolFlag,
 })
 
@@ -160,6 +220,7 @@ export const stationListItemSchema = z.object({
   lat: z.number(),
   nOp: z.number().nullable(),
   paxLatest: z.number().nullable(),
+  distM: z.number().optional(), // 起点からの距離（m・近傍で絞ったときだけ・261008 B2）
 })
 export type StationListItem = z.infer<typeof stationListItemSchema>
 
@@ -209,6 +270,7 @@ export const rankingResponseSchema = z.object({
   routes: z.array(z.string()).default([]), // 空＝全路線（260801）
   routeTypes: z.array(z.number()).default([]), // 空＝全種別（260801）
   lines: z.array(lineRefSchema).default([]), // 空＝絞らない（運行系統・261008 L2）
+  ...areaEchoShape,
   order: orderSchema,
   offset: z.number(), // このページの先頭順位-1（P6c）
   total: z.number(), // フィルタ後の総件数（P6c）
@@ -225,6 +287,7 @@ export const growthResponseSchema = z.object({
   routes: z.array(z.string()).default([]), // 空＝全路線（260731）
   routeTypes: z.array(z.number()).default([]), // 空＝全種別（260731）
   lines: z.array(lineRefSchema).default([]), // 空＝絞らない（運行系統・261008 L2）
+  ...areaEchoShape,
   clusterCount: z.number(),
   excludedLowN: z.number(),
   points: z.array(scatterPointSchema),
@@ -713,9 +776,7 @@ export const recommendAreaSchema = z.object({
   routes: z.array(z.string()),
   routeTypes: z.array(z.number()),
   lines: z.array(lineRefSchema).default([]), // 路線（運行系統・261008 L2）
-  bbox: z
-    .object({ west: z.number(), south: z.number(), east: z.number(), north: z.number() })
-    .nullable(),
+  bbox: bboxSchema.nullable(),
   /** 「横浜市／東海道線・根岸線・横須賀線」。言い方をサーバが決める（UI と AI で割らない）。 */
   labelJa: z.string(),
 })

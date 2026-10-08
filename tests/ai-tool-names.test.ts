@@ -94,10 +94,14 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-/** `rankByColumn` に渡った条件（会社・法令上の路線・路線コード）。 */
+/** `rankByColumn` に渡った条件（会社・法令上の路線・路線コード・未指定は空）。 */
 function rankedWith(): { operators: unknown; routes: unknown; lines: unknown } {
-  const call = db.rankByColumn.mock.calls[0] ?? []
-  return { operators: call[6], routes: call[7], lines: call[9] }
+  const filter = db.rankByColumn.mock.calls[0]?.[1] ?? {}
+  return {
+    operators: filter.operators ?? [],
+    routes: filter.routes ?? [],
+    lines: filter.lines ?? [],
+  }
 }
 
 describe('rankStations：路線は路線コードで絞る', () => {
@@ -162,8 +166,7 @@ describe('rankStations：路線は路線コードで絞る', () => {
       { metric: 'pop_gr', routes: ['東西線'], prefectures: ['東京都'] },
       CTX,
     )
-    const [, prefectures] = db.rankByColumn.mock.calls[0] ?? []
-    expect(prefectures).toEqual(['東京都'])
+    expect(db.rankByColumn.mock.calls[0]?.[1]?.prefectures).toEqual(['東京都'])
     expect(rankedWith().lines).toEqual([28004])
     expect(result.effects).toHaveLength(1)
   })
@@ -206,7 +209,8 @@ describe('compareGrowth：名前の解決と 0 件', () => {
       CTX,
     )
     const filters = db.scatterPoints.mock.calls[0]?.[4]
-    expect(filters).toMatchObject({ operators: ['東京地下鉄'], routes: [], lines: [] })
+    expect(filters).toMatchObject({ operators: ['東京地下鉄'], lines: [] })
+    expect(filters?.routes).toBeUndefined()
   })
 
   it('路線は路線コードで散布の条件に入り、応答に名前つきで載る', async () => {
@@ -214,7 +218,8 @@ describe('compareGrowth：名前の解決と 0 件', () => {
       { x: 'pop_gr', y: 'rate_covid', routes: ['副都心線'] },
       { ...CTX, viewport: VIEW.tokyo },
     )
-    expect(db.scatterPoints.mock.calls[0]?.[4]).toMatchObject({ lines: [28010], routes: [] })
+    expect(db.scatterPoints.mock.calls[0]?.[4]).toMatchObject({ lines: [28010] })
+    expect(db.scatterPoints.mock.calls[0]?.[4]?.routes).toBeUndefined()
     const [effect] = result.effects
     expect(effect?.kind === 'growth' && effect.response.lines).toEqual([
       { lineCd: 28010, name: '東京メトロ副都心線' },

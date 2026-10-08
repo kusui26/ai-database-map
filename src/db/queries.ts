@@ -11,6 +11,7 @@ import {
   type StationSummary,
 } from '@/shared/api'
 import { stationHazardSummarySchema, type StationHazardSummary } from '@/shared/hazard-summary'
+import { type Viewport } from '@/shared/viewport'
 import { db, DbError } from './client'
 
 async function rpc(fn: string, args: Record<string, unknown>): Promise<unknown> {
@@ -57,6 +58,70 @@ function toSummary(row: z.infer<typeof summaryRowSchema>): StationSummary {
   }
 }
 
+// --- 駅の絞り込み（一覧・ランキング・散布で同じ・SQL の述語 station_matches_filters） ----------
+
+/** 起点と半径（m・楕円体の上の距離で絞る・起点からの距離も返る）。 */
+export type NearPoint = { readonly lon: number; readonly lat: number; readonly radiusM: number }
+
+/**
+ * 駅の絞り込み（未指定・空＝絞らない・条件どうしは AND）。一覧・ランキング・散布が同じ形で受け、
+ * DB の述語（`station_matches_filters`・単一の定義）が同じ意味で絞る（2026-10-08 B2 で市区町村・範囲・近傍を足した）。
+ */
+export type StationFilter = {
+  readonly prefectures?: readonly string[]
+  /** 市区町村名（前方一致・例「横浜市」で全区）または JIS コード（前方一致）。 */
+  readonly municipality?: string
+  /** 運営会社（S12 の会社名・どれか）。 */
+  readonly operators?: readonly string[]
+  /** 法令上の路線（S12）・事業者種別（この 2 つは OR）。 */
+  readonly routes?: readonly string[]
+  readonly routeTypes?: readonly number[]
+  /** 路線（運行系統）の路線コード。どれかの路線の駅（261008 L2）。 */
+  readonly lines?: readonly number[]
+  /** 地図の範囲（経度・緯度）。 */
+  readonly bbox?: Viewport
+  /** 起点から半径 m 以内。 */
+  readonly near?: NearPoint
+}
+
+/** 駅の一覧の条件（絞り込み＋明示の駅・件数）。 */
+export type ListStationsFilter = StationFilter & {
+  /** 明示の駅 ID 集合（build_dataset の grps 指定・260903）。 */
+  readonly grps?: readonly string[]
+  readonly limit?: number
+}
+
+/** 空配列は null（＝絞らない）へ写す（既存 RPC の空配列の扱いと揃える）。 */
+function arrayOrNull<T>(values: readonly T[] | undefined): readonly T[] | null {
+  return values !== undefined && values.length > 0 ? values : null
+}
+
+/**
+ * 絞り込み → RPC の引数（法令上の路線を除く。名前が RPC ごとに違う：rank/scatter は `routes`、一覧は `routes_in`）。
+ * 3 つの RPC が同じ組み立てを使うので、条件を足すときはここだけ直せばよい。
+ */
+function filterArgs(filter: StationFilter): Record<string, unknown> {
+  return {
+    prefs: arrayOrNull(filter.prefectures),
+    muni: filter.municipality ?? null,
+    ops: arrayOrNull(filter.operators),
+    route_types: arrayOrNull(filter.routeTypes),
+    line_cds: arrayOrNull(filter.lines),
+    west: filter.bbox?.west ?? null,
+    south: filter.bbox?.south ?? null,
+    east: filter.bbox?.east ?? null,
+    north: filter.bbox?.north ?? null,
+    near_lon: filter.near?.lon ?? null,
+    near_lat: filter.near?.lat ?? null,
+    near_radius_m: filter.near?.radiusM ?? null,
+  }
+}
+
+/** 起点からの距離（m）を整数に（近傍でなければ undefined＝返却に載せない）。 */
+function distanceOf(distM: number | null | undefined): { readonly distM?: number } {
+  return distM === null || distM === undefined ? {} : { distM: Math.round(distM) }
+}
+
 // --- 駅一覧（対象集合・260902 PR-4） ------------------------------------
 const listRowSchema = z.object({
   grp: z.string(),
@@ -69,36 +134,8 @@ const listRowSchema = z.object({
   lat: z.number(),
   n_op: z.number().nullable(),
   pax_latest: z.number().nullable(),
+  dist_m: z.number().nullable().optional(), // 起点からの距離（近傍のときだけ・261008 B2）
 })
-
-export type ListStationsFilter = {
-  readonly prefectures?: readonly string[]
-  /** 市区町村名（前方一致・例「横浜市」）または JIS コード（前方一致）。 */
-  readonly municipality?: string
-  /** 運営会社・路線・事業者種別（rank/scatter と同じ述語 station_matches_filters・260903）。 */
-  readonly operators?: readonly string[]
-  readonly routes?: readonly string[]
-  readonly routeTypes?: readonly number[]
-  /** 路線（運行系統）の路線コード。どれかの路線の駅（ほかの条件とは AND・261008 L2）。 */
-  readonly lines?: readonly number[]
-  /** 地図範囲（4 値すべて揃ったときだけ効く）。 */
-  readonly bbox?: {
-    readonly west: number
-    readonly south: number
-    readonly east: number
-    readonly north: number
-  }
-  /** 中心と半径（m・geography の正確な距離で絞る）。 */
-  readonly near?: { readonly lon: number; readonly lat: number; readonly radiusM: number }
-  /** 明示の駅 ID 集合（build_dataset の grps 指定・260903）。 */
-  readonly grps?: readonly string[]
-  readonly limit?: number
-}
-
-/** 空配列は null（＝絞らない）へ写す（既存 RPC の空配列の扱いと揃える）。 */
-function arrayOrNull<T>(values: readonly T[] | undefined): readonly T[] | null {
-  return values !== undefined && values.length > 0 ? values : null
-}
 
 /**
  * 対象集合を作る（値は返さない・`list_stations` RPC）。並びは乗降客数の降順。
@@ -113,19 +150,8 @@ export async function listStations(filter: ListStationsFilter): Promise<StationL
   const rows = await rpcRows(
     'list_stations',
     {
-      prefs: arrayOrNull(filter.prefectures),
-      muni: filter.municipality ?? null,
-      ops: arrayOrNull(filter.operators),
+      ...filterArgs(filter),
       routes_in: arrayOrNull(filter.routes),
-      route_types: arrayOrNull(filter.routeTypes),
-      line_cds: arrayOrNull(filter.lines),
-      west: filter.bbox?.west ?? null,
-      south: filter.bbox?.south ?? null,
-      east: filter.bbox?.east ?? null,
-      north: filter.bbox?.north ?? null,
-      near_lon: filter.near?.lon ?? null,
-      near_lat: filter.near?.lat ?? null,
-      near_radius_m: filter.near?.radiusM ?? null,
       grps: arrayOrNull(filter.grps),
       lim: filter.limit ?? null,
     },
@@ -142,6 +168,50 @@ export async function listStations(filter: ListStationsFilter): Promise<StationL
     lat: row.lat,
     nOp: row.n_op,
     paxLatest: row.pax_latest,
+    ...distanceOf(row.dist_m),
+  }))
+}
+
+// --- 全駅の索引（AI の入口で起点の駅名・市区町村名を解決する・261008 B2） -------
+const catalogStationSchema = z.object({
+  grp: z.string(),
+  name: z.string(),
+  label: z.string(),
+  prefecture: z.string(),
+  municipality: z.string().nullable(),
+  municipality_code: z.string().nullable(),
+  lon: z.number(),
+  lat: z.number(),
+  pax: z.number().nullable(),
+})
+
+/** 全駅の索引の 1 駅。 */
+export type CatalogStation = {
+  readonly grp: string
+  readonly name: string
+  /** 表示名（同じ名前の駅は「大塚（東日本旅客鉄道）」）。 */
+  readonly label: string
+  readonly prefecture: string
+  readonly municipality: string | null
+  readonly municipalityCode: string | null
+  readonly lon: number
+  readonly lat: number
+  readonly paxLatest: number | null
+}
+
+/** 全駅の索引（`station_catalog`・jsonb 1 つ＝1,000 行の上限を超えて全駅）。 */
+export async function stationCatalog(): Promise<CatalogStation[]> {
+  const rows = z.array(catalogStationSchema).parse(await rpc('station_catalog', {}))
+  return rows.map((row) => ({
+    grp: row.grp,
+    name: row.name,
+    label: row.label,
+    prefecture: row.prefecture,
+    municipality: row.municipality,
+    municipalityCode: row.municipality_code,
+    lon: row.lon,
+    lat: row.lat,
+    paxLatest: row.pax,
   }))
 }
 
@@ -236,6 +306,7 @@ const rankRowSchema = z.object({
   flag_value: z.number().nullable(),
   rank: z.number(),
   total: z.number(),
+  dist_m: z.number().nullable().optional(), // 起点からの距離（近傍のときだけ・261008 B2）
 })
 
 /** buildRanking の入力（RankRawRow）と構造一致。 */
@@ -246,34 +317,36 @@ export type RankRow = {
   value: number
   flagValue: number | null
   rank: number
+  /** 起点からの距離（m・整数）。近傍で絞ったときだけ。 */
+  distM?: number
 }
 
-/** rank_by_column の1ページ（rows＋フィルタ後の総件数）。 */
+/** ランキングの 1 ページの取り方。 */
+export type RankPage = {
+  readonly order: 'asc' | 'desc'
+  readonly limit: number
+  readonly offset: number
+  /** 信頼性の低い値（⚠）の駅を除く。 */
+  readonly excludeLowN: boolean
+}
+
+/**
+ * rank_by_column の 1 ページ（rows＋絞り込み後の総件数）。絞り込みは散布・一覧と同じ述語を DB 側で共有している
+ * （ランキングは total とページングを SQL で数えるので、絞り込みを SQL に渡さないと件数が狂う）。
+ */
 export async function rankByColumn(
   columnKey: string,
-  prefectures: string[],
-  order: 'asc' | 'desc',
-  limit: number,
-  offset: number,
-  excludeLowN: boolean,
-  operators: readonly string[] = [],
-  routes: readonly string[] = [],
-  routeTypes: readonly number[] = [],
-  lines: readonly number[] = [],
+  filter: StationFilter,
+  page: RankPage,
 ): Promise<{ rows: RankRow[]; total: number }> {
   const args = {
     column_key: columnKey,
-    prefs: prefectures.length > 0 ? prefectures : null, // 空は null＝全国（PostgREST の空配列回避）
-    dir: order,
-    lim: limit,
-    off: offset,
-    exclude_lown: excludeLowN,
-    // 絞り込みは散布（scatter_points）と同じ述語を DB 側で共有している（260801）。
-    // ランキングは total とページングを SQL で数えるため、ここで渡さないと件数が狂う。
-    ops: operators.length > 0 ? operators : null,
-    routes: routes.length > 0 ? routes : null,
-    route_types: routeTypes.length > 0 ? routeTypes : null,
-    line_cds: lines.length > 0 ? lines : null, // 路線（運行系統・261008 L2）
+    dir: page.order,
+    lim: page.limit,
+    off: page.offset,
+    exclude_lown: page.excludeLowN,
+    ...filterArgs(filter),
+    routes: arrayOrNull(filter.routes),
   }
   const raw = await rpcRows('rank_by_column', args, rankRowSchema)
   return {
@@ -285,6 +358,7 @@ export async function rankByColumn(
       value: r.value,
       flagValue: r.flag_value,
       rank: r.rank,
+      ...distanceOf(r.dist_m),
     })),
   }
 }
@@ -309,16 +383,6 @@ const scatterRowSchema = z.object({
   y_flag: z.number().nullable(),
 })
 
-/** 散布の絞り込み条件（DB 側で解決する。空＝絞らない）。 */
-export type ScatterFilters = {
-  readonly prefectures: readonly string[]
-  readonly operators: readonly string[]
-  readonly routes: readonly string[]
-  readonly routeTypes: readonly number[]
-  /** 路線（運行系統）の路線コード（261008 L2）。省略・空＝絞らない。 */
-  readonly lines?: readonly number[]
-}
-
 /**
  * 散布の点（駅ごとに x・y と、それぞれの信頼性フラグ）。
  *
@@ -332,18 +396,15 @@ export async function scatterPoints(
   yKey: string,
   xFlagKey: string | null,
   yFlagKey: string | null,
-  filters: ScatterFilters,
+  filter: StationFilter,
 ): Promise<ScatterRow[]> {
   const raw = await rpc('scatter_points', {
     x_key: xKey,
     y_key: yKey,
     x_flag_key: xFlagKey,
     y_flag_key: yFlagKey,
-    prefs: filters.prefectures.length > 0 ? [...filters.prefectures] : null,
-    ops: filters.operators.length > 0 ? [...filters.operators] : null,
-    routes: filters.routes.length > 0 ? [...filters.routes] : null,
-    route_types: filters.routeTypes.length > 0 ? [...filters.routeTypes] : null,
-    line_cds: arrayOrNull(filters.lines),
+    ...filterArgs(filter),
+    routes: arrayOrNull(filter.routes),
   })
   const rows = z.array(scatterRowSchema).parse(raw)
   return rows.map((r) => ({

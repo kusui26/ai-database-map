@@ -5,6 +5,7 @@
 import useSWRInfinite from 'swr/infinite'
 import { type Order, type RankingResponse, rankingResponseSchema } from '@/shared/api'
 import { fetchJson } from '@/lib/fetch-json'
+import { appendFilterParams, type FilterQueryValues } from '@/components/metrics/filterQuery'
 
 const PAGE_SIZE = 50
 const FETCH_TIMEOUT_MS = 12_000
@@ -26,15 +27,9 @@ export type RankingState = {
   readonly error: Error | undefined
 }
 
-/** ランキングの条件（そのままクエリ文字列になる・空配列＝絞らない）。 */
-export type RankingQuery = {
+/** ランキングの条件（そのままクエリ文字列になる・空＝絞らない）。絞り込みは散布・おすすめと同じ形。 */
+export type RankingQuery = FilterQueryValues & {
   readonly metric: string
-  readonly prefectures: readonly string[]
-  readonly operators: readonly string[]
-  readonly routes: readonly string[]
-  readonly routeTypes: readonly number[]
-  /** 路線（運行系統）の路線コード（チャットの図の ⤢ から・2026-10-08 L3）。 */
-  readonly lines: readonly number[]
   readonly order: Order
   readonly excludeLowN: boolean
 }
@@ -47,11 +42,7 @@ export function rankingUrl(query: RankingQuery, pageIndex: number): string {
     limit: String(PAGE_SIZE),
     offset: String(pageIndex * PAGE_SIZE),
   })
-  if (query.prefectures.length > 0) params.set('prefecture', query.prefectures.join(','))
-  if (query.operators.length > 0) params.set('operators', query.operators.join(','))
-  if (query.routes.length > 0) params.set('routes', query.routes.join(','))
-  if (query.routeTypes.length > 0) params.set('routeTypes', query.routeTypes.join(','))
-  if (query.lines.length > 0) params.set('lines', query.lines.join(','))
+  appendFilterParams(params, query)
   if (query.excludeLowN) params.set('excludeLowN', 'true')
   return `/api/ranking?${params.toString()}`
 }

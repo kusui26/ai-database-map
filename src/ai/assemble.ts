@@ -8,7 +8,12 @@
 
 import { type Category } from '@/shared/constants'
 import { formatNumber, type MetricFormat } from '@/shared/format'
-import { type PanelPromotion, type PanelPromotions } from '@/shared/promotion'
+import {
+  type PanelPromotion,
+  type PanelPromotions,
+  type RankingPromotion,
+} from '@/shared/promotion'
+import { type GrowthResponse, type RankingResponse } from '@/shared/api'
 import { type MapAction, type MapResponse, type Panel } from '@/shared/protocol'
 import {
   busPanels,
@@ -260,6 +265,25 @@ export function textOrFallback(
   return panelCount > 0 ? fallback.withPanels : fallback.withoutPanels
 }
 
+/** 図の応答 → ⤢ の絞り込み（ランキング・散布で同じ・路線は路線コード・起点は grp と半径）。 */
+function promotionFilters(
+  response: RankingResponse | GrowthResponse,
+  excludeLowN: boolean,
+): Omit<RankingPromotion, 'kind' | 'metricKey' | 'order'> {
+  const { prefectures, operators, routes, routeTypes, lines, municipality, bbox, near } = response
+  return {
+    prefectures,
+    operators,
+    routes,
+    routeTypes,
+    lines: lines.map((line) => line.lineCd),
+    municipality: municipality ?? '',
+    bbox,
+    near: near === null ? null : { grp: near.grp, radiusM: near.radiusM },
+    excludeLowN,
+  }
+}
+
 /**
  * 副産物 → ⤢ の条件。**図を生んだ条件そのもの**（ツールの応答・焦点カテゴリ）から作る。
  * 画面が推し量らない——同じ指標の図が 2 つあっても、それぞれが自分の条件を持つ（`shared/promotion.ts`）。
@@ -270,27 +294,13 @@ function promotionOf(effect: ToolEffect): PanelPromotion | null {
     case 'stationDetail':
       return { kind: 'detail', grp: effect.detail.station.grp, category: effect.category }
     case 'ranking': {
-      const { metric, order, prefectures, operators, routes, routeTypes, lines } = effect.response
-      const filters = {
-        prefectures,
-        operators,
-        routes,
-        routeTypes,
-        lines: lines.map((line) => line.lineCd),
-        excludeLowN: effect.excludeLowN,
-      }
+      const { metric, order } = effect.response
+      const filters = promotionFilters(effect.response, effect.excludeLowN)
       return { kind: 'ranking', metricKey: metric.key, order, ...filters }
     }
     case 'growth': {
-      const { x, y, prefectures, operators, routes, routeTypes, lines } = effect.response
-      const filters = {
-        prefectures,
-        operators,
-        routes,
-        routeTypes,
-        lines: lines.map((line) => line.lineCd),
-        excludeLowN: effect.excludeLowN,
-      }
+      const { x, y } = effect.response
+      const filters = promotionFilters(effect.response, effect.excludeLowN)
       return { kind: 'scatter', xKey: x.key, yKey: y.key, ...filters }
     }
     // 種類を足したら、ここで昇格させるかを決める（列挙しておけば型検査が漏れを捕まえる）。

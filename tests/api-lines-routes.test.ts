@@ -129,7 +129,7 @@ describe('GET /api/ranking：lines', () => {
   it('路線コードが SQL まで届き、応答に名前つきで返る', async () => {
     const response = await getRanking(request('/api/ranking?metric=pop_2020_1km&lines=11302,28010'))
     expect(response.status).toBe(200)
-    expect(db.rankByColumn.mock.calls[0]?.at(-1)).toEqual([11302, 28010])
+    expect(db.rankByColumn.mock.calls[0]?.[1]?.lines).toEqual([11302, 28010])
     expect((await body(response)).lines).toEqual([YAMANOTE, FUKUTOSHIN])
   })
 
@@ -152,7 +152,7 @@ describe('GET /api/ranking：lines', () => {
     const response = await getRanking(request('/api/ranking?metric=pop_2020_1km'))
     expect(response.status).toBe(200)
     expect(db.linesByCodes).not.toHaveBeenCalled()
-    expect(db.rankByColumn.mock.calls[0]?.at(-1)).toEqual([])
+    expect(db.rankByColumn.mock.calls[0]?.[1]?.lines).toEqual([])
     expect((await body(response)).lines).toEqual([])
   })
 })

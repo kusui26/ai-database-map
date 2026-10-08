@@ -84,6 +84,7 @@ describe('rankingUrl（ランキングの SWR キー）', () => {
   const base: RankingQuery = {
     metric: 'pax_2024',
     prefectures: [],
+    municipality: '',
     operators: [],
     routes: [],
     routeTypes: [],

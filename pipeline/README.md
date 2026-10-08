@@ -203,6 +203,20 @@ python3 pipeline/golden_lines_test.py        # 投入後：共通の条件 line_
 社名が変わると（S12 は新しい社名・2024-04 版は古い事業者名）、検証の「表示名が S12 の会社名と違うのは確かめた通称だけ」が落ちる。
 社名変更なら `COMPANY_NAME_FIXES`、通称なら `COMPANY_DISPLAY_NAMES` に足す（画面と AI は会社を事業者名で出すので、古い社名を黙って出さない）。
 
+## 場所の条件 — 市区町村・範囲・起点から N m（B2・261008）
+
+データの投入は無い（migration `20261008210000_area_filters.sql` だけ）。駅の絞り込みの述語 `station_matches_filters` に
+市区町村・範囲・近傍を寄せ、ランキング・散布・一覧の 3 つの RPC が同じ述語を使う。近傍のときは起点からの距離（`dist_m`）も返す。
+
+```bash
+python3 pipeline/golden_area_test.py --trial   # 当てる前：migration をトランザクションの中で当てて確かめ、ロールバック
+python3 pipeline/golden_area_test.py           # 当てたあと：本物の DB と REST（anon）で確かめる（全 PASS で exit 0）
+```
+
+| ファイル | 役割 |
+|---|---|
+| `golden_area_test.py` | 駅の集合を RPC を通さずに `stations` から直接数えて突き合わせる：市区町村の前方一致（横浜市＝全区）・JIS コード・都道府県と AND・「%」を特別扱いしない・範囲・近傍（竹橋から 5km＝129 駅・最寄地価 1 位は新宿三丁目 4,882m）・ランキングと散布と一覧で同じ件数・路線と会社とも AND・以前の呼び方の互換・述語が展開されること（実行計画）・`station_catalog()`（全 9,273 駅）・REST（anon） |
+
 ## 独立検証（260812）
 
 `data/derived/` の生成は**すべてノートブック 1 回で完結する**（`script/create_dataset_for_AI_Database_Map.ipynb`）。

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.8.7 — 2026-10-08
+
+- **ランキング・散布を市区町村と「起点の駅から N km 以内」で絞れるようになった**（サーバ側・
+  `rank_stations` / `compare_growth` に `municipality`・`near: {station, withinM}`・`bbox`）。「横浜市で」を
+  神奈川県で代用せず、「竹橋から 5km 以内で」を集計半径（`radiusM`）に入れずに答えられる。
+  返却の各駅に起点からの距離（`distance`）が付く（`list_stations` も）
+- **市区町村・起点の駅の名前もサーバが解決する**（「港北区」→ 横浜市港北区・「横浜」→ 横浜市・「東京都港区」）。
+  決めた市区町村の都道府県を添え、読み替えを `nameNotes` に返す。同じ名前（区の「中区」・駅の「府中」「日本橋」）は
+  `prefectures` で決まらなければ候補を返す（MCP には地図が無いので、地図の表示範囲では決めない）
+- `list_stations` / `build_dataset` の `near` は、起点を駅（`station`）でも地点（`lon`・`lat`）でも受け、半径は `withinM`
+  （以前の `radiusM` も受ける）
+- 上の振る舞いに合わせて、`station-analysis` と `analyze-csv` の手順を直した
+
 ## 0.8.6 — 2026-10-08
 
 - **路線が、利用者の呼ぶ路線（運行系統）になった**（サーバ側・`rank_stations` / `compare_growth` /

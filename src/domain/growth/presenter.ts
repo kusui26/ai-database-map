@@ -10,6 +10,7 @@
 import { requireEntry } from '@/shared/catalog'
 import { type GrowthResponse, type LineRef } from '@/shared/api'
 import { kmeans } from './kmeans'
+import { type AreaEcho, areaEchoOf } from '@/domain/area'
 import { displayOperators } from '@/domain/scope'
 
 /** scatter_points RPC の 1 行（駅ごとに x・y と、それぞれの信頼性フラグ）。 */
@@ -36,6 +37,8 @@ export type GrowthOptions = {
   readonly routeTypes?: readonly number[]
   /** 路線（運行系統・名前つき・同上・261008 L2）。 */
   readonly lines?: readonly LineRef[]
+  /** 市区町村・範囲・近傍（261008 B2）。絞り込みは DB 側、ここは応答へ載せて題に使う。 */
+  readonly area?: AreaEcho
 }
 
 export function buildGrowth(
@@ -70,6 +73,7 @@ export function buildGrowth(
     routes: [...(options.routes ?? [])],
     routeTypes: [...(options.routeTypes ?? [])],
     lines: [...(options.lines ?? [])],
+    ...areaEchoOf(options.area),
     clusterCount: new Set(clusters).size,
     excludedLowN,
     points,

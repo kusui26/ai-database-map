@@ -80,18 +80,28 @@ export function emptyFigureCount(panels: readonly FigurePanel[]): number {
 export type CheckResult = { readonly name: string; readonly ok: boolean }
 export type ScoreResult = { readonly pass: boolean; readonly checks: readonly CheckResult[] }
 
-/** input の期待キーがすべて観測に含まれるか（配列は部分集合、他は厳密一致）。 */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/**
+ * 期待の値に観測が合うか：配列は「どれも含む」、オブジェクトは部分一致（入れ子も・2026-10-08 B2 の
+ * `near: { withinM: 5000 }`）、それ以外は一致。
+ */
+function valueMatches(actual: unknown, expected: unknown): boolean {
+  if (Array.isArray(expected)) {
+    return Array.isArray(actual) && expected.every((item) => actual.includes(item))
+  }
+  if (isRecord(expected)) return isRecord(actual) && inputMatches(actual, expected)
+  return actual === expected
+}
+
+/** input の期待キーがすべて観測に含まれるか（配列は部分集合、オブジェクトは部分一致、他は厳密一致）。 */
 function inputMatches(
   observed: Record<string, unknown>,
   expected: Record<string, unknown>,
 ): boolean {
-  return Object.entries(expected).every(([key, value]) => {
-    const actual = observed[key]
-    if (Array.isArray(value)) {
-      return Array.isArray(actual) && value.every((item) => actual.includes(item))
-    }
-    return actual === value
-  })
+  return Object.entries(expected).every(([key, value]) => valueMatches(observed[key], value))
 }
 
 /** 1 問を採点する（全チェック ok で pass）。 */

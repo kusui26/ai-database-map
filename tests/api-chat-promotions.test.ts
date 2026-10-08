@@ -19,7 +19,7 @@ import { MockLanguageModelV3 } from 'ai/test'
 import { resetRateLimitStore } from '@/ai/rate-limit'
 import { panelPromotionsSchema, type PanelPromotions } from '@/shared/promotion'
 import { mapResponseSchema, type MapResponse } from '@/shared/protocol'
-import { type RankRow, type ScatterFilters, type ScatterRow } from '@/db/queries'
+import { type RankRow, type ScatterRow, type StationFilter } from '@/db/queries'
 
 const current: { model: MockLanguageModelV3 | null } = { model: null }
 
@@ -47,8 +47,8 @@ vi.mock('@/db/queries', async (importOriginal) => {
       _y: string,
       _xFlag: string | null,
       _yFlag: string | null,
-      filters: ScatterFilters,
-    ): Promise<ScatterRow[]> => (filters.operators.includes('新幹線') ? [] : SCATTER_ROWS),
+      filter: StationFilter,
+    ): Promise<ScatterRow[]> => ((filter.operators ?? []).includes('新幹線') ? [] : SCATTER_ROWS),
     rankByColumn: async (): Promise<{ rows: RankRow[]; total: number }> => ({
       rows: RANK_ROWS,
       total: RANK_ROWS.length,
@@ -244,6 +244,9 @@ describe('図と一緒に、その図を生んだ条件を送る', () => {
         routes: [],
         routeTypes: [],
         lines: [],
+        municipality: '',
+        bbox: null,
+        near: null,
         excludeLowN: true,
       },
     ])

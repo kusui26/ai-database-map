@@ -268,6 +268,9 @@ describe('promotionsFor（⤢ の条件・パネルと同じ並び）', () => {
         routes: ['常磐線'],
         routeTypes: [2],
         lines: [],
+        municipality: '',
+        bbox: null,
+        near: null,
         excludeLowN: true,
       },
     ])
@@ -296,6 +299,33 @@ describe('promotionsFor（⤢ の条件・パネルと同じ並び）', () => {
     expect(promotionsFor([growth])[0]).toMatchObject({ kind: 'scatter', lines: [28010] })
   })
 
+  it('市区町村・範囲・起点の駅と半径も載る——⤢ で開いた図も同じ駅の集合（2026-10-08 B2）', () => {
+    const area = {
+      municipality: '横浜市',
+      bbox: { west: 139.5, south: 35.4, east: 139.8, north: 35.6 },
+      near: { grp: '竹橋#0', label: '竹橋', radiusM: 5000 },
+    }
+    const effect: RankingEffect = {
+      kind: 'ranking',
+      response: buildRanking('lp_near_price', ['神奈川県'], 'desc', rankRows, 2, 0, { area }),
+      excludeLowN: false,
+    }
+    expect(promotionsFor([effect])[0]).toMatchObject({
+      municipality: '横浜市',
+      bbox: area.bbox,
+      near: { grp: '竹橋#0', radiusM: 5000 },
+    })
+    const growth: GrowthEffect = {
+      kind: 'growth',
+      response: buildGrowth([], 'pop_gr_2020_2015_2km', 'rate_covid', { area }),
+      excludeLowN: false,
+    }
+    expect(promotionsFor([growth])[0]).toMatchObject({
+      municipality: '横浜市',
+      near: { grp: '竹橋#0' },
+    })
+  })
+
   it('散布：x/y のキーと絞り込み・除外の指定', () => {
     expect(promotionsFor([growthEffect])).toEqual([
       {
@@ -307,6 +337,9 @@ describe('promotionsFor（⤢ の条件・パネルと同じ並び）', () => {
         routes: [],
         routeTypes: [],
         lines: [],
+        municipality: '',
+        bbox: null,
+        near: null,
         excludeLowN: false,
       },
     ])

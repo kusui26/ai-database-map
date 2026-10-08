@@ -1,33 +1,26 @@
 import { isRankableKey } from '@/shared/catalog'
 import { rankingQuerySchema } from '@/shared/api'
 import { rankByColumn } from '@/db/queries'
-import { resolveLineCodes } from '@/domain/lines'
-import { labelsOfOperators } from '@/domain/operators'
+import { resolveFilters } from '@/domain/filters'
 import { buildRanking } from '@/domain/ranking/presenter'
+import { filterParams } from '@/lib/filter-params'
 import { BadRequestError, CACHE, handle, json } from '@/lib/http'
 
 export const runtime = 'nodejs'
 
-/** カンマ区切りのクエリを配列に（未指定は undefined＝スキーマ既定）。 */
-function listParam(value: string | null): string[] | undefined {
-  return value === null ? undefined : value.split(',').filter(Boolean)
-}
-
 /**
- * GET /api/ranking?metric=&prefecture=&operators=&routes=&routeTypes=&lines=&order=&limit= — 順位表。
- * lines は路線（運行系統）の路線コード（GET /api/lines の lineCd・261008 L2）。題にも路線の名前が入る。
+ * GET /api/ranking?metric=&prefecture=&municipality=&bbox=&nearStation=&withinM=&operators=&routes=&routeTypes=&lines=
+ *   &order=&limit= — 順位表。
+ * lines は路線（運行系統）の路線コード（GET /api/lines の lineCd・261008 L2）。municipality は市区町村の前方一致、
+ * bbox は「西,南,東,北」、nearStation（起点の駅の grp）と withinM（m）は組で「起点から N m 以内」（261008 B2）。
+ * 近傍のときは行に起点からの距離（distM）が付く。題にも路線・場所の名前が入る。
  */
 export function GET(request: Request): Promise<Response> {
   return handle(async () => {
     const params = new URL(request.url).searchParams
-    const typesParam = listParam(params.get('routeTypes'))
     const query = rankingQuerySchema.parse({
       metric: params.get('metric') ?? undefined,
-      prefectures: listParam(params.get('prefecture')),
-      operators: listParam(params.get('operators')),
-      routes: listParam(params.get('routes')),
-      routeTypes: typesParam?.map(Number).filter((type) => Number.isInteger(type)),
-      lines: listParam(params.get('lines'))?.map(Number),
+      ...filterParams(params),
       order: params.get('order') ?? undefined,
       limit: params.get('limit') ?? undefined,
       offset: params.get('offset') ?? undefined,
@@ -36,30 +29,23 @@ export function GET(request: Request): Promise<Response> {
     if (!isRankableKey(query.metric)) {
       throw new BadRequestError(`ランキング不可の metric です: ${query.metric}`)
     }
-    const [lines, operatorLabels] = await Promise.all([
-      resolveLineCodes(query.lines),
-      labelsOfOperators(query.operators),
-    ])
-    if (!lines.ok) throw new BadRequestError(lines.messageJa)
-    const { rows, total } = await rankByColumn(
-      query.metric,
-      query.prefectures,
-      query.order,
-      query.limit,
-      query.offset,
-      query.excludeLowN,
-      query.operators,
-      query.routes,
-      query.routeTypes,
-      lines.lines.map((line) => line.lineCd),
-    )
+    const resolved = await resolveFilters(query)
+    if (!resolved.ok) throw new BadRequestError(resolved.messageJa)
+    const { filter, lines, operatorLabels, area } = resolved.filters
+    const { rows, total } = await rankByColumn(query.metric, filter, {
+      order: query.order,
+      limit: query.limit,
+      offset: query.offset,
+      excludeLowN: query.excludeLowN,
+    })
     return json(
       buildRanking(query.metric, query.prefectures, query.order, rows, total, query.offset, {
         operators: query.operators,
         operatorLabels,
         routes: query.routes,
         routeTypes: query.routeTypes,
-        lines: lines.lines,
+        lines,
+        area,
       }),
       CACHE.hour,
     )

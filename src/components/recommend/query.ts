@@ -21,6 +21,7 @@ import type {
   RecommendPresetId,
 } from '@/shared/recommend'
 import { RECOMMEND_PRESETS } from '@/domain/recommend/presets'
+import { appendFilterParams } from '@/components/metrics/filterQuery'
 
 /** 表に出す上限（サーバの `limit`）。順位が付いた総数は `rankedCount` で別に返る。 */
 export const RESULT_LIMIT = 50
@@ -129,12 +130,8 @@ export function recommendUrl(criteria: RecommendCriteria): string | null {
     topN: String(criteria.topN),
     limit: String(RESULT_LIMIT),
   })
-  if (criteria.municipality.length > 0) params.set('municipality', criteria.municipality)
-  if (criteria.prefectures.length > 0) params.set('prefecture', criteria.prefectures.join(','))
-  if (criteria.operators.length > 0) params.set('operators', criteria.operators.join(','))
-  if (criteria.routes.length > 0) params.set('routes', criteria.routes.join(','))
-  if (criteria.routeTypes.length > 0) params.set('routeTypes', criteria.routeTypes.join(','))
-  if (criteria.lines.length > 0) params.set('lines', criteria.lines.join(','))
+  // 絞り込みはランキング・散布と同じ組み立て（おすすめは範囲・起点を持たない）。
+  appendFilterParams(params, criteria)
   const weights = changedWeightsParam(criteria)
   if (weights.length > 0) params.set('weights', weights)
   for (const [key, value] of hazardParams(criteria)) params.set(key, value)

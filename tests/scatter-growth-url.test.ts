@@ -5,6 +5,7 @@ const BASE: GrowthQuery = {
   x: 'pop_gr_2020_2015_1km',
   y: 'rate_covid',
   prefectures: [],
+  municipality: '',
   operators: [],
   routes: [],
   routeTypes: [],

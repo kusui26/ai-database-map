@@ -14,6 +14,7 @@
  */
 
 import { type Line, type Operator, type Route } from '@/shared/api'
+import { type Viewport } from '@/shared/viewport'
 import {
   linesInPrefectures,
   linesOfOperators,
@@ -29,14 +30,22 @@ import {
   routesOfOperators,
 } from './routeLink'
 
+/** 起点の駅（grp）と半径（m）。 */
+export type NearFilter = { readonly grp: string; readonly radiusM: number }
+
 /** 絞り込みの値（そのまま API のクエリになる・空＝絞らない）。 */
 export type StationFilterValues = {
   readonly prefectures: readonly string[]
+  /** 市区町村（前方一致の値・空＝絞らない・2026-10-08 B2）。 */
+  readonly municipality: string
   readonly operators: readonly string[]
   readonly routes: readonly string[]
   readonly routeTypes: readonly number[]
   /** 路線（運行系統）の路線コード（選んだ順・2026-10-08 L3/L4）。 */
   readonly lines: readonly number[]
+  /** 範囲・起点と半径（チャットの図の ⤢ から・null＝絞らない・B2）。 */
+  readonly bbox: Viewport | null
+  readonly near: NearFilter | null
 }
 
 /** セレクタの選択肢（一覧の取得結果）と、会社 → 走る都道府県の索引。 */

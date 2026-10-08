@@ -6,6 +6,7 @@
 import { requireEntry } from '@/shared/catalog'
 import { type LineRef, type Order, type RankingResponse } from '@/shared/api'
 import { formatNumber } from '@/shared/format'
+import { type AreaEcho, areaEchoOf } from '@/domain/area'
 import { displayOperators } from '@/domain/scope'
 
 /** rank_by_column RPC の1行（生）。 */
@@ -16,6 +17,8 @@ export type RankRawRow = {
   readonly value: number
   readonly flagValue: number | null
   readonly rank: number
+  /** 起点からの距離（m・近傍で絞ったときだけ・2026-10-08 B2）。 */
+  readonly distM?: number
 }
 
 /** 絞り込み条件（省略時は絞らない）。散布の GrowthOptions と対になる（260801）。 */
@@ -27,6 +30,8 @@ export type RankingOptions = {
   readonly routeTypes?: readonly number[]
   /** 路線（運行系統・名前つき・261008 L2）。絞り込みは DB 側、ここは応答へ載せて題に使う。 */
   readonly lines?: readonly LineRef[]
+  /** 市区町村・範囲・近傍（261008 B2）。絞り込みは DB 側、ここは応答へ載せて題に使う。 */
+  readonly area?: AreaEcho
 }
 
 export function buildRanking(
@@ -48,6 +53,7 @@ export function buildRanking(
     routes: [...(options.routes ?? [])],
     routeTypes: [...(options.routeTypes ?? [])],
     lines: [...(options.lines ?? [])],
+    ...areaEchoOf(options.area),
     order,
     offset,
     total,
@@ -59,6 +65,7 @@ export function buildRanking(
       value: row.value,
       formatted: formatNumber(row.value, entry.format, { signed }),
       flagged: row.flagValue === 1,
+      ...(row.distM === undefined ? {} : { distM: row.distM }),
     })),
   }
 }

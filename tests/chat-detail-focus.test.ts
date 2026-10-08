@@ -25,6 +25,9 @@ const ranking: PanelPromotion = {
   routes: [],
   routeTypes: [],
   lines: [],
+  municipality: '',
+  bbox: null,
+  near: null,
   excludeLowN: false,
 }
 
@@ -37,6 +40,9 @@ const scatter: PanelPromotion = {
   routes: [],
   routeTypes: [],
   lines: [],
+  municipality: '',
+  bbox: null,
+  near: null,
   excludeLowN: false,
 }
 

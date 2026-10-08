@@ -12,7 +12,7 @@
  */
 
 import { z } from 'zod'
-import { orderSchema } from './api'
+import { bboxSchema, orderSchema } from './api'
 import { categorySchema } from './catalog'
 
 /** 絞り込み（空＝絞らない）。ランキングと散布で同じ意味。 */
@@ -27,6 +27,13 @@ const filtersShape = {
    * 同じ駅の集合になるように、条件に必ず載せる。
    */
   lines: z.array(z.number()).default([]),
+  /**
+   * 市区町村（前方一致の値・空＝絞らない）・範囲・起点の駅と半径（2026-10-08 B2）。⤢ で開いた図も同じ駅の集合に
+   * なるように、条件に必ず載せる。起点の言い方（「竹橋から 5km」）は、開いた図が応答から引く。
+   */
+  municipality: z.string().default(''),
+  bbox: bboxSchema.nullable().default(null),
+  near: z.object({ grp: z.string(), radiusM: z.number() }).nullable().default(null),
   /** 信頼性の低い値（⚠）を除外する。 */
   excludeLowN: z.boolean(),
 }

@@ -118,10 +118,10 @@ type MapResponse = {
 | エンドポイント | 用途 | ドメイン |
 |---|---|---|
 | `GET /api/metrics` | **メトリクス・カタログ**（機械可読・自己記述）| `domain/metrics` |
-| `GET /api/stations?bbox=…&q=…` | 駅検索・bbox・最寄（`municipality`・`lines` などを付けると対象集合の一覧）| `domain/stations` |
+| `GET /api/stations?bbox=…&q=…` | 駅検索・bbox・最寄（`municipality`・`lines`・`nearStation`＋`withinM` などを付けると対象集合の一覧。一覧では `bbox` も絞り込み、近傍なら各駅に起点からの距離 `distM`）| `domain/stations` |
 | `GET /api/stations/:grp` | 駅詳細（指標・年次推移）| `domain/stations` |
-| `GET /api/ranking?metric=…&prefecture=…` | ランキング（`operators`・`routes`・`routeTypes`・`lines` で絞る。会社は鍵＝S12 の会社名で受け、応答の `operatorLabels` と題は表示名）| `domain/ranking` |
-| `GET /api/growth?x=…&y=…&prefecture=…` | 増減率散布＋クラスタリング（絞り込みはランキングと同じ）| `domain/growth` |
+| `GET /api/ranking?metric=…&prefecture=…` | ランキング（`operators`・`routes`・`routeTypes`・`lines` で絞る。会社は鍵＝S12 の会社名で受け、応答の `operatorLabels` と題は表示名。場所は `municipality`（前方一致）・`bbox`（西,南,東,北）・`nearStation`（起点の駅の grp）＋`withinM`（m）で絞り、応答に `municipality`・`bbox`・`near` を返す。近傍なら各行に起点からの距離 `distM`）| `domain/ranking`・`domain/area` |
+| `GET /api/growth?x=…&y=…&prefecture=…` | 増減率散布＋クラスタリング（絞り込みはランキングと同じ・場所も）| `domain/growth`・`domain/area` |
 | `GET /api/lines` | **路線（運行系統）の一覧**（JR山手線＝環状 30 駅など・駅データ.jp。共通の条件 `lines` に渡す `lineCd`）| `domain/lines` |
 | `GET /api/operators` | 運営会社の一覧（条件の鍵 `name`＝S12 の会社名「東京地下鉄」と、人に見せる `label`＝駅データ.jp の事業者名「東京メトロ」・都営は「東京都交通局」）| `domain/operators` |
 | `GET /api/recommend?municipality=…&preset=…` | **おすすめ駅**（正規化 → 重み付き合成・災害の足切り／段階減点・±20% 敏感度）| `domain/recommend` |

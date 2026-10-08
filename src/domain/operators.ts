@@ -11,6 +11,7 @@
 
 import { lineNames, type LineRow, type OperatorRow } from '@/db/queries'
 import { type OperatorsResponse } from '@/shared/api'
+import { ttlCache } from '@/lib/ttl-cache'
 
 /** 表示名を作るのに要る路線の列。 */
 export type OperatorLabelSource = Pick<LineRow, 'operator' | 'companyName' | 'stationCount'>
@@ -59,20 +60,11 @@ export function operatorsResponse(
 /** 表示名の対応をサーバの中で持つ時間（路線の一覧はデータの更新でしか変わらない）。 */
 const LABELS_TTL_MS = 60 * 60 * 1000
 
-type CacheEntry = { readonly loadedAt_ms: number; readonly labels: Promise<OperatorLabels> }
-
-const cache: { entry: CacheEntry | null } = { entry: null }
+const labelsCache = ttlCache(async () => operatorLabelMap(await lineNames()), LABELS_TTL_MS)
 
 /** 表示名の対応（1 時間持つ。読めなかったときは持たない＝次の呼び出しで読み直す）。 */
 export function loadOperatorLabels(now_ms: number = Date.now()): Promise<OperatorLabels> {
-  const entry = cache.entry
-  if (entry !== null && now_ms - entry.loadedAt_ms < LABELS_TTL_MS) return entry.labels
-  const labels = lineNames().then(operatorLabelMap)
-  cache.entry = { loadedAt_ms: now_ms, labels }
-  labels.catch(() => {
-    if (cache.entry?.labels === labels) cache.entry = null
-  })
-  return labels
+  return labelsCache.get(now_ms)
 }
 
 /** 会社名（S12）の並び → 表示名の並び（同じ順）。指定が無ければ一覧も読まない。 */
@@ -84,5 +76,5 @@ export async function labelsOfOperators(names: readonly string[]): Promise<strin
 
 /** キャッシュを捨てる（テストと、データを入れ替えたあとの読み直し）。 */
 export function clearOperatorLabelCache(): void {
-  cache.entry = null
+  labelsCache.clear()
 }

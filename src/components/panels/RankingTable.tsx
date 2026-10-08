@@ -3,9 +3,11 @@
 /**
  * rankingTable Panel のレンダラ（順位表・値 format 済・⚠ 列）。onSelect で行クリック→駅選択。
  * compact（会話の中）は上位だけを出し、残りの数を添える（`rankingRows.ts`）。
+ * 起点から N km で絞った順位表は、都道府県の横に起点からの距離を出す（2026-10-08 B2）。
  */
 
 import { type RankingRow, type RankingTablePanel } from '@/shared/protocol'
+import { distanceLabel } from '@/shared/constants'
 import { cn } from '@/lib/utils'
 import { visibleRankingRows } from './rankingRows'
 
@@ -29,7 +31,10 @@ function RankingRowButton({
       <span className="w-6 shrink-0 text-right text-slate-400 tabular-nums">{row.rank}</span>
       <span className="min-w-0 flex-1 truncate">
         <span className="font-medium text-slate-800">{row.name}</span>
-        <span className="ml-1.5 text-xs text-slate-400">{row.prefecture}</span>
+        <span className="ml-1.5 text-xs text-slate-400">
+          {row.prefecture}
+          {row.distM === undefined ? '' : `・${distanceLabel(row.distM)}`}
+        </span>
       </span>
       <span
         className={cn(

@@ -134,10 +134,13 @@ const LISTS: FilterLists = {
 }
 const NONE: StationFilterValues = {
   prefectures: [],
+  municipality: '',
   operators: [],
   routes: [],
   routeTypes: [],
   lines: [],
+  bbox: null,
+  near: null,
 }
 
 describe('allowedCandidates：連動をまとめて決める', () => {

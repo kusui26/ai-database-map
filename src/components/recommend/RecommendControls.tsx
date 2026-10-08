@@ -27,7 +27,6 @@ import type { StationFiltersState } from '@/components/metrics/useStationFilters
 import { cn } from '@/lib/utils'
 import { CUTOFF_LEVELS, toGroup, toLevel, toMethod } from './parse'
 import type { RecommendCriteria } from './query'
-import type { MunicipalitiesState } from './useMunicipalities'
 import { WeightSliders } from './WeightSliders'
 
 const METHOD_LABELS_JA: Readonly<Record<NormalizeMethod, string>> = {
@@ -91,53 +90,6 @@ function Segment<T extends string | number>({
         </button>
       ))}
     </div>
-  )
-}
-
-/** 市区町村（都道府県を 1 つに絞ったときだけ。実在する値だけを出すので空振りしない）。 */
-function MunicipalitySelect({
-  value,
-  prefecture,
-  state,
-  onChange,
-}: {
-  value: string
-  prefecture: string | null
-  state: MunicipalitiesState
-  onChange: (value: string) => void
-}) {
-  if (prefecture === null) {
-    return <span className="text-xs text-slate-400">都道府県を 1 つ選ぶと市区町村を選べます</span>
-  }
-  return (
-    <select
-      // 狭い画面では折り返して 1 行を占める（詰めると「横…」まで縮んで選べなくなる）。
-      className={cn(METRIC_SELECT_CLASS, 'w-full min-w-40 sm:w-auto sm:max-w-64 sm:flex-1')}
-      aria-label="市区町村"
-      value={value}
-      disabled={state.isLoading}
-      onChange={(event) => onChange(event.target.value)}
-    >
-      <option value="">{state.isLoading ? '読み込み中…' : `${prefecture}（全域）`}</option>
-      <optgroup label="市全体（区をまとめる）">
-        {state.options
-          .filter((option) => option.kind === 'city')
-          .map((option) => (
-            <option key={`city:${option.value}`} value={option.value}>
-              {option.labelJa}・{option.stationCount} 駅
-            </option>
-          ))}
-      </optgroup>
-      <optgroup label="市区町村">
-        {state.options
-          .filter((option) => option.kind === 'municipality')
-          .map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.labelJa}・{option.stationCount} 駅
-            </option>
-          ))}
-      </optgroup>
-    </select>
   )
 }
 
@@ -211,27 +163,18 @@ function HazardControls({
 export function RecommendControls({
   criteria,
   filters,
-  municipalities,
   onChange,
 }: {
   criteria: RecommendCriteria
   filters: StationFiltersState
-  municipalities: MunicipalitiesState
   onChange: (patch: Partial<RecommendCriteria>) => void
 }) {
-  const prefecture = filters.values.prefectures.length === 1 ? filters.values.prefectures[0] : null
   const customized = Object.keys(criteria.weights).length > 0
 
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
         <StationFilterControls state={filters} />
-        <MunicipalitySelect
-          value={criteria.municipality}
-          prefecture={prefecture ?? null}
-          state={municipalities}
-          onChange={(municipality) => onChange({ municipality })}
-        />
       </div>
 
       <div className="flex flex-wrap items-center gap-2">

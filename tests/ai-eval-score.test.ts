@@ -156,10 +156,47 @@ describe('scoreCase: 空の図と呼び出し回数（2026-10-07 B1）', () => {
   })
 })
 
+describe('scoreCase: 付けてはいけない引数（forbidInputs・2026-10-09 B3）', () => {
+  const call = (name: string, input: Record<string, unknown>) => ({ name, input })
+
+  it('どの呼び出しにも付いていなければ合格（無い・null・false は付けていない）', () => {
+    const observed = {
+      ...base,
+      toolCalls: [
+        call('rankStations', { metric: 'pop_gr' }),
+        call('rankStations', { metric: 'pop_gr', inMapView: false, bbox: null }),
+      ],
+    }
+    expect(
+      scoreCase({ forbidInputs: { rankStations: ['inMapView', 'bbox'] } }, observed).pass,
+    ).toBe(true)
+  })
+
+  it('1 つの呼び出しにでも付いていれば落ちる（呼び直しの 2 回目でも）', () => {
+    const observed = {
+      ...base,
+      toolCalls: [
+        call('rankStations', { metric: 'pop_gr' }),
+        call('rankStations', { metric: 'pop_gr', inMapView: true }),
+      ],
+    }
+    const result = scoreCase({ forbidInputs: { rankStations: ['inMapView', 'bbox'] } }, observed)
+    expect(result.pass).toBe(false)
+    expect(result.checks.map((check) => check.name)).toContain(
+      'rankStations に inMapView・bbox を付けない',
+    )
+  })
+
+  it('ほかのツールの引数は見ない。そのツールを呼ばなければ合格', () => {
+    const observed = { ...base, toolCalls: [call('listStations', { inMapView: true })] }
+    expect(scoreCase({ forbidInputs: { rankStations: ['inMapView'] } }, observed).pass).toBe(true)
+  })
+})
+
 describe('EVAL_CASES', () => {
-  it('48 問・id 一意・全問に期待あり', () => {
-    expect(EVAL_CASES.length).toBe(48)
-    expect(new Set(EVAL_CASES.map((c) => c.id)).size).toBe(48)
+  it('53 問・id 一意・全問に期待あり', () => {
+    expect(EVAL_CASES.length).toBe(53)
+    expect(new Set(EVAL_CASES.map((c) => c.id)).size).toBe(53)
     for (const testCase of EVAL_CASES) {
       expect(testCase.query.length).toBeGreaterThan(0)
       expect(Object.keys(testCase.expect).length).toBeGreaterThan(0)
@@ -175,6 +212,13 @@ describe('EVAL_CASES', () => {
       'rank-municipality',
       'rank-near-suburb',
       'rank-near-screenshot',
+      'context-followup-landprice',
+      'context-explicit-override',
+      'map-context',
+      'map-context-ward',
+      'map-context-too-wide',
+      'map-context-national',
+      'map-context-other-pref',
     ])
     for (const testCase of withViewport) {
       expect(viewportFromTuple(testCase.bbox ?? []), testCase.id).not.toBeNull()

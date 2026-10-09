@@ -46,7 +46,10 @@ import {
 import { CHAT_FAILURE_JA } from '@/shared/chat-errors'
 import { createCollector, type ToolEffect } from '@/ai/types'
 import { type ChatUIMessage, createTools } from '@/ai/tools'
-import { buildSystemPrompt, mapContextPrompt } from '@/ai/system-prompt'
+import { buildSystemPrompt, mapContextPrompt, mapViewPrompt } from '@/ai/system-prompt'
+import { areaDeps } from '@/ai/area/catalog'
+import { describeMapView, isTooWideForArea } from '@/ai/area/map-view'
+import { type AreaIndex } from '@/ai/area/place-index'
 import { assemble, promotionsFor, textOrFallback, type ChatOutcome } from '@/ai/assemble'
 import { panelPromotionsSchema } from '@/shared/promotion'
 import { rateLimit } from '@/ai/rate-limit'
@@ -67,7 +70,8 @@ const inboundSchema = z.object({
   // 地図で選択中の駅・半径（P8e）。クライアントが sendMessage の body で同送する。
   selectedGrp: z.string().optional(),
   radiusM: z.number().optional(),
-  // 地図の表示範囲 [west, south, east, north]（丸め済み・2026-10-08 L3）。同じ名前の路線を決めるのに使う。
+  // 地図の表示範囲 [west, south, east, north]（丸め済み・2026-10-08 L3）。同じ名前の路線を決めるのと、
+  // 「このあたり」（ツールの inMapView・2026-10-09 B3）に使う。
   // 形が崩れていても会話は止めない（範囲なしとして続ける・選択駅の文脈と同じ安全側）。
   bbox: z.array(z.number()).optional().catch(undefined),
 })
@@ -186,6 +190,26 @@ async function resolveMapContext(selectedGrp?: string, radiusM?: number): Promis
   }
 }
 
+/** 全駅の索引（読めなければ null＝中心の駅を挙げないだけで続ける）。 */
+async function areaIndexOrNull(): Promise<AreaIndex | null> {
+  try {
+    return await areaDeps().index()
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 地図の表示範囲を LLM の文脈へ（2026-10-09 B3）：広さと中心に近い駅だけ（範囲の数は見せない——
+ * 「このあたり」で絞るのはツールの inMapView で、範囲はサーバが持っている）。
+ * 日本全体に近い広さなら索引を読まない（中心の駅は挙げない）。範囲が無ければ何も足さない。
+ */
+async function resolveMapView(viewport: Viewport | null): Promise<string> {
+  if (viewport === null) return ''
+  const index = isTooWideForArea(viewport) ? null : await areaIndexOrNull()
+  return mapViewPrompt(describeMapView(viewport, index))
+}
+
 export async function POST(request: Request): Promise<Response> {
   const startedAt = Date.now()
   // 1) レート制限（IP・固定窓）。鍵に `chat:` を付けるのは、`checkRateLimit` の store が
@@ -237,10 +261,14 @@ export async function POST(request: Request): Promise<Response> {
     return apiError('BAD_REQUEST', '会話が長くなりました。新しい会話を始めてください。', 400)
   }
 
-  // 地図で選択中の駅を LLM の文脈に（P8e）。未選択・解決失敗なら文脈なしで続行（安全側）。
-  const mapContext = await resolveMapContext(parsed.data.selectedGrp, parsed.data.radiusM)
-  // 地図の表示範囲はツールの文脈へ（LLM には見せない。同じ名前の路線をサーバが決め、nameNotes で伝える）。
+  // 地図の表示範囲は、ツールの文脈（同じ名前の路線を決める・「このあたり」の inMapView）と、
+  // LLM の文脈（広さと中心に近い駅だけ・B3）へ。
   const viewport = viewportOf(parsed.data.bbox)
+  // 地図で選択中の駅（P8e）と地図の表示範囲（B3）を LLM の文脈に。どちらも解決できなければ文脈なしで続行（安全側）。
+  const [mapContext, mapView] = await Promise.all([
+    resolveMapContext(parsed.data.selectedGrp, parsed.data.radiusM),
+    resolveMapView(viewport),
+  ])
   // 失敗を記録するとき、提供元の説明に紛れた発話を伏せるために使う（ログには決して出さない）。
   const utterances = conversation.map((message) => message.text)
 
@@ -264,7 +292,7 @@ export async function POST(request: Request): Promise<Response> {
       // この `onError` が呼ばれるのはストリームの失敗（error パート）だけで、ツールの失敗では呼ばれない。
       const result = streamText({
         model: chatModel(),
-        system: buildSystemPrompt() + mapContext,
+        system: buildSystemPrompt() + mapContext + mapView,
         tools: createTools(collector, new URL(request.url).origin, viewport),
         stopWhen: stepCountIs(MAX_TOOL_STEPS),
         temperature: CHAT_TEMPERATURE,

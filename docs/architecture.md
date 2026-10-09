@@ -125,7 +125,7 @@ type MapResponse = {
 | `GET /api/lines` | **路線（運行系統）の一覧**（JR山手線＝環状 30 駅など・駅データ.jp。共通の条件 `lines` に渡す `lineCd`）| `domain/lines` |
 | `GET /api/operators` | 運営会社の一覧（条件の鍵 `name`＝S12 の会社名「東京地下鉄」と、人に見せる `label`＝駅データ.jp の事業者名「東京メトロ」・都営は「東京都交通局」）| `domain/operators` |
 | `GET /api/recommend?municipality=…&preset=…` | **おすすめ駅**（正規化 → 重み付き合成・災害の足切り／段階減点・±20% 敏感度）| `domain/recommend` |
-| `POST /api/chat`（**Step2**）| 自然言語 → GUI Chat Protocol（送信に地図の選択駅と**表示範囲 `bbox`** を同送。表示範囲は同じ名前の路線——「中央線」＝JR・大阪メトロ——を決めるのに使う）| `domain/*` via `ai/tools` |
+| `POST /api/chat`（**Step2**）| 自然言語 → GUI Chat Protocol（送信に地図の選択駅と**表示範囲 `bbox`**（パネルに隠れていない部分）を同送。表示範囲は同じ名前の路線——「中央線」＝JR・大阪メトロ——を決めるのと、「このあたり」の質問に使う：ツールの `inMapView` で送信時の範囲そのもので絞り、LLM には広さと中心に近い駅だけを見せる）| `domain/*` via `ai/tools` |
 
 - **原則**：①生カラム名のパススルー禁止（`metric` は catalog で列挙・検証）、②応答は**意味づけ済み**（label/unit/format 付き）、③各エンドポイントを **Gemini の function calling ツール**として設計（Step2 でそのまま tool 化）。
 

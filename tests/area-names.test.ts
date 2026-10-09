@@ -673,6 +673,69 @@ describe('半径・座標・範囲', () => {
   })
 })
 
+describe('地図に表示中の範囲（inMapView・「このあたり」・2026-10-09 B3）', () => {
+  const SHIBUYA: Viewport = { west: 139.66, south: 35.63, east: 139.74, north: 35.69 }
+  const JAPAN: Viewport = { west: 122.9, south: 24.0, east: 153.9, north: 45.6 }
+
+  it('送られてきた地図の範囲で絞る（範囲はサーバが持っている・索引は読まない）', async () => {
+    const deps = depsOf()
+    const result = await resolveAreaInput(
+      { inMapView: true },
+      { prefectures: [], viewport: SHIBUYA },
+      deps,
+    )
+    expect(resolved(result).area).toEqual({ municipality: null, bbox: SHIBUYA, near: null })
+    expect(resolved(result).notes).toEqual([])
+    expect(deps.index).not.toHaveBeenCalled()
+  })
+
+  it('市区町村・起点とも AND（「千代田区のこのあたり」）', async () => {
+    const takebashi: Viewport = { west: 139.72, south: 35.66, east: 139.8, north: 35.72 }
+    const result = resolved(
+      await resolve(
+        { inMapView: true, municipality: '千代田区', near: { station: '竹橋', withinM: 1000 } },
+        { viewport: takebashi },
+      ),
+    )
+    expect(result.area).toMatchObject({
+      municipality: '千代田区',
+      bbox: takebashi,
+      near: { grp: '竹橋#0', radiusM: 1000 },
+    })
+  })
+
+  it('false・無しなら地図で絞らない（地図の範囲は名前を決めるのにだけ使う）', async () => {
+    for (const input of [{ inMapView: false }, {}]) {
+      expect(resolved(await resolve(input, { viewport: SHIBUYA })).area.bbox).toBeNull()
+    }
+  })
+
+  it.each<[string, AreaInput, Viewport | null, string]>([
+    [
+      '地図の範囲が届いていない（MCP など）',
+      { inMapView: true },
+      null,
+      '地図の表示範囲が届いていません（地図のある画面のチャットだけで使えます）。地名・駅名で絞るか、範囲を bbox に [west, south, east, north] で渡してください。',
+    ],
+    [
+      '日本全体に近い広さ',
+      { inMapView: true },
+      JAPAN,
+      '地図が日本全体に近い広さなので、「このあたり」がどこか決められません。どのあたりかを利用者に聞いてください（地名・駅名を聞くか、地図を拡大してもらう）。',
+    ],
+    [
+      '数の bbox と一緒',
+      { inMapView: true, bbox: [139.6, 35.6, 139.8, 35.7] },
+      SHIBUYA,
+      'inMapView と bbox は一緒に使いません（地図に表示中の範囲なら inMapView だけ。範囲はサーバが持っています）。',
+    ],
+  ])('%s → 図を作らずに直し方を返す', async (_label, input, viewport, problem) => {
+    expect(failed(await resolve(input, { viewport })).problems).toEqual([
+      { input: 'inMapView', problem },
+    ])
+  })
+})
+
 describe('索引を読むのは名前があるときだけ', () => {
   it.each<[string, AreaInput]>([
     ['何も無い', {}],

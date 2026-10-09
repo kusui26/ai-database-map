@@ -7,7 +7,8 @@
  * - どれも無ければ索引を読まない（いつもの呼び出しを遅くしない）
  * - 決められなければ、図を作らずに候補を返す（路線の名前と同じ `problems` の形）
  *
- * 地図の表示範囲（`viewport`）は、同じ名前を決めるのにだけ使う（駅を範囲で絞るのは `bbox`）。
+ * 地図の表示範囲（`viewport`）は、同じ名前を決めるのに使う。駅を範囲で絞るのは `bbox`（数で受ける）か、
+ * 「このあたり」の `inMapView`（地図の範囲そのもの・2026-10-09 B3）。
  */
 
 import { nearOf, type NearArea, type ResolvedArea } from '@/domain/area'
@@ -15,6 +16,7 @@ import { NEAR_MAX_RADIUS_M, NEAR_MIN_RADIUS_M, distanceLabel } from '@/shared/co
 import { isValidLonLat, viewportFromTuple, type Viewport } from '@/shared/viewport'
 import { resolveMunicipality } from './municipality'
 import { resolveOrigin } from './origin'
+import { isTooWideForArea } from './map-view'
 import { type AreaIndex } from './place-index'
 import { type AreaProblem } from './problems'
 
@@ -30,6 +32,8 @@ export type AreaInput = {
   readonly municipality?: string
   readonly near?: NearInput
   readonly bbox?: readonly number[]
+  /** 地図に表示中の範囲の駅だけ（「このあたり」・アプリのチャットだけ・B3）。 */
+  readonly inMapView?: boolean
 }
 
 export type AreaResolveContext = {
@@ -89,6 +93,31 @@ function bboxStep(bbox: readonly number[] | undefined): Step<Viewport | null> {
   const problem =
     'bbox は [west, south, east, north]（経度・緯度・west < east・south < north）の 4 つの数です。'
   return { ok: false, problem: { input: 'bbox', problem } }
+}
+
+const MAP_VIEW_WITH_BBOX: AreaProblem = {
+  input: 'inMapView',
+  problem:
+    'inMapView と bbox は一緒に使いません（地図に表示中の範囲なら inMapView だけ。範囲はサーバが持っています）。',
+}
+const NO_MAP_VIEW: AreaProblem = {
+  input: 'inMapView',
+  problem:
+    '地図の表示範囲が届いていません（地図のある画面のチャットだけで使えます）。地名・駅名で絞るか、範囲を bbox に [west, south, east, north] で渡してください。',
+}
+const MAP_VIEW_TOO_WIDE: AreaProblem = {
+  input: 'inMapView',
+  problem:
+    '地図が日本全体に近い広さなので、「このあたり」がどこか決められません。どのあたりかを利用者に聞いてください（地名・駅名を聞くか、地図を拡大してもらう）。',
+}
+
+/** 範囲：数の bbox か、地図に表示中の範囲（「このあたり」）。 */
+function rangeStep(input: AreaInput, viewport: Viewport | null): Step<Viewport | null> {
+  if (input.inMapView !== true) return bboxStep(input.bbox)
+  if (input.bbox !== undefined) return { ok: false, problem: MAP_VIEW_WITH_BBOX }
+  if (viewport === null) return { ok: false, problem: NO_MAP_VIEW }
+  if (isTooWideForArea(viewport)) return { ok: false, problem: MAP_VIEW_TOO_WIDE }
+  return { ok: true, value: viewport, notes: [] }
 }
 
 const NEEDS_RADIUS: AreaProblem = {
@@ -189,7 +218,7 @@ export async function resolveAreaInput(
   const chosen = municipality.ok ? municipality.value?.prefecture : undefined
   const prefectures = withPrefecture(context.prefectures, chosen)
   const near = nearStep(input.near, prefectures, context.viewport, index)
-  const bbox = bboxStep(input.bbox)
+  const bbox = rangeStep(input, context.viewport)
   if (!municipality.ok || !near.ok || !bbox.ok) return failure([municipality, near, bbox])
   return {
     ok: true,

@@ -378,6 +378,69 @@ describe('buildDataset：署名つきの条件に、決めた場所が入る（C
   })
 })
 
+describe('「このあたり」（inMapView・地図に表示中の範囲・2026-10-09 B3）', () => {
+  const SHIBUYA = { west: 139.66, south: 35.63, east: 139.74, north: 35.69 }
+  const JAPAN = { west: 122.9, south: 24.0, east: 153.9, north: 45.6 }
+
+  it('ランキング：送信時の地図の範囲が SQL の範囲に入り、題は「地図の表示範囲」', async () => {
+    const result = await TOOL_SPECS.rankStations.run(
+      { metric: 'lp_gr', inMapView: true },
+      { ...CTX, viewport: SHIBUYA },
+    )
+    expect(rankFilter().bbox).toEqual(SHIBUYA)
+    expect(result.forLlm).toMatchObject({ place: '地図の表示範囲' })
+    const [effect] = result.effects
+    if (effect?.kind !== 'ranking') throw new Error('順位表が無い')
+    // ⤢ で開いた図も同じ範囲（応答に範囲を返す＝図の URL の figBbox になる）
+    expect(effect.response.bbox).toEqual(SHIBUYA)
+    expect(rankingPanel(effect.response).title).toContain('（地図の表示範囲・上位）')
+    // 名前の解決は無いので、全駅の索引も読まない
+    expect(db.stationCatalog).not.toHaveBeenCalled()
+  })
+
+  it('散布・一覧も同じ', async () => {
+    await TOOL_SPECS.compareGrowth.run(
+      { x: 'pop_gr', y: 'rate_covid', inMapView: true },
+      { ...CTX, viewport: SHIBUYA },
+    )
+    expect(db.scatterPoints.mock.calls[0]?.[4]).toMatchObject({ bbox: SHIBUYA })
+    await TOOL_SPECS.listStations.run({ inMapView: true }, { ...CTX, viewport: SHIBUYA })
+    expect(listFilter().bbox).toEqual(SHIBUYA)
+  })
+
+  it('地図の範囲が無い・日本全体に近い広さなら、集計を走らせずに直し方を返す', async () => {
+    const noMap = await TOOL_SPECS.rankStations.run({ metric: 'lp_gr', inMapView: true }, CTX)
+    expect(noMap.effects).toEqual([])
+    expect(JSON.stringify(noMap.forLlm)).toContain('地図の表示範囲が届いていません')
+    const wide = await TOOL_SPECS.rankStations.run(
+      { metric: 'lp_gr', inMapView: true },
+      { ...CTX, viewport: JAPAN },
+    )
+    expect(JSON.stringify(wide.forLlm)).toContain('日本全体に近い広さ')
+    expect(db.rankByColumn).not.toHaveBeenCalled()
+  })
+
+  it('ランキング・散布・一覧のスキーマは inMapView を受ける（AI SDK はスキーマで検証する＝無いと黙って落ちる）', () => {
+    const inputs = [
+      TOOL_SPECS.rankStations.inputSchema.parse({ metric: 'lp_gr', inMapView: true }),
+      TOOL_SPECS.compareGrowth.inputSchema.parse({ x: 'pop_gr', y: 'rate_covid', inMapView: true }),
+      TOOL_SPECS.listStations.inputSchema.parse({ inMapView: true }),
+    ]
+    for (const input of inputs) expect(input).toMatchObject({ inMapView: true })
+    // データセット（MCP だけ）の対象集合には足さない（地図が無い）
+    const dataset = TOOL_SPECS.buildDataset.inputSchema.parse({
+      stations: { inMapView: true },
+      metrics: ['pop_2020_1km'],
+    })
+    expect(dataset.stations).not.toHaveProperty('inMapView')
+  })
+
+  it('地図があっても、頼まれなければ範囲で絞らない（名前を決めるのにだけ使う）', async () => {
+    await TOOL_SPECS.rankStations.run({ metric: 'lp_gr' }, { ...CTX, viewport: SHIBUYA })
+    expect(rankFilter()).not.toHaveProperty('bbox')
+  })
+})
+
 describe('全駅の索引のキャッシュ', () => {
   it('名前が無い呼び出しは索引を読まない。続けて呼んでも 1 回だけ読む', async () => {
     await TOOL_SPECS.rankStations.run({ metric: 'lp_near_price' }, CTX)

@@ -1,5 +1,5 @@
 /**
- * 評価：ゴールデン 48 問（駅詳細・ランキング・会社と路線の名前・場所（市区町村・起点から N km）・散布・比較・曖昧駅名・カタログ探索・データ外拒否・**災害**）。
+ * 評価：ゴールデン 53 問（駅詳細・ランキング・会社と路線の名前・場所（市区町村・起点から N km）・散布・比較・曖昧駅名・カタログ探索・データ外拒否・**災害**・地図文脈（選択駅・「このあたり」））。
  * 各問は自然言語クエリと、機械判定できる期待（score.ts）を持つ。代表性を重視して分野を網羅する。
  *
  * **災害の 6 問だけは性格が違う**（`docs/260824_flood.md` §6.5・§10.4）。
@@ -26,12 +26,21 @@ export type EvalCase = {
 }
 
 /**
- * 地図の初期表示（東京駅中心・ズーム 9・幅 1440×高さ 840px）の範囲。首都圏が入る（`MapView.tsx`）。
- * 値は地図が送るのと同じく外向きに丸めたもの。
+ * 地図の初期表示（東京駅中心・ズーム 9・幅 1440×高さ 840px）の地図全体の範囲。首都圏が入る（`MapView.tsx`）。
+ * 値は地図が送るのと同じく外向きに丸めたもの。2026-10-09 B3 から、画面はチャット欄に隠れた左を除いて送る
+ * （同じ窓なら西端は 139.37 前後）——ここは「首都圏を見ている」代表の範囲として残す。
  */
 const TOKYO_VIEW = [138.78, 35.21, 140.76, 36.15] as const
 /** 大阪駅中心・ズーム 9 の範囲（神戸・京都も入る）。 */
 const OSAKA_VIEW = [134.51, 34.23, 136.48, 35.18] as const
+/** 東京駅の周り（ズーム 13 前後・約 7km 四方）。選択駅の問で、画面と同じく範囲も同送する（2026-10-09 B3）。 */
+const TOKYO_STATION_VIEW = [139.73, 35.65, 139.81, 35.71] as const
+/** 渋谷駅の周り（ズーム 13 前後・約 7km 四方・53 駅）。「このあたり」の問（B3）。 */
+const SHIBUYA_VIEW = [139.66, 35.63, 139.74, 35.69] as const
+/** 横浜市港北区の大倉山の周り（約 9km 四方）。中心に近い駅の市区町村が「この区」になる（B3）。 */
+const KOHOKU_VIEW = [139.58, 35.49, 139.68, 35.57] as const
+/** 日本全体（ズーム 4〜5）。「このあたり」がどこか決まらない（B3）。 */
+const JAPAN_VIEW = [122.9, 24.0, 153.9, 45.6] as const
 
 export const EVAL_CASES: readonly EvalCase[] = [
   // --- 駅詳細（カテゴリの選択・半径・選択） ---
@@ -585,12 +594,14 @@ export const EVAL_CASES: readonly EvalCase[] = [
 
   // --- 地図文脈（P8e・選択駅を会話の主題に） ---
   {
-    // 東京を選択中に駅名を省いた追随質問 → 選択駅の地価を、検索を省いて getStationDetail 直呼び
+    // 東京を選択中に駅名を省いた追随質問 → 選択駅の地価を、検索を省いて getStationDetail 直呼び。
+    // 画面と同じく地図の範囲も同送する（2026-10-09 B3 で範囲を LLM に見せるようになったので、選択駅の答え方が崩れないかも見る）
     id: 'context-followup-landprice',
     category: '地図文脈',
     query: '地価の推移は？',
     selectedGrp: '東京#0',
     radiusM: 1000,
+    bbox: TOKYO_STATION_VIEW,
     expect: {
       toolCalls: [
         { name: 'getStationDetail', inputIncludes: { grp: '東京#0', category: 'land_price' } },
@@ -599,15 +610,84 @@ export const EVAL_CASES: readonly EvalCase[] = [
     },
   },
   {
-    // 東京を選択中でも、別駅を明示したらそちら（選択に縛られない）
+    // 東京を選択中でも、別駅を明示したらそちら（選択に縛られない）。範囲も同送（B3）
     id: 'context-explicit-override',
     category: '地図文脈',
     query: '新宿駅の人口は？',
     selectedGrp: '東京#0',
     radiusM: 1000,
+    bbox: TOKYO_STATION_VIEW,
     expect: {
       toolCalls: [{ name: 'searchStations', inputIncludes: { query: '新宿' } }],
       contains: ['新宿'],
+    },
+  },
+
+  // --- 地図文脈：「このあたり」（地図に表示中の範囲・2026-10-09 B3・計画書 §6.4・§6.6） ---
+  {
+    // 以前は地図の範囲が LLM に届かず（路線の名前を決めるのにだけ使っていた）、「このあたり」に答えられなかった。
+    // 範囲の数は書かせず inMapView で絞る（範囲はサーバが持っている）。題に「地図の表示範囲」が出る。
+    id: 'map-context',
+    category: '地図文脈',
+    query: 'このあたりで地価が上がっている駅は？',
+    bbox: SHIBUYA_VIEW,
+    expect: {
+      toolCalls: [{ name: 'rankStations', inputIncludes: { inMapView: true } }],
+      panels: ['rankingTable'],
+      contains: ['地図の表示範囲'],
+      noEmptyFigures: true,
+      forbidInputs: { rankStations: ['bbox'] },
+    },
+  },
+  {
+    // 「この区」は地図の中心に近い駅（大倉山）の市区町村＝横浜市港北区。区の全域で答え、地図の範囲では絞らない。
+    id: 'map-context-ward',
+    category: '地図文脈',
+    query: 'この区で人口が増えている駅は？',
+    bbox: KOHOKU_VIEW,
+    expect: {
+      toolCalls: [{ name: 'rankStations' }],
+      panels: ['rankingTable'],
+      contains: ['横浜市港北区'],
+      noEmptyFigures: true,
+      forbidInputs: { rankStations: ['inMapView', 'bbox'] },
+    },
+  },
+  {
+    // 日本全体を見ているときの「このあたり」はどこか決まらない——地図で絞らず（全国の順位も出さず）、どのあたりかを聞く。
+    id: 'map-context-too-wide',
+    category: '地図文脈',
+    query: 'このあたりで地価が上がっている駅は？',
+    bbox: JAPAN_VIEW,
+    expect: {
+      noRankScatter: true,
+      textNonEmpty: true,
+      containsAny: ['拡大', 'どのあたり', 'どの辺', 'どの地域', 'どちら', '地名', '駅名'],
+    },
+  },
+  {
+    // 渋谷を見ていても「全国で」は全国（頼まれていないのに地図で絞らない）。
+    id: 'map-context-national',
+    category: '地図文脈',
+    query: '全国で人口が増えている駅は？',
+    bbox: SHIBUYA_VIEW,
+    expect: {
+      toolCalls: [{ name: 'rankStations' }],
+      panels: ['rankingTable'],
+      contains: ['全国'],
+      forbidInputs: { rankStations: ['inMapView', 'bbox'] },
+    },
+  },
+  {
+    // 渋谷（東京都）を見ていても「神奈川県で」は神奈川県（地図は話題を決めない）。
+    id: 'map-context-other-pref',
+    category: '地図文脈',
+    query: '神奈川県で乗降客数が多い駅は？',
+    bbox: SHIBUYA_VIEW,
+    expect: {
+      toolCalls: [{ name: 'rankStations', inputIncludes: { prefectures: ['神奈川県'] } }],
+      panels: ['rankingTable'],
+      forbidInputs: { rankStations: ['inMapView', 'bbox'] },
     },
   },
 ]

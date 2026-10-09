@@ -91,8 +91,9 @@ type MapStore = {
   setCenter: (center: MapCenter) => void
 
   /**
-   * いま地図に出している範囲（外向きに丸め済み・未初期化は null）。チャットの送信に同送し、同じ名前の路線
-   * （「中央線」＝JR・大阪メトロ）を決めるのに使う（2026-10-08 L3・`shared/viewport.ts`）。
+   * いま地図に出している範囲（パネルに隠れていない部分・外向きに丸め済み・未初期化は null）。チャットの送信に同送し、
+   * 同じ名前の路線（「中央線」＝JR・大阪メトロ）を決めるのと（2026-10-08 L3）、「このあたり」の質問（2026-10-09 B3）に使う
+   * （`shared/viewport.ts`・`components/map/visibleBounds.ts`）。
    */
   viewport: Viewport | null
   /** 地図が止まったときに呼ぶ。中心と同じく、丸めて変化が無ければ何もしない。 */

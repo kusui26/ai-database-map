@@ -2,7 +2,7 @@
  * 導入ページ（PR-8・`docs/260828_research_claude_auth.md` §6）。
  *
  * ユーザー自身の Claude（Claude Code / Claude.ai / Cowork）や他の MCP クライアントから、
- * このアプリの共通 API（リモート MCP・13 ツール）を**本人のサブスクリプションで**使うための
+ * このアプリの共通 API（リモート MCP・14 ツール）を**本人のサブスクリプションで**使うための
  * 入口。コマンド・導入リンク・プラン別の注意（枠の消費）をここに集約する。
  */
 
@@ -73,6 +73,10 @@ const TOOLS: readonly { name: string; desc: string }[] = [
   { name: 'build_dataset', desc: '駅×指標の CSV を 1 回で生成（短命 URL・ハザード結合可）' },
   { name: 'render_map', desc: '結果を地図にした HTML ページを生成（短命 URL・保存して開く）' },
   { name: 'get_hazard_summary', desc: '全駅事前計算の災害サマリを最大 500 駅一括' },
+  {
+    name: 'get_station_profile',
+    desc: '駅周辺のプロフィール（要点・県内／市内での位置・性格の目安・見ていないこと）',
+  },
   { name: 'get_station_detail / rank_stations / compare_growth', desc: '駅詳細・ランキング・散布' },
   { name: 'get_hazard_at_point / get_hazard_alerts', desc: '地点の想定リスク・いまの警報' },
   {
@@ -186,7 +190,7 @@ export default function AiIntroPage() {
           追加費用もかかりません（推論はあなた自身の Claude の利用枠を使います）。
         </p>
         <p className="text-sm text-slate-500">
-          実体は読み取り専用のリモート MCP サーバ（13 ツール）です。Claude Code・Claude.ai・Cowork・
+          実体は読み取り専用のリモート MCP サーバ（14 ツール）です。Claude Code・Claude.ai・Cowork・
           MulmoTerminal / MulmoClaude・その他の MCP 対応クライアントから使えます。
         </p>
       </header>
@@ -362,7 +366,7 @@ export default function AiIntroPage() {
         </p>
       </Section>
 
-      <Section title="扱えるデータ（13 ツール）">
+      <Section title="扱えるデータ（14 ツール）">
         {/* 名前の札は**横に並べたいが、狭い画面では並べられない**。いちばん長い
             `get_station_detail / rank_stations / compare_growth` は 380px あり、説明の最小幅を足すと
             1 行に 448px 要る——430px の端末でも溢れていた（実測：320px で 112px・390px で 42px）。

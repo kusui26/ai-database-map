@@ -194,9 +194,9 @@ describe('scoreCase: 付けてはいけない引数（forbidInputs・2026-10-09 
 })
 
 describe('EVAL_CASES', () => {
-  it('53 問・id 一意・全問に期待あり', () => {
-    expect(EVAL_CASES.length).toBe(53)
-    expect(new Set(EVAL_CASES.map((c) => c.id)).size).toBe(53)
+  it('56 問・id 一意・全問に期待あり', () => {
+    expect(EVAL_CASES.length).toBe(56)
+    expect(new Set(EVAL_CASES.map((c) => c.id)).size).toBe(56)
     for (const testCase of EVAL_CASES) {
       expect(testCase.query.length).toBeGreaterThan(0)
       expect(Object.keys(testCase.expect).length).toBeGreaterThan(0)
@@ -214,6 +214,7 @@ describe('EVAL_CASES', () => {
       'rank-near-screenshot',
       'context-followup-landprice',
       'context-explicit-override',
+      'area-profile-selected',
       'map-context',
       'map-context-ward',
       'map-context-too-wide',
@@ -222,6 +223,19 @@ describe('EVAL_CASES', () => {
     ])
     for (const testCase of withViewport) {
       expect(viewportFromTuple(testCase.bbox ?? []), testCase.id).not.toBeNull()
+    }
+  })
+
+  it('エリアの性格の問は、プロフィールを 1 回呼ぶ（getStationDetail を連ねさせない・B4）', () => {
+    const profile = EVAL_CASES.filter((testCase) => testCase.category === 'エリアの性格')
+    expect(profile.map((testCase) => testCase.id)).toEqual([
+      'area-profile',
+      'area-profile-living',
+      'area-profile-selected',
+    ])
+    for (const testCase of profile) {
+      expect(testCase.expect.toolCalls?.[0]?.name, testCase.id).toBe('getStationProfile')
+      expect(testCase.expect.panels, testCase.id).toContain('stationProfile')
     }
   })
 

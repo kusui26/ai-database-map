@@ -1,5 +1,5 @@
 /**
- * 評価：ゴールデン 53 問（駅詳細・ランキング・会社と路線の名前・場所（市区町村・起点から N km）・散布・比較・曖昧駅名・カタログ探索・データ外拒否・**災害**・地図文脈（選択駅・「このあたり」））。
+ * 評価：ゴールデン 56 問（駅詳細・ランキング・会社と路線の名前・場所（市区町村・起点から N km）・散布・比較・曖昧駅名・カタログ探索・データ外拒否・**災害**・地図文脈（選択駅・「このあたり」）・エリアの性格（駅周辺のプロフィール））。
  * 各問は自然言語クエリと、機械判定できる期待（score.ts）を持つ。代表性を重視して分野を網羅する。
  *
  * **災害の 6 問だけは性格が違う**（`docs/260824_flood.md` §6.5・§10.4）。
@@ -620,6 +620,49 @@ export const EVAL_CASES: readonly EvalCase[] = [
     expect: {
       toolCalls: [{ name: 'searchStations', inputIncludes: { query: '新宿' } }],
       contains: ['新宿'],
+    },
+  },
+
+  // --- エリアの性格：駅周辺のプロフィール（2026-10-09 B4・計画書 §6.4・§6.6） ---
+  {
+    // 「どんなエリア？」は 1 回で要点・県内／市内の位置・性格の目安・見ていないことを返す道具で答える（§9.2 原則 3）。
+    // ツールに無い事実を言わない——横浜駅なら、記憶にある「みなとみらい」「中華街」「百貨店」を足しがち。
+    id: 'area-profile',
+    category: 'エリアの性格',
+    query: '横浜駅の周辺はどんなエリア？',
+    expect: {
+      toolCalls: [{ name: 'getStationProfile' }],
+      panels: ['stationProfile'],
+      select: true,
+      maxCalls: { getStationProfile: 1 },
+      notContains: ['みなとみらい', '中華街', '百貨店', 'デパート', '観光'],
+    },
+  },
+  {
+    // 1 つの駅の「住むならどう？」は、駅を並べる推薦（おすすめボタンへ引き渡す）ではなくプロフィールで答える。
+    // 物件・治安・子育てはデータに無い——断定しない（「見ていないこと」として挙げるのはよい）。
+    id: 'area-profile-living',
+    category: 'エリアの性格',
+    query: '武蔵小杉に住むならどう？',
+    expect: {
+      toolCalls: [{ name: 'getStationProfile' }],
+      panels: ['stationProfile'],
+      noRankScatter: true,
+      notContains: ['タワーマンション', 'タワマン', '治安が良い', '治安がいい', '子育てしやすい'],
+    },
+  },
+  {
+    // 選択中の駅は検索を省き、grp をそのまま渡す（地図文脈と同じ作法）。画面と同じく地図の範囲も同送する。
+    id: 'area-profile-selected',
+    category: 'エリアの性格',
+    query: 'この駅の周辺はどんなところ？',
+    selectedGrp: '東京#0',
+    radiusM: 1000,
+    bbox: TOKYO_STATION_VIEW,
+    expect: {
+      toolCalls: [{ name: 'getStationProfile', inputIncludes: { grp: '東京#0' } }],
+      panels: ['stationProfile'],
+      maxCalls: { searchStations: 0 },
     },
   },
 

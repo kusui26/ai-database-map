@@ -25,7 +25,9 @@ import {
   populationPanels,
   salesPanels,
   stationCardPanel,
+  stationCardPanelOf,
 } from '@/domain/stations/panels'
+import { stationProfilePanel } from '@/domain/profile/panel'
 import { rankingPanel } from '@/domain/ranking/panel'
 import { scatterPanel } from '@/domain/growth/panel'
 import {
@@ -44,6 +46,7 @@ import {
   type HazardPointEffect,
   type RankingEffect,
   type StationDetailEffect,
+  type StationProfileEffect,
   type ToolEffect,
 } from './types'
 
@@ -86,6 +89,18 @@ export function panelsForStationDetail(effect: StationDetailEffect): Panel[] {
   return [stationCardPanel(effect.detail, 'compact'), ...categoryPanels(effect)].map(inline)
 }
 
+/**
+ * 駅周辺のプロフィールツール → パネル（駅カード → プロフィール・compact/inline）。
+ * 駅カードを先頭に置くのは駅詳細と同じ形にするため——会話では 1 つのグループ（⤢ で駅詳細の「概要」タブ）になる。
+ */
+export function panelsForStationProfile(effect: StationProfileEffect): Panel[] {
+  const { profile } = effect
+  return [
+    stationCardPanelOf(profile.station, 'compact'),
+    stationProfilePanel(profile, 'compact'),
+  ].map(inline)
+}
+
 /** ランキングツール → パネル（rankingTable・compact/inline）。 */
 export function panelsForRanking(effect: RankingEffect): Panel[] {
   return [inline(rankingPanel(effect.response, 'compact'))]
@@ -121,6 +136,8 @@ function panelsFor(effect: ToolEffect): Panel[] {
   switch (effect.kind) {
     case 'stationDetail':
       return panelsForStationDetail(effect)
+    case 'stationProfile':
+      return panelsForStationProfile(effect)
     case 'ranking':
       return panelsForRanking(effect)
     case 'growth':
@@ -144,6 +161,14 @@ export function mapActionsForEffect(effect: ToolEffect): MapAction[] {
       return [
         { type: 'flyTo', lon: s.lon, lat: s.lat, zoom: DETAIL_ZOOM },
         { type: 'selectStation', grp: s.grp, radiusM: effect.radiusM },
+      ]
+    }
+    case 'stationProfile': {
+      // 駅詳細と同じく、駅へ寄って選ぶ（半径も合わせる＝「概要」タブがその半径で開く）。
+      const { station, radiusM } = effect.profile
+      return [
+        { type: 'flyTo', lon: station.lon, lat: station.lat, zoom: DETAIL_ZOOM },
+        { type: 'selectStation', grp: station.grp, radiusM },
       ]
     }
     case 'ranking': {
@@ -293,6 +318,8 @@ function promotionOf(effect: ToolEffect): PanelPromotion | null {
   switch (effect.kind) {
     case 'stationDetail':
       return { kind: 'detail', grp: effect.detail.station.grp, category: effect.category }
+    case 'stationProfile':
+      return { kind: 'detail', grp: effect.profile.station.grp, category: null, tab: 'overview' }
     case 'ranking': {
       const { metric, order } = effect.response
       const filters = promotionFilters(effect.response, effect.excludeLowN)
@@ -412,6 +439,18 @@ function summarizePanel(panel: Panel): string {
           ? '方向は出せませんでした'
           : `${panel.direction.bearingJa}へ${panel.direction.distanceJa}`
       return `${panel.placeJa}（${panel.forDisasterJa}の外へ）: ${where}。${panel.headlineJa}`
+    }
+    case 'stationProfile': {
+      // 位置・性格はサーバが決めた文字列のまま渡す（LLM に順位や型を作らせない）。
+      const items = panel.sections
+        .flatMap((section) => section.items)
+        .map((item) => {
+          const where = item.positions.map((each) => `${each.scopeJa}${each.shareJa}`).join('・')
+          const flag = item.flagged ? '⚠' : ''
+          return `${item.labelJa} ${item.valueJa}${flag}${where === '' ? '' : `（${where}）`}`
+        })
+        .join('、')
+      return `${panel.title}: ${panel.character.labelJa}（${panel.character.basisJa}）｜${items}`
     }
     case 'markdown':
       return panel.body

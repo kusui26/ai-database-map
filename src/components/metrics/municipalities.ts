@@ -11,8 +11,7 @@
  * 辿り着けないので、区を持つ市には「市全体」の選択肢を足す。
  */
 
-/** 政令市（区を持つ市）。前方一致で区をまとめるのに使う。 */
-const CITY_WITH_WARDS = /^(.+市)(.+区)$/
+import { cityOfWard } from '@/shared/municipality'
 
 export type MunicipalityOption = {
   /** API に渡す値（前方一致）。 */
@@ -57,9 +56,9 @@ export function municipalityOptions(
   for (const station of stations) {
     const name = station.municipality
     if (name === null || name.length === 0) continue
-    const matched = CITY_WITH_WARDS.exec(name)
+    const city = cityOfWard(name)
     bump(plain, name)
-    if (matched?.[1] !== undefined) bump(cities, matched[1])
+    if (city !== null) bump(cities, city)
   }
   return [...toOptions(cities, 'city', '（全区）'), ...toOptions(plain, 'municipality', '')]
 }

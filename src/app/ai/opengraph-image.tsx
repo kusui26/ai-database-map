@@ -9,7 +9,7 @@ export const alt = 'Ask your own Claude about 9,273 train stations in Japan — 
 export const size = { width: 1200, height: 630 }
 export const contentType = 'image/png'
 
-const FACTS: readonly string[] = ['9,273 stations', '806 columns', '13 tools', 'read-only']
+const FACTS: readonly string[] = ['9,273 stations', '806 columns', '14 tools', 'read-only']
 
 function Brand() {
   return (

@@ -71,7 +71,7 @@ export const CATEGORY_LABELS_JA: Readonly<Record<Category, string>> = {
 }
 
 /**
- * 駅詳細のタブ。**指標のカテゴリ ＋ 指標ではないタブ（災害）**。
+ * 駅詳細のタブ。**指標のカテゴリ ＋ 指標ではないタブ（概要・災害）**。
  *
  * `Category` は**指標カタログの語彙**である（`/api/metrics?category=`・AI ツールの `category` 引数・
  * ランキングの絞り込み・カタログの CSV 列）。ここに「災害」を足すと、**指標ではないものが
@@ -82,23 +82,27 @@ export const CATEGORY_LABELS_JA: Readonly<Record<Category, string>> = {
  * 焦点を当てた駅詳細を ⤢ で開くと、**どのタブも選ばれず「データがありません」と出た**
  * （`docs/261001_fix_user_feedback_ui.md` §4.3）。型から外し、カテゴリ → タブは `detailTabFor` だけが写す。
  */
-export type DetailTab = Exclude<Category, 'population_forecast'> | 'hazard'
+export type DetailTab = 'overview' | Exclude<Category, 'population_forecast'> | 'hazard'
 
 /**
- * 詳細タブ（表示順）。URL の `?tab` が受け付ける値もこの 9 つだけ（`components/detail/useDetailTab.ts`）。
+ * 詳細タブ（表示順）。URL の `?tab` が受け付ける値もこの 10 個だけ（`components/detail/useDetailTab.ts`）。
+ *
+ * **概要は先頭**（2026-10-09 B4・`docs/261001_fix_user_feedback_ui.md` §12-7）。駅周辺のプロフィール（全カテゴリの要点と
+ * 県内・市内での位置・性格の目安・見ていないこと）で、どのタブから見ればよいかを決める入口になる。
  *
  * 所得は「そこに住む人の稼ぎ」、売上は「そこで落ちるお金」なので、人口 → 所得 → 売上 と並べる
  * （`CATEGORIES` と同順）。**災害は末尾**（`docs/260828_fix_flood.md` §7 決定 2）。2 番目に置けば
  * 見つけやすいが、**乗降・人口を主に使う人の並びを乱す**——ヘッダのバッジという確実な入口があるので、
  * 並びを壊してまで前に出さない。
  *
- * ⚠ タブ帯は 7 タブで 460px、8 タブ（売上）で 516px、**9 タブ（災害）で 572px** になり、
+ * ⚠ タブ帯は 7 タブで 460px、8 タブ（売上）で 516px、9 タブ（災害）で 572px、**10 タブ（概要）で 628px** になり、
  * パネル幅 420px を超えて横スライドが要る（パネルを広げると地図が狭くなるので広げない・
  * `docs/260805_research_add_dataset_economy.md` §16.3）。8 タブ以降は最後のタブが完全に隠れるため、
  * 帯の右端にフェードを出し、**選んだタブは帯を送って見せる**（`StationDetailPanel.tsx`・
  * `docs/260816_sales.md` §7.4 案A・`docs/260828_fix_flood.md` §4.2・`tests/panel-layout.test.ts`）。
  */
 export const DETAIL_TABS: readonly DetailTab[] = [
+  'overview',
   'passenger',
   'population',
   'income',
@@ -110,8 +114,11 @@ export const DETAIL_TABS: readonly DetailTab[] = [
   'hazard',
 ]
 
-/** URL にも、この端末の記憶にもタブが無いときのタブ（駅の概要として乗降客数を出す）。 */
-export const DEFAULT_DETAIL_TAB: DetailTab = 'passenger'
+/**
+ * URL にも、この端末の記憶にもタブが無いときのタブ。**概要**（駅周辺のプロフィール・2026-10-09 B4）。
+ * 以前は乗降客数を「駅の概要」の代わりにしていた。選んだタブは覚えるので、乗降客数を見たい人はそれが続く。
+ */
+export const DEFAULT_DETAIL_TAB: DetailTab = 'overview'
 
 /** 指標カテゴリ → 駅詳細のタブ。将来推計人口は人口タブにある（チャットの駅詳細も人口として描く）。 */
 export function detailTabFor(category: Category): DetailTab {
@@ -120,6 +127,7 @@ export function detailTabFor(category: Category): DetailTab {
 
 /** タブの日本語ラベル。指標ぶんは `CATEGORY_LABELS_JA` を単一の出所として使う（重複させない）。 */
 export const DETAIL_TAB_LABELS_JA: Readonly<Record<DetailTab, string>> = {
+  overview: '概要',
   ...CATEGORY_LABELS_JA,
   hazard: '災害',
 }

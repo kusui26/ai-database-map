@@ -16,7 +16,8 @@
  * 予算重視なら安いほど良い——**指標の属性ではなく用途の属性**なので、プリセット側の指定を使う。
  */
 
-import { entries, getEntry, type CatalogEntry } from '@/shared/catalog'
+import { getEntry, type CatalogEntry } from '@/shared/catalog'
+import { familyCandidates } from '@/domain/metrics/family'
 import type { PresetMetric } from './presets'
 import type { ScoredMetric } from './types'
 
@@ -32,38 +33,6 @@ export type ResolvedMetrics = {
   readonly notes: readonly string[]
   /** カタログに無くて解決できなかった指定。 */
   readonly unresolved: readonly string[]
-}
-
-/** 年の新しい順。増減率は終点年（`year`）で比べる。 */
-function newestFirst(a: CatalogEntry, b: CatalogEntry): number {
-  return (b.year ?? 0) - (a.year ?? 0) || (b.yearBase ?? 0) - (a.yearBase ?? 0)
-}
-
-/** 増減率が見ている期間（年）。水準（`year` だけ）は null。 */
-function spanOf(entry: CatalogEntry): number | null {
-  return entry.year === null || entry.yearBase === null ? null : entry.year - entry.yearBase
-}
-
-/**
- * ファミリ名 → その半径で使えるエントリ（新しい年が先）。
- *
- * 期間の指定があれば**まず期間で絞る**。「いちばん新しい」だけで選ぶと、
- * 将来人口（終点年が動く）は最も遠い年、地価トレンド（起点年が動く）は最も短い期間、と
- * **同じ規則が逆の意味になる**。期間を先に見れば、どちらも指定どおりになる。
- * 指定した期間が無ければ新しい順に倒す（notes に選んだ key が出るので、黙って消えはしない）。
- */
-function familyCandidates(
-  family: string,
-  radiusM: number,
-  spanYears?: number,
-): readonly CatalogEntry[] {
-  const all = entries
-    .filter((entry) => entry.baseMetric === family && entry.kind !== 'flag')
-    .filter((entry) => entry.radiusM === radiusM || entry.radiusM === null)
-    .sort(newestFirst)
-  if (spanYears === undefined) return all
-  const matched = all.filter((entry) => spanOf(entry) === spanYears)
-  return matched.length > 0 ? matched : all
 }
 
 /** 何を既定で埋めたかを 1 行で。 */

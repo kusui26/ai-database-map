@@ -594,6 +594,54 @@ export async function stationByGrp(grp: string): Promise<StationRow | null> {
   }
 }
 
+// --- 駅周辺のプロフィールの順位（県内・市内・261009 B4） --------------------
+const profileRankRowSchema = z.object({
+  key: z.string(),
+  value: z.number(),
+  pref_rank: z.number(),
+  pref_total: z.number(),
+  area_rank: z.number().nullable(),
+  area_total: z.number().nullable(),
+})
+
+/** 指標 1 つの順位（値の大きい順・同じ値は同じ順位・total は値のある駅の数）。市内は駅がその中にあるときだけ。 */
+export type ProfileRankRow = {
+  readonly key: string
+  readonly prefRank: number
+  readonly prefTotal: number
+  readonly areaRank: number | null
+  readonly areaTotal: number | null
+}
+
+/**
+ * 駅の指標が県内（と市内）で何位か（`station_profile_ranks` RPC・1 駅 11 指標で約 50ms）。
+ * 値の無い指標・知らない key は返らない（Map に無い＝位置なし）。`area` は市区町村の前方一致（政令市は「横浜市」で全区）。
+ */
+export async function stationProfileRanks(
+  grp: string,
+  keys: readonly string[],
+  area: string | null,
+): Promise<Map<string, ProfileRankRow>> {
+  if (keys.length === 0) return new Map()
+  const rows = await rpcRows(
+    'station_profile_ranks',
+    { in_grp: grp, keys: [...keys], area },
+    profileRankRowSchema,
+  )
+  return new Map(
+    rows.map((row) => [
+      row.key,
+      {
+        key: row.key,
+        prefRank: row.pref_rank,
+        prefTotal: row.pref_total,
+        areaRank: row.area_rank,
+        areaTotal: row.area_total,
+      },
+    ]),
+  )
+}
+
 // --- 全駅 GeoJSON（RPC が単一 jsonb で返す・max-rows 回避） -------------
 const geojsonSchema = z.object({
   type: z.literal('FeatureCollection'),

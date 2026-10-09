@@ -15,6 +15,7 @@ import {
   type HazardPointResponse,
   type RankingResponse,
   type StationDetail,
+  type StationProfile,
 } from '@/shared/api'
 
 /** 駅詳細ツールの副産物（焦点カテゴリ・集約半径つき）。 */
@@ -24,6 +25,15 @@ export type StationDetailEffect = {
   /** 焦点タブ（null＝乗降客の概要）。 */
   readonly category: Category | null
   readonly radiusM: RadiusM
+}
+
+/**
+ * 駅周辺のプロフィールツールの副産物（2026-10-09 B4）。中身は共通 API（`/api/stations/[grp]/profile`）の応答そのもので、
+ * 駅詳細の「概要」タブと同じパネルになる。
+ */
+export type StationProfileEffect = {
+  readonly kind: 'stationProfile'
+  readonly profile: StationProfile
 }
 
 /** ランキングツールの副産物。 */
@@ -81,6 +91,7 @@ export type EscapeEffect = {
 /** ツールが記録しうる副産物（assemble がパネル/地図操作に変換）。 */
 export type ToolEffect =
   | StationDetailEffect
+  | StationProfileEffect
   | RankingEffect
   | GrowthEffect
   | HazardPointEffect

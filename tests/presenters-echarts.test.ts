@@ -51,6 +51,7 @@ const NOT_CHARTABLE = [
   'hazardCard',
   'evacuationList',
   'escapeDirection',
+  'stationProfile',
   'markdown',
 ]
 

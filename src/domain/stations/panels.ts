@@ -49,7 +49,11 @@ export function stationCardPanel(
   detail: StationDetail,
   size: PanelSize = 'full',
 ): StationCardPanel {
-  const s = detail.station
+  return stationCardPanelOf(detail.station, size)
+}
+
+/** 駅の属性だけから駅カードを作る（駅周辺のプロフィールのように、系列を持たない応答から・2026-10-09 B4）。 */
+export function stationCardPanelOf(s: StationRow, size: PanelSize = 'full'): StationCardPanel {
   return {
     type: 'stationCard',
     grp: s.grp,

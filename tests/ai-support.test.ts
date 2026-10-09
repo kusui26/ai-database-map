@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { RECOMMEND_PRESETS } from '@/domain/recommend/presets'
-import { buildSystemPrompt } from '@/ai/system-prompt'
+import { buildSystemPrompt, mapContextPrompt } from '@/ai/system-prompt'
 import { checkRateLimit, resetRateLimitStore } from '@/ai/rate-limit'
 import {
   baseMetricDetail,
@@ -98,6 +98,34 @@ describe('catalog-digest（カタログ駆動）', () => {
     expect(summary).toContain('[pop_gr｜') // キーではなくファミリ名を提示する
     // 半径非依存で少数のファミリ（意味の異なる指標が同居）はキーを列挙する
     expect(summary).toContain('rate_yoy/rate_covid')
+  })
+})
+
+describe('システムプロンプト：駅周辺のプロフィール（2026-10-09 B4）', () => {
+  /**
+   * 「どんなエリア？」に getStationDetail を何度も呼ばせず、1 回で要点を返す道具を使わせる（計画書 §9.2 原則 3）。
+   * 実際の応答は `tests/chat-eval.test.ts` の `area-profile*` が見る。ここは指示が消えていないことを固定する。
+   */
+  it('「どんなエリア？」「住むならどう？」は getStationProfile を 1 回', () => {
+    const prompt = buildSystemPrompt()
+    expect(prompt).toContain('は getStationProfile を 1 回')
+    expect(prompt).toContain('getStationDetail を何度も呼ばない')
+  })
+
+  it('答え方はシステムプロンプトに書かず、返却の answerGuide に従わせる（関係の無い問の答え方を動かさない）', () => {
+    const prompt = buildSystemPrompt()
+    expect(prompt).toContain('答え方は返却の answerGuide に従う（ツールに無い事実は書かない）')
+    // 答え方の本体をシステムプロンプトに足すと、「この区」の問が地図の範囲で答えるようになった（2026-10-09・6 回中 0 回）
+    expect(prompt).not.toContain('character.type の語のまま')
+  })
+
+  it('1 つの駅の「住むならどう？」はおすすめの引き渡しと区別する', () => {
+    expect(buildSystemPrompt()).toContain('駅を並べて選ぶ推薦ではない')
+  })
+
+  it('選択中の駅なら、検索を省いて grp と半径を直接渡す', () => {
+    const prompt = mapContextPrompt({ label: '横浜', prefecture: '神奈川県', grp: '横浜#0' }, 2000)
+    expect(prompt).toContain('getStationProfile に grp="横浜#0"・radiusM=2000 を直接渡します')
   })
 })
 

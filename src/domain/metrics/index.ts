@@ -6,10 +6,15 @@
 import { type CatalogEntry, entries, getEntry, rankableForCategory } from '@/shared/catalog'
 import { type Category } from '@/shared/constants'
 
+/** 推計時点（`vintage`）の呼び名。将来推計人口は R6（2024 年）推計と H30（2018 年）推計の 2 系統。 */
+export function vintageLabel(vintage: number): string {
+  return vintage === 2024 ? 'R6推計' : 'H30推計'
+}
+
 /** 指標の変種ラベル（年・期間・推計時点。**半径は含めない**＝半径は別セレクタ・P6c）。 */
 export function variantLabel(entry: CatalogEntry): string {
   const parts: string[] = []
-  if (entry.vintage !== null) parts.push(entry.vintage === 2024 ? 'R6推計' : 'H30推計')
+  if (entry.vintage !== null) parts.push(vintageLabel(entry.vintage))
   if (entry.yearBase !== null && entry.year !== null) parts.push(`${entry.yearBase}→${entry.year}`)
   else if (entry.year !== null) parts.push(`${entry.year}年`)
   return parts.length > 0 ? parts.join('・') : entry.labelJa

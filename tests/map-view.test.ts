@@ -117,6 +117,13 @@ describe('mapViewPrompt（LLM に足す文脈）', () => {
     expect(prompt).toContain('municipality:"千代田区"・prefectures:["東京都"]')
   })
 
+  it('「この区」は地図の範囲ではないと言い切り、inMapView を付けさせない（2026-10-09 B4）', () => {
+    // 「（地図の範囲では絞らない）」だけでは境目に近く、システムプロンプトに節を足しただけで地図の範囲で答えた（6 回中 0 回が区）
+    const prompt = mapViewPrompt(describeMapView(TAKEBASHI_VIEW, INDEX))
+    expect(prompt).toContain('「この区」「この市」「この町」は**地図の範囲ではない**')
+    expect(prompt).toContain('**inMapView は付けない**')
+  })
+
   it('首都圏の初期表示（約 179km）では「この区」を読ませない。広さは整数の km', () => {
     const prompt = mapViewPrompt(describeMapView(TOKYO_VIEW, INDEX))
     expect(prompt).toContain('約 179km × 105km')

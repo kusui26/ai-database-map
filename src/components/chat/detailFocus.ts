@@ -26,13 +26,22 @@ function isDetailPromotion(promotion: PanelPromotion | null): promotion is Detai
 }
 
 /**
+ * 駅詳細をどのタブで開くか。指標ではないタブ（「概要」＝駅周辺のプロフィール・2026-10-09 B4）が先、
+ * 次に聞かれた指標のカテゴリ。どちらも無ければ null（タブは触らず、覚えたタブのまま開く）。
+ */
+export function focusTabOf(promotion: DetailPromotion): DetailTab | null {
+  if (promotion.tab !== undefined) return promotion.tab
+  return promotion.category === null ? null : detailTabFor(promotion.category)
+}
+
+/**
  * 最後の駅詳細の焦点。地図が最後に選ぶ駅は最後の駅詳細の駅なので、それに合わせる。
- * 最後の駅詳細に焦点が無い（`category: null`＝駅の概要）なら null——タブは触らず、覚えたタブのまま開く。
+ * 最後の駅詳細に焦点が無い（`category: null` でタブの指定も無い）なら null——タブは触らず、覚えたタブのまま開く。
  */
 export function detailFocusOf(promotions: PanelPromotions): DetailFocus | null {
   const last = promotions.filter(isDetailPromotion).at(-1)
-  if (last === undefined || last.category === null) return null
-  return { grp: last.grp, tab: detailTabFor(last.category) }
+  const tab = last === undefined ? null : focusTabOf(last)
+  return last === undefined || tab === null ? null : { grp: last.grp, tab }
 }
 
 /** 同じ焦点かを見分ける鍵（ツールが成功するたびに条件が送り直されても、1 回だけ当てるため）。 */

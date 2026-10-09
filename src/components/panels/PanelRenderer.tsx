@@ -12,6 +12,7 @@ import { EscapeDirection } from './EscapeDirection'
 import { EvacuationList } from './EvacuationList'
 import { HazardCard } from './HazardCard'
 import { StationCard } from './StationCard'
+import { StationProfile } from './StationProfile'
 import { TrendChart } from './TrendChart'
 import { StatTable } from './StatTable'
 import { BarChart } from './BarChart'
@@ -47,6 +48,8 @@ export function PanelRenderer({
       return <EvacuationList panel={panel} />
     case 'escapeDirection':
       return <EscapeDirection panel={panel} />
+    case 'stationProfile':
+      return <StationProfile panel={panel} />
     default: {
       const exhaustive: never = panel
       return exhaustive

@@ -35,8 +35,10 @@ import {
   type SourceRef,
   type StatTablePanel,
   type StationCardPanel,
+  type StationProfilePanel,
   type TrendChartPanel,
 } from '@/shared/protocol'
+import { type ProfileItem, type ProfileSection } from '@/shared/profile'
 import { scatterSvg, seriesColor, trendChartSvg } from './charts'
 import { el, type VNode } from './vnode'
 
@@ -293,6 +295,84 @@ function escapeDirectionNode(panel: EscapeDirectionPanel): VNode {
   ])
 }
 
+/** プロフィールの表の列の数（名前・年 ／ 値 ／ 位置）。 */
+const PROFILE_COLUMNS = 3
+
+/** プロフィールの 1 項目の行（名前・年 ／ 値 ／ 県内・市内の位置）。注記は次の行に。 */
+function profileItemRows(item: ProfileItem): VNode[] {
+  const positions = item.positions.map((each) => `${each.scopeJa} ${each.shareJa}`).join('・')
+  const row = el('tr', {
+    children: [
+      el('td', {
+        children: [
+          el('div', { text: item.flagged ? `⚠ ${item.labelJa}` : item.labelJa }),
+          el('div', { cls: 'muted', text: item.periodJa }),
+        ],
+      }),
+      el('td', { cls: 'num', text: item.valueJa }),
+      el('td', { cls: 'muted', text: positions === '' ? '—' : positions }),
+    ],
+  })
+  if (item.noteJa === null) return [row]
+  const note = el('td', { cls: 'muted', text: item.noteJa, attrs: { colspan: PROFILE_COLUMNS } })
+  return [row, el('tr', { children: [note] })]
+}
+
+function profileSectionNodes(section: ProfileSection): VNode[] {
+  return [
+    el('div', { cls: 'title', text: section.titleJa }),
+    el('table', { children: section.items.flatMap(profileItemRows) }),
+  ]
+}
+
+/** 災害の要約。危険度の**語**は出さない（いまの危険度と読まれる・Web UI のバッジと同じ）——色と記号と文で。 */
+function profileHazardNodes(panel: StationProfilePanel): VNode[] {
+  const hazard = panel.hazard
+  if (hazard === null) {
+    return [
+      el('div', { cls: 'muted', text: '災害の要約はありません（安全という意味ではありません）。' }),
+    ]
+  }
+  return [
+    el('div', { cls: 'title', text: '災害（もし起きたら）' }),
+    el('div', {
+      children: [
+        el('span', {
+          cls: 'level',
+          text: HAZARD_LEVEL_ICONS[hazard.level],
+          style: { background: HAZARD_LEVEL_COLORS[hazard.level] },
+        }),
+        el('span', { text: ` ${hazard.headlineJa}` }),
+      ],
+    }),
+    el('ul', { cls: 'items', children: hazard.hitsJa.map((hit) => el('li', { text: hit })) }),
+    hazard.uncoveredJa.length === 0
+      ? el('div', { cls: 'muted', text: hazard.caveatJa })
+      : el('div', {
+          cls: 'muted',
+          text: `区域図が無い災害: ${hazard.uncoveredJa.join('・')}（安全という意味ではありません）。${hazard.caveatJa}`,
+        }),
+    el('div', {
+      cls: 'muted',
+      text: `出典: ${hazard.sources.map((each) => each.source).join(' / ')}`,
+    }),
+  ]
+}
+
+function stationProfileNode(panel: StationProfilePanel): VNode {
+  const { character } = panel
+  return panelBox([
+    titleNode(panel.title),
+    el('div', { text: `${character.labelJa}：${character.summaryJa}` }),
+    character.basisJa === '' ? null : el('div', { cls: 'muted', text: character.basisJa }),
+    el('div', { cls: 'muted', text: panel.positionsLegendJa }),
+    ...panel.sections.flatMap(profileSectionNodes),
+    ...profileHazardNodes(panel),
+    notesNode([`見ていないこと: ${panel.notCoveredJa.join('・')}`, ...panel.notesJa]),
+    sourcesNode(panel.sources),
+  ])
+}
+
 function markdownNode(panel: MarkdownPanel): VNode {
   // 段落だけを扱う（強調・リンクの解釈はしない＝本文をそのまま読ませる）。
   const paragraphs = panel.body.split(/\n{2,}/).filter((paragraph) => paragraph.trim() !== '')
@@ -334,6 +414,8 @@ export function panelToVNode(panel: Panel): VNode {
       return evacuationListNode(panel)
     case 'escapeDirection':
       return escapeDirectionNode(panel)
+    case 'stationProfile':
+      return stationProfileNode(panel)
     case 'markdown':
       return markdownNode(panel)
     default:

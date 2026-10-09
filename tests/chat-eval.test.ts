@@ -68,6 +68,31 @@ const CATEGORY = process.env.EVAL_CATEGORY ?? ''
 /** 失敗した問を流し直す前の待ち（無料枠の 1 分窓をまたぐ）。 */
 const RETRY_COOLDOWN_MS = 65_000
 
+/** 流す問（id・分野で絞る）。打ち切りの長さを決めるので、テストの外で決める。 */
+const SELECTED_CASES = EVAL_CASES.filter(
+  (each) =>
+    (ONLY.length === 0 || ONLY.includes(each.id)) &&
+    (CATEGORY.length === 0 || each.category === CATEGORY),
+)
+
+/** 1 問の最悪の所要（間隔＋1 回目の打ち切り＋流し直しの待ち＋2 回目の打ち切り）。 */
+const WORST_PER_CASE_MS = THROTTLE_MS + REQUEST_TIMEOUT_MS + RETRY_COOLDOWN_MS + REQUEST_TIMEOUT_MS
+
+/**
+ * テスト全体の打ち切り。**流す問の数から決める**——以前は 45 分の固定で、53 問（2026-10-09 B3）は 1 問 50 秒ほどの
+ * ペースで 50 問目のところで打ち切られた。各リクエストには打ち切りがあるのでループは止まらずに進む。ここは
+ * 「最悪でもこれまでに終わる」上限で、ふつうに進んでいる評価を途中で止めない。
+ */
+const RUN_TIMEOUT_MS = Math.max(SELECTED_CASES.length, 1) * WORST_PER_CASE_MS
+
+/** 落ちた問のツールの入力（揺れか退行かを見分ける手がかり・1 行に収める）。 */
+const FAILED_INPUT_MAX_CHARS = 600
+
+function failedInputs(observed: AskResult): string {
+  const calls = observed.toolCalls.map((call) => `${call.name}${JSON.stringify(call.input)}`)
+  return calls.join(' ').slice(0, FAILED_INPUT_MAX_CHARS)
+}
+
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
 type AskResult = EvalObserved & { errored: boolean }
@@ -177,12 +202,7 @@ describe.skipIf(!ENABLED)(`eval — ゴールデン ${EVAL_CASES.length} 問`, (
   it(
     '合格率を計測する',
     async () => {
-      const selected = EVAL_CASES.filter(
-        (each) =>
-          (ONLY.length === 0 || ONLY.includes(each.id)) &&
-          (CATEGORY.length === 0 || each.category === CATEGORY),
-      )
-      const cases = selected
+      const cases = SELECTED_CASES
       const runs: EvalRun[] = []
       let firstAsk = true
 
@@ -216,7 +236,7 @@ describe.skipIf(!ENABLED)(`eval — ゴールデン ${EVAL_CASES.length} 問`, (
             `  ${(elapsedMs / 1000).toFixed(1)}s${retried ? ' ↻' : ''}` +
             `  tools=${observed.toolCalls.map((call) => call.name).join(',')}` +
             `  panels=${observed.panelTypes.join(',')}` +
-            (failed.length > 0 ? `  ✗ ${failed.join('；')}` : ''),
+            (failed.length > 0 ? `  ✗ ${failed.join('；')}  inputs=${failedInputs(observed)}` : ''),
         )
       }
 
@@ -236,6 +256,6 @@ describe.skipIf(!ENABLED)(`eval — ゴールデン ${EVAL_CASES.length} 問`, (
       const partial = ONLY.length > 0 || CATEGORY.length > 0
       expect(summary.passed).toBeGreaterThanOrEqual(partial ? 0 : PASS_THRESHOLD)
     },
-    45 * 60 * 1000,
+    RUN_TIMEOUT_MS,
   )
 })

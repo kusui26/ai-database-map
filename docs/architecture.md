@@ -120,6 +120,7 @@ type MapResponse = {
 | `GET /api/metrics` | **メトリクス・カタログ**（機械可読・自己記述）| `domain/metrics` |
 | `GET /api/stations?bbox=…&q=…` | 駅検索・bbox・最寄（`municipality`・`lines`・`nearStation`＋`withinM` などを付けると対象集合の一覧。一覧では `bbox` も絞り込み、近傍なら各駅に起点からの距離 `distM`）| `domain/stations` |
 | `GET /api/stations/:grp` | 駅詳細（指標・年次推移）| `domain/stations` |
+| `GET /api/stations/:grp/profile?radiusM=…` | **駅周辺のプロフィール**（駅×半径の要点 11 指標と**県内・市内での位置**〔順位・駅数・上位◯%〕、性格の目安〔従業者 ÷ 人口と人の密度の規則〕、災害の要約〔事前計算〕、**見ていないこと**。駅詳細の「概要」タブ・AI の `getStationProfile`・MCP の `get_station_profile` が同じものを読む）| `domain/profile` |
 | `GET /api/ranking?metric=…&prefecture=…` | ランキング（`operators`・`routes`・`routeTypes`・`lines` で絞る。会社は鍵＝S12 の会社名で受け、応答の `operatorLabels` と題は表示名。場所は `municipality`（前方一致）・`bbox`（西,南,東,北）・`nearStation`（起点の駅の grp）＋`withinM`（m）で絞り、応答に `municipality`・`bbox`・`near` を返す。近傍なら各行に起点からの距離 `distM`）| `domain/ranking`・`domain/area` |
 | `GET /api/growth?x=…&y=…&prefecture=…` | 増減率散布＋クラスタリング（絞り込みはランキングと同じ・場所も）| `domain/growth`・`domain/area` |
 | `GET /api/lines` | **路線（運行系統）の一覧**（JR山手線＝環状 30 駅など・駅データ.jp。共通の条件 `lines` に渡す `lineCd`）| `domain/lines` |

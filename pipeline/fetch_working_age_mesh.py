@@ -24,7 +24,7 @@
     → data/国勢調査_人口及び世帯_{2015,2020}_mesh250/age1564_<区画>.csv（151 区画）
       ＋ _manifest_age1564.csv ＋ 全国計を国勢調査の公式値と照合
 
-再開可能（取得済みの区画は skip）・3 回リトライ。appId と完全な URL は**出力しない**。
+再開可能（取得済みの区画は skip）・3 回リトライ。appId と完全な URL は**出力しない**（呼び方と失敗の言い方は `estat_api.py`）。
 """
 
 from __future__ import annotations
@@ -33,10 +33,9 @@ import argparse
 import csv
 import re
 import sys
-import time
 from pathlib import Path
 
-import requests
+from estat_api import get_json, get_text  # appId を足して呼び、失敗の理由に URL・appId を出さない
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -61,20 +60,7 @@ EXPECTED_TOTALS: dict[int, int] = {2015: 76_288_736, 2020: 72_922_764}
 EXPECTED_REGIONS = 151
 
 API_LIMIT = 100_000
-RETRIES = 3
 TIMEOUT_S = 300
-
-
-def app_id() -> str:
-    """`.env` から e-Stat の appId を読む（値は決してログに出さない）。"""
-    env = ROOT / ".env"
-    if not env.exists():
-        raise SystemExit(f"{env.relative_to(ROOT)} がありません（ESTAT_APP_ID が要ります）")
-    for line in env.read_text(encoding="utf-8").splitlines():
-        found = re.match(r'\s*(?:export\s+)?ESTAT_APP_ID\s*=\s*"?([^"\s#]+)"?', line)
-        if found:
-            return found.group(1)
-    raise SystemExit("ESTAT_APP_ID が .env にありません")
 
 
 def text_of(node: object) -> str:
@@ -84,40 +70,16 @@ def text_of(node: object) -> str:
     return "" if node is None else str(node)
 
 
-def with_retry(call: object, context: str) -> object:
-    """3 回リトライして返す（失敗時は文脈付きで落とす。URL は出さない）。"""
-    last = ""
-    for attempt in range(1, RETRIES + 1):
-        try:
-            return call()  # type: ignore[operator]
-        except Exception as error:  # noqa: BLE001 — 文脈を付けて上位へ渡す
-            last = f"{type(error).__name__}: {error}"
-            if attempt < RETRIES:
-                time.sleep(2 * attempt)
-    raise SystemExit(f"取得に失敗しました（{context}・{RETRIES} 回試行）: {last}")
-
-
 def list_regions(year: int) -> list[tuple[str, str]]:
     """その年の 250m メッシュ表を列挙する。戻り値は (区画コード, statsDataId)。"""
     _, title_head = YEARS[year]
-
-    def call() -> dict[str, object]:
-        response = requests.get(
-            LIST_ENDPOINT,
-            params={
-                "appId": app_id(),
-                "statsCode": CENSUS_CODE,
-                "searchKind": "2",
-                "surveyYears": str(year),
-                "limit": 3000,
-                "explanationGetFlg": "N",
-            },
-            timeout=TIMEOUT_S,
-        )
-        response.raise_for_status()
-        return response.json()
-
-    payload = with_retry(call, f"{year}年 表一覧")
+    payload = get_json(
+        LIST_ENDPOINT,
+        {"statsCode": CENSUS_CODE, "searchKind": "2", "surveyYears": str(year), "limit": 3000, "explanationGetFlg": "N"},
+        context=f"{year}年 表一覧",
+        root="GET_STATS_LIST",
+        timeout_s=TIMEOUT_S,
+    )
     tables = payload["GET_STATS_LIST"]["DATALIST_INF"].get("TABLE_INF", [])  # type: ignore[index]
     tables = tables if isinstance(tables, list) else [tables]
 
@@ -138,25 +100,18 @@ def list_regions(year: int) -> list[tuple[str, str]]:
 def fetch_region(stats_data_id: str, context: str) -> str:
     """1 区画分の CSV を取る（10 万件を超える区画はページングして VALUE 行を連結）。"""
 
-    def call(start: int) -> str:
-        response = requests.get(
-            DATA_ENDPOINT,
-            params={
-                "appId": app_id(),
-                "statsDataId": stats_data_id,
-                "cdCat01": WORKING_AGE_CAT01,
-                "metaGetFlg": "Y",
-                "sectionHeaderFlg": "1",
-                "limit": API_LIMIT,
-                "startPosition": start,
-            },
-            timeout=TIMEOUT_S,
-        )
-        response.raise_for_status()
-        response.encoding = "utf-8"
-        return response.text
+    def page(start: int, label: str) -> str:
+        params = {
+            "statsDataId": stats_data_id,
+            "cdCat01": WORKING_AGE_CAT01,
+            "metaGetFlg": "Y",
+            "sectionHeaderFlg": "1",
+            "limit": API_LIMIT,
+            "startPosition": start,
+        }
+        return get_text(DATA_ENDPOINT, params, context=label, timeout_s=TIMEOUT_S)
 
-    first = str(with_retry(lambda: call(1), context))
+    first = page(1, context)
     total = total_number(first)
     if total <= API_LIMIT:
         return first
@@ -165,8 +120,7 @@ def fetch_region(stats_data_id: str, context: str) -> str:
     merged = first.splitlines()
     fetched = API_LIMIT
     while fetched < total:
-        page = str(with_retry(lambda start=fetched + 1: call(start), f"{context} {fetched + 1}件目〜"))
-        merged.extend(value_rows(page))
+        merged.extend(value_rows(page(fetched + 1, f"{context} {fetched + 1}件目〜")))
         fetched += API_LIMIT
     return "\n".join(merged) + "\n"
 

@@ -54,15 +54,21 @@ export type StationLegend = z.infer<typeof stationLegendSchema>
 /**
  * 駅 1 つの段（`legend.classes` の index）。null は、色分けしたときは ⚠ の参考値（`legend.flagged.color` で描く）、
  * 色分けしなかったとき（`legend.reasonJa` がある）はすべての駅（色を付けず、強調で出す）。
+ * 値は元の数と、指標の書式で書いた文（「31,640 人」・地図のホバーと地図レポートがそのまま出す・2026-10-11 B5c）。
  */
 export const stationClassAssignmentSchema = z.object({
   grp: z.string(),
   cls: z.number().int().nullable(),
+  value: z.number(),
+  valueJa: z.string(),
 })
+export type StationClassAssignment = z.infer<typeof stationClassAssignmentSchema>
 
 export const stationClassesResponseSchema = z.object({
   /** 色分けしたエリア（エリアの文字列・指定の順）。2 つ以上は合わせて 1 つの凡例。 */
   areas: z.array(z.string()),
+  /** エリアの名前（`areas` と同じ順・「神奈川県横浜市」「東急東横線の沿線」「竹橋から 5km」・2026-10-11 B5c）。 */
+  areaLabelsJa: z.array(z.string()),
   legend: stationLegendSchema,
   /** 値のある駅（値の無い駅は入らない・描かない）。 */
   stations: z.array(stationClassAssignmentSchema),

@@ -7,13 +7,31 @@
  * 地図の意味論（`domain/map/scene.ts`）は純粋なまま。
  */
 
-import { mapScene, type MapScene, type StationPoint } from '@/domain/map/scene'
+import {
+  coloringRequestIn,
+  mapScene,
+  type ColoringRequest,
+  type ColoringResolution,
+  type MapScene,
+  type ResolvedColoring,
+  type StationPoint,
+} from '@/domain/map/scene'
 import { resolveHazardTile, tileTimeLabelJa } from '@/domain/hazard/tile-time'
-import { listStations } from '@/db/queries'
+import {
+  coloredStationDetailJa,
+  coloredStations,
+  coloringNotesJa,
+  coloringScopeJa,
+  isColored,
+} from '@/domain/style/coloring'
+import { loadStationClasses } from '@/domain/style/load'
+import { listStations, stationCatalog } from '@/db/queries'
 import { hazardTileTimes } from '@/lib/hazard/tile-times'
+import { ttlCache } from '@/lib/ttl-cache'
+import { type StationClassesResponse } from '@/shared/area-summary'
 import { getHazardLayer, HAZARD_DISCLAIMER_JA } from '@/shared/hazard'
 import { type MapAction } from '@/shared/protocol'
-import { MAP_MAX_GRPS } from './token'
+import { MAP_MAX_COLORED_STATIONS, MAP_MAX_GRPS } from './token'
 import { stationLabelsOmitted, type MapReportLayer } from './html'
 
 /** 地図操作に出てくる駅 grp（`selectStation` と `highlightStations`）。 */
@@ -48,9 +66,83 @@ export async function resolveStationPoints(
   )
 }
 
-/** 地図操作 → 描くもの（駅の座標を引いたうえで）。 */
+/** 全駅の座標の索引を持つ期間（データの更新でしか変わらない・AI の名前の索引と同じ 1 時間）。 */
+const STATION_INDEX_TTL_MS = 60 * 60 * 1000
+
+/**
+ * 全駅の座標（`station_catalog`・サーバの中で持つ）。色分けは数千駅になるので、`highlightStations` のように
+ * 駅を名指しで引かない（一覧の RPC は 2,000 駅が上限）。
+ */
+const stationIndexCache = ttlCache(async (): Promise<ReadonlyMap<string, StationPoint>> => {
+  const stations = await stationCatalog()
+  return new Map(
+    stations.map((station) => [
+      station.grp,
+      { lon: station.lon, lat: station.lat, nameJa: station.label },
+    ]),
+  )
+}, STATION_INDEX_TTL_MS)
+
+/** 全駅の座標の索引を捨てる（テストと、データを入れ替えたあとの読み直し）。 */
+export function clearStationIndexCache(): void {
+  stationIndexCache.clear()
+}
+
+/** 色分けで描く駅が多すぎるときの断り方（絞り方つき）。 */
+export function tooManyColoredJa(count: number): string {
+  return (
+    `色分けする駅が ${count.toLocaleString('en-US')} 駅あり、地図レポートに描ける ` +
+    `${MAP_MAX_COLORED_STATIONS.toLocaleString('en-US')} 駅を超える。エリアを都道府県・市区町村・路線などに絞る。`
+  )
+}
+
+/** 色分けの応答 → 座標つきの印（座標の分からない駅は描かず、数を残す）。 */
+export function placeColoredStations(
+  classes: StationClassesResponse,
+  index: ReadonlyMap<string, StationPoint>,
+): ResolvedColoring {
+  const colored = coloredStations(classes)
+  const points = colored.flatMap((station) => {
+    const at = index.get(station.grp)
+    if (at === undefined) return []
+    const { kind, color } = station
+    return [
+      {
+        lon: at.lon,
+        lat: at.lat,
+        nameJa: at.nameJa,
+        kind,
+        color,
+        detailJa: coloredStationDetailJa(station),
+      },
+    ]
+  })
+  return { classes, points, unplacedCount: colored.length - points.length }
+}
+
+/**
+ * 色分けの条件 → 描く色分け。分け方は共通 API（`GET /api/stations/classes`）と同じ関数を通す——
+ * Web 地図と同じ段・同じ色・同じ凡例になる。知らない指標・エリアは共通 API と同じ理由で断る。
+ */
+export async function resolveColoring(request: ColoringRequest): Promise<ColoringResolution> {
+  const result = await loadStationClasses(request.metricKey, request.areas)
+  if (!result.ok) return { ok: false, reasonJa: result.messageJa }
+  const count = result.response.stations.length
+  if (count > MAP_MAX_COLORED_STATIONS) return { ok: false, reasonJa: tooManyColoredJa(count) }
+  return {
+    ok: true,
+    coloring: placeColoredStations(result.response, await stationIndexCache.get()),
+  }
+}
+
+/** 地図操作 → 描くもの（駅の座標と、色分けを引いたうえで）。 */
 export async function sceneFor(actions: readonly MapAction[]): Promise<MapScene> {
-  return mapScene(actions, { stations: await resolveStationPoints(actions) })
+  const request = coloringRequestIn(actions)
+  const [stations, coloring] = await Promise.all([
+    resolveStationPoints(actions),
+    request === null ? Promise.resolve(undefined) : resolveColoring(request),
+  ])
+  return mapScene(actions, { stations, coloring })
 }
 
 /**
@@ -119,8 +211,44 @@ export async function resolveReportLayers(scene: MapScene): Promise<{
   }
 }
 
+/** 地図に描いた色分けの要約（凡例と同じ言葉。LLM が色の意味をこの文で説明する）。 */
+export type MapReportColoring = {
+  readonly titleJa: string
+  /** 「神奈川県横浜市の 137 駅」。 */
+  readonly scopeJa: string
+  /** 地図に描いた駅の数（座標の分からない駅は除く）。 */
+  readonly drawnStations: number
+  /** 段（「25,000 人未満（27 駅）」）。色分けしなかったときは空。 */
+  readonly classesJa: readonly string[]
+  readonly meaningJa: string | null
+  /** 色分けしなかった理由（駅が少ないなど・色分けしたら null）。 */
+  readonly reasonJa: string | null
+}
+
+/** 色分けの要約（描いていなければ null）。 */
+export function coloringSummary(scene: MapScene): MapReportColoring | null {
+  const resolved = scene.coloring?.resolved
+  if (resolved === undefined || resolved === null) return null
+  const { classes, points } = resolved
+  const { legend } = classes
+  return {
+    titleJa: legend.titleJa,
+    scopeJa: coloringScopeJa(classes),
+    drawnStations: points.length,
+    classesJa: isColored(legend)
+      ? legend.classes.map((cls) => `${cls.labelJa}（${cls.count} 駅）`)
+      : [],
+    meaningJa: legend.meaningJa,
+    reasonJa: legend.reasonJa,
+  }
+}
+
 /** 既定の題（何の地図かが一覧で分かる程度に）。 */
 export function defaultTitleJa(scene: MapScene): string {
+  const classes = scene.coloring?.resolved?.classes
+  if (classes !== undefined) {
+    return `${classes.areaLabelsJa.join('・')}の駅：${classes.legend.titleJa}`
+  }
   const origin = scene.points.find((point) => point.kind === 'origin' && point.labelJa !== null)
   if (origin?.labelJa != null) return `${origin.labelJa} 周辺の地図`
   const stations = scene.points.filter((point) => point.kind === 'station').length
@@ -128,6 +256,24 @@ export function defaultTitleJa(scene: MapScene): string {
   const destinations = scene.points.filter((point) => point.kind === 'destination').length
   if (destinations > 0) return `行き先 ${destinations} 件の地図`
   return '地図'
+}
+
+/**
+ * 色分けの注意。描けたら凡例と同じ注意（駅ごとの値で、エリア全体の値ではない・色の意味・値の無い駅）と、座標の分からなかった駅の数。
+ * 描けなければ理由（知らない指標・エリア、駅が多すぎる）——色分けを頼まれたのに描かなかったことを黙らない。
+ */
+function coloringReportNotesJa(coloring: MapScene['coloring']): readonly string[] {
+  if (coloring === null) return []
+  if (coloring.resolved === null) {
+    return [`駅の色分けは描いていません：${coloring.issueJa ?? '理由が分かりません。'}`]
+  }
+  const { classes, unplacedCount } = coloring.resolved
+  return [
+    ...coloringNotesJa(classes),
+    ...(unplacedCount === 0
+      ? []
+      : [`${unplacedCount} 駅は座標が分からず、色分けに描いていません。`]),
+  ]
 }
 
 /**
@@ -151,14 +297,16 @@ export function reportNotesJa(args: {
   })
   const destinations = scene.points.filter((point) => point.kind === 'destination').length
   const stations = scene.points.filter((point) => point.kind === 'station').length
+  const colored = scene.coloring?.resolved?.points.length ?? 0
   return [
     // **どの地図にも 1 つは注意が付く**。印だけの地図でも「位置を示しただけ」だと読めるように
     // ——地図は文脈から切り離して眺められるので、断定的に見える状態を作らない（§7.5）。
     '表示は公的オープンデータの二次加工です。原典の定義・年次・集計単位に依存します。',
+    ...coloringReportNotesJa(scene.coloring),
     ...(destinations === 0
       ? []
       : ['印は場所を指すだけで、経路・所要時間・そこへ行けるかどうかは示していません。']),
-    ...(stations === 0 ? [] : ['駅の位置は駅の代表点（代表的な 1 点）です。']),
+    ...(stations + colored === 0 ? [] : ['駅の位置は駅の代表点（代表的な 1 点）です。']),
     ...(stationLabelsOmitted(scene)
       ? [
           `駅が ${stations} 件と多いため、名前は地図に出していません（点の位置だけを見てください）。`,

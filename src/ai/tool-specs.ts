@@ -39,8 +39,19 @@ import {
 } from '@/shared/api'
 import { type Viewport } from '@/shared/viewport'
 import { signedUrlSecret } from './signed-url'
-import { defaultTitleJa, reportNotesJa, sceneFor } from './map-report/build'
-import { MAP_MAX_ACTIONS, mapQuerySchema, signMapToken } from './map-report/token'
+import {
+  coloringSummary,
+  defaultTitleJa,
+  reportNotesJa,
+  sceneFor,
+  type MapReportColoring,
+} from './map-report/build'
+import {
+  MAP_MAX_ACTIONS,
+  MAP_MAX_COLORED_STATIONS,
+  mapQuerySchema,
+  signMapToken,
+} from './map-report/token'
 import { mapActionSchema } from '@/shared/protocol'
 import {
   DATASET_MAX_VALUE_COLUMNS,
@@ -214,6 +225,8 @@ type MapReportForLlm = {
     readonly radiusM: number | null
   }
   readonly layers: readonly { key: string; labelJa: string; sourceJa: string }[]
+  /** 駅の色分け（`colorStations`・凡例と同じ言葉。描いていなければ null）。 */
+  readonly coloring: MapReportColoring | null
   readonly unresolvedGrps: readonly string[]
   readonly notesJa: readonly string[]
   readonly howToJa: string
@@ -1256,6 +1269,7 @@ export const TOOL_SPECS = {
       '直前のツール結果の mapActions（structuredContent.mapActions）をそのまま渡すと、その内容を描いた地図の HTML ページを作り、短命 URL で返す。' +
       '駅の半径円・起点の印・避難先の番号つきマーカー・ハザードの面を、アプリの地図と同じ意味で描く。' +
       'grp だけの操作（highlightStations＝ランキング等の上位駅）も、サーバが座標を引いて点にする。' +
+      `駅の色分け（colorStations）は、アプリと同じ分け方・色で駅を塗り、凡例を付ける（描ける駅は ${MAP_MAX_COLORED_STATIONS.toLocaleString('en-US')} まで・超えたらエリアを絞る）。` +
       'HTML は応答に含めない（大きいため）——URL を保存して、HTML を表示できるツール（presentHtml など）に渡すか、ブラウザで開く。' +
       '約 24 時間で失効する。失効したら呼び直す。地図が描けない入力（座標もレイヤも無い）のときは URL を作らずに理由を返す。',
     inputSchema: z.object({
@@ -1287,13 +1301,22 @@ export const TOOL_SPECS = {
         })
       }
       const scene = await sceneFor(mapActions)
+      // 色分けを頼まれたのに描けない（知らない指標・エリア・駅が多すぎる）なら URL を作らない——色の無い地図を渡さない。
+      if (scene.coloring !== null && scene.coloring.resolved === null) {
+        return pure({
+          error: `駅の色分けを描けません：${scene.coloring.issueJa ?? ''}`,
+          hint:
+            'colorStations の metricKey は getMetricsCatalog の rankable な key、areas はエリアの文字列（jp・pref:14・muni:14100・line:26001・near:<grp>@<m>・bbox:西,南,東,北）。' +
+            `駅が ${MAP_MAX_COLORED_STATIONS.toLocaleString('en-US')} を超えるときはエリアを絞ってから呼び直す。`,
+        })
+      }
       if (!scene.drawable) {
         return pure({
           error: '渡された地図操作から描けるものがありませんでした',
           hint:
             scene.unresolvedGrps.length > 0
               ? '駅の grp が見つかりませんでした。searchStations / listStations が返した grp をそのまま渡してください。'
-              : '座標を持つ操作（flyTo・showPoint・highlightPoints）かハザードのレイヤ（setHazardLayers）を含む mapActions を渡してください。',
+              : '座標を持つ操作（flyTo・showPoint・highlightPoints）、ハザードのレイヤ（setHazardLayers）、駅の色分け（colorStations）のどれかを含む mapActions を渡してください。',
         })
       }
       const signed = signMapToken(query.data, { secret: signedUrlSecret(), now: Date.now() })
@@ -1327,6 +1350,7 @@ export const TOOL_SPECS = {
           labelJa: layer.labelJa,
           sourceJa: layer.attribution,
         })),
+        coloring: coloringSummary(scene),
         unresolvedGrps: scene.unresolvedGrps,
         notesJa: notes,
         howToJa:

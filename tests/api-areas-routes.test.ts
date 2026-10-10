@@ -310,8 +310,16 @@ describe('GET /api/stations/classes', () => {
     expect(response.headers.get('Cache-Control')).toContain('s-maxage=3600')
     const body = stationClassesResponseSchema.parse(await response.json())
     expect(body.areas).toEqual(['muni:14100'])
+    expect(body.areaLabelsJa).toEqual(['神奈川県横浜市'])
     expect(body.stations).toHaveLength(136)
     expect(body.legend.classes.map((each) => each.count)).toEqual([4, 16, 25, 59, 32])
+    // 駅ごとに元の数と、指標の書式で書いた値（地図のホバー・地図レポートがそのまま出す・B5c）。
+    expect(body.stations.find((each) => each.grp === '横浜#0')).toEqual({
+      grp: '横浜#0',
+      cls: 4,
+      value: 5.3,
+      valueJa: '+5.3%',
+    })
     expect(db.areaRows).toHaveBeenCalledWith(['muni:14100'], false)
     expect(db.areaStationStats).not.toHaveBeenCalled()
   })
@@ -323,6 +331,17 @@ describe('GET /api/stations/classes', () => {
     expect(db.areaRows).toHaveBeenCalledWith(['line:26001@1000'], false)
     expect(db.stationMetricValues).toHaveBeenCalledWith('pop_gr_2020_2015_1km', { lines: [26001] })
     expect(body.areas).toEqual(['line:26001'])
+    expect(body.areaLabelsJa).toEqual(['東急東横線の沿線'])
+  })
+
+  it('エリアの名前は指定の順（駅から N m は起点と距離）', async () => {
+    const body = stationClassesResponseSchema.parse(
+      await (
+        await classes('metric=pop_gr_2020_2015_1km&area=near:竹橋%230@5000&area=muni:14100')
+      ).json(),
+    )
+    expect(body.areas).toEqual(['near:竹橋#0@5000', 'muni:14100'])
+    expect(body.areaLabelsJa).toEqual(['竹橋から 5km', '神奈川県横浜市'])
   })
 
   it('重なるエリア（神奈川県と横浜市）の駅は 1 回だけ数える', async () => {

@@ -5,7 +5,7 @@
  * 見ること：
  * - 応答が共通 API の Zod を通り、キャッシュは一覧が 1 日・要約と色分けが 1 時間
  * - 往復：区域の行は 1 回で（比較も・内訳の子も）、エリアごとに駅の分布と色分けの値。沿線は路線の駅と駅の円の値、
- *   駅から N m は起点の駅と、駅詳細と同じ値の束（`station_bundle`・6 つの半径のときだけ）
+ *   駅から N m は起点の駅と、その円の値（`dataset_rows` で要る key だけ・6 つの半径のときだけ）
  * - 絞り込み：政令市は名前の前方一致・沿線は路線コード・駅から N m は起点の座標と半径・範囲はそのまま
  * - 400 で理由を返し、**集計を走らせない**：エリアが 0・5 つ、壊れた形、知らないエリア・路線・駅、幅の無い沿線（要約）、
  *   色分けできない指標、6 段以外の半径。DB の失敗は 502
@@ -38,7 +38,6 @@ const db = vi.hoisted(() => ({
   stationMetricValues: vi.fn(),
   lineStationsInOrder: vi.fn(),
   datasetRows: vi.fn(),
-  stationBundle: vi.fn(),
   stationByGrp: vi.fn(),
 }))
 
@@ -101,7 +100,6 @@ beforeEach(() => {
     '渋谷#0': { pop_2020_1km: 31640, pop_gr_2020_2015_1km: 7.2, pop_gr_pred_2024_2050_1km: -1.6 },
     '代官山#0': { pop_2020_1km: 52529, pop_gr_2020_2015_1km: 5.7, pop_gr_pred_2024_2050_1km: -0.3 },
   })
-  db.stationBundle.mockResolvedValue(new Map(Object.entries(TAKEBASHI_5KM)))
   db.stationByGrp.mockImplementation(async (grp: string) => (grp === '竹橋#0' ? TAKEBASHI : null))
 })
 
@@ -203,13 +201,19 @@ describe('GET /api/areas/summary', () => {
     )
   })
 
-  it('駅から 5km：起点の駅を引き、区域の値は駅詳細と同じ値の束から（1,277,680 人）', async () => {
+  it('駅から 5km：起点の駅を引き、区域の値はその円の値（要る key だけ・1995〜2010 年は使わない・1,277,680 人）', async () => {
+    db.datasetRows.mockResolvedValue({ '竹橋#0': TAKEBASHI_5KM })
     const body = areaSummaryResponseSchema.parse(
       await (await summary('area=near:竹橋%230@5000')).json(),
     )
     expect(db.stationByGrp).toHaveBeenCalledWith('竹橋#0')
-    expect(db.stationBundle).toHaveBeenCalledWith('竹橋#0')
-    expect(db.datasetRows).not.toHaveBeenCalled()
+    const [grps, keys] = db.datasetRows.mock.calls[0] ?? []
+    expect(grps).toEqual(['竹橋#0'])
+    expect(keys).toHaveLength(19)
+    expect(keys).toEqual(
+      expect.arrayContaining(['pop_2015_5km', 'pop_pred_2024_2050_5km', 'emp_n_2021_5km']),
+    )
+    expect(keys).not.toContain('pop_1995_5km')
     expect(db.areaStationStats).toHaveBeenCalledWith(expect.any(Array), {
       near: { lon: TAKEBASHI.lon, lat: TAKEBASHI.lat, radiusM: 5000 },
     })
@@ -218,11 +222,11 @@ describe('GET /api/areas/summary', () => {
     expect(near?.totals[0]?.headlineJa).toBe('1,277,680 人（2020年）・2015→2020年で +9.8%')
   })
 
-  it('駅から 3km（6 つ以外の半径）：区域の値の束は引かない', async () => {
+  it('駅から 3km（6 つ以外の半径）：区域の値は引かない', async () => {
     const body = areaSummaryResponseSchema.parse(
       await (await summary('area=near:竹橋%230@3000')).json(),
     )
-    expect(db.stationBundle).not.toHaveBeenCalled()
+    expect(db.datasetRows).not.toHaveBeenCalled()
     expect(body.areas[0]?.totals).toEqual([])
   })
 

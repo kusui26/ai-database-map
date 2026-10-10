@@ -12,7 +12,6 @@ import {
   areaStationStats,
   datasetRows,
   lineStationsInOrder,
-  stationBundle,
   type StationStatRow,
 } from '@/db/queries'
 import { areaCatalog } from '@/shared/area-catalog'
@@ -57,8 +56,7 @@ function colorChoiceOf(colorBy: string | undefined, radiusM: RadiusM): ColorChoi
 }
 
 /**
- * 沿線の駅（路線の順）と、内訳に使う駅の円の値（2km までの人口と、小数 1 桁の増減率）。`dataset_rows` の有効 6 桁で足りる
- * （駅から 2km の人口は多くて 30 万人台）——100 万を超える円の値は `circleParts` のとおり `station_bundle` で引く。
+ * 沿線の駅（路線の順）と、内訳に使う駅の円の値（駅の人口・人口の増減・将来の人口の増減）。
  */
 async function lineParts(
   area: Extract<ResolvedArea, { type: 'line' }>,
@@ -78,20 +76,23 @@ async function lineParts(
 
 /**
  * 駅から N m（6 つの半径のどれか）の、起点の駅の円の値（区域の指標の key へ読み替える・年は沿線と同じ）。
- * 駅詳細と同じ `station_bundle` で引く——`dataset_rows`（jsonb）は PostgREST の接続の設定で real が有効 6 桁に丸まり、
- * 5km 以上の円の値（100 万人を超える）が駅詳細とずれる（1,163,836 → 1,163,840）。
+ * 要る key だけを `dataset_rows` で引く（駅詳細と同じ値・1,163,836 人は 1,163,836 人のまま——2026-10-10 に、jsonb で返す関数が
+ * 有効 6 桁に丸めていたのを直した・migration `20261010230000_jsonb_number_precision.sql`）。
  */
 async function circleParts(
   area: Extract<ResolvedArea, { type: 'near' }>,
 ): Promise<AreaSummaryParts['circle']> {
   const within = area.withinM
   if (!isRadiusM(within)) return null
-  const bundle = await stationBundle(area.origin.grp)
-  const values = areaCatalog.metrics.flatMap((metric): [string, number][] => {
-    const value =
-      metric.sources.line === null ? undefined : bundle.get(stationKeyOf(metric, within))
-    return value === undefined ? [] : [[metric.key, value]]
-  })
+  const metrics = areaCatalog.metrics.filter((metric) => metric.sources.line !== null)
+  const keys = new Map(metrics.map((metric) => [stationKeyOf(metric, within), metric.key]))
+  const rows = await datasetRows([area.origin.grp], [...keys.keys()])
+  const values = Object.entries(rows[area.origin.grp] ?? {}).flatMap(
+    ([key, value]): [string, number][] => {
+      const areaKey = keys.get(key)
+      return areaKey === undefined ? [] : [[areaKey, value]]
+    },
+  )
   return values.length === 0 ? null : new Map(values)
 }
 

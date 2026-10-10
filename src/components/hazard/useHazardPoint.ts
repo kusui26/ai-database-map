@@ -16,6 +16,13 @@
  * `watchPosition` は静止していても数メートル揺れ続ける。座標をそのまま鍵にすると
  * 揺れるたびに取得が走るので、**小数 4 桁（約 11m）に丸める**。
  * GPS の誤差（5〜50m）より細かいので、答えは変わらない。
+ *
+ * ## 別の地点の結果を返さない（既定）
+ *
+ * 地点が替わったら、新しい地点の結果が届くまで `point` は無い（`isLoading`）。以前は前の地点の結果を返し続けていたので
+ * （SWR の `keepPreviousData`）、駅を横浜から東京へ替えると、**東京の名前の下に横浜の「⛔ 河岸侵食…」が数秒出ていた**
+ * （ヘッダのバッジと「災害」タブの「もし起きたら」・2026-10-10）。前の結果を出し続けてよいのは、同じ「現在地」が
+ * 動いているときだけ（`keepPrevious`・`useCurrentPositionHazard`）。
  */
 
 import useSWR from 'swr'
@@ -117,15 +124,27 @@ export type HazardPointState = {
   readonly error: Error | undefined
 }
 
-/** 地点（`null`＝未指定）から災害リスクを取る。 */
-export function useHazardPoint(target: HazardTarget | null): HazardPointState {
+export type HazardPointOptions = {
+  /**
+   * 地点が替わったとき、新しい地点の結果が届くまで**前の地点の結果を出し続ける**か（既定 false）。
+   * 現在地だけが使う——同じ「現在地」が十数 m 動くたびにカードを「調べています…」へ戻すと、歩いている間ずっとちらつく。
+   * **駅には使わない**：駅を替えた直後に、新しい駅の名前の下に前の駅の結果を出してしまう。
+   */
+  readonly keepPrevious?: boolean
+}
+
+/** 地点（`null`＝未指定）から災害リスクを取る。返すのはその地点の結果だけ（`keepPrevious` を除く）。 */
+export function useHazardPoint(
+  target: HazardTarget | null,
+  options: HazardPointOptions = {},
+): HazardPointState {
   const key =
     target === null
       ? null
       : (['hazard/point', round(target.lon), round(target.lat), target.placeJa] as const)
   const { data, error, isLoading } = useSWR(key, loadHazard, {
     revalidateOnFocus: false,
-    keepPreviousData: true,
+    keepPreviousData: options.keepPrevious === true,
     dedupingInterval: DEDUPE_MS,
   })
   return { point: data, isLoading, error: error instanceof Error ? error : undefined }

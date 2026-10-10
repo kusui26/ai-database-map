@@ -29,6 +29,7 @@ import { loadStations } from './stationsSource'
 import { useHazardUrlState } from './useHazardUrlState'
 import { useHazardTileTimes } from '@/hooks/useHazardTileTimes'
 import { boundsOf, mapInsets, type MapInsets, visibleCorners } from './visibleBounds'
+import { fitBoundsInView } from './camera'
 import { useMapUrlState } from './useMapUrlState'
 
 const STYLE_URL = process.env.NEXT_PUBLIC_MAP_STYLE_URL ?? '/map/gsi-pale-style.json'
@@ -38,6 +39,8 @@ const BASE_PAD = 64
 // 選択駅をパネルの裏に置いてしまう。
 const EMPTY_FC: FeatureCollection = { type: 'FeatureCollection', features: [] }
 const NONE = '__none__'
+/** ハイライトした駅へ寄せるときの最大ズーム。 */
+const HIGHLIGHT_FIT_MAX_ZOOM = 12
 
 /** 開いているパネル幅を避けて可視領域の中心へ寄せる flyTo padding（plan_fable §2.4 ルール④）。 */
 function flyPadding(
@@ -426,7 +429,7 @@ export function MapView() {
     source.setData({ type: 'FeatureCollection', features })
     // 選択駅がある場合はその flyTo にカメラを任せる（二重のカメラ操作を避ける）。
     if (features.length > 0 && grpRef.current === null) {
-      map.fitBounds(bounds, { padding: paddingRef.current, maxZoom: 12, duration: 800 })
+      fitBoundsInView(map, bounds, paddingRef.current, HIGHLIGHT_FIT_MAX_ZOOM)
     }
   }, [ready, highlightedGrps])
 

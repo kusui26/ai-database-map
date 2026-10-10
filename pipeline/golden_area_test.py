@@ -13,6 +13,10 @@ station_catalog() を確かめる。期待値は RPC を通さずに `stations` 
 
     python3 pipeline/golden_area_test.py           # 当てたあと：全 PASS で exit 0
     python3 pipeline/golden_area_test.py --trial   # 当てる前：migration をトランザクションの中で当てて確かめ、ロールバック（REST は見ない）
+
+2026-10-10：述語は「条件に合う駅の集合」を返す stations_matching_filters に作り直した（migration
+`20261010230100_station_filter_set.sql`・`golden_station_filter_test.py`）。4 の形の検査はそれに合わせてある。--trial は
+この migration を当てる前に使ったもので、いまは当てたあとの検査だけを使う（--trial は古い述語を当て直してしまう）。
 """
 
 from __future__ import annotations
@@ -190,22 +194,23 @@ def check_compat(checks: Checks, cur: psycopg.Cursor) -> None:
     checks.add(ranked_total(cur, FULL_METRIC) == stations, "新しい引数なしのランキングは全駅（以前と同じ）", f"{stations}")
     tokyu = grps_of(cur, "string_to_array(coalesce(s.operators, ''), '・') && array['東急電鉄']")
     checks.add(listed(cur, ops=["東急電鉄"]) == tokyu, "新しい引数なしの一覧（会社）は以前と同じ集合", f"{len(tokyu)} 駅")
-    cur.execute("select pg_get_function_identity_arguments(oid) from pg_proc where proname = 'station_matches_filters'")
+    # 絞り込みは 2026-10-10 に「条件に合う駅の集合」を返す関数に作り直した（20261010230100・古い述語は落とした）。
+    cur.execute("select pg_get_function_identity_arguments(oid) from pg_proc where proname = 'stations_matching_filters'")
     signatures = [row[0] for row in cur.fetchall()]
-    one = len(signatures) == 1 and len(signatures[0].split(", ")) == 19 and signatures[0].endswith("near_radius_m double precision")
-    checks.add(one, "述語は 1 つだけ（駅の列 6＋条件 13・旧 6 引数は落とした）", f"{len(signatures)} 個")
-    cur.execute("select proconfig, prosrc ~ 'select' from pg_proc where proname = 'station_matches_filters'")
-    config, _ = cur.fetchone()
-    checks.add(config is None, "外側の述語は SET を持たない（呼び出し側に展開されるため）", f"{config}")
+    one = len(signatures) == 1 and len(signatures[0].split(", ")) == 13 and signatures[0].endswith("near_radius_m double precision")
+    cur.execute("select count(*) from pg_proc where proname in ('station_matches_filters', 'station_matches_railway')")
+    checks.add(one and cur.fetchone()[0] == 0, "絞り込みは 1 つだけ（条件 13・古い述語は落とした）", f"{len(signatures)} 個")
+    cur.execute("select proconfig from pg_proc where proname = 'stations_matching_filters'")
+    config = cur.fetchone()[0]
+    checks.add(config is None, "絞り込みは SET を持たない（呼び出し側に展開されるため）", f"{config}")
     cur.execute(
-        "explain (format text) select count(*) from public.stations s where public.station_matches_filters("
-        "s.id, s.prefecture, s.municipality, s.municipality_code, s.operators, s.geom, array['東京都'], null, null, null, null, null,"
-        " null, null, null, null, null, null, null)"
+        "explain (format text) select count(*) from public.stations_matching_filters("
+        "array['東京都'], null, null, null, null, null, null, null, null, null, null, null, null)"
     )
     plan = "\n".join(row[0] for row in cur.fetchall())
-    checks.add("station_matches_filters" not in plan and "prefecture" in plan, "外側の述語は展開される（実行計画に関数名が出ず、都道府県の比較が出る）", "")
+    checks.add("Function Scan" not in plan and "prefecture" in plan, "絞り込みは展開される（実行計画に関数の走査が出ず、都道府県の比較が出る）", "")
     missing = []
-    for fn in ("rank_by_column", "scatter_points", "list_stations", "station_matches_filters", "station_matches_railway", "station_distance_m", "station_catalog"):
+    for fn in ("rank_by_column", "scatter_points", "list_stations", "stations_matching_filters", "station_distance_m", "station_catalog"):
         cur.execute("select bool_and(has_function_privilege('anon', oid, 'execute')) from pg_proc where proname = %s", (fn,))
         if not cur.fetchone()[0]:
             missing.append(fn)

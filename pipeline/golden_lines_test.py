@@ -12,6 +12,9 @@ scatter_points・list_stations）に足した `line_cds` と、一覧 `line_name
   6. PostgREST（anon・名前つき引数）からも同じ結果（アプリは supabase-js＝REST で呼ぶ）
 
     python3 pipeline/golden_lines_test.py   # 全 PASS で exit 0
+
+2026-10-10：述語は「条件に合う駅の集合」を返す stations_matching_filters に作り直した（migration
+`20261010230100_station_filter_set.sql`・`golden_station_filter_test.py`）。5 の形の検査はそれに合わせてある。
 """
 
 from __future__ import annotations
@@ -128,13 +131,13 @@ def check_compat(checks: Checks, cur: psycopg.Cursor) -> None:
     cur.execute("select grp from public.stations where string_to_array(coalesce(operators, ''), '・') && array['東急電鉄']")
     tokyu = {row[0] for row in cur.fetchall()}
     checks.add(listed(cur, ops=["東急電鉄"]) == tokyu, "line_cds なしの一覧（会社）は以前と同じ集合", f"{len(tokyu)} 駅")
-    cur.execute("select pg_get_function_identity_arguments(oid) from pg_proc where proname = 'station_matches_filters'")
+    cur.execute("select pg_get_function_identity_arguments(oid) from pg_proc where proname = 'stations_matching_filters'")
     signatures = [row[0] for row in cur.fetchall()]
-    # 述語の形は B2（20261008210000）で駅の列＋条件 13 に作り直した（路線は内側の station_matches_railway）。
+    # 述語は B2（20261008210000）で駅の列＋条件 13 に、2026-10-10（20261010230100）で「条件に合う駅の集合」に作り直した。
     one = len(signatures) == 1 and "line_cds integer[]" in signatures[0]
-    checks.add(one, "述語は 1 つだけで line_cds を受ける（旧版は落とした）", f"{len(signatures)} 個")
+    checks.add(one, "絞り込みは 1 つだけで line_cds を受ける（旧版は落とした）", f"{len(signatures)} 個")
     missing = []
-    for fn in ("rank_by_column", "scatter_points", "list_stations", "line_names", "station_matches_filters"):
+    for fn in ("rank_by_column", "scatter_points", "list_stations", "line_names", "stations_matching_filters"):
         cur.execute("select bool_and(has_function_privilege('anon', oid, 'execute')) from pg_proc where proname = %s", (fn,))
         if not cur.fetchone()[0]:
             missing.append(fn)

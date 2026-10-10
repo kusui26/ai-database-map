@@ -60,14 +60,15 @@ function toSummary(row: z.infer<typeof summaryRowSchema>): StationSummary {
   }
 }
 
-// --- 駅の絞り込み（一覧・ランキング・散布で同じ・SQL の述語 station_matches_filters） ----------
+// --- 駅の絞り込み（一覧・ランキング・散布で同じ・SQL の stations_matching_filters） ----------
 
 /** 起点と半径（m・楕円体の上の距離で絞る・起点からの距離も返る）。 */
 export type NearPoint = { readonly lon: number; readonly lat: number; readonly radiusM: number }
 
 /**
  * 駅の絞り込み（未指定・空＝絞らない・条件どうしは AND）。一覧・ランキング・散布が同じ形で受け、
- * DB の述語（`station_matches_filters`・単一の定義）が同じ意味で絞る（2026-10-08 B2 で市区町村・範囲・近傍を足した）。
+ * DB の絞り込み（`stations_matching_filters`・条件に合う駅の集合・単一の定義）が同じ意味で絞る（2026-10-08 B2 で市区町村・
+ * 範囲・近傍を足し、2026-10-10 に駅ごとの真偽の述語から駅の集合に作り直した——会社・路線などで絞っても速い）。
  */
 export type StationFilter = {
   readonly prefectures?: readonly string[]

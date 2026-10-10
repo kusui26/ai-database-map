@@ -25,7 +25,7 @@ SSDS への反映は毎年 6 月頃なので、API だけに寄せると常に 1
       （列: area_code, area_name, taxable_income_1000yen, taxpayers）
       ＋ 年度ごとに全国計を既知の値と照合（1 つでも崩れたら異常終了）
 
-appId と完全なリクエスト URL は**出力しない**（`.claude/CLAUDE.md` §5）。
+appId と完全なリクエスト URL は**出力しない**（`.claude/CLAUDE.md` §5）——e-Stat の呼び方と失敗の言い方は `estat_api.py`。
 """
 
 from __future__ import annotations
@@ -40,7 +40,8 @@ import urllib.request
 from pathlib import Path
 
 import pandas as pd
-import requests
+
+from estat_api import get_json  # appId を足して呼び、失敗の理由に URL・appId を出さない
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT_DIR = ROOT / "data" / "市町村税課税状況"
@@ -72,18 +73,6 @@ TIMEOUT_S = 180
 HEADERS = ("area_code", "area_name", "taxable_income_1000yen", "taxpayers")
 
 
-def app_id() -> str:
-    """`.env` から e-Stat の appId を読む（値は決してログに出さない）。"""
-    env = ROOT / ".env"
-    if not env.exists():
-        raise SystemExit(f"{env.relative_to(ROOT)} がありません（ESTAT_APP_ID が要ります）")
-    for line in env.read_text(encoding="utf-8").splitlines():
-        found = re.match(r'\s*(?:export\s+)?ESTAT_APP_ID\s*=\s*"?([^"\s#]+)"?', line)
-        if found:
-            return found.group(1)
-    raise SystemExit("ESTAT_APP_ID が .env にありません")
-
-
 def is_number(text: str) -> bool:
     """統計値が数値か（`-`＝該当なし、`X`＝秘匿、`･･･`＝非公表 を弾く）。"""
     return re.fullmatch(r"-?\d+(\.\d+)?", text or "") is not None
@@ -107,7 +96,6 @@ def normalize_name(text: str) -> str:
 def fetch_estat(year: int) -> list[tuple[str, str, int, int]]:
     """SSDS から 1 年度分を取る。戻り値は (コード, 名称, 課税対象所得, 納税義務者)。"""
     params = {
-        "appId": app_id(),
         "statsDataId": SSDS_TABLE,
         "cdCat01": f"{INCOME_ITEM},{TAXPAYER_ITEM}",
         "cdTime": f"{year}100000",
@@ -115,7 +103,9 @@ def fetch_estat(year: int) -> list[tuple[str, str, int, int]]:
         "metaGetFlg": "Y",
         "cntGetFlg": "N",
     }
-    payload = request_json(params, context=f"{year}年度 SSDS {SSDS_TABLE}")
+    payload = get_json(
+        ESTAT_ENDPOINT, params, context=f"{year}年度 SSDS {SSDS_TABLE}", root="GET_STATS_DATA", timeout_s=TIMEOUT_S
+    )
     data = payload["GET_STATS_DATA"]["STATISTICAL_DATA"]
     names: dict[str, str] = {}
     for class_obj in data["CLASS_INF"]["CLASS_OBJ"]:
@@ -133,25 +123,6 @@ def fetch_estat(year: int) -> list[tuple[str, str, int, int]]:
         for code in income
         if is_municipality(code) and is_number(income[code]) and is_number(taxpayers.get(code, "-"))
     )
-
-
-def request_json(params: dict[str, object], context: str) -> dict[str, object]:
-    """e-Stat API を叩く（3 回リトライ・失敗時は文脈付きで落とす。URL は出さない）。"""
-    last = ""
-    for attempt in range(1, RETRIES + 1):
-        try:
-            response = requests.get(ESTAT_ENDPOINT, params=params, timeout=TIMEOUT_S)
-            response.raise_for_status()
-            payload = response.json()
-            status = payload["GET_STATS_DATA"]["RESULT"]
-            if str(status["STATUS"]) not in {"0", "1"}:
-                raise RuntimeError(f"API がエラーを返した: {status.get('ERROR_MSG')}")
-            return payload
-        except Exception as error:  # noqa: BLE001 — 文脈を付けて上位へ渡す
-            last = f"{type(error).__name__}: {error}"
-            if attempt < RETRIES:
-                time.sleep(2 * attempt)
-    raise SystemExit(f"取得に失敗しました（{context}・{RETRIES} 回試行）: {last}")
 
 
 def download_xlsx(year: int) -> bytes:

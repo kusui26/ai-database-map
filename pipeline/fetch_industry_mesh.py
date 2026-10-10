@@ -26,7 +26,7 @@ glob で拾うので、同じフォルダに似た名前で置くと**既存の�
     → data/経済センサス_活動調査_事業所数及び従業者数/2016_industry/eco2016ind_{区画}.csv（149 区画）
       （列: KEY_CODE, emp_i, emp_m, emp_n）＋ _manifest.csv
 
-再開可能（取得済みの区画は skip）・3 回リトライ。appId と完全な URL は**出力しない**。
+再開可能（取得済みの区画は skip）・3 回リトライ。appId と完全な URL は**出力しない**（呼び方と失敗の言い方は `estat_api.py`）。
 """
 
 from __future__ import annotations
@@ -35,10 +35,9 @@ import argparse
 import csv
 import re
 import sys
-import time
 from pathlib import Path
 
-import requests
+from estat_api import get_json, get_text  # appId を足して呼び、失敗の理由に URL・appId を出さない
 
 ROOT = Path(__file__).resolve().parents[1]
 ECO_DIR = ROOT / "data" / "経済センサス_活動調査_事業所数及び従業者数"
@@ -59,22 +58,9 @@ INDUSTRY_CAT01 = {"emp_i": "0290", "emp_m": "0330", "emp_n": "0340"}
 EXPECTED_TOTAL = 56_872_826
 EXPECTED_REGIONS = 149
 
-RETRIES = 3
 TIMEOUT_S = 300
 API_LIMIT = 100_000
 HEADERS = ("KEY_CODE", "emp_i", "emp_m", "emp_n")
-
-
-def app_id() -> str:
-    """`.env` から e-Stat の appId を読む（値は決してログに出さない）。"""
-    env = ROOT / ".env"
-    if not env.exists():
-        raise SystemExit(f"{env.relative_to(ROOT)} がありません（ESTAT_APP_ID が要ります）")
-    for line in env.read_text(encoding="utf-8").splitlines():
-        found = re.match(r'\s*(?:export\s+)?ESTAT_APP_ID\s*=\s*"?([^"\s#]+)"?', line)
-        if found:
-            return found.group(1)
-    raise SystemExit("ESTAT_APP_ID が .env にありません")
 
 
 def text_of(node: object) -> str:
@@ -84,39 +70,15 @@ def text_of(node: object) -> str:
     return "" if node is None else str(node)
 
 
-def with_retry(call, context: str):  # noqa: ANN001, ANN201 — 呼び出し側で型が決まる
-    """3 回リトライして返す（失敗時は文脈付きで落とす。URL は出さない）。"""
-    last = ""
-    for attempt in range(1, RETRIES + 1):
-        try:
-            return call()
-        except Exception as error:  # noqa: BLE001 — 文脈を付けて上位へ渡す
-            last = f"{type(error).__name__}: {error}"
-            if attempt < RETRIES:
-                time.sleep(2 * attempt)
-    raise SystemExit(f"取得に失敗しました（{context}・{RETRIES} 回試行）: {last}")
-
-
 def list_regions() -> list[tuple[str, str]]:
     """2016 の 500m メッシュ表を列挙する。戻り値は (区画コード, statsDataId)。"""
-
-    def call() -> dict[str, object]:
-        response = requests.get(
-            LIST_ENDPOINT,
-            params={
-                "appId": app_id(),
-                "statsCode": ECO_CODE,
-                "searchKind": "2",
-                "surveyYears": SURVEY_YEAR,
-                "limit": 3000,
-                "explanationGetFlg": "N",
-            },
-            timeout=TIMEOUT_S,
-        )
-        response.raise_for_status()
-        return response.json()
-
-    payload = with_retry(call, "2016年 メッシュ表一覧")
+    payload = get_json(
+        LIST_ENDPOINT,
+        {"statsCode": ECO_CODE, "searchKind": "2", "surveyYears": SURVEY_YEAR, "limit": 3000, "explanationGetFlg": "N"},
+        context="2016年 メッシュ表一覧",
+        root="GET_STATS_LIST",
+        timeout_s=TIMEOUT_S,
+    )
     tables = payload["GET_STATS_LIST"]["DATALIST_INF"].get("TABLE_INF", [])  # type: ignore[index]
     tables = tables if isinstance(tables, list) else [tables]
 
@@ -132,25 +94,14 @@ def list_regions() -> list[tuple[str, str]]:
 
 def fetch_region(stats_data_id: str, context: str) -> str:
     """1 区画分の CSV（総数＋3 産業）を取る。件数が上限を超えたら落とす（現状は超えない）。"""
-
-    def call() -> str:
-        response = requests.get(
-            DATA_ENDPOINT,
-            params={
-                "appId": app_id(),
-                "statsDataId": stats_data_id,
-                "cdCat01": ",".join([TOTAL_CAT01, *INDUSTRY_CAT01.values()]),
-                "metaGetFlg": "N",
-                "sectionHeaderFlg": "1",
-                "limit": API_LIMIT,
-            },
-            timeout=TIMEOUT_S,
-        )
-        response.raise_for_status()
-        response.encoding = "utf-8"
-        return response.text
-
-    body = str(with_retry(call, context))
+    params = {
+        "statsDataId": stats_data_id,
+        "cdCat01": ",".join([TOTAL_CAT01, *INDUSTRY_CAT01.values()]),
+        "metaGetFlg": "N",
+        "sectionHeaderFlg": "1",
+        "limit": API_LIMIT,
+    }
+    body = get_text(DATA_ENDPOINT, params, context=context, timeout_s=TIMEOUT_S)
     total = total_number(body)
     if total > API_LIMIT:
         raise SystemExit(f"{context}: 件数 {total:,} が上限 {API_LIMIT:,} を超えました（ページングが要ります）")

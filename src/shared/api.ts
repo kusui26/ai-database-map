@@ -84,7 +84,7 @@ export type LineRef = z.infer<typeof lineRefSchema>
 export const operatorLabelsSchema = z.array(z.string()).default([])
 
 /**
- * エリアの条件（一覧・ランキング・散布で同じ・261008 B2・SQL の述語 station_matches_filters）。
+ * エリアの条件（一覧・ランキング・散布で同じ・261008 B2・SQL の絞り込み stations_matching_filters）。
  * municipality は市区町村名か JIS コードの前方一致（「横浜市」で全区）、bbox は "west,south,east,north"（経度・緯度）、
  * nearStation は起点の駅（GET /api/stations?q= の grp）で、withinM（m）と組で使う（起点から何 m 以内）。
  * 形の検証（bbox の並び・起点の有無）はドメイン（`src/domain/area.ts`）がする。

@@ -28,7 +28,7 @@
       ＋ 年ごとに全国計（市区町村の合計）を既知の値と照合し、代表 6 市区町村を個別照合する
 
 秘匿（`X`）・該当なし（`-`）・非公表（`･･･`）は **0 に潰さず空欄**で出す。
-appId と完全なリクエスト URL は**出力しない**（`.claude/CLAUDE.md` §5）。
+appId と完全なリクエスト URL は**出力しない**（`.claude/CLAUDE.md` §5）——e-Stat の呼び方と失敗の言い方は `estat_api.py`。
 """
 
 from __future__ import annotations
@@ -37,17 +37,15 @@ import argparse
 import csv
 import re
 import sys
-import time
 from dataclasses import dataclass
 from pathlib import Path
 
-import requests
+from estat_api import get_json  # appId を足して呼び、失敗の理由に URL・appId を出さない
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT_DIR = ROOT / "data" / "経済センサス_売上"
 
 ESTAT_ENDPOINT = "https://api.e-stat.go.jp/rest/3.0/app/json/getStatsData"
-RETRIES = 3
 TIMEOUT_S = 300
 API_LIMIT = 100_000
 
@@ -155,18 +153,6 @@ HEADERS = (
 )
 
 
-def app_id() -> str:
-    """`.env` から e-Stat の appId を読む（値は決してログに出さない）。"""
-    env = ROOT / ".env"
-    if not env.exists():
-        raise SystemExit(f"{env.relative_to(ROOT)} がありません（ESTAT_APP_ID が要ります）")
-    for line in env.read_text(encoding="utf-8").splitlines():
-        found = re.match(r'\s*(?:export\s+)?ESTAT_APP_ID\s*=\s*"?([^"\s#]+)"?', line)
-        if found:
-            return found.group(1)
-    raise SystemExit("ESTAT_APP_ID が .env にありません")
-
-
 def is_number(text: str) -> bool:
     """統計値が数値か（`-`＝該当なし、`X`＝秘匿、`･･･`＝非公表 を弾く）。"""
     return re.fullmatch(r"-?\d+(\.\d+)?", text or "") is not None
@@ -185,25 +171,6 @@ def is_municipality(code: str) -> bool:
 def normalize_name(text: str) -> str:
     """「北海道　札幌市」→「北海道 札幌市」（全角空白と連続空白を半角 1 個に）。"""
     return re.sub(r"\s+", " ", text.replace("　", " ")).strip()
-
-
-def request_json(params: dict[str, object], context: str) -> dict[str, object]:
-    """e-Stat API を叩く（3 回リトライ・失敗時は文脈付きで落とす。URL は出さない）。"""
-    last = ""
-    for attempt in range(1, RETRIES + 1):
-        try:
-            response = requests.get(ESTAT_ENDPOINT, params=params, timeout=TIMEOUT_S)
-            response.raise_for_status()
-            payload = response.json()
-            status = payload["GET_STATS_DATA"]["RESULT"]
-            if str(status["STATUS"]) not in {"0", "1"}:
-                raise RuntimeError(f"API がエラーを返した: {status.get('ERROR_MSG')}")
-            return payload
-        except Exception as error:  # noqa: BLE001 — 文脈を付けて上位へ渡す
-            last = f"{type(error).__name__}: {error}"
-            if attempt < RETRIES:
-                time.sleep(2 * attempt)
-    raise SystemExit(f"取得に失敗しました（{context}・{RETRIES} 回試行）: {last}")
 
 
 def values_of(payload: dict[str, object], area_filter) -> dict[str, float]:
@@ -234,14 +201,13 @@ def area_names(payload: dict[str, object]) -> dict[str, str]:
 def fetch_series(series: Series, context: str, with_meta: bool = False) -> dict[str, object]:
     """1 系列を全地域ぶん取る（市区町村は 1,966 件程度でページングは不要）。"""
     params: dict[str, object] = {
-        "appId": app_id(),
         "statsDataId": series.table,
         "limit": API_LIMIT,
         "metaGetFlg": "Y" if with_meta else "N",
         "cntGetFlg": "N",
     }
     params.update(series.params)
-    return request_json(params, context)
+    return get_json(ESTAT_ENDPOINT, params, context=context, root="GET_STATS_DATA", timeout_s=TIMEOUT_S)
 
 
 def prefecture_retail_shares(year: int) -> tuple[dict[str, float], float]:

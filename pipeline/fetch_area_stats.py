@@ -8,7 +8,7 @@
     python3 pipeline/fetch_area_stats.py --force   # すべて取り直す
 
 落とし先は `data/area_raw/`（gitignore）。**appId と完全な URL は出力しない**（`.claude/CLAUDE.md` §5）——
-例外の文には URL（appId を含む）が入るので、失敗の理由は型と HTTP の状態だけを書く。
+例外の文には URL（appId を含む）が入るので、失敗の理由は型と HTTP の状態だけを書く（e-Stat の呼び方は `estat_api.py`）。
 取得した直後に、全国の値を既知の公表値と照合する（崩れたら保存しない）。
 """
 
@@ -17,7 +17,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -35,36 +34,20 @@ from area_rules import (  # noqa: E402
     SSDS_POP_ITEM,
     EstatTable,
 )
-from fetch_working_age_mesh import app_id  # noqa: E402  （.env から読む・値は出さない）
+import estat_api  # noqa: E402  （appId を足して呼び、失敗の理由に URL・appId を出さない）
 
 DATA_ENDPOINT = "https://api.e-stat.go.jp/rest/3.0/app/json/getStatsData"
 API_LIMIT = 100_000
-RETRIES = 3
 TIMEOUT_S = 180
-#: e-Stat の RESULT.STATUS（0＝正常・1＝正常だが該当なし）。それ以外は誤り。
-OK_STATUSES = frozenset({0, 1})
+#: 再試行の間隔（試行の回数 × この秒数・大きい表なので共通の既定より長め）。
+RETRY_WAIT_S = 3.0
 
 
 def get_json(params: dict[str, str | int], context: str) -> dict[str, object]:
-    """getStatsData を 1 回呼ぶ（3 回まで再試行）。失敗の理由に URL・appId を含めない。"""
-    last = ""
-    for attempt in range(1, RETRIES + 1):
-        try:
-            response = requests.get(DATA_ENDPOINT, params={"appId": app_id(), **params}, timeout=TIMEOUT_S)
-        except requests.RequestException as error:
-            last = type(error).__name__  # 例外の文には URL（appId を含む）が入る
-        else:
-            if response.status_code == 200:
-                payload = response.json()
-                result = payload["GET_STATS_DATA"]["RESULT"]
-                if int(result["STATUS"]) in OK_STATUSES:
-                    return payload
-                last = f"e-Stat STATUS {result['STATUS']}: {result.get('ERROR_MSG', '')}"
-            else:
-                last = f"HTTP {response.status_code}"
-        if attempt < RETRIES:
-            time.sleep(3 * attempt)
-    raise SystemExit(f"取得に失敗しました（{context}・{RETRIES} 回試行）: {last}")
+    """getStatsData を呼ぶ（3 回まで再試行）。失敗の理由に URL・appId を含めない（`estat_api.py`）。"""
+    return estat_api.get_json(
+        DATA_ENDPOINT, params, context=context, root="GET_STATS_DATA", timeout_s=TIMEOUT_S, wait_s=RETRY_WAIT_S
+    )
 
 
 def fetch_table(table: EstatTable) -> dict[str, object]:

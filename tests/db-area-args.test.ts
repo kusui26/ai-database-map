@@ -1,6 +1,6 @@
 /**
  * `src/db/queries.ts`：絞り込み → RPC の引数（2026-10-08 B2）。一覧・ランキング・散布の 3 つの RPC が
- * 同じ組み立て（`filterArgs`）を使い、SQL の述語（`station_matches_filters`）に同じ名前で渡すことを確かめる。
+ * 同じ組み立て（`filterArgs`）を使い、SQL の絞り込み（`stations_matching_filters`）に同じ名前で渡すことを確かめる。
  *
  * SQL の関数は既存の引数のあとに `muni`・`west`〜`north`・`near_lon`・`near_lat`・`near_radius_m` を足した
  * （既定 null＝以前の呼び出しのまま動く）。名前を 1 文字でも違えると PostgREST は関数を見つけられないので、

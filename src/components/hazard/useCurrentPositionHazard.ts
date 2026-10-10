@@ -10,9 +10,13 @@ export const CURRENT_PLACE_JA = '現在地'
 
 export type CurrentPositionHazard = HazardPointState
 
-/** 現在地（null＝未測位）から災害リスクを取る。 */
+/**
+ * 現在地（null＝未測位）から災害リスクを取る。
+ * 動いている間は、新しい位置の結果が届くまで前の位置の結果を出し続ける（同じ「現在地」なので・カードをちらつかせない）。
+ */
 export function useCurrentPositionHazard(position: CurrentPosition | null): CurrentPositionHazard {
   return useHazardPoint(
     position === null ? null : { lon: position.lon, lat: position.lat, placeJa: CURRENT_PLACE_JA },
+    { keepPrevious: true },
   )
 }

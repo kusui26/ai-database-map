@@ -217,6 +217,38 @@ python3 pipeline/golden_area_test.py           # 当てたあと：本物の DB 
 |---|---|
 | `golden_area_test.py` | 駅の集合を RPC を通さずに `stations` から直接数えて突き合わせる：市区町村の前方一致（横浜市＝全区）・JIS コード・都道府県と AND・「%」を特別扱いしない・範囲・近傍（竹橋から 5km＝129 駅・最寄地価 1 位は新宿三丁目 4,882m）・ランキングと散布と一覧で同じ件数・路線と会社とも AND・以前の呼び方の互換・述語が展開されること（実行計画）・`station_catalog()`（全 9,273 駅）・REST（anon） |
 
+## エリアの区域の値 — 行政区域の公表値・沿線のメッシュ按分（B5a・261010）
+
+「横浜市全体の人口は？」「東横線の沿線の人口は 2050 年までにどうなる？」に、**区域全体の値**で答えるためのデータ
+（駅の値を足すと、重なった円を二重に数える）。行政区域（全国・都道府県・政令市・東京 23 区・市区町村・区）は**公表値**、
+沿線（路線の駅から 500m・1km・2km の円を重ねた範囲）は**メッシュの面積按分**（駅の値と同じ方法）。
+設計は `docs/261001_fix_user_feedback_ui.md` §6.12、データの説明は `docs/area_values.md`。
+
+```bash
+python3 pipeline/fetch_area_stats.py           # e-Stat の 8 表と社人研の結果表（照合用）→ data/area_raw/（取得済みは skip・--force）
+python3 pipeline/build_area_values.py          # 行政区域 → area_units.csv・area_values.csv・area-catalog.json（照合が崩れたら書かない）
+python3 pipeline/build_line_corridors.py       # 沿線 601 路線 × 3 幅 → line_corridors.csv・line_corridor_values.csv（約 2 分）
+python3 pipeline/validate_area_values.py       # 独立の検証（--mesh でメッシュの按分と公表値のずれも・約 5 分）
+python3 pipeline/load_area_values.py           # area_metrics / areas / area_values へ投入（単一トランザクション・投入後の確認つき）
+python3 pipeline/golden_area_values_test.py    # 投入後：本物の DB と REST（anon）で確かめる（当てる前は --trial）
+python3 pipeline/build_area_values.py --check  # カタログ JSON が規則と一致するか
+```
+
+| ファイル | 役割 |
+|---|---|
+| `area_rules.py` | **手で編集するのはここだけ**：年・幅・e-Stat の表・単位の特例（境界未定地域・所属未定地・北方領土・浜松・浜通り）・無い値の理由・県の和の例外（山口村・上九一色村）・照合の固定値・区域の指標（カタログの元） |
+| `area_common.py` | 置き場所・エリアの鍵（`jp`／`pref:14`／`muni:14100`／`line:26001@1000`）・e-Stat の生データの読み方・行政区域（N03）の単位 |
+| `area_mesh.py` | メッシュの読み方（国勢調査 250m・経済センサス 500m・将来推計人口 R6）と正積図法の矩形。駅の値を作ったノートブックと同じ規約 |
+| `fetch_area_stats.py` | 公表値を取る。取得の直後に全国の値を公表値と照合し、崩れた表は保存しない。**appId と URL を出さない**（失敗の理由は型と HTTP の状態だけ） |
+| `build_area_values.py` | 区・市区町村は市区町村データ、都道府県・全国は公表の行、推計は R6 を `SHICODE` で足す。無い値には理由が要る。内訳の和（区＝市・23 区＝特別区部・市区町村＝県・県＝全国）と推計の 2020 年＝国勢調査を照合 |
+| `build_line_corridors.py` | 沿線の面を作り、250m（人口・推計）と 500m（事業所・従業者）のセルを重なりの割合で按分する |
+| `validate_area_values.py` | build の照合を使わずに確かめる：推計＝社人研（13,601 組）・固定値・沿線 ≥ 最大の駅の円・≤ 駅の円の和・円が重ならない沿線は駅の値の和と一致・形 |
+| `load_area_values.py` | `copy_area_values()`。areas は stations を参照しないので全量投入では消えない（路線・駅を作り直したら沿線から作り直す） |
+| `golden_area_values_test.py` | 本物の DB で：件数・固定値・カタログの写し・内訳の和・沿線の単調性と**DB の駅の値**との比べ・無い値の理由・権限（anon は SELECT だけ）・大きさ・速さ・REST（anon） |
+
+**生成物**（`data/derived/`・gitignore）：`area_units.csv`（行政区域 1,961）・`area_values.csv`（46,737 値）・`line_corridors.csv`（1,803 沿線）・
+`line_corridor_values.csv`（34,257 値）。カタログ `src/shared/catalog/area-catalog.json`（24 指標）はコミットする契約物。
+
 ## 独立検証（260812）
 
 `data/derived/` の生成は**すべてノートブック 1 回で完結する**（`script/create_dataset_for_AI_Database_Map.ipynb`）。

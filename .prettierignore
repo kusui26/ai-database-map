@@ -9,6 +9,7 @@ pnpm-lock.yaml
 next-env.d.ts
 tsconfig.json
 src/shared/catalog/catalog.json
+src/shared/catalog/area-catalog.json
 src/shared/hazard/hazard-catalog.json
 public/hazard/index.json
 

@@ -1,0 +1,582 @@
+{
+  "version": 1,
+  "generatedFrom": "pipeline/build_area_values.py（規則は pipeline/area_rules.py）",
+  "kinds": [
+    {
+      "kind": "country",
+      "labelJa": "全国"
+    },
+    {
+      "kind": "prefecture",
+      "labelJa": "都道府県"
+    },
+    {
+      "kind": "city",
+      "labelJa": "政令市（市全体）"
+    },
+    {
+      "kind": "special_wards",
+      "labelJa": "東京 23 区（特別区部）"
+    },
+    {
+      "kind": "municipality",
+      "labelJa": "市区町村"
+    },
+    {
+      "kind": "ward",
+      "labelJa": "政令市の区"
+    },
+    {
+      "kind": "line",
+      "labelJa": "沿線"
+    }
+  ],
+  "lineWidthsM": [
+    500,
+    1000,
+    2000
+  ],
+  "years": {
+    "population": [
+      1995,
+      2000,
+      2005,
+      2010,
+      2015,
+      2020,
+      2025
+    ],
+    "populationLine": [
+      2015,
+      2020
+    ],
+    "projection": [
+      2020,
+      2025,
+      2030,
+      2035,
+      2040,
+      2045,
+      2050,
+      2055,
+      2060,
+      2065,
+      2070
+    ],
+    "economy": [
+      2012,
+      2016,
+      2021
+    ]
+  },
+  "metrics": [
+    {
+      "key": "pop_1995",
+      "baseMetric": "pop",
+      "category": "population",
+      "labelJa": "人口（1995年）",
+      "unit": "人",
+      "format": "int",
+      "year": 1995,
+      "vintage": null,
+      "sources": {
+        "admin": {
+          "method": "official",
+          "sourceJa": "総務省 国勢調査（e-Stat 社会・人口統計体系 市区町村データ・今の市区町村の境域に組み替え済み）",
+          "license": "CC BY 4.0（政府統計・出典明記で商用可）"
+        },
+        "line": null
+      }
+    },
+    {
+      "key": "pop_2000",
+      "baseMetric": "pop",
+      "category": "population",
+      "labelJa": "人口（2000年）",
+      "unit": "人",
+      "format": "int",
+      "year": 2000,
+      "vintage": null,
+      "sources": {
+        "admin": {
+          "method": "official",
+          "sourceJa": "総務省 国勢調査（e-Stat 社会・人口統計体系 市区町村データ・今の市区町村の境域に組み替え済み）",
+          "license": "CC BY 4.0（政府統計・出典明記で商用可）"
+        },
+        "line": null
+      }
+    },
+    {
+      "key": "pop_2005",
+      "baseMetric": "pop",
+      "category": "population",
+      "labelJa": "人口（2005年）",
+      "unit": "人",
+      "format": "int",
+      "year": 2005,
+      "vintage": null,
+      "sources": {
+        "admin": {
+          "method": "official",
+          "sourceJa": "総務省 国勢調査（e-Stat 社会・人口統計体系 市区町村データ・今の市区町村の境域に組み替え済み）",
+          "license": "CC BY 4.0（政府統計・出典明記で商用可）"
+        },
+        "line": null
+      }
+    },
+    {
+      "key": "pop_2010",
+      "baseMetric": "pop",
+      "category": "population",
+      "labelJa": "人口（2010年）",
+      "unit": "人",
+      "format": "int",
+      "year": 2010,
+      "vintage": null,
+      "sources": {
+        "admin": {
+          "method": "official",
+          "sourceJa": "総務省 国勢調査（e-Stat 社会・人口統計体系 市区町村データ・今の市区町村の境域に組み替え済み）",
+          "license": "CC BY 4.0（政府統計・出典明記で商用可）"
+        },
+        "line": null
+      }
+    },
+    {
+      "key": "pop_2015",
+      "baseMetric": "pop",
+      "category": "population",
+      "labelJa": "人口（2015年）",
+      "unit": "人",
+      "format": "int",
+      "year": 2015,
+      "vintage": null,
+      "sources": {
+        "admin": {
+          "method": "official",
+          "sourceJa": "総務省 国勢調査（e-Stat 社会・人口統計体系 市区町村データ・今の市区町村の境域に組み替え済み）",
+          "license": "CC BY 4.0（政府統計・出典明記で商用可）"
+        },
+        "line": {
+          "method": "mesh",
+          "sourceJa": "総務省 国勢調査 地域メッシュ統計（250m・e-Stat）を沿線の範囲で面積按分",
+          "license": "CC BY 4.0（政府統計・出典明記で商用可）"
+        }
+      }
+    },
+    {
+      "key": "pop_2020",
+      "baseMetric": "pop",
+      "category": "population",
+      "labelJa": "人口（2020年）",
+      "unit": "人",
+      "format": "int",
+      "year": 2020,
+      "vintage": null,
+      "sources": {
+        "admin": {
+          "method": "official",
+          "sourceJa": "総務省 国勢調査（e-Stat 社会・人口統計体系 市区町村データ・今の市区町村の境域に組み替え済み）",
+          "license": "CC BY 4.0（政府統計・出典明記で商用可）"
+        },
+        "line": {
+          "method": "mesh",
+          "sourceJa": "総務省 国勢調査 地域メッシュ統計（250m・e-Stat）を沿線の範囲で面積按分",
+          "license": "CC BY 4.0（政府統計・出典明記で商用可）"
+        }
+      }
+    },
+    {
+      "key": "pop_2025",
+      "baseMetric": "pop",
+      "category": "population",
+      "labelJa": "人口（2025年）",
+      "unit": "人",
+      "format": "int",
+      "year": 2025,
+      "vintage": null,
+      "sources": {
+        "admin": {
+          "method": "official",
+          "sourceJa": "総務省 令和7年国勢調査 人口等基本集計（2026-09-29 公表・e-Stat）",
+          "license": "CC BY 4.0（政府統計・出典明記で商用可）"
+        },
+        "line": null
+      }
+    },
+    {
+      "key": "pop_pred_2024_2020",
+      "baseMetric": "pop_pred",
+      "category": "population_forecast",
+      "labelJa": "将来推計人口（2020年・R6推計の基準）",
+      "unit": "人",
+      "format": "int",
+      "year": 2020,
+      "vintage": 2024,
+      "sources": {
+        "admin": {
+          "method": "projection",
+          "sourceJa": "国土数値情報 将来推計人口メッシュ（R6・国土交通省）を市区町村ごとに足したもの（国立社会保障・人口問題研究所『日本の地域別将来推計人口（令和5年推計）』と同じ値）",
+          "license": "CC BY 4.0 相当（国土数値情報 利用約款）"
+        },
+        "line": {
+          "method": "mesh",
+          "sourceJa": "国土数値情報 将来推計人口メッシュ（R6・250m・国土交通省）を沿線の範囲で面積按分",
+          "license": "CC BY 4.0 相当（国土数値情報 利用約款）"
+        }
+      }
+    },
+    {
+      "key": "pop_pred_2024_2025",
+      "baseMetric": "pop_pred",
+      "category": "population_forecast",
+      "labelJa": "将来推計人口（2025年・R6推計）",
+      "unit": "人",
+      "format": "int",
+      "year": 2025,
+      "vintage": 2024,
+      "sources": {
+        "admin": {
+          "method": "projection",
+          "sourceJa": "国土数値情報 将来推計人口メッシュ（R6・国土交通省）を市区町村ごとに足したもの（国立社会保障・人口問題研究所『日本の地域別将来推計人口（令和5年推計）』と同じ値）",
+          "license": "CC BY 4.0 相当（国土数値情報 利用約款）"
+        },
+        "line": {
+          "method": "mesh",
+          "sourceJa": "国土数値情報 将来推計人口メッシュ（R6・250m・国土交通省）を沿線の範囲で面積按分",
+          "license": "CC BY 4.0 相当（国土数値情報 利用約款）"
+        }
+      }
+    },
+    {
+      "key": "pop_pred_2024_2030",
+      "baseMetric": "pop_pred",
+      "category": "population_forecast",
+      "labelJa": "将来推計人口（2030年・R6推計）",
+      "unit": "人",
+      "format": "int",
+      "year": 2030,
+      "vintage": 2024,
+      "sources": {
+        "admin": {
+          "method": "projection",
+          "sourceJa": "国土数値情報 将来推計人口メッシュ（R6・国土交通省）を市区町村ごとに足したもの（国立社会保障・人口問題研究所『日本の地域別将来推計人口（令和5年推計）』と同じ値）",
+          "license": "CC BY 4.0 相当（国土数値情報 利用約款）"
+        },
+        "line": {
+          "method": "mesh",
+          "sourceJa": "国土数値情報 将来推計人口メッシュ（R6・250m・国土交通省）を沿線の範囲で面積按分",
+          "license": "CC BY 4.0 相当（国土数値情報 利用約款）"
+        }
+      }
+    },
+    {
+      "key": "pop_pred_2024_2035",
+      "baseMetric": "pop_pred",
+      "category": "population_forecast",
+      "labelJa": "将来推計人口（2035年・R6推計）",
+      "unit": "人",
+      "format": "int",
+      "year": 2035,
+      "vintage": 2024,
+      "sources": {
+        "admin": {
+          "method": "projection",
+          "sourceJa": "国土数値情報 将来推計人口メッシュ（R6・国土交通省）を市区町村ごとに足したもの（国立社会保障・人口問題研究所『日本の地域別将来推計人口（令和5年推計）』と同じ値）",
+          "license": "CC BY 4.0 相当（国土数値情報 利用約款）"
+        },
+        "line": {
+          "method": "mesh",
+          "sourceJa": "国土数値情報 将来推計人口メッシュ（R6・250m・国土交通省）を沿線の範囲で面積按分",
+          "license": "CC BY 4.0 相当（国土数値情報 利用約款）"
+        }
+      }
+    },
+    {
+      "key": "pop_pred_2024_2040",
+      "baseMetric": "pop_pred",
+      "category": "population_forecast",
+      "labelJa": "将来推計人口（2040年・R6推計）",
+      "unit": "人",
+      "format": "int",
+      "year": 2040,
+      "vintage": 2024,
+      "sources": {
+        "admin": {
+          "method": "projection",
+          "sourceJa": "国土数値情報 将来推計人口メッシュ（R6・国土交通省）を市区町村ごとに足したもの（国立社会保障・人口問題研究所『日本の地域別将来推計人口（令和5年推計）』と同じ値）",
+          "license": "CC BY 4.0 相当（国土数値情報 利用約款）"
+        },
+        "line": {
+          "method": "mesh",
+          "sourceJa": "国土数値情報 将来推計人口メッシュ（R6・250m・国土交通省）を沿線の範囲で面積按分",
+          "license": "CC BY 4.0 相当（国土数値情報 利用約款）"
+        }
+      }
+    },
+    {
+      "key": "pop_pred_2024_2045",
+      "baseMetric": "pop_pred",
+      "category": "population_forecast",
+      "labelJa": "将来推計人口（2045年・R6推計）",
+      "unit": "人",
+      "format": "int",
+      "year": 2045,
+      "vintage": 2024,
+      "sources": {
+        "admin": {
+          "method": "projection",
+          "sourceJa": "国土数値情報 将来推計人口メッシュ（R6・国土交通省）を市区町村ごとに足したもの（国立社会保障・人口問題研究所『日本の地域別将来推計人口（令和5年推計）』と同じ値）",
+          "license": "CC BY 4.0 相当（国土数値情報 利用約款）"
+        },
+        "line": {
+          "method": "mesh",
+          "sourceJa": "国土数値情報 将来推計人口メッシュ（R6・250m・国土交通省）を沿線の範囲で面積按分",
+          "license": "CC BY 4.0 相当（国土数値情報 利用約款）"
+        }
+      }
+    },
+    {
+      "key": "pop_pred_2024_2050",
+      "baseMetric": "pop_pred",
+      "category": "population_forecast",
+      "labelJa": "将来推計人口（2050年・R6推計）",
+      "unit": "人",
+      "format": "int",
+      "year": 2050,
+      "vintage": 2024,
+      "sources": {
+        "admin": {
+          "method": "projection",
+          "sourceJa": "国土数値情報 将来推計人口メッシュ（R6・国土交通省）を市区町村ごとに足したもの（国立社会保障・人口問題研究所『日本の地域別将来推計人口（令和5年推計）』と同じ値）",
+          "license": "CC BY 4.0 相当（国土数値情報 利用約款）"
+        },
+        "line": {
+          "method": "mesh",
+          "sourceJa": "国土数値情報 将来推計人口メッシュ（R6・250m・国土交通省）を沿線の範囲で面積按分",
+          "license": "CC BY 4.0 相当（国土数値情報 利用約款）"
+        }
+      }
+    },
+    {
+      "key": "pop_pred_2024_2055",
+      "baseMetric": "pop_pred",
+      "category": "population_forecast",
+      "labelJa": "将来推計人口（2055年・R6推計）",
+      "unit": "人",
+      "format": "int",
+      "year": 2055,
+      "vintage": 2024,
+      "sources": {
+        "admin": {
+          "method": "projection",
+          "sourceJa": "国土数値情報 将来推計人口メッシュ（R6・国土交通省が社人研の推計を 2070 年まで延長）を市区町村ごとに足したもの",
+          "license": "CC BY 4.0 相当（国土数値情報 利用約款）"
+        },
+        "line": {
+          "method": "mesh",
+          "sourceJa": "国土数値情報 将来推計人口メッシュ（R6・250m・国土交通省）を沿線の範囲で面積按分",
+          "license": "CC BY 4.0 相当（国土数値情報 利用約款）"
+        }
+      }
+    },
+    {
+      "key": "pop_pred_2024_2060",
+      "baseMetric": "pop_pred",
+      "category": "population_forecast",
+      "labelJa": "将来推計人口（2060年・R6推計）",
+      "unit": "人",
+      "format": "int",
+      "year": 2060,
+      "vintage": 2024,
+      "sources": {
+        "admin": {
+          "method": "projection",
+          "sourceJa": "国土数値情報 将来推計人口メッシュ（R6・国土交通省が社人研の推計を 2070 年まで延長）を市区町村ごとに足したもの",
+          "license": "CC BY 4.0 相当（国土数値情報 利用約款）"
+        },
+        "line": {
+          "method": "mesh",
+          "sourceJa": "国土数値情報 将来推計人口メッシュ（R6・250m・国土交通省）を沿線の範囲で面積按分",
+          "license": "CC BY 4.0 相当（国土数値情報 利用約款）"
+        }
+      }
+    },
+    {
+      "key": "pop_pred_2024_2065",
+      "baseMetric": "pop_pred",
+      "category": "population_forecast",
+      "labelJa": "将来推計人口（2065年・R6推計）",
+      "unit": "人",
+      "format": "int",
+      "year": 2065,
+      "vintage": 2024,
+      "sources": {
+        "admin": {
+          "method": "projection",
+          "sourceJa": "国土数値情報 将来推計人口メッシュ（R6・国土交通省が社人研の推計を 2070 年まで延長）を市区町村ごとに足したもの",
+          "license": "CC BY 4.0 相当（国土数値情報 利用約款）"
+        },
+        "line": {
+          "method": "mesh",
+          "sourceJa": "国土数値情報 将来推計人口メッシュ（R6・250m・国土交通省）を沿線の範囲で面積按分",
+          "license": "CC BY 4.0 相当（国土数値情報 利用約款）"
+        }
+      }
+    },
+    {
+      "key": "pop_pred_2024_2070",
+      "baseMetric": "pop_pred",
+      "category": "population_forecast",
+      "labelJa": "将来推計人口（2070年・R6推計）",
+      "unit": "人",
+      "format": "int",
+      "year": 2070,
+      "vintage": 2024,
+      "sources": {
+        "admin": {
+          "method": "projection",
+          "sourceJa": "国土数値情報 将来推計人口メッシュ（R6・国土交通省が社人研の推計を 2070 年まで延長）を市区町村ごとに足したもの",
+          "license": "CC BY 4.0 相当（国土数値情報 利用約款）"
+        },
+        "line": {
+          "method": "mesh",
+          "sourceJa": "国土数値情報 将来推計人口メッシュ（R6・250m・国土交通省）を沿線の範囲で面積按分",
+          "license": "CC BY 4.0 相当（国土数値情報 利用約款）"
+        }
+      }
+    },
+    {
+      "key": "estab_n_2012",
+      "baseMetric": "estab_n",
+      "category": "establishment",
+      "labelJa": "事業所数（2012年・民営）",
+      "unit": "事業所",
+      "format": "int",
+      "year": 2012,
+      "vintage": null,
+      "sources": {
+        "admin": {
+          "method": "official",
+          "sourceJa": "経済センサス‐活動調査（総務省・経済産業省／e-Stat 社会・人口統計体系 市区町村データ・今の境域に組み替え済み。都道府県・全国は各年の公表値）",
+          "license": "CC BY 4.0（政府統計・出典明記で商用可）"
+        },
+        "line": {
+          "method": "mesh",
+          "sourceJa": "経済センサス‐活動調査 地域メッシュ統計（500m・e-Stat）を沿線の範囲で面積按分",
+          "license": "CC BY 4.0（政府統計・出典明記で商用可）"
+        }
+      }
+    },
+    {
+      "key": "estab_n_2016",
+      "baseMetric": "estab_n",
+      "category": "establishment",
+      "labelJa": "事業所数（2016年・民営）",
+      "unit": "事業所",
+      "format": "int",
+      "year": 2016,
+      "vintage": null,
+      "sources": {
+        "admin": {
+          "method": "official",
+          "sourceJa": "経済センサス‐活動調査（総務省・経済産業省／e-Stat 社会・人口統計体系 市区町村データ・今の境域に組み替え済み。都道府県・全国は各年の公表値）",
+          "license": "CC BY 4.0（政府統計・出典明記で商用可）"
+        },
+        "line": {
+          "method": "mesh",
+          "sourceJa": "経済センサス‐活動調査 地域メッシュ統計（500m・e-Stat）を沿線の範囲で面積按分",
+          "license": "CC BY 4.0（政府統計・出典明記で商用可）"
+        }
+      }
+    },
+    {
+      "key": "estab_n_2021",
+      "baseMetric": "estab_n",
+      "category": "establishment",
+      "labelJa": "事業所数（2021年・民営）",
+      "unit": "事業所",
+      "format": "int",
+      "year": 2021,
+      "vintage": null,
+      "sources": {
+        "admin": {
+          "method": "official",
+          "sourceJa": "経済センサス‐活動調査（総務省・経済産業省／e-Stat 社会・人口統計体系 市区町村データ・今の境域に組み替え済み。都道府県・全国は各年の公表値）",
+          "license": "CC BY 4.0（政府統計・出典明記で商用可）"
+        },
+        "line": {
+          "method": "mesh",
+          "sourceJa": "経済センサス‐活動調査 地域メッシュ統計（500m・e-Stat）を沿線の範囲で面積按分",
+          "license": "CC BY 4.0（政府統計・出典明記で商用可）"
+        }
+      }
+    },
+    {
+      "key": "emp_n_2012",
+      "baseMetric": "emp_n",
+      "category": "employee",
+      "labelJa": "従業者数（2012年・民営）",
+      "unit": "人",
+      "format": "int",
+      "year": 2012,
+      "vintage": null,
+      "sources": {
+        "admin": {
+          "method": "official",
+          "sourceJa": "経済センサス‐活動調査（総務省・経済産業省／e-Stat 社会・人口統計体系 市区町村データ・今の境域に組み替え済み。都道府県・全国は各年の公表値）",
+          "license": "CC BY 4.0（政府統計・出典明記で商用可）"
+        },
+        "line": {
+          "method": "mesh",
+          "sourceJa": "経済センサス‐活動調査 地域メッシュ統計（500m・e-Stat）を沿線の範囲で面積按分",
+          "license": "CC BY 4.0（政府統計・出典明記で商用可）"
+        }
+      }
+    },
+    {
+      "key": "emp_n_2016",
+      "baseMetric": "emp_n",
+      "category": "employee",
+      "labelJa": "従業者数（2016年・民営）",
+      "unit": "人",
+      "format": "int",
+      "year": 2016,
+      "vintage": null,
+      "sources": {
+        "admin": {
+          "method": "official",
+          "sourceJa": "経済センサス‐活動調査（総務省・経済産業省／e-Stat 社会・人口統計体系 市区町村データ・今の境域に組み替え済み。都道府県・全国は各年の公表値）",
+          "license": "CC BY 4.0（政府統計・出典明記で商用可）"
+        },
+        "line": {
+          "method": "mesh",
+          "sourceJa": "経済センサス‐活動調査 地域メッシュ統計（500m・e-Stat）を沿線の範囲で面積按分",
+          "license": "CC BY 4.0（政府統計・出典明記で商用可）"
+        }
+      }
+    },
+    {
+      "key": "emp_n_2021",
+      "baseMetric": "emp_n",
+      "category": "employee",
+      "labelJa": "従業者数（2021年・民営）",
+      "unit": "人",
+      "format": "int",
+      "year": 2021,
+      "vintage": null,
+      "sources": {
+        "admin": {
+          "method": "official",
+          "sourceJa": "経済センサス‐活動調査（総務省・経済産業省／e-Stat 社会・人口統計体系 市区町村データ・今の境域に組み替え済み。都道府県・全国は各年の公表値）",
+          "license": "CC BY 4.0（政府統計・出典明記で商用可）"
+        },
+        "line": {
+          "method": "mesh",
+          "sourceJa": "経済センサス‐活動調査 地域メッシュ統計（500m・e-Stat）を沿線の範囲で面積按分",
+          "license": "CC BY 4.0（政府統計・出典明記で商用可）"
+        }
+      }
+    }
+  ]
+}

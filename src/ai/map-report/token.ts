@@ -28,6 +28,11 @@ export const MAP_MAX_ACTIONS = 20
 export const MAP_MAX_POINTS = 50
 /** 一覧の駅（`highlightStations`）の合計上限。 */
 export const MAP_MAX_GRPS = 200
+/**
+ * 色分け（`colorStations`）で描く駅の上限（Leaflet の canvas 描画で軽く動く数・`docs/261001_fix_user_feedback_ui.md` §6.12.6）。
+ * 色分けは条件で運ぶので入力の大きさでは数えられない——描く前にサーバが数えて、超えたら絞り方を返す。
+ */
+export const MAP_MAX_COLORED_STATIONS = 3_000
 
 /** 合計の数を数える（超過は「何が多いか」を言って弾く）。 */
 function countTotals(actions: readonly z.infer<typeof mapActionSchema>[]): {

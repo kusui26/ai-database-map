@@ -2,7 +2,7 @@
 
 import { useMapStore } from '@/stores/mapStore'
 
-/** ホバー中の駅名を、カーソル位置の上に小さく表示する。 */
+/** ホバー中の駅名を、カーソル位置の上に小さく表示する（色分けしている駅は、値と段を 2 行目に）。 */
 export function HoverTooltip() {
   const hovered = useMapStore((state) => state.hovered)
   if (hovered === null || hovered.name === '') return null
@@ -12,6 +12,11 @@ export function HoverTooltip() {
       style={{ left: hovered.x, top: hovered.y - 10 }}
     >
       {hovered.name}
+      {hovered.detailJa !== null && (
+        <span className="block text-[11px] font-normal text-slate-200 tabular-nums">
+          {hovered.detailJa}
+        </span>
+      )}
     </div>
   )
 }

@@ -181,7 +181,7 @@ export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
     mcpName: 'render_map',
     titleJa: '地図レポート（HTML の短命 URL）',
     descriptionEn:
-      'Render the given mapActions as a self-contained HTML map page and return a short-lived URL. Leaflet is inlined and tiles load as <img>, so the page works inside a sandboxed iframe with connect-src none.',
+      'Render the given mapActions as a self-contained HTML map page and return a short-lived URL. Leaflet is inlined and tiles load as <img>, so the page works inside a sandboxed iframe with connect-src none. colorStations ({metricKey, areas}) colors the stations of the areas by a metric with the same classes, colors and legend as the app (up to 3,000 stations — narrow the area otherwise).',
     maxResultSizeChars: 8_000,
     // 駅の座標を DB から引き、URL を発行する。検索系より絞る（上流は GET 時に叩く）。
     perMinute: 10,

@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { hazardTileOrigins, mapScene, sceneBounds } from '@/domain/map/scene'
+import {
+  COLORING_NEEDS_SERVER_JA,
+  coloringRequestIn,
+  hazardTileOrigins,
+  mapScene,
+  sceneBounds,
+  type ResolvedColoring,
+} from '@/domain/map/scene'
+import { type StationClassesResponse } from '@/shared/area-summary'
 import { HAZARD_OPACITY_DEFAULT, HAZARD_TERRAIN_OPACITY_SCALE } from '@/shared/constants'
 import { mapActionSchema, type MapAction } from '@/shared/protocol'
 
@@ -9,7 +17,7 @@ import { mapActionSchema, type MapAction } from '@/shared/protocol'
  * MCP Apps の地図ビューアは撤収したが、「mapActions をどう描くか」は
  * T1（サーバ生成の地図レポート）・T2（ビューア・プラグイン）・Web UI が**同じ規則**で
  * 描くための資産なので、純関数として残す。ここで固定するのは
- * ①**7 型すべてを扱う**こと（protocol に型を足すと扱い忘れで落ちる）、
+ * ①**8 型すべてを扱う**こと（protocol に型を足すと扱い忘れで落ちる）、
  * ②座標を持たない操作（`highlightStations`・`selectStation` 単独）を**描かない**こと、
  * ③半径円の中心は直前の `flyTo` で、中心の印を必ず置くこと、
  * ④ハザードの**描画順・不透明度・出典**が既存 domain（カタログ）由来であること、
@@ -39,11 +47,12 @@ const FIXTURES: readonly MapAction[] = [
       { lon: 139.64, lat: 35.48, labelJa: '△△中学校' },
     ],
   },
+  { type: 'colorStations', metricKey: 'pop_gr_2020_2015_1km', areas: ['muni:14100'] },
 ]
 
 describe('mapAction の網羅', () => {
   it('全型に見本があり、すべて protocol の Zod を通る', () => {
-    expect(ACTION_TYPES.length).toBeGreaterThanOrEqual(7)
+    expect(ACTION_TYPES.length).toBeGreaterThanOrEqual(8)
     expect(new Set(FIXTURES.map((action) => action.type))).toEqual(new Set(ACTION_TYPES))
     for (const action of FIXTURES) {
       expect(() => mapActionSchema.parse(action), action.type).not.toThrow()
@@ -241,5 +250,136 @@ describe('駅の座標を渡したとき（サーバだけができること・P
     expect(scene.points).toEqual([])
     expect(scene.drawable).toBe(false)
     expect(scene.unresolvedGrps).toEqual(['横浜#0'])
+  })
+})
+
+describe('駅の色分け（colorStations・条件だけを畳み込む・B5c）', () => {
+  const BY_POP = { metricKey: 'pop_2020_1km', areas: ['muni:14100'] }
+  const BY_GROWTH = { metricKey: 'pop_gr_2020_2015_1km', areas: ['muni:14100', 'muni:14130'] }
+  const color = (request: { metricKey: string; areas: string[] }): MapAction => ({
+    type: 'colorStations',
+    ...request,
+  })
+  const UNCOLOR: MapAction = { type: 'colorStations', metricKey: null, areas: [] }
+
+  const CLASSES: StationClassesResponse = {
+    areas: ['muni:14100'],
+    areaLabelsJa: ['神奈川県横浜市'],
+    legend: {
+      metricKey: 'pop_2020_1km',
+      titleJa: '人口（2020年・1km圏）',
+      unit: '人',
+      scheme: 'sequential',
+      classes: [
+        {
+          index: 0,
+          color: '#c7e9b4',
+          lower: null,
+          upper: 30000,
+          labelJa: '30,000 人未満',
+          count: 1,
+        },
+        {
+          index: 1,
+          color: '#225ea8',
+          lower: 30000,
+          upper: null,
+          labelJa: '30,000 人以上',
+          count: 1,
+        },
+      ],
+      flagged: { color: '#9ca3af', labelJa: '参考値（⚠）', count: 0 },
+      missingCount: 0,
+      meaningJa: '色が濃いほど値が大きい。',
+      sourceJa: '総務省 国勢調査',
+      reasonJa: null,
+    },
+    stations: [
+      { grp: '横浜#0', cls: 1, value: 31640, valueJa: '31,640 人' },
+      { grp: '戸塚#0', cls: 0, value: 25000, valueJa: '25,000 人' },
+    ],
+  }
+  const RESOLVED: ResolvedColoring = {
+    classes: CLASSES,
+    points: [
+      {
+        lon: 139.622,
+        lat: 35.466,
+        nameJa: '横浜',
+        kind: 'class',
+        color: '#225ea8',
+        detailJa: '31,640 人・30,000 人以上',
+      },
+      {
+        lon: 139.533,
+        lat: 35.401,
+        nameJa: '戸塚',
+        kind: 'class',
+        color: '#c7e9b4',
+        detailJa: '25,000 人・30,000 人未満',
+      },
+    ],
+    unplacedCount: 0,
+  }
+
+  it('条件は最後の colorStations。null の色分けと clearOverlays は消す', () => {
+    expect(coloringRequestIn([color(BY_POP)])).toEqual(BY_POP)
+    expect(coloringRequestIn([color(BY_POP), color(BY_GROWTH)])).toEqual(BY_GROWTH)
+    expect(coloringRequestIn([color(BY_POP), UNCOLOR])).toBeNull()
+    expect(coloringRequestIn([color(BY_POP), { type: 'clearOverlays' }])).toBeNull()
+    expect(coloringRequestIn([{ type: 'clearOverlays' }, color(BY_POP)])).toEqual(BY_POP)
+    expect(coloringRequestIn([{ type: 'flyTo', lon: 139.6, lat: 35.4 }])).toBeNull()
+  })
+
+  it('解決を渡さない消費側（DB を引けないブラウザのビューア）は描かず、描けない理由を残す', () => {
+    const scene = mapScene([color(BY_POP)])
+    expect(scene.coloring).toEqual({
+      request: BY_POP,
+      resolved: null,
+      issueJa: COLORING_NEEDS_SERVER_JA,
+    })
+    expect(scene.drawable).toBe(false)
+  })
+
+  it('解決できなかった（知らない指標・駅が多すぎる）なら、その理由を残して描かない', () => {
+    const scene = mapScene([color(BY_POP)], {
+      coloring: { ok: false, reasonJa: '色分けできない指標です: nope' },
+    })
+    expect(scene.coloring?.resolved).toBeNull()
+    expect(scene.coloring?.issueJa).toBe('色分けできない指標です: nope')
+    expect(scene.drawable).toBe(false)
+  })
+
+  it('解決した色分けは描ける（色分けだけの地図も出す）・カメラの範囲に入る', () => {
+    const scene = mapScene([color(BY_POP)], { coloring: { ok: true, coloring: RESOLVED } })
+    expect(scene.coloring).toEqual({ request: BY_POP, resolved: RESOLVED, issueJa: null })
+    expect(scene.drawable).toBe(true)
+    expect(sceneBounds(scene)).toEqual({
+      west: 139.533,
+      south: 35.401,
+      east: 139.622,
+      north: 35.466,
+    })
+  })
+
+  it('消したあとは、解決を渡されても描かない（条件が無い）', () => {
+    const scene = mapScene([color(BY_POP), UNCOLOR], { coloring: { ok: true, coloring: RESOLVED } })
+    expect(scene.coloring).toBeNull()
+    expect(scene.drawable).toBe(false)
+  })
+
+  it('色分けはほかの印・円・面と並ぶ（clearOverlays の後の色分けだけが残る）', () => {
+    const scene = mapScene(
+      [
+        { type: 'showPoint', lon: 139.7, lat: 35.68, labelJa: '現在地' },
+        { type: 'clearOverlays' },
+        color(BY_POP),
+        { type: 'setHazardLayers', layers: ['flood_l2'] },
+      ],
+      { coloring: { ok: true, coloring: RESOLVED } },
+    )
+    expect(scene.points).toEqual([])
+    expect(scene.coloring?.resolved).toBe(RESOLVED)
+    expect(scene.layers.map((layer) => layer.key)).toEqual(['flood_l2'])
   })
 })

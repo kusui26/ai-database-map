@@ -5,12 +5,25 @@
  */
 
 import { create } from 'zustand'
+import { type ColoredStation } from '@/domain/style/coloring'
 import { roundViewport, sameViewport, type Viewport } from '@/shared/viewport'
 
 export type HoverInfo = {
   readonly name: string
+  /** 2 行目（色分けしている駅の「値・段」・無ければ null）。 */
+  readonly detailJa: string | null
   readonly x: number
   readonly y: number
+}
+
+/**
+ * 地図に描く駅の色分け（2026-10-11 B5c）。URL の条件（`?color&colorIn`）を共通 API で引いた結果を、凡例の入れ物
+ * （`ColoringHost`）が書く。地図は描くだけ（取得も分け方も持たない）。
+ */
+export type MapStationColoring = {
+  /** エリアの並び（同じエリアで指標だけ替えたときは寄せ直さない）。 */
+  readonly areasKey: string
+  readonly stations: readonly ColoredStation[]
 }
 
 /**
@@ -85,6 +98,10 @@ type MapStore = {
   highlightedPoints: readonly HighlightedPoint[]
   setHighlightedPoints: (points: readonly HighlightedPoint[]) => void
 
+  /** 駅の色分け（null＝描かない）。 */
+  stationColoring: MapStationColoring | null
+  setStationColoring: (coloring: MapStationColoring | null) => void
+
   /** 地図の中心（丸め済み・未初期化は null）。 */
   center: MapCenter | null
   /** 地図が止まったときに呼ぶ。**丸めて変化が無ければ何もしない**（無駄な再描画を作らない）。 */
@@ -126,6 +143,9 @@ export const useMapStore = create<MapStore>((set, get) => ({
 
   highlightedPoints: [],
   setHighlightedPoints: (points) => set({ highlightedPoints: points }),
+
+  stationColoring: null,
+  setStationColoring: (coloring) => set({ stationColoring: coloring }),
 
   center: null,
   setCenter: (center) => {

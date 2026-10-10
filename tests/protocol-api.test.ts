@@ -205,6 +205,56 @@ describe('GUI Chat Protocol: ハザード拡張（260824_flood §6.4）', () => 
   })
 })
 
+describe('GUI Chat Protocol: 駅の色分け colorStations（2026-10-11 B5c・§6.12.6）', () => {
+  it('条件（指標とエリア 1〜4 つ）を運ぶ。応答の地図操作として通る', () => {
+    const parsed = mapResponseSchema.parse({
+      messages: [],
+      mapActions: [
+        {
+          type: 'colorStations',
+          metricKey: 'pop_gr_2020_2015_1km',
+          areas: ['muni:14100', 'muni:14130', 'line:26001', 'near:竹橋#0@5000'],
+        },
+      ],
+      panels: [],
+    })
+    expect(parsed.mapActions[0]).toEqual({
+      type: 'colorStations',
+      metricKey: 'pop_gr_2020_2015_1km',
+      areas: ['muni:14100', 'muni:14130', 'line:26001', 'near:竹橋#0@5000'],
+    })
+  })
+
+  it('metricKey: null と空の areas は「色分けを消す」', () => {
+    expect(mapActionSchema.parse({ type: 'colorStations', metricKey: null, areas: [] })).toEqual({
+      type: 'colorStations',
+      metricKey: null,
+      areas: [],
+    })
+  })
+
+  it.each([
+    ['色分けするのにエリアが無い', { metricKey: 'pop_2020_1km', areas: [] }],
+    ['消すのにエリアがある', { metricKey: null, areas: ['muni:14100'] }],
+    [
+      'エリアが 5 つ',
+      { metricKey: 'pop_2020_1km', areas: ['jp', 'pref:13', 'pref:14', 'pref:11', 'pref:12'] },
+    ],
+    ['空の指標', { metricKey: '', areas: ['jp'] }],
+    ['空のエリア', { metricKey: 'pop_2020_1km', areas: [''] }],
+    ['値の列を運ぶ旧案（styleStations の形）', { grps: ['横浜#0'], values: [1] }],
+  ])('通さない：%s', (_label, body) => {
+    expect(mapActionSchema.safeParse({ type: 'colorStations', ...body }).success).toBe(false)
+  })
+
+  it('エリアの書き方（知らないエリア）はここでは弾かない——共通 API が理由つきで断る', () => {
+    expect(
+      mapActionSchema.safeParse({ type: 'colorStations', metricKey: 'nope', areas: ['pref:99'] })
+        .success,
+    ).toBe(true)
+  })
+})
+
 describe('API: ハザード・カタログ', () => {
   it('group クエリは既知のグループのみ・省略可', () => {
     expect(hazardCatalogQuerySchema.parse({}).group).toBeUndefined()

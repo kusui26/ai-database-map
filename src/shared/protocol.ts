@@ -20,6 +20,7 @@ import {
   areaSummaryCardSchema,
   stationLegendSchema,
 } from './area-summary'
+import { MAX_AREAS } from './area-ref'
 
 // --- メッセージ ---------------------------------------------------------
 export const messageSchema = z.object({
@@ -69,8 +70,32 @@ export const mapActionSchema = z.discriminatedUnion('type', [
     type: z.literal('highlightPoints'),
     points: z.array(z.object({ lon: z.number(), lat: z.number(), labelJa: z.string() })),
   }),
+  /**
+   * **エリアの駅を、指標の値で色分けする**（2026-10-11 B5c・`docs/261001_fix_user_feedback_ui.md` §6.12.6）。
+   * 値の列ではなく**条件**を運ぶ——全国は 9,273 駅で、値を写すと `render_map` の入力や URL に収まらない。
+   * 受け手は共通 API `GET /api/stations/classes` で凡例と駅ごとの段を引いて描く（分け方と色はサーバの 1 か所）。
+   *
+   * - `metricKey`：駅の指標のカタログの key（ランキングできるもの）。**null＝色分けを消す**（そのとき `areas` は空）
+   * - `areas`：エリアの文字列（`shared/area-ref.ts`）を 1〜4 つ。2 つ以上は合わせて 1 つの凡例
+   * - 書き方（知らない指標・エリア）の検証は共通 API がする。ここで弾くと、1 つの誤りで応答の地図操作を丸ごと捨ててしまう
+   * - 回答が色分けを送らなければ、前の色分けは残る（ハザードのレイヤと同じ）。`clearOverlays` は色分けも消す
+   */
+  z
+    .object({
+      type: z.literal('colorStations'),
+      metricKey: z.string().min(1).nullable(),
+      areas: z.array(z.string().min(1)).max(MAX_AREAS),
+    })
+    .refine(
+      (action) => (action.metricKey === null ? action.areas.length === 0 : action.areas.length > 0),
+      {
+        message: `colorStations は、色分けするなら areas を 1〜${MAX_AREAS} つ、消すなら metricKey: null と空の areas を渡す`,
+      },
+    ),
 ])
 export type MapAction = z.infer<typeof mapActionSchema>
+/** 駅の色分け（`colorStations`）の操作。 */
+export type ColorStationsAction = Extract<MapAction, { type: 'colorStations' }>
 
 // --- パネル部品 ---------------------------------------------------------
 /** 表示先ヒント（チャット=inline 既定・⤢で drawer/modal へ昇格）。 */

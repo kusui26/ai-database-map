@@ -8,6 +8,7 @@ import { useCurrentPosition } from '@/hooks/useCurrentPosition'
 import { useOfflineHazardCache } from '@/hooks/useOfflineHazardCache'
 import { useMapUrlState } from './map/useMapUrlState'
 import { useHazardUrlState } from './map/useHazardUrlState'
+import { useColoringUrlState } from './map/useColoringUrlState'
 import { useFigureUrl } from './figure/useFigureUrl'
 import { useAlertTarget, useHazardAlerts } from './hazard/useHazardAlerts'
 import { useWarningMode } from './hazard/useWarningMode'
@@ -49,12 +50,18 @@ const PromotionHost = dynamic(
 const ChatCanvas = dynamic(() => import('./canvas/ChatCanvas').then((mod) => mod.ChatCanvas), {
   ssr: false,
 })
+// 駅の色分け（凡例と取得・B5c）は、URL に色分けの条件（`?color`）があるときだけ読み込む。
+const ColoringHost = dynamic(
+  () => import('./coloring/ColoringHost').then((mod) => mod.ColoringHost),
+  { ssr: false },
+)
 
 /** アプリシェル：全面地図＋浮遊ヘッダ（ロゴ・検索・半径・✦AI）＋左下 FAB＋左チャット＋キャンバス。 */
 export function MapShell() {
   const chatOpen = useChatStore((state) => state.open)
   const setChatOpen = useChatStore((state) => state.setOpen)
   const { grp } = useMapUrlState()
+  const { coloring } = useColoringUrlState()
   const { figure } = useFigureUrl()
   const [chatSeen, setChatSeen] = useState(false)
   // 駅詳細と図の表示先（キャンバス／モーダル）は「何も出さない状態」でも重い依存
@@ -104,7 +111,7 @@ export function MapShell() {
   }, [geoActive])
 
   // 重なり順（この main の直下は同じ重なり文脈にいるので、ここで一覧にしておく）:
-  //   z-10  地図の付随物（FAB・ホバーツールチップ）
+  //   z-10  地図の付随物（FAB・ホバーツールチップ・色分けの凡例）
   //   z-20  浮遊パネル（AI チャット・駅詳細・キャンバス）
   //   z-30  ヘッダと通信断バナー ← 駅名検索の候補がパネルの前に出る必要がある
   //   z-40  モーダルのオーバーレイ／z-50 モーダル本体（Radix・Vaul の portal）
@@ -116,6 +123,7 @@ export function MapShell() {
       <AppHeader />
       <OfflineBanner />
       <Fab />
+      {coloring !== null && <ColoringHost />}
       {geoSeen && <CurrentPositionPanel />}
       {detailSeen && <StationDetailPanel />}
       {chatSeen && <ChatPanel />}

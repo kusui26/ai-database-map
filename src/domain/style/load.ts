@@ -14,7 +14,8 @@ import { type RadiusM } from '@/shared/constants'
 import { resolveFamilyAtRadius } from '@/domain/metrics/family'
 import { parseAreaRefs } from '@/domain/area-summary/refs'
 import { resolveAreas, stationFilterOf, type ResolvedArea } from '@/domain/area-summary/resolve'
-import { classifyStations, type Classification } from './classify'
+import { classifyStations, type Classification, type StyleInput } from './classify'
+import { classRows, coloringAreaLabelJa } from './rows'
 
 /** 色分けできる指標（ランキングと同じ：カタログにあり、並べられるもの。フラグ・文字の列は除く）。 */
 export function colorableEntry(key: string): CatalogEntry | null {
@@ -32,11 +33,14 @@ export function notColorableJa(key: string): string {
   return `色分けできない指標です: ${key}（GET /api/metrics で rankable な key を選ぶ）`
 }
 
-/** エリアの駅の値を集めて分ける（駅は grp で 1 回だけ）。 */
-export async function classifyAreas(
+/** エリアの駅の値（値のある駅だけ）と、エリアの駅の数（値の無い駅も数える）。 */
+type AreaStationValues = { readonly inputs: readonly StyleInput[]; readonly stationCount: number }
+
+/** エリアの駅の値を集める（駅は grp で 1 回だけ）。 */
+async function areaStationValues(
   entry: CatalogEntry,
   areas: readonly ResolvedArea[],
-): Promise<Classification> {
+): Promise<AreaStationValues> {
   const results = await Promise.all(
     areas.map((area) => stationMetricValues(entry.key, stationFilterOf(area))),
   )
@@ -48,7 +52,16 @@ export async function classifyAreas(
       ? []
       : [{ grp: station.grp, value: station.value, flagged: station.flagged }],
   )
-  return classifyStations(inputs, entry, stations.size)
+  return { inputs, stationCount: stations.size }
+}
+
+/** エリアの駅の値を集めて分ける（駅は grp で 1 回だけ）。 */
+export async function classifyAreas(
+  entry: CatalogEntry,
+  areas: readonly ResolvedArea[],
+): Promise<Classification> {
+  const { inputs, stationCount } = await areaStationValues(entry, areas)
+  return classifyStations(inputs, entry, stationCount)
 }
 
 export type StationClassesResult =
@@ -66,13 +79,15 @@ export async function loadStationClasses(
   if (!parsed.ok) return parsed
   const resolved = await resolveAreas(parsed.refs, { withChildren: false, requireLineWidth: false })
   if (!resolved.ok) return resolved
-  const { legend, assignments } = await classifyAreas(entry, resolved.areas)
+  const { inputs, stationCount } = await areaStationValues(entry, resolved.areas)
+  const { legend, assignments } = classifyStations(inputs, entry, stationCount)
   return {
     ok: true,
     response: {
       areas: parsed.refs.map(formatAreaRef),
+      areaLabelsJa: resolved.areas.map(coloringAreaLabelJa),
       legend,
-      stations: [...assignments].map(([grp, cls]) => ({ grp, cls })),
+      stations: classRows(inputs, assignments, entry),
     },
   }
 }

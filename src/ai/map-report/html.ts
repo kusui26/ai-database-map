@@ -10,13 +10,21 @@
  *   通信する地図（MapLibre）は動かない。タイルは Leaflet が `<img>` で読む
  * - **外部スクリプトを読まない**（Leaflet はインライン同梱）。オフラインでも枠と凡例は出る
  * - **印の意味は Web UI と同じ**：起点＝アクセントの点／行き先＝緑の番号丸／
- *   一覧の駅＝アクセントの輪（`stations-highlight` と同じ）／半径円＝アクセントの薄い円
+ *   一覧の駅＝アクセントの輪（`stations-highlight` と同じ）／半径円＝アクセントの薄い円／
+ *   色分けの駅＝段の色の丸に濃い縁（`coloringSource.ts` と同じ・数千駅になるので canvas で描く・B5c）
  * - **出典・限界・免責・生成時刻を必ず本文に出す**。地図だけを切り取って使われても、
  *   何のデータで、いつの、何が言えないかが読める（`docs/260824_flood.md` §7.5）
  * - 本文・ラベルは**すべてエスケープ**して書き出す（`shared/viewer/vnode.ts` の直列化）
  */
 
-import { type MapScene, type ScenePoint } from '@/domain/map/scene'
+import { type ColoredPoint, type MapScene, type ScenePoint } from '@/domain/map/scene'
+import {
+  COLORED_STROKE_COLOR,
+  coloringScopeJa,
+  FLAGGED_NOTE_JA,
+  isColored,
+} from '@/domain/style/coloring'
+import { type StationClassesResponse } from '@/shared/area-summary'
 import { ACCENT_COLOR } from '@/shared/constants'
 import { el, escapeText, vnodeToHtml, type VNode } from '@/shared/viewer/vnode'
 
@@ -127,6 +135,57 @@ function layerLegend(layers: readonly MapReportLayer[]): readonly VNode[] {
   )
 }
 
+/** 色分けの凡例の 1 行（段の色・範囲・駅の数）。 */
+function coloredRow(color: string, labelJa: string, count: number, noteJa: string | null): VNode {
+  return el('li', {
+    cls: 'legend-row',
+    children: [
+      el('span', { cls: 'sw sw-colored', style: { background: color } }),
+      el('span', { cls: 'legend-label', text: labelJa }),
+      noteJa === null ? null : el('span', { cls: 'legend-source', text: noteJa }),
+      el('span', { cls: 'legend-count', text: `${count.toLocaleString('en-US')} 駅` }),
+    ],
+  })
+}
+
+/** 段と参考値の行（色分けしなかったときは「強調して出した駅」の 1 行）。 */
+function coloredRows(classes: StationClassesResponse): readonly VNode[] {
+  const { legend } = classes
+  if (!isColored(legend)) {
+    return [coloredRow(ACCENT_COLOR, '色分けしていない駅（強調）', classes.stations.length, null)]
+  }
+  return [
+    ...legend.classes.map((cls) => coloredRow(cls.color, cls.labelJa, cls.count, null)),
+    ...(legend.flagged.count === 0
+      ? []
+      : [
+          coloredRow(
+            legend.flagged.color,
+            legend.flagged.labelJa,
+            legend.flagged.count,
+            FLAGGED_NOTE_JA,
+          ),
+        ]),
+  ]
+}
+
+/** 色分けの凡例（指標・エリアと駅の数・段・出典）。注意は「読むときの注意」に入る（`build.ts`）。 */
+function coloringSection(scene: MapScene): readonly VNode[] {
+  const classes = scene.coloring?.resolved?.classes
+  if (classes === undefined) return []
+  return [
+    el('section', {
+      cls: 'coloring',
+      children: [
+        el('h2', { text: `色分け：${classes.legend.titleJa}` }),
+        el('p', { cls: 'coloring-scope', text: coloringScopeJa(classes) }),
+        el('ul', { children: coloredRows(classes) }),
+        el('p', { cls: 'legend-source', text: `出典：${classes.legend.sourceJa}` }),
+      ],
+    }),
+  ]
+}
+
 /**
  * 地図の番号 → 名前の一覧。
  * 行き先は近接して並ぶことが多く、名前を地図に重ねると**どれも読めなくなる**——
@@ -165,6 +224,7 @@ function bodySections(input: MapReportInput): string {
   const sections = [
     el('h1', { text: input.title }),
     el('div', { attrs: { id: 'map', role: 'application', 'aria-label': input.title } }),
+    ...coloringSection(input.scene),
     el('section', {
       cls: 'legend',
       children: [el('h2', { text: '凡例と出典' }), el('ul', { children: rows })],
@@ -197,6 +257,8 @@ type MapReportData = {
   }
   readonly layers: readonly Omit<MapReportLayer, 'labelJa' | 'key' | 'timeLabelJa'>[]
   readonly points: readonly ScenePoint[]
+  /** 色分けの駅（段の色・ホバーの文）。 */
+  readonly colored: readonly ColoredPoint[]
   readonly circle: MapScene['circle']
   readonly focus: MapScene['focus']
   readonly maxLabelledStations: number
@@ -231,6 +293,26 @@ const DRAW_JS = /* js */ `
   });
 
   var bounds = [];
+  // 色分けの駅（数千駅になるので canvas で描く）。印は一定の大きさ・濃い縁。ホバーで名前と「値・段」。
+  if (D.colored.length > 0) {
+    var renderer = L.canvas({ padding: 0.5 });
+    D.colored.forEach(function (p) {
+      var marker = L.circleMarker([p.lat, p.lon], {
+        renderer: renderer, radius: 5.5, color: '${COLORED_STROKE_COLOR}', weight: 1.25,
+        opacity: 1, fillColor: p.color, fillOpacity: 1
+      });
+      var tip = document.createElement('div');
+      var name = document.createElement('strong');
+      name.textContent = p.nameJa;
+      var detail = document.createElement('div');
+      detail.textContent = p.detailJa;
+      tip.appendChild(name);
+      tip.appendChild(detail);
+      marker.bindTooltip(tip, { direction: 'top', offset: [0, -6] });
+      marker.addTo(map);
+      bounds.push([p.lat, p.lon]);
+    });
+  }
   if (D.circle !== null) {
     L.circle([D.circle.lat, D.circle.lon], {
       radius: D.circle.radiusM, color: '${ACCENT_COLOR}', weight: 1.5,
@@ -310,6 +392,10 @@ const PAGE_CSS = /* css */ `
   .sw-circle { background: ${ACCENT_COLOR}14; border: 1.5px solid ${ACCENT_COLOR}80; }
   .sw-layer { background: #dc2626; border-radius: 4px; }
   .sw-base { background: #e8ecef; border: 1px solid #cbd5e1; border-radius: 4px; }
+  .sw-colored { width: 12px; height: 12px; flex: 0 0 12px; border: 1.5px solid ${COLORED_STROKE_COLOR}; }
+  .legend-count { margin-left: auto; color: #64748b; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .coloring-scope { font-size: 12.5px; color: #475569; }
+  .coloring ul { list-style: none; padding: 0; max-width: 420px; }
   .mk { position: relative; }
   .mk-origin, .sw.mk-origin { width: 14px; height: 14px; border-radius: 50%;
     background: ${ACCENT_COLOR}; border: 2px solid #fff; box-shadow: 0 0 0 4px ${ACCENT_COLOR}40; }
@@ -342,6 +428,7 @@ export function buildMapReportHtml(input: MapReportInput): string {
       attribution: layer.attribution,
     })),
     points: input.scene.points,
+    colored: input.scene.coloring?.resolved?.points ?? [],
     circle: input.scene.circle,
     focus: input.scene.focus,
     maxLabelledStations: MAX_LABELLED_STATIONS,

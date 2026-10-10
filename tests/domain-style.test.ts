@@ -36,6 +36,7 @@ import {
   type StyleInput,
 } from '@/domain/style/classify'
 import { colorableEntry, defaultColorEntry, notColorableJa } from '@/domain/style/load'
+import { classRows } from '@/domain/style/rows'
 import { KAWASAKI_POP_GR, YOKOHAMA_LP_MED, YOKOHAMA_POP_GR } from './fixtures/area-summary'
 
 const POP_GR = requireEntry('pop_gr_2020_2015_1km')
@@ -402,8 +403,9 @@ describe('本物の値（横浜市の 137 駅・川崎市の 53 駅）', () => {
     expect(legend.classes.map((each) => each.count)).toEqual([5, 17, 28, 82, 57])
     const response = stationClassesResponseSchema.parse({
       areas: ['muni:14100', 'muni:14130'],
+      areaLabelsJa: ['神奈川県横浜市', '神奈川県川崎市'],
       legend,
-      stations: [...assignments].map(([grp, cls]) => ({ grp, cls })),
+      stations: classRows(both, assignments, POP_GR),
     })
     expect(response.stations).toHaveLength(189)
   })

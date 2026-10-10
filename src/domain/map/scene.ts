@@ -11,6 +11,9 @@
  * 描画ライブラリの都合ではない。だから `domain/hazard/*` を再利用する（`shared/viewer` は
  * protocol だけに依存する純粋な markup 側で、こちらとは層が違う）。
  *
+ * 駅の色分け（`colorStations`・2026-10-11 B5c）は**条件**だけを畳み込む。段・色・座標は共通 API の分け方で
+ * 呼び出し側が引いて渡す（渡されなければ、描けなかった理由を残す）。
+ *
  * **描けないものを黙って落とさない**：ラスタで描けないレイヤは `undrawableLayerKeys` に残す。
  * 「載らなかったから白い ＝ 危険がない」と読ませないための材料を、消費側に必ず渡す
  * （`docs/260824_flood.md` §7.5-1）。
@@ -18,6 +21,8 @@
 
 import { hazardDrawOrder, hazardOpacityFor } from '@/domain/hazard/catalog'
 import { needsTileTime } from '@/domain/hazard/tile-time'
+import { type ColoredStationKind } from '@/domain/style/coloring'
+import { type StationClassesResponse } from '@/shared/area-summary'
 import { HAZARD_OPACITY_DEFAULT } from '@/shared/constants'
 import { boundingBoxAround, type BoundingBox } from '@/shared/geo'
 import { getHazardLayer, hazardLayers } from '@/shared/hazard'
@@ -43,6 +48,40 @@ export type StationPoint = {
   readonly nameJa: string
 }
 
+/** 色分けの条件（`colorStations` のうち、最後に効いているもの）。 */
+export type ColoringRequest = {
+  readonly metricKey: string
+  readonly areas: readonly string[]
+}
+
+/** 色の付いた駅 1 つ（サーバが段・色・座標を引いたもの）。 */
+export type ColoredPoint = {
+  readonly lon: number
+  readonly lat: number
+  readonly nameJa: string
+  readonly kind: ColoredStationKind
+  readonly color: string
+  /** ホバーの 2 行目（「31,640 人・25,000〜32,000 人」）。 */
+  readonly detailJa: string
+}
+
+/** 色分けの描くもの（共通 API の応答そのものと、座標を引いた印）。 */
+export type ResolvedColoring = {
+  readonly classes: StationClassesResponse
+  readonly points: readonly ColoredPoint[]
+  /** 座標が分からず描けなかった駅の数（黙って消さない）。 */
+  readonly unplacedCount: number
+}
+
+/** 消費側が色分けを解決した結果（解決できない消費側は渡さない）。 */
+export type ColoringResolution =
+  | { readonly ok: true; readonly coloring: ResolvedColoring }
+  | { readonly ok: false; readonly reasonJa: string }
+
+/** 解決する手段の無い消費側（DB を引けないブラウザのビューア）で、色分けを描かなかった理由。 */
+export const COLORING_NEEDS_SERVER_JA =
+  '駅の色分けは、この表示では描けない（駅の値と座標をサーバで引く必要がある）。'
+
 /**
  * 描くときの補助。
  *
@@ -50,9 +89,11 @@ export type StationPoint = {
  * `flyTo` を伴わない `selectStation`）も描けるようになる。渡さなければ従来どおり描かない
  * ——ブラウザのビューアは DB を引けないが、サーバ（`render_map`）は引けるので、
  * 「描ける方は描く」を**呼び出し側の持ち物**にしてある（この関数は純粋なまま）。
+ * `coloring` も同じ（`coloringRequestIn` の条件を、呼び出し側が共通 API の分け方で解決して渡す）。
  */
 export type MapSceneOptions = {
   readonly stations?: ReadonlyMap<string, StationPoint>
+  readonly coloring?: ColoringResolution
 }
 
 /** 選択駅の半径円（中心は直前の `flyTo`）。 */
@@ -86,11 +127,22 @@ export type SceneLayer = {
   readonly attribution: string
 }
 
+/** 色分け（条件と、描くもの・描けなかった理由）。 */
+export type SceneColoring = {
+  readonly request: ColoringRequest
+  /** 描く色分け（解決できなかった・解決する手段が無いときは null）。 */
+  readonly resolved: ResolvedColoring | null
+  /** 描けなかった理由（描けたら null）。 */
+  readonly issueJa: string | null
+}
+
 /** 1 回の応答で地図に描くもの一式。 */
 export type MapScene = {
   readonly points: readonly ScenePoint[]
   readonly circle: SceneCircle | null
   readonly focus: SceneFocus | null
+  /** 駅の色分け（条件が無ければ null）。 */
+  readonly coloring: SceneColoring | null
   /** 描画順（base 先・overlay 後）。 */
   readonly layers: readonly SceneLayer[]
   /** 要求されたが描けなかったレイヤ（未知の key・ラスタでない配信）。 */
@@ -120,6 +172,7 @@ type Draft = {
   readonly layerKeys: readonly string[]
   readonly opacity: number
   readonly unresolvedGrps: readonly string[]
+  readonly coloring: ColoringRequest | null
 }
 
 const EMPTY: Draft = {
@@ -130,10 +183,11 @@ const EMPTY: Draft = {
   layerKeys: [],
   opacity: HAZARD_OPACITY_DEFAULT,
   unresolvedGrps: [],
+  coloring: null,
 }
 
 /**
- * 操作 1 つを畳み込む。**7 型すべてを列挙**する——protocol に型を足すと、
+ * 操作 1 つを畳み込む。**8 型すべてを列挙**する——protocol に型を足すと、
  * 返り値が `Draft` にならず型エラーになる（扱い忘れが実行時まで残らない）。
  */
 function applyAction(draft: Draft, action: MapAction, stations: Stations): Draft {
@@ -173,7 +227,21 @@ function applyAction(draft: Draft, action: MapAction, stations: Stations): Draft
       }
     }
     case 'clearOverlays':
-      return { ...draft, points: [], circleRadiusM: null, layerKeys: [], unresolvedGrps: [] }
+      return {
+        ...draft,
+        points: [],
+        circleRadiusM: null,
+        layerKeys: [],
+        unresolvedGrps: [],
+        coloring: null,
+      }
+    case 'colorStations':
+      // 条件だけを持つ（値はサーバが共通 API の分け方で引く）。null は「色分けを消す」。
+      return {
+        ...draft,
+        coloring:
+          action.metricKey === null ? null : { metricKey: action.metricKey, areas: action.areas },
+      }
     case 'setHazardLayers':
       return { ...draft, layerKeys: action.layers, opacity: action.opacity ?? draft.opacity }
     case 'showPoint':
@@ -240,10 +308,34 @@ function sceneLayers(layerKeys: readonly string[], opacity: number): readonly Sc
   })
 }
 
+/**
+ * 地図操作の列で、最後に効いている色分けの条件（無ければ null）。`colorStations` の null と `clearOverlays` は消す。
+ * 描く側（`render_map`）がこの条件を解決してから `mapScene` に渡す——条件の読み方を 2 つにしないため、同じ畳み込みを使う。
+ */
+export function coloringRequestIn(actions: readonly MapAction[]): ColoringRequest | null {
+  return actions.reduce((current, action) => applyAction(current, action, NO_STATIONS), EMPTY)
+    .coloring
+}
+
+/** 条件と、呼び出し側の解決 → 描く色分け（解決が無ければ「この表示では描けない」）。 */
+function sceneColoring(
+  request: ColoringRequest | null,
+  resolution: ColoringResolution | undefined,
+): SceneColoring | null {
+  if (request === null) return null
+  if (resolution === undefined)
+    return { request, resolved: null, issueJa: COLORING_NEEDS_SERVER_JA }
+  return resolution.ok
+    ? { request, resolved: resolution.coloring, issueJa: null }
+    : { request, resolved: null, issueJa: resolution.reasonJa }
+}
+
 /** 地図操作の列 → 描くもの一式。 */
 export function mapScene(actions: readonly MapAction[], options: MapSceneOptions = {}): MapScene {
   const stations = options.stations ?? NO_STATIONS
   const draft = actions.reduce((current, action) => applyAction(current, action, stations), EMPTY)
+  const coloring = sceneColoring(draft.coloring, options.coloring)
+  const colored = coloring?.resolved?.points.length ?? 0
   const center = draft.focus ?? draft.selected
   const circle =
     draft.circleRadiusM === null || center === null
@@ -270,13 +362,19 @@ export function mapScene(actions: readonly MapAction[], options: MapSceneOptions
     points,
     circle,
     focus: draft.focus,
+    coloring,
     layers,
     // 未知の key もラスタでない配信も、ここに残る（描かれなかった事実を消費側へ渡す）。
     undrawableLayerKeys: [...new Set(draft.layerKeys)].filter((key) => !drawn.has(key)),
     unresolvedGrps: [...new Set(draft.unresolvedGrps)],
     attributions: [...new Set(layers.map((layer) => layer.attribution))],
     hasTimedLayer: layers.some((layer) => layer.needsTime),
-    drawable: points.length > 0 || circle !== null || layers.length > 0 || draft.focus !== null,
+    drawable:
+      points.length > 0 ||
+      colored > 0 ||
+      circle !== null ||
+      layers.length > 0 ||
+      draft.focus !== null,
   }
 }
 
@@ -285,8 +383,9 @@ export function mapScene(actions: readonly MapAction[], options: MapSceneOptions
  * 円は**半径を必ず含む**矩形で数える（`boundingBoxAround`）。
  */
 export function sceneBounds(scene: MapScene): BoundingBox | null {
+  const placed = [...scene.points, ...(scene.coloring?.resolved?.points ?? [])]
   const boxes = [
-    ...scene.points.map((point) => ({
+    ...placed.map((point) => ({
       west: point.lon,
       south: point.lat,
       east: point.lon,

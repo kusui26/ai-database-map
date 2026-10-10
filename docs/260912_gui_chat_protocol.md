@@ -17,7 +17,7 @@
 
 **答え（3 行）**
 
-1. **GUI の契約を「HTML を返す」から「型つきデータを返す」に戻す。** 当アプリは設計当初から **GUI Chat Protocol (Map Edition)**（Zod のパネル 10 型＋地図操作 7 型・`src/shared/protocol.ts`）を持ち、MCP の `structuredContent` にも載せている。足りないのは「その型を描く**ビューアが、ユーザーの母艦に登録されている**こと」だけで、これは MCP Apps の iframe より小さく、可搬で、テストしやすい。
+1. **GUI の契約を「HTML を返す」から「型つきデータを返す」に戻す。** 当アプリは設計当初から **GUI Chat Protocol (Map Edition)**（Zod のパネル 10 型＋地図操作 7 型・`src/shared/protocol.ts`。2026-10-11 時点はパネル 12 型・地図操作 8 型——§2.5）を持ち、MCP の `structuredContent` にも載せている。足りないのは「その型を描く**ビューアが、ユーザーの母艦に登録されている**こと」だけで、これは MCP Apps の iframe より小さく、可搬で、テストしやすい。
 2. **母艦＝MulmoTerminal / MulmoClaude（GUI Chat Protocol ホスト）を採る。** どちらも**無改変の Claude Code／Codex** を動かし、その**セッションに GUI ツール（`presentChart`・`presentForm`・`presentHtml`…）を MCP で差し込む**構造なので、当アプリのリモート MCP（データ）と母艦のプレゼンタ（描画）は**同じ会話の中で LLM が合成できる**。段階化する——**T1：母艦のプレゼンタ合成**（当アプリ側はデータを「プレゼンタ対応」にするだけ・今日から動く）→ **T2：地図ビューアを GUI Chat Protocol プラグイン（npm）として届ける**（型つきデータ → 当アプリ製 viewer）。
 3. **役割分担は不変**：データと意味＝サーバ（リモート MCP・カタログ）／方法論と禁じ手＝スキル／判断と対話＝エージェント（ユーザーの Claude/Codex）。GUI は 4 層目「**描画語彙＝母艦のプレゼンタ＋当アプリのビューア**」で、**ドメイン・プロトコル・既存 API・Gemini チャットは無改変**。
 
@@ -77,7 +77,7 @@
 
 ### 1.4 用語：「GUI Chat Protocol」が 2 つある
 
-- **Map Edition**：当アプリが 2026-07 に設計した応答契約（`src/shared/protocol.ts`：`Panel` 10 型・`MapAction` 7 型・`MapResponse`）。UI（クリック）と Gemini（会話）と MCP が同じ型を produce/consume する
+- **Map Edition**：当アプリが 2026-07 に設計した応答契約（`src/shared/protocol.ts`：`Panel` 10 型・`MapAction` 7 型・`MapResponse`。2026-10-11 時点は 12 型・8 型）。UI（クリック）と Gemini（会話）と MCP が同じ型を produce/consume する
 - **GCP**：receptron の `gui-chat-protocol`（npm **2.0.0**・2026-08-03）。ツール結果 `ToolResult` の `data` に**型つきペイロード**を載せ、ホストが**登録済み viewer**で描く契約と、プラグインの実行時 API
 
 以後、前者を **Map Edition**、後者を **GCP** と書く。両者は「型つきデータで UI を駆動する」という同じ思想で、**Map Edition のパネル配列は GCP の `data` にそのまま載る**（§2.5 の対応表）。
@@ -153,8 +153,8 @@ MulmoTerminal の `docs/gui-protocol-spike.md`（Phase III・実機検証済み�
 
 | Map Edition（当アプリ） | GCP | 備考 |
 |---|---|---|
-| `Panel[]`（`type` 判別の 10 型） | `ToolResult.data`（viewer が `type` で描き分け） | **配列ごと `data` に載せる**。viewer は既存レンダラ |
-| `MapAction[]`（7 型） | `data.mapActions`（viewer が解釈） | 同じ意味論（§1.2） |
+| `Panel[]`（`type` 判別の 12 型・2026-10 に `stationProfile`・`areaSummary` を足した） | `ToolResult.data`（viewer が `type` で描き分け） | **配列ごと `data` に載せる**。viewer は既存レンダラ |
+| `MapAction[]`（8 型・2026-10-11 に `colorStations` を足した） | `data.mapActions`（viewer が解釈） | 同じ意味論（§1.2）。`colorStations`（駅の色分け）は**条件**（指標とエリア）を運ぶ——描くには共通 API `GET /api/stations/classes` で段・色・凡例を引く。`render_map` はサーバで引いて描き、DB を引けない受け手は描けない理由を残す（`domain/map/scene.ts`・`docs/261001_fix_user_feedback_ui.md` §6.12.6・§6.16） |
 | `placement: inline / drawer / modal`・`size` | `previewComponent`（サイドバー）／`viewComponent`（キャンバス） | inline＝preview、drawer/modal＝view |
 | `forLlm`（要約 JSON・現 `structuredContent.result`） | `message`＋`jsonData` | LLM の見える面は今と同じ |
 | `limitationsJa`・`disclaimerJa`・`notes` | `instructions`（LLM への後続指示）にも写す | 「安全と言わない」規範をホスト越しに保つ |

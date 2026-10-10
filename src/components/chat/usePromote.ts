@@ -10,11 +10,11 @@
  */
 
 import { useCallback } from 'react'
-import { detailTabFor } from '@/shared/constants'
 import { useMapUrlState } from '@/components/map/useMapUrlState'
 import { useSelectDetailTab } from '@/components/detail/useDetailTab'
 import { useFigureUrl } from '@/components/figure/useFigureUrl'
 import { type PanelPromotion } from '@/shared/promotion'
+import { focusTabOf } from './detailFocus'
 
 export function usePromote(): (promotion: PanelPromotion) => void {
   const { setGrp } = useMapUrlState()
@@ -28,7 +28,8 @@ export function usePromote(): (promotion: PanelPromotion) => void {
         return
       }
       // タブと駅を同じ tick で書く（nuqs が 1 回の URL 更新に束ねる＝ドロワーは最初から焦点のタブ）。
-      if (promotion.category !== null) selectDetailTab(detailTabFor(promotion.category))
+      const tab = focusTabOf(promotion)
+      if (tab !== null) selectDetailTab(tab)
       void setGrp(promotion.grp)
     },
     [setGrp, openFigure, selectDetailTab],

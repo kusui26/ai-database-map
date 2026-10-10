@@ -14,7 +14,7 @@
 
 ## やり方
 
-タブは URL（`?tab`）→ この端末の記憶（localStorage）→ 乗降客数、の順で決まる。判定は、選ばれているタブ
+タブは URL（`?tab`）→ この端末の記憶（localStorage）→ 概要（2026-10-09 B4 までは乗降客数）、の順で決まる。判定は、選ばれているタブ
 （タブ帯の下線）と URL の両方で行う。チャットは `/api/chat` を差し替え、本番と同じ並び
 （data-promotions → data-map、ツールが成功するたびに送り直し）を返す。回答の途中で利用者がタブを替える
 場面だけは、届く間隔を空けたいので、ページの fetch を差し替えて 2 回に分けて流す。
@@ -234,7 +234,7 @@ def scenario_switch_station(browser: Browser) -> None:
     print("[駅を替えても・閉じて開き直しても・リロードしても、選んだタブのまま]")
     context, page, errors = open_page(browser, WIDE)
     goto(page, "?grp=%E6%9D%B1%E4%BA%AC%230")
-    wait_for_tab(page, "乗降客数")
+    check("記憶が無ければ概要で開く（B4）", wait_for_tab(page, "概要"), f"タブ={active_tab(page)}")
     click_tab(page, "所得")
     check("所得を選ぶと URL に tab=income", wait_for_tab(page, "所得") and params(page).get("tab") == "income", page.url)
     search_and_select(page, "新宿")
@@ -277,12 +277,12 @@ def scenario_link(browser: Browser) -> None:
 
 
 def scenario_invalid(browser: Browser) -> None:
-    print("[知らない ?tab は無いのと同じ（既定の乗降客数）]")
+    print("[知らない ?tab は無いのと同じ（既定の概要）]")
     context, page, errors = open_page(browser, WIDE)
     goto(page, "?grp=%E6%9D%B1%E4%BA%AC%230&tab=population_forecast")
-    check("将来推計人口（タブではない）は乗降客数に倒す", wait_for_tab(page, "乗降客数"), f"タブ={active_tab(page)}")
+    check("将来推計人口（タブではない）は概要に倒す", wait_for_tab(page, "概要"), f"タブ={active_tab(page)}")
     goto(page, "?grp=%E6%9D%B1%E4%BA%AC%230&tab=xyz")
-    check("でたらめな値も乗降客数に倒す", wait_for_tab(page, "乗降客数"), f"タブ={active_tab(page)}")
+    check("でたらめな値も概要に倒す", wait_for_tab(page, "概要"), f"タブ={active_tab(page)}")
     check("画面のエラーなし", not errors, "; ".join(errors))
     context.close()
 

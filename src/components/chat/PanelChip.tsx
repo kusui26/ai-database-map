@@ -11,16 +11,17 @@
  * （`InlineFigure`・出し分けは `presentation.ts`・2026-10-02）。
  */
 
-import { CATEGORY_LABELS_JA } from '@/shared/constants'
+import { CATEGORY_LABELS_JA, DETAIL_TAB_LABELS_JA } from '@/shared/constants'
 import { type PanelPromotion } from '@/shared/promotion'
 import { type Panel } from '@/shared/protocol'
 import { type PanelGroup } from './panelGroups'
 import { usePromote } from './usePromote'
 
-/** 駅詳細のチップで、何を開くか（聞いたカテゴリ。焦点が無ければ「詳細」）。押す前に開く先が分かる。 */
+/** 駅詳細のチップで、何を開くか（概要・聞いたカテゴリ。焦点が無ければ「詳細」）。押す前に開く先が分かる。 */
 function detailFocusLabel(promotion: PanelPromotion | null): string {
-  if (promotion?.kind !== 'detail' || promotion.category === null) return '詳細'
-  return CATEGORY_LABELS_JA[promotion.category]
+  if (promotion?.kind !== 'detail') return '詳細'
+  if (promotion.tab !== undefined) return DETAIL_TAB_LABELS_JA[promotion.tab]
+  return promotion.category === null ? '詳細' : CATEGORY_LABELS_JA[promotion.category]
 }
 
 /** チップに出す見出し。図はタイトルを、駅詳細は駅名と聞いたカテゴリを、地点のハザードは地点名を使う。 */

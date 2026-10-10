@@ -11,6 +11,7 @@
  */
 
 import { type CatalogStation } from '@/db/queries'
+import { cityOfWard, wardOf } from '@/shared/municipality'
 import { placeKey } from './keys'
 
 /** 経度・緯度。 */
@@ -36,9 +37,6 @@ export type AreaIndex = {
   /** 全部の市区町村と市全体（近い名前を挙げるとき）。 */
   readonly places: readonly PlaceEntry[]
 }
-
-/** 政令市の区（「横浜市港北区」→ 市「横浜市」・区「港北区」）。 */
-const CITY_WARD = /^(.+?市)(.+区)$/
 
 /** 鍵ごとにまとめる（鍵が null のものは入れない・入った順を保つ）。 */
 function groupBy<T>(items: readonly T[], keyOf: (item: T) => string | null): Map<string, T[]> {
@@ -81,8 +79,8 @@ function groupPlaces(stations: readonly CatalogStation[]): PlaceEntry[] {
 /** 政令市の区をまとめて、市全体を作る（都道府県と市の組ごと）。 */
 function groupCities(places: readonly PlaceEntry[]): PlaceEntry[] {
   const cities = groupBy(places, (place) => {
-    const city = CITY_WARD.exec(place.value)?.[1]
-    return city === undefined ? null : `${place.prefecture}\t${city}`
+    const city = cityOfWard(place.value)
+    return city === null ? null : `${place.prefecture}\t${city}`
   })
   return [...cities.entries()].map(([key, wards]) => {
     const [prefecture = '', city = ''] = key.split('\t')
@@ -92,8 +90,8 @@ function groupCities(places: readonly PlaceEntry[]): PlaceEntry[] {
 }
 
 function wardKey(place: PlaceEntry): string | null {
-  const ward = CITY_WARD.exec(place.value)?.[2]
-  return ward === undefined ? null : placeKey(ward)
+  const ward = wardOf(place.value)
+  return ward === null ? null : placeKey(ward)
 }
 
 export function buildAreaIndex(stations: readonly CatalogStation[]): AreaIndex {

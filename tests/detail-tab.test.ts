@@ -1,5 +1,6 @@
 /**
- * 駅詳細のタブ：URL（`?tab`）→ この端末で最後に見たタブ → 乗降客数、の順で決める（2026-10-02）。
+ * 駅詳細のタブ：URL（`?tab`）→ この端末で最後に見たタブ → 概要、の順で決める（2026-10-02・既定は 2026-10-09 B4 で
+ * 乗降客数から概要＝駅周辺のプロフィールへ）。
  *
  * 以前は駅を替えるたびに乗降客数タブへ戻していた。「同じ項目を見たいので、ブラウザに覚えておいて
  * ほしい」というフィードバックへの対応（`docs/261001_fix_user_feedback_ui.md` §2）。
@@ -53,11 +54,16 @@ const throwingStorage: TabStorage = {
 }
 
 describe('タブの値（DETAIL_TABS・DetailTab）', () => {
-  it('9 タブ・重複なし・乗降客数が先頭・災害が末尾', () => {
-    expect(DETAIL_TABS).toHaveLength(9)
+  it('10 タブ・重複なし・概要が先頭・乗降客数が 2 番目・災害が末尾', () => {
+    expect(DETAIL_TABS).toHaveLength(10)
     expect(new Set(DETAIL_TABS).size).toBe(DETAIL_TABS.length)
-    expect(DETAIL_TABS[0]).toBe('passenger')
+    expect(DETAIL_TABS[0]).toBe('overview')
+    expect(DETAIL_TABS[1]).toBe('passenger')
     expect(DETAIL_TABS.at(-1)).toBe('hazard')
+  })
+
+  it('概要は指標のカテゴリではない（カテゴリからは写らない＝チャットは tab で開く）', () => {
+    expect(CATEGORIES.some((category) => detailTabFor(category) === 'overview')).toBe(false)
   })
 
   it('将来推計人口はタブではない（人口タブの中にある）', () => {
@@ -67,8 +73,8 @@ describe('タブの値（DETAIL_TABS・DetailTab）', () => {
     expect(DETAIL_TABS.some((tab) => tab === forecast)).toBe(false)
   })
 
-  it('既定のタブは乗降客数で、タブの 1 つ', () => {
-    expect(DEFAULT_DETAIL_TAB).toBe('passenger')
+  it('既定のタブは概要（駅周辺のプロフィール）で、タブの 1 つ', () => {
+    expect(DEFAULT_DETAIL_TAB).toBe('overview')
     expect(isDetailTab(DEFAULT_DETAIL_TAB)).toBe(true)
   })
 })
@@ -87,7 +93,7 @@ describe('detailTabFor（指標カテゴリ → タブ）', () => {
 })
 
 describe('isDetailTab（外から来た値の検査）', () => {
-  it('9 タブはすべて通す', () => {
+  it('10 タブはすべて通す', () => {
     for (const tab of DETAIL_TABS) expect(isDetailTab(tab)).toBe(true)
   })
 
@@ -98,6 +104,8 @@ describe('isDetailTab（外から来た値の検査）', () => {
       'Passenger',
       ' passenger',
       'hazard\n',
+      'Overview',
+      '概要',
       '人口',
       0,
       null,
@@ -118,11 +126,15 @@ describe('resolveDetailTab（URL → この端末の記憶 → 既定）', () =>
     expect(resolveDetailTab('passenger', 'income')).toBe('passenger')
   })
 
+  it('URL が概要なら、記憶が別のタブでも概要（既定と同じ値でも URL を優先）', () => {
+    expect(resolveDetailTab('overview', 'income')).toBe('overview')
+  })
+
   it('URL に無ければ、この端末で最後に見たタブ', () => {
     expect(resolveDetailTab(null, 'land_price')).toBe('land_price')
   })
 
-  it('どちらも無ければ既定（乗降客数）', () => {
+  it('どちらも無ければ既定（概要）', () => {
     expect(resolveDetailTab(null, null)).toBe(DEFAULT_DETAIL_TAB)
   })
 })

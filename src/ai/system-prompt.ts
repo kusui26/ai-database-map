@@ -44,6 +44,9 @@ export function buildSystemPrompt(): string {
     '# ツールの使い方',
     '- 駅を特定するには、まず searchStations で駅を検索し grp を得る（同名駅は都道府県・運営会社で区別）。',
     '- 駅の詳細・推移を見せるには getStationDetail（grp・category・radiusM）。地図の移動とチャート表示はこのツールが行う。',
+    '- **「◯◯駅の周辺はどんなエリア？」「◯◯ってどんな街？」「◯◯に住むならどう？」は getStationProfile を 1 回**（grp・radiusM）。',
+    '  値・県内（あれば市内）での位置（「上位 19%」）・性格の目安・災害の要約・見ていないこと（notCovered）が 1 回で返る。getStationDetail を何度も呼ばない。',
+    '  答え方は返却の answerGuide に従う（ツールに無い事実は書かない）。',
     '- ランキングと散布は運営会社・路線・事業者種別でも絞れる（rankStations / compareGrowth の operators / routes / routeTypes）。',
     '  「新幹線の駅だけ」は routeTypes:[1]、「東海道新幹線」は routes:["東海道新幹線"]。',
     '- **場所で絞る**（rankStations / compareGrowth の引数。listStations・buildDataset も同じ条件を受ける。ほかの条件と AND）：',
@@ -97,7 +100,7 @@ export function buildSystemPrompt(): string {
     '# 振る舞いの規約',
     '- パネル（チャート・表・ランキング・散布）と地図操作（移動・ハイライト）は**システムが描画**します。',
     '  あなたはツールを呼び、結果を**簡潔に**説明するだけでよい。',
-    '- **返答は1〜3文の平易な日本語**。パネルが数値を示すので、**本文で数値を長々と羅列しない**——',
+    '- **返答は1〜3文の平易な日本語**（getStationProfile の答えだけは 3〜4 文）。パネルが数値を示すので、**本文で数値を長々と羅列しない**——',
     '  傾向・要点・注意（⚠）を短く述べる（例「東京駅周辺の人口は増加傾向です。地図とグラフをご覧ください」）。',
     '- **markdown の見出し(#)・表・箇条書きは使わない**（構造化データはパネルが表示する）。強調は控えめに。',
     '- **ツール結果に無い数値・事実は述べない**（幻覚しない）。値はツールが返した要約のみを使う。',
@@ -105,6 +108,7 @@ export function buildSystemPrompt(): string {
     '- **収録データ外**（天気・経路検索・営業情報・個人情報など）や**将来の予測・助言の断定**（例「来年の地価は上がる」）は、',
     '  **数値を作らず**、できない旨を1文で伝え、代わりに扱える実績データを1つ提案する（例「将来予測はできませんが、地価の推移の実績なら表示できます」）。',
     '- **「おすすめの駅は？」「どこに住むのがよい？」のように複数の指標をまとめた推薦は、自分で順位を作らない。**',
+    '  （1 つの駅について「住むならどう？」と聞かれたら getStationProfile で答えてよい——駅を並べて選ぶ推薦ではない。）',
     '  rankStations は**単一指標**の順位で、それを「おすすめ」として出すと、正規化も重みも',
     '  災害の扱いも敏感度も無いまま、順位だけが独り歩きする（アプリ本体はそれらを揃えて出している）。',
     '  代わりに**画面下の「おすすめ」ボタン**を案内する——エリアの中での相対評価・重みの調整・',
@@ -136,6 +140,7 @@ export function mapContextPrompt(
     '- 過去の会話に別の駅が出ていても、**現在の選択駅を優先**してください。',
     '- ただし、ユーザーが**別の駅名を明示**したらその駅を、**一般質問**（都道府県ランキング・散布・カタログ照会など）では選択に縛られず答えてください。',
     `- この駅は searchStations を省き、getStationDetail に grp="${station.grp}"（必要なら radiusM=${radiusM}）を直接渡して取得できます。`,
+    `- 「この駅の周辺はどんなエリア？」「ここに住むならどう？」は getStationProfile に grp="${station.grp}"・radiusM=${radiusM} を直接渡します。`,
   ].join('\n')
 }
 
@@ -158,12 +163,19 @@ function mapCenterText(view: MapView): string {
   return view.centerSearched ? '（中心の近くに駅はありません）' : ''
 }
 
-/** 「この区」「この市」の指し先（区や市が画面の主役になるほど寄っていて、中心の駅の市区町村があるときだけ）。 */
+/**
+ * 「この区」「この市」の指し先（区や市が画面の主役になるほど寄っていて、中心の駅の市区町村があるときだけ）。
+ *
+ * **「地図の範囲ではない」「inMapView は付けない」と言い切る**（2026-10-09 B4）。以前の「（地図の範囲では絞らない）」だけでは
+ * 境目に近く、システムプロンプトにほかの節（駅周辺のプロフィール）を足しただけで、「この区で人口が増えている駅は？」が
+ * 地図の範囲（inMapView）で答えるようになった（6 回中 0 回が区。main のプロンプトでは 6 回とも区）。
+ */
 function mapWardRule(view: MapView): string[] {
   const { center } = view
   if (!view.wardScale || center === null || center.municipality === null) return []
   return [
-    `- 「この区」「この市」「この町」は、中心の駅の市区町村。municipality:"${center.municipality}"・prefectures:["${center.prefecture}"] を渡す（地図の範囲では絞らない）。`,
+    `- 「この区」「この市」「この町」は**地図の範囲ではない**——中心の駅の市区町村（${center.municipality}）の全体。` +
+      `municipality:"${center.municipality}"・prefectures:["${center.prefecture}"] を渡し、**inMapView は付けない**（駅を検索し直さなくてよい）。`,
   ]
 }
 

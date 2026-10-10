@@ -14,6 +14,7 @@ import {
   hazardLevelSchema,
   hazardSourceSchema,
 } from './hazard'
+import { areaCharacterSchema, profileHazardSchema, profileSectionSchema } from './profile'
 
 // --- メッセージ ---------------------------------------------------------
 export const messageSchema = z.object({
@@ -374,6 +375,36 @@ export const panelSchema = z.discriminatedUnion('type', [
     size: sizeSchema,
   }),
   z.object({
+    /**
+     * 駅周辺のプロフィール（2026-10-09 B4・`docs/261001_fix_user_feedback_ui.md` §6.4）。
+     * 汎用の `statTable` に流すと、県内・市内の**位置**（順位・比べた駅の数・目盛り）と性格の目安、災害の時制が
+     * 文字列に潰れ、画面は目盛りを描けず、AI は位置を読めない——`hazardCard` と同じく**意味を型に残す**。
+     * 中身は共通 API（`GET /api/stations/[grp]/profile`）の応答そのもの（部品の形は `profile.ts`）。
+     */
+    type: z.literal('stationProfile'),
+    grp: z.string(),
+    /** 「横浜の周辺（1km圏）」。 */
+    title: z.string(),
+    /** 駅の呼び名（「横浜」）。 */
+    placeJa: z.string(),
+    radiusM: z.number(),
+    /** 市内の比較に使った市区町村（政令市は市全体）。無ければ null。 */
+    areaJa: z.string().nullable(),
+    /** 位置の凡例（行には「県内」「市内」とだけ書くので、どこの県・市かをここで言う）。 */
+    positionsLegendJa: z.string(),
+    character: areaCharacterSchema,
+    sections: z.array(profileSectionSchema),
+    /** 災害の要約（事前計算・出典つき）。無い駅は null＝分からない（安全ではない）。 */
+    hazard: profileHazardSchema.nullable(),
+    /** **見ていないこと**（必ず表示する）。 */
+    notCoveredJa: z.array(z.string()),
+    notesJa: z.array(z.string()),
+    /** 指標の出典（災害の出典は `hazard.sources`）。 */
+    sources: z.array(sourceRefSchema),
+    placement: placementSchema,
+    size: sizeSchema,
+  }),
+  z.object({
     type: z.literal('markdown'),
     body: z.string(),
     placement: placementSchema,
@@ -397,6 +428,7 @@ export type MarkdownPanel = PanelOf<'markdown'>
 export type HazardCardPanel = PanelOf<'hazardCard'>
 export type EvacuationListPanel = PanelOf<'evacuationList'>
 export type EscapeDirectionPanel = PanelOf<'escapeDirection'>
+export type StationProfilePanel = PanelOf<'stationProfile'>
 
 /** パネル表示バリアント（チャット内=compact／ドロワー・モーダル=full）。 */
 export type PanelSize = NonNullable<z.infer<typeof sizeSchema>>

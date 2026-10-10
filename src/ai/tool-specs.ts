@@ -20,6 +20,7 @@ import {
   NEAR_MIN_RADIUS_M,
   PREFECTURES,
   RADII_M,
+  radiusLabel,
   type Category,
   type RadiusM,
   ROUTE_TYPES,
@@ -34,6 +35,7 @@ import {
   type LineRef,
   type RankingResponse,
   type StationListItem,
+  type StationProfile,
 } from '@/shared/api'
 import { type Viewport } from '@/shared/viewport'
 import { signedUrlSecret } from './signed-url'
@@ -81,6 +83,7 @@ import {
   type StationHazardRow,
 } from '@/db/queries'
 import { buildStationDetail } from '@/domain/stations/presenter'
+import { loadStationProfile } from '@/domain/profile/load'
 import { buildRanking } from '@/domain/ranking/presenter'
 import { buildGrowth } from '@/domain/growth/presenter'
 import { hazardPointAt } from '@/lib/hazard/point-source'
@@ -791,6 +794,73 @@ function stationDetailForLlm(
   }
 }
 
+/** プロフィールの 1 項目 → LLM 向け（値と位置は整形済みの文字列のまま・順位を作らせない）。 */
+function profileItemForLlm(item: StationProfile['sections'][number]['items'][number]) {
+  return {
+    name: item.labelJa,
+    when: item.periodJa,
+    value: item.valueJa,
+    ...(item.flagged ? { flagged: true as const } : {}),
+    ...(item.positions.length > 0 ? { positions: item.positions.map((each) => each.labelJa) } : {}),
+    ...(item.noteJa === null ? {} : { note: item.noteJa }),
+  }
+}
+
+/** 災害の要約 → LLM 向け（事前計算・「もし起きたら」・「安全」と言わない）。 */
+function profileHazardForLlm(hazard: StationProfile['hazard']) {
+  if (hazard === null)
+    return { headline: '災害の要約がありません（安全という意味ではありません）。' }
+  return {
+    level: hazard.level,
+    headline: hazard.headlineJa,
+    ...(hazard.hitsJa.length > 0 ? { hits: hazard.hitsJa } : {}),
+    ...(hazard.nearbyJa.length > 0 ? { nearby: hazard.nearbyJa } : {}),
+    ...(hazard.uncoveredJa.length > 0 ? { uncoveredMaps: hazard.uncoveredJa } : {}),
+    caveat: hazard.caveatJa,
+  }
+}
+
+/**
+ * プロフィールの答え方（LLM 向け・返却に同梱する）。**システムプロンプトには書かない**——2026-10-09 B4 の評価で、
+ * この答え方をシステムプロンプトに足すと、関係の無い「この区で人口が増えている駅は？」（地図の中心の区で答える問）が
+ * 地図の範囲（inMapView）で絞るようになった（3 回中 3 回。プロンプトから外すと 3 回とも区で答える）。
+ * 答え方が要るのはこのツールを呼んだあとだけなので、結果と一緒に渡す（`renderMap` の howToJa と同じ）。
+ */
+export const PROFILE_ANSWER_GUIDE_JA =
+  '答え方：性格の目安（character.type の語のまま。「業務地型」「混在型」「住宅地型」「低密度」を言い換えて別の型名を作らない）→ ' +
+  '目立つ位置（上位・下位に大きく寄ったものを 2〜3 個。positions の言い方のまま）→ 災害（hazard.headline を「もし起きたら」の話として一言・「安全」と言わない）→ ' +
+  '見ていないこと（notCovered から 2〜3 個）の順に、箇条書きにせず 3〜4 文の短い段落で。' +
+  '性格と位置はサーバが決めたもの——判定し直したり順位を作ったりしない。「上位」は値が大きい側で、良し悪しではない（地価の上位＝高い）。' +
+  'このデータに無い事実（商業施設・名所・再開発・治安・学校・街の雰囲気など）は、知っていても書かない。' +
+  'データに無い評価（「人気」「注目されている」「住みやすい」「便利」など）も足さない——言えるのは値と位置までで、良し悪しは利用者が決める。'
+
+/**
+ * 駅周辺のプロフィール → LLM 向けの要約（2026-10-09 B4）。性格の目安・位置・注記は**サーバが決めた文字列のまま**渡す——
+ * LLM に型を判定させたり順位を数えさせたりしない（計画書 §11）。見ていないことも同梱し、本文に書かせる。
+ */
+function stationProfileForLlm(profile: StationProfile, radiusNote: string | null) {
+  const { station, character } = profile
+  return {
+    grp: station.grp,
+    name: station.label,
+    prefecture: station.prefecture,
+    municipality: station.municipality,
+    radius: `${radiusLabel(profile.radiusM)}圏`,
+    ...(radiusNote === null ? {} : { note: radiusNote }),
+    character: { type: character.labelJa, meaning: character.summaryJa, basis: character.basisJa },
+    positionsLegend: profile.positionsLegendJa,
+    sections: profile.sections.map((section) => ({
+      title: section.titleJa,
+      items: section.items.map(profileItemForLlm),
+    })),
+    hazard: profileHazardForLlm(profile.hazard),
+    notCovered: profile.notCoveredJa,
+    notes: profile.notesJa,
+    sources: profile.sources.map((each) => each.source),
+    answerGuide: PROFILE_ANSWER_GUIDE_JA,
+  }
+}
+
 /**
  * LLM に返す「どの路線で絞ったか」。引数 `routes` と同じ名前で、利用者の呼ぶ路線（運行系統）の名前を返す——
  * ツールは法令上の路線（応答の `routes`）を使わない（2026-10-08 L3）。
@@ -1345,6 +1415,49 @@ export const TOOL_SPECS = {
   }),
 
   /**
+   * 駅周辺のプロフィール（2026-10-09 B4・`docs/261001_fix_user_feedback_ui.md` §6.4）。
+   * 「どんなエリア？」「住むならどう？」に 1 回で答える束。共通 API（`/api/stations/[grp]/profile`）と同じ
+   * `loadStationProfile` を呼ぶ——値・位置・性格の目安・見ていないことは画面の「概要」タブと同じになる。
+   */
+  getStationProfile: defineSpec({
+    name: 'getStationProfile',
+    description:
+      '駅（grp）の周辺がどんなエリアかを 1 回で返す：人口と増減・将来推計、所得、地価の水準と増減、従業者・事業所、売上、乗降客数、バス停の値と、' +
+      'それぞれの県内（あれば市内）での位置（「上位 19%」）、エリアの性格の目安（業務地型・混在型・住宅地型・低密度。規則で決めたもの）、災害の要約、このデータで**見ていないこと**。' +
+      '「◯◯駅の周辺はどんなエリア？」「◯◯ってどんな街？」「◯◯に住むならどう？」はこれを 1 回呼ぶ（getStationDetail を何度も呼ばない）。' +
+      '地図の移動と駅詳細（「概要」タブ）の表示もこのツールが行う。',
+    inputSchema: z.object({
+      grp: z.string().describe('searchStations が返した駅 grp'),
+      radiusM: z
+        .number()
+        .optional()
+        .describe('集約半径(m): 500/1000/2000/5000/10000/20000。省略時 1000'),
+    }),
+    errorFallbackJa: '駅周辺のプロフィールの取得に失敗しました',
+    run: async ({
+      grp,
+      radiusM,
+    }): Promise<ToolRunResult<HintErrorJa | ReturnType<typeof stationProfileForLlm>>> => {
+      const resolved = resolveRadius(radiusM)
+      const profile = await loadStationProfile(grp, resolved)
+      if (profile === null) {
+        return pure({
+          error: `駅が見つかりません: ${grp}`,
+          hint: 'searchStations で grp を取り直してください。',
+        })
+      }
+      const radiusNote =
+        radiusM === undefined || radiusM === resolved
+          ? null
+          : `半径 ${radiusM}m は無いため、${radiusLabel(resolved)}圏で集計しました。`
+      return {
+        effects: [{ kind: 'stationProfile', profile }],
+        forLlm: stationProfileForLlm(profile, radiusNote),
+      }
+    },
+  }),
+
+  /**
    * 都道府県×指標のランキング（上位/下位）。指標はキーでもファミリ名でもよい。
    * 会社・路線の名前を解決し（路線は運行系統の路線コード・2026-10-08 L3）、決まらない・0 件のときは図を作らない（2026-10-07 B1）。
    */
@@ -1695,6 +1808,7 @@ export const TOOL_SPEC_NAMES = [
   'renderMap',
   'getHazardSummary',
   'getStationDetail',
+  'getStationProfile',
   'rankStations',
   'compareGrowth',
   'getHazardAtPoint',

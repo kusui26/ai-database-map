@@ -14,7 +14,8 @@
  *   **コンパイルが通らない**。ラベルが要る所は ECharts の**文字列テンプレート**で書く
  * - **数値のパネルだけ**を変換する。`hazardCard`・`evacuationList`・`escapeDirection` は
  *   **チャートにしない**——危険度は順序尺度で、色・記号・免責・時制が落ちると誤読される
- *   （`docs/260824_flood.md` §7.5）。`statTable`・`stationCard`・`markdown` は表と文が正しい形
+ *   （`docs/260824_flood.md` §7.5）。`statTable`・`stationCard`・`markdown` は表と文が正しい形。
+ *   `stationProfile`（駅周辺のプロフィール）も表——単位の違う 11 指標の位置を 1 枚の図にしても読めない
  * - **色は Web UI・ビューアと同じ規則**（`shared/viewer/charts.ts` の `seriesColor`・
  *   共有定数の `clusterColor`）。同じ数字が経路によって違う色にならないようにする
  */
@@ -314,6 +315,7 @@ function chartsOf(panel: Panel): readonly EChartsChart[] {
     case 'hazardCard':
     case 'evacuationList':
     case 'escapeDirection':
+    case 'stationProfile':
     case 'markdown':
       return []
   }

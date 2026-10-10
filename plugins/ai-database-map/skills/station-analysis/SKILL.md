@@ -25,7 +25,9 @@ AI Database Map の MCP ツール（`station-data` サーバ）で駅周辺の�
 2. **多数の駅を比べる・合成するなら CSV**：おおむね 10 駅を超える比較・スコアリング・相関は
    `build_dataset` で駅×指標の CSV（短命 URL）を
    1 回で作り、ローカルの pandas で分析する（実務は [analyze-csv](../analyze-csv/SKILL.md)）。
-   `get_station_detail` を駅数ぶん繰り返さない。
+   `get_station_detail` を駅数ぶん繰り返さない。1 駅の周辺が「どんなエリアか」は
+   `get_station_profile` を 1 回（要点・県内／市内での位置・性格の目安・災害の要約・見ていないこと）。
+   性格の目安と位置はサーバの判定のまま使い、作り直さない。
 3. **指標キーはカタログが唯一の真実**：指標名を推測で書かない。
    `get_metrics_catalog` で正確なキー・ラベル・単位・
    利用可能な半径と年次を引いてから `rank_stations` / `compare_growth` に渡す。

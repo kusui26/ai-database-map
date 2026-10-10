@@ -83,6 +83,11 @@ export function createTools(
       inputSchema: s.getStationDetail.inputSchema,
       execute: executeFromSpec(s.getStationDetail, collector, ctx),
     }),
+    getStationProfile: tool({
+      description: s.getStationProfile.description,
+      inputSchema: s.getStationProfile.inputSchema,
+      execute: executeFromSpec(s.getStationProfile, collector, ctx),
+    }),
     rankStations: tool({
       description: s.rankStations.description,
       inputSchema: s.rankStations.inputSchema,

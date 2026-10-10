@@ -41,6 +41,7 @@ import {
   panelsForHazardPoint,
   panelsForRanking,
   panelsForStationDetail,
+  panelsForStationProfile,
   mapActionsForEffect,
 } from './assemble'
 import { metricsCatalogDigest } from './catalog-digest'
@@ -202,6 +203,14 @@ export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
     perMinute: 30,
     chartable: true, // trendChart / barChart
   },
+  getStationProfile: {
+    mcpName: 'get_station_profile',
+    titleJa: '駅周辺のプロフィール',
+    descriptionEn:
+      'One-call profile of the area around a station (chosen radius): key metrics — population with its change and forecast, income, land price level and trend, employees, establishments, retail/food/leisure sales, ridership, bus stops — each with its rank within the prefecture and the city, a rule-based area character (business / mixed / residential / sparse), a precomputed hazard summary, and what the data does not cover (safety, schools, shops, rents, commute, noise).',
+    maxResultSizeChars: 40_000,
+    perMinute: 30,
+  },
   rankStations: {
     mcpName: 'rank_stations',
     titleJa: '駅ランキング',
@@ -287,6 +296,8 @@ function panelsForEffect(effect: ToolEffect): Panel[] {
   switch (effect.kind) {
     case 'stationDetail':
       return panelsForStationDetail(effect)
+    case 'stationProfile':
+      return panelsForStationProfile(effect)
     case 'ranking':
       return panelsForRanking(effect)
     case 'growth':
@@ -421,6 +432,7 @@ export function registerMcpTools(
   registerSpec(server, 'renderMap', s.renderMap, origin, options)
   registerSpec(server, 'getHazardSummary', s.getHazardSummary, origin, options)
   registerSpec(server, 'getStationDetail', s.getStationDetail, origin, options)
+  registerSpec(server, 'getStationProfile', s.getStationProfile, origin, options)
   registerSpec(server, 'rankStations', s.rankStations, origin, options)
   registerSpec(server, 'compareGrowth', s.compareGrowth, origin, options)
   registerSpec(server, 'getHazardAtPoint', s.getHazardAtPoint, origin, options)

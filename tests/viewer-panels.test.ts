@@ -164,3 +164,29 @@ describe('危険度の伝え方（色だけで伝えない）', () => {
     expect(htmlOf(panelFixture('escapeDirection'))).toContain('経路案内ではありません')
   })
 })
+
+describe('駅周辺のプロフィール（stationProfile・2026-10-09 B4）', () => {
+  const html = htmlOf(panelFixture('stationProfile'))
+
+  it('性格の目安・凡例・値・位置・注記を出す', () => {
+    expect(html).toContain('業務地型：働きに来る人が、住む人より多いエリア')
+    expect(html).toContain('市内＝横浜市')
+    expect(html).toContain('43,471 人')
+    expect(html).toContain('神奈川県内 上位 19%')
+    expect(html).toContain('⚠ 1人当たり所得') // ⚠ の値は印つき
+    expect(html).toContain('市全体の平均が主')
+  })
+
+  it('見ていないことを必ず出す', () => {
+    expect(html).toContain('見ていないこと: 治安（犯罪の件数）・学校・学区・保育園の空き')
+  })
+
+  it('災害は時制・記号・色で示し、危険度の語は出さない（いまの危険度と読まれる）', () => {
+    expect(html).toContain('災害（もし起きたら）')
+    expect(html).toContain(HAZARD_LEVEL_ICONS.warning)
+    expect(html).toContain(HAZARD_LEVEL_COLORS.warning)
+    expect(html).not.toContain('警戒')
+    expect(html).toContain('区域図が無い災害: 土砂災害（安全という意味ではありません）')
+    expect(html).toContain('出典: 国土交通省')
+  })
+})

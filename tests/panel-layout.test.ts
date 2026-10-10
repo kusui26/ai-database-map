@@ -10,7 +10,7 @@ import {
 import { TAB_FADE_WIDTH_PX, tabStripScrollLeft } from '@/lib/tab-strip'
 
 /**
- * 駅詳細のタブ帯（1440px 実測・2026-08-04／所得 2026-08-13／売上 2026-08-17／災害 2026-08-28）。
+ * 駅詳細のタブ帯（1440px 実測・2026-08-04／所得 2026-08-13／売上 2026-08-17／災害 2026-08-28／概要 2026-10-09）。
  *
  * 6 タブ時代は帯 404px < パネル 420px で**既定でスライドしなかった**。所得で 7 タブ・460px に
  * なって横スライドが要るようになり、売上で 8 タブ・516px、**災害で 9 タブ・572px** になった
@@ -23,8 +23,11 @@ import { TAB_FADE_WIDTH_PX, tabStripScrollLeft } from '@/lib/tab-strip'
  *           （docs/260816_sales.md §7.4 の案A）。フェードはタブ名を覆い隠さない幅にする。
  *   9 タブ: 同じ条件のまま。ただし**選んだタブは帯を送って見せる**——災害タブは末尾にあり、
  *           バッジから飛んだときに見えないままだと壊れて見える（docs/260828_fix_flood.md §4.2）。
+ *  10 タブ: 概要（駅周辺のプロフィール・B4）を**先頭**に足して 628px。条件は 9 タブと同じ
+ *           （`docs/261001_fix_user_feedback_ui.md` §12-7——ヘッダに要約を置く案はヘッダが伸びるので採らない）。
  */
 const TAB_WIDTHS_PX: Readonly<Record<string, number>> = {
+  概要: 52,
   乗降客数: 80,
   人口: 52,
   所得: 52,
@@ -37,7 +40,7 @@ const TAB_WIDTHS_PX: Readonly<Record<string, number>> = {
 }
 const TAB_GAP_PX = 4
 const STRIP_PADDING_PX = 16
-const TAB_STRIP_WIDTH_PX = 572
+const TAB_STRIP_WIDTH_PX = 628
 
 /**
  * statTable の行幅（1440px・Chromium 実測 2026-08-16／docs/260816_stat_table_layout.md）。
@@ -60,7 +63,7 @@ const tabWidths = Object.values(TAB_WIDTHS_PX)
 const contentWidth = tabWidths.reduce((sum, w) => sum + w, 0) + TAB_GAP_PX * (tabWidths.length - 1)
 
 describe('併設パネルの幅（260804・所得タブ追加 260813）', () => {
-  it('タブ帯の実測内訳が 572px になる（幅を判断した根拠）', () => {
+  it('タブ帯の実測内訳が 628px になる（幅を判断した根拠）', () => {
     expect(contentWidth + STRIP_PADDING_PX).toBe(TAB_STRIP_WIDTH_PX)
   })
 
@@ -68,7 +71,7 @@ describe('併設パネルの幅（260804・所得タブ追加 260813）', () => 
     expect(TAB_STRIP_WIDTH_PX).toBeGreaterThan(PANEL_WIDTH_PX)
   })
 
-  it('9 タブでも最後のタブは完全に隠れる＝フェードで示すしかない（案A を選んだ理由）', () => {
+  it('10 タブでも最後のタブは完全に隠れる＝フェードで示すしかない（案A を選んだ理由）', () => {
     // 帯の可視幅はパネル幅から左右パディングを引いたぶん。そこからはみ出す量が隠れる。
     const visibleStripWidth = PANEL_WIDTH_PX - STRIP_PADDING_PX
     const hidden = contentWidth - visibleStripWidth
@@ -84,10 +87,11 @@ describe('併設パネルの幅（260804・所得タブ追加 260813）', () => 
     expect(TAB_FADE_WIDTH_PX).toBeGreaterThan(0)
   })
 
-  it('タブのラベルと並びが実測時から変わっていない（災害は末尾）', () => {
+  it('タブのラベルと並びが実測時から変わっていない（概要が先頭・災害は末尾）', () => {
     // ラベルが伸びる／タブが増えると帯が広がり、上の不変条件が崩れる。変えたときは実測し直す。
     const labels = DETAIL_TABS.map((tab) => DETAIL_TAB_LABELS_JA[tab])
     expect(labels).toEqual(Object.keys(TAB_WIDTHS_PX))
+    expect(labels[0]).toBe('概要') // 261001 §12-7：先頭
     expect(labels[labels.length - 1]).toBe('災害') // §7 決定 2：末尾
   })
 
@@ -120,18 +124,18 @@ describe('併設パネルの幅（260804・所得タブ追加 260813）', () => 
 /**
  * 帯を送って「選んだタブ」を見せる（`src/lib/tab-strip.ts`・実測 2026-08-28）。
  *
- * 数字はすべて 1440px の Chromium で測ったもの——災害タブは `offsetLeft=512`・幅 52px、
- * 帯の可視幅は 420px（PC）／390px（モバイル）、`scrollWidth` は 572px。
+ * 数字はすべて 1440px の Chromium で測ったもの——災害タブは `offsetLeft=568`・幅 52px、
+ * 帯の可視幅は 420px（PC）／390px（モバイル）、`scrollWidth` は 628px（概要を足した 2026-10-09 に測り直した）。
  * バッジから飛んだのにタブ帯が動かないと、**押しても何も起きていないように見える**。
  */
 describe('タブ帯のスクロール位置（260828）', () => {
-  const HAZARD_TAB = { offsetLeft: 512, offsetWidth: 52 }
+  const HAZARD_TAB = { offsetLeft: 568, offsetWidth: 52 }
   const FIRST_TAB = { offsetLeft: STRIP_PADDING_PX / 2, offsetWidth: 80 }
   const VISIBLE_WIDTH_PX = PANEL_WIDTH_PX // 帯はパネル幅いっぱいに広がる
 
   it('末尾の災害タブを選ぶと、右端まで送って見せる', () => {
     const left = tabStripScrollLeft({ scrollLeft: 0, clientWidth: VISIBLE_WIDTH_PX }, HAZARD_TAB)
-    // 右端が見える位置＋フェードに隠れない余白。ブラウザ側で最大値（572−420＝152）に丸まる。
+    // 右端が見える位置＋フェードに隠れない余白。ブラウザ側で最大値（628−420＝208）に丸まる。
     expect(left).toBe(
       HAZARD_TAB.offsetLeft + HAZARD_TAB.offsetWidth + TAB_FADE_WIDTH_PX - VISIBLE_WIDTH_PX,
     )
@@ -187,6 +191,12 @@ describe('駅詳細ヘッダの不変条件（260828）', () => {
 
   it('ヘッダにその場で開くものを置かない（開閉は本文＝タブでやる）', () => {
     expect(header).not.toContain('aria-expanded')
+  })
+
+  it('駅周辺のプロフィールはヘッダに置かない（「概要」タブ＝本文・261001 §12-7）', () => {
+    // ヘッダに要約を置く案は実測でヘッダが 53px 伸び、どのタブでも本文が 16% 狭くなった（携帯 387→324px）。
+    expect(header).not.toContain('StationProfile')
+    expect(header).not.toContain('useStationProfile')
   })
 
   it('災害バッジはパネルを描かない（1 行の入口に徹する）', () => {

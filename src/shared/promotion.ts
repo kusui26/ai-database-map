@@ -14,6 +14,7 @@
 import { z } from 'zod'
 import { bboxSchema, orderSchema } from './api'
 import { categorySchema } from './catalog'
+import { DETAIL_TABS } from './constants'
 
 /** 絞り込み（空＝絞らない）。ランキングと散布で同じ意味。 */
 const filtersShape = {
@@ -52,11 +53,20 @@ export const scatterPromotionSchema = z.object({
   ...filtersShape,
 })
 
+/** 駅詳細のタブ（`DETAIL_TABS` と同じ値）。 */
+export const detailTabSchema = z.literal([...DETAIL_TABS])
+
 /** 駅詳細（右ドロワーを駅＋焦点タブで開く）。 */
 export const detailPromotionSchema = z.object({
   kind: z.literal('detail'),
   grp: z.string(),
+  /** 聞かれた指標のカテゴリ（null＝焦点なし）。タブは `detailTabFor` で写す。 */
   category: categorySchema.nullable(),
+  /**
+   * 指標ではないタブで開く（「概要」＝駅周辺のプロフィール・2026-10-09 B4）。あれば `category` より先に見る。
+   * カテゴリは指標カタログの語彙なので、概要をそこへ混ぜず別の欄にする（`DetailTab` の型を分けたのと同じ理由）。
+   */
+  tab: detailTabSchema.optional(),
 })
 
 export const panelPromotionSchema = z.discriminatedUnion('kind', [

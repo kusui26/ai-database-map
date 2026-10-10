@@ -15,6 +15,12 @@ import {
 import { jmaWarningKindSchema } from './jma'
 import { summaryHazardGroupSchema } from './hazard-summary'
 import {
+  areaCharacterSchema,
+  profileHazardSchema,
+  profileSectionSchema,
+  profileSourceSchema,
+} from './profile'
+import {
   degenerateReasonSchema,
   exclusionKindSchema,
   flaggedPolicySchema,
@@ -931,6 +937,37 @@ export const recommendResponseSchema = z.object({
   sources: z.array(z.object({ source: z.string(), license: z.string() })),
 })
 export type RecommendResponse = z.infer<typeof recommendResponseSchema>
+
+// --- 駅周辺のプロフィール（GET /api/stations/[grp]/profile・261009 B4） ----------
+
+/** 集計半径（6 段のどれか・既定 1km）。指標によっては近い半径に替える（応答の各項目の `radiusM`・`noteJa`）。 */
+export const stationProfileQuerySchema = z.object({ radiusM: radiusParam.default(1000) })
+export type StationProfileQuery = z.infer<typeof stationProfileQuerySchema>
+
+/**
+ * 駅周辺のプロフィール（駅×半径の要点・県内／市内での位置・性格の目安・災害の要約・見ていないこと）。
+ * 部品の形は `profile.ts`（GUI Chat Protocol のパネルと共有）。
+ */
+export const stationProfileSchema = z.object({
+  station: stationRowSchema,
+  /** 選んだ集計半径（m）。 */
+  radiusM: z.number(),
+  /** 市内の比較に使った市区町村（政令市は市全体）。無ければ null。 */
+  area: z.string().nullable(),
+  /** 位置の凡例（「県内＝神奈川県、市内＝横浜市の駅と比べた位置です（…）」）。 */
+  positionsLegendJa: z.string(),
+  character: areaCharacterSchema,
+  sections: z.array(profileSectionSchema),
+  /** 災害の要約。事前計算が無い駅は null（＝分からない。安全ではない）。 */
+  hazard: profileHazardSchema.nullable(),
+  /** このプロフィールが**見ていないこと**（治安・学校・生活施設・家賃…）。必ず並べて出す。 */
+  notCoveredJa: z.array(z.string()),
+  /** 全体に効く注意（順位の意味・円で集計していること・年の違い）。 */
+  notesJa: z.array(z.string()),
+  /** 使った指標の出典（権利表記を落とさない）。災害の出典は `hazard.sources`。 */
+  sources: z.array(profileSourceSchema),
+})
+export type StationProfile = z.infer<typeof stationProfileSchema>
 
 export const healthResponseSchema = z.object({ ok: z.literal(true) })
 export type HealthResponse = z.infer<typeof healthResponseSchema>

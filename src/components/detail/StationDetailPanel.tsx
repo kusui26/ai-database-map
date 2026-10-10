@@ -3,7 +3,8 @@
 /**
  * 駅詳細パネル（骨格＋乗降タブ）。デスクトップ＝右ドロワー／モバイル＝vaul ボトムシート。
  * ?grp 選択で開き、閉じると ?grp をクリア。カード＋タブは Protocol の Panel を PanelStack で描画する。
- * タブは 8 カテゴリ（乗降・人口・所得・売上・地価・バス・事業所・従業者）＋**災害**。
+ * タブは**概要**（駅周辺のプロフィール・2026-10-09 B4）＋ 8 カテゴリ（乗降・人口・所得・売上・地価・バス・
+ * 事業所・従業者）＋**災害**。
  * 半径依存タブは集計半径セレクタを表示。
  *
  * 選んだタブは URL（`?tab`）とこの端末に覚え、**駅を替えても、閉じて開き直しても保つ**
@@ -43,6 +44,7 @@ import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { PanelRenderer, PanelStack } from '@/components/panels/PanelRenderer'
 import { StationHazardBadge } from '@/components/hazard/StationHazardBadge'
 import { StationHazardTab } from '@/components/hazard/StationHazardTab'
+import { StationOverviewTab } from '@/components/detail/StationOverviewTab'
 import { type HazardTarget } from '@/components/hazard/useHazardPoint'
 import { TAB_FADE_WIDTH_PX, tabStripScrollLeft } from '@/lib/tab-strip'
 import { cn } from '@/lib/utils'
@@ -230,21 +232,36 @@ function MetricTabContent({
 }
 
 /**
- * タブの本文。**災害だけは指標ではない**ので、集計半径もカタログも通さず別の器に渡す
+ * タブの本文。**概要と災害は指標ではない**ので、カタログを通さず別の器に渡す
  * （`docs/260828_fix_flood.md` §4.1）。ここで分けておくと、指標側の型が `Category` のまま保てる。
+ * 概要（駅周辺のプロフィール）は位置が半径で変わるので、指標のタブと同じ半径のセレクタを置く。
  */
 function TabContent({
   detail,
   tab,
+  onTab,
   radiusM,
   onRadius,
 }: {
   detail: StationDetail
   tab: DetailTab
+  onTab: (tab: DetailTab) => void
   radiusM: number
   onRadius: (radiusM: number) => void
 }) {
   if (tab === 'hazard') return <StationHazardTab target={hazardTargetOf(detail)} />
+  if (tab === 'overview') {
+    return (
+      <div>
+        <DrawerRadiusControl radiusM={radiusM} onChange={onRadius} />
+        <StationOverviewTab
+          grp={detail.station.grp}
+          radiusM={radiusM}
+          onOpenHazard={() => onTab('hazard')}
+        />
+      </div>
+    )
+  }
   return <MetricTabContent detail={detail} tab={tab} radiusM={radiusM} onRadius={onRadius} />
 }
 
@@ -298,7 +315,13 @@ function DetailBody({
         ) : detail === undefined ? (
           <div className="grid h-40 place-items-center text-sm text-slate-400">読み込み中…</div>
         ) : (
-          <TabContent detail={detail} tab={tab} radiusM={radiusM} onRadius={onRadius} />
+          <TabContent
+            detail={detail}
+            tab={tab}
+            onTab={onTab}
+            radiusM={radiusM}
+            onRadius={onRadius}
+          />
         )}
       </div>
     </div>

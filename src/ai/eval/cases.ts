@@ -698,6 +698,7 @@ export const EVAL_CASES: readonly EvalCase[] = [
   },
   {
     // 日本全体を見ているときの「このあたり」はどこか決まらない——地図で絞らず（全国の順位も出さず）、どのあたりかを聞く。
+    // 聞き方は「市区町村や路線を教えて」も正しい（2026-10-10 の 6 回中 5 回がこの言い方で、「どのあたり」の語の一覧だけでは落ちた）。
     id: 'map-context-too-wide',
     category: '地図文脈',
     query: 'このあたりで地価が上がっている駅は？',
@@ -705,7 +706,17 @@ export const EVAL_CASES: readonly EvalCase[] = [
     expect: {
       noRankScatter: true,
       textNonEmpty: true,
-      containsAny: ['拡大', 'どのあたり', 'どの辺', 'どの地域', 'どちら', '地名', '駅名'],
+      containsAny: [
+        '拡大',
+        'どのあたり',
+        'どの辺',
+        'どの地域',
+        'どちら',
+        '地名',
+        '駅名',
+        '市区町村',
+        '路線',
+      ],
     },
   },
   {

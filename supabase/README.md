@@ -27,6 +27,8 @@
 | `*_lines_filter.sql` | 述語 `station_matches_filters` と `rank_by_column`・`scatter_points`・`list_stations` に路線コード `line_cds`（どれかの路線・ほかとは AND）、一覧 `line_names()`（261008 L2）。`line_cds` は default null なので旧版のアプリもそのまま呼べる。検証は `pipeline/golden_lines_test.py` |
 | `*_area_values.sql` | エリアの区域の値（261010 B5a）：区域の指標 `area_metrics`（カタログの写し）・区域 `areas`（行政区域と沿線）・値 `area_values`（double precision）。投入は `pipeline/load_area_values.py`、検証は `pipeline/golden_area_values_test.py`（`docs/area_values.md`） |
 | `*_area_summary.sql` | エリアの要約と色分けの関数（261010 B5b）：`area_rows`（区域の行と内訳の子）・`area_catalog`・`area_station_stats`（駅の分布・⚠ を除く）・`station_metric_values`（色分けの値）・`area_station_counts`。どれも `security invoker`・`set extra_float_digits = 3`（PostgREST の接続の設定のまま real を jsonb にすると有効 6 桁に丸まる）。検証は `pipeline/golden_area_summary_test.py` |
+| `*_jsonb_number_precision.sql` | jsonb で返す `dataset_rows`・`scatter_points` に `extra_float_digits = 3`（261010・B5 で見つけたこと 1）。PostgREST の接続の設定のまま real を jsonb にすると有効 6 桁に丸まっていた（東京都の 20km の人口 12,407,970 → 12,408,000）。検証は `pipeline/golden_number_precision_test.py` |
+| `*_station_filter_set.sql` | 駅の絞り込みを「条件に合う駅の集合」`stations_matching_filters` にし、5 つの RPC（rank_by_column・scatter_points・list_stations・area_station_stats・station_metric_values）をそれで絞る（引数・返り値は以前のまま）。古い述語 `station_matches_filters`・`station_matches_railway` は落とした（261010・B5 で見つけたこと 2）。会社・路線などで絞ると約 160ms → 数 ms。検証は `pipeline/golden_station_filter_test.py` |
 
 上表は代表的なものだけ。実際に適用されるのは `supabase/migrations/` の全ファイル（タイムスタンプ順）。
 

@@ -207,6 +207,7 @@ python3 pipeline/golden_lines_test.py        # 投入後：共通の条件 line_
 
 データの投入は無い（migration `20261008210000_area_filters.sql` だけ）。駅の絞り込みの述語 `station_matches_filters` に
 市区町村・範囲・近傍を寄せ、ランキング・散布・一覧の 3 つの RPC が同じ述語を使う。近傍のときは起点からの距離（`dist_m`）も返す。
+（2026-10-10 に、述語は「条件に合う駅の集合」`stations_matching_filters` に作り直した——下の「B5 で見つけたことの直し」）
 
 ```bash
 python3 pipeline/golden_area_test.py --trial   # 当てる前：migration をトランザクションの中で当てて確かめ、ロールバック
@@ -251,6 +252,33 @@ python3 pipeline/build_area_values.py --check  # カタログ JSON が規則と�
 **生成物**（`data/derived/`・gitignore）：`area_units.csv`（行政区域 1,961）・`area_values.csv`（46,737 値）・`line_corridors.csv`（1,803 沿線）・
 `line_corridor_values.csv`（34,257 値）。カタログ `src/shared/catalog/area-catalog.json`（24 指標）はコミットする契約物。
 
+## B5 で見つけたことの直し（261010）
+
+B5（エリア要約）の作業で見つけた 3 つを直した（`docs/261001_fix_user_feedback_ui.md` §6.15）。
+
+1. **jsonb の数を有効 6 桁に丸めない**（migration `20261010230000_jsonb_number_precision.sql`）：Supabase はサーバの設定で
+   extra_float_digits = 0 で、そのまま real を jsonb にすると有効 6 桁に丸まっていた（散布・データセット）
+2. **絞り込みを「条件に合う駅の集合」にする**（migration `20261010230100_station_filter_set.sql`）：会社・法令上の路線・種別・路線で
+   絞ると、駅ごとに展開できない関数を呼んでいた（約 160ms）。集合を返す関数にして、副問い合わせを 1 回だけ引く
+3. **e-Stat の失敗の文に appId を出さない**（`estat_api.py`）：requests の例外の文には appId つきの URL が入る。
+   取得スクリプト 5 本の呼び方を 1 か所に寄せた
+
+```bash
+python3 pipeline/golden_number_precision_test.py           # 当てたあと：PostgREST と同じ設定・REST（anon）で表の値と一致
+python3 pipeline/golden_number_precision_test.py --trial   # 当てる前：当てる前に丸まっていたことと、当てると直ることを見る
+python3 pipeline/golden_station_filter_test.py             # 当てたあと：20 通りの条件の駅・速さ・形・REST（anon）
+python3 pipeline/golden_station_filter_test.py --trial     # 当てる前：当てる前の関数の結果そのものとも比べる
+python3 pipeline/estat_api_test.py                         # 通信を差し替えて、失敗の文に appId を出さないことを見る
+python3 pipeline/estat_api_test.py --live                  # 本物の e-Stat にも小さな要求（成功・無い表・無い URL）
+```
+
+| ファイル | 役割 |
+|---|---|
+| `golden_number_precision_test.py` | dataset_rows・scatter_points の設定（extra_float_digits = 3）と、PostgREST と同じ extra_float_digits = 0 の中で散布（東京都 654 駅・20km の人口 2 年）とデータセット（3,263 値）が表の値と 1 桁まで一致すること・REST（anon）でも同じ（お台場海浜公園 12,407,970・竹橋の 5km 1,163,836） |
+| `golden_station_filter_test.py` | 20 通りの条件で 5 つの RPC の駅が、関数を通さない直接の SQL と一致（--trial では当てる前の関数の結果とも完全一致）・会社・路線などで絞っても速い・絞り込みは 1 つで SET を持たず展開される・5 つの RPC の本体（汎用の計画）で副問い合わせがハッシュ・古い述語が無い・REST（anon） |
+| `estat_api.py` | e-Stat の呼び方の 1 か所：appId の読み方（`.env`）・appId を足して呼ぶ・STATUS を見る・再試行・失敗の文は型・HTTP の状態・STATUS と ERROR_MSG だけ（念のため appId を伏せる） |
+| `estat_api_test.py` | 失敗の言い方（HTTP の誤り・接続の失敗・時間切れ・e-Stat の誤り・ほかの例外に紛れた appId）・appId はここで足す・取得スクリプトは appId を自分で扱わない・`--live` で本物にも |
+
 ## 独立検証（260812）
 
 `data/derived/` の生成は**すべてノートブック 1 回で完結する**（`script/create_dataset_for_AI_Database_Map.ipynb`）。
@@ -273,5 +301,6 @@ python3 pipeline/verify_station_routes.py   # 路線表を最近傍マッチン�
 ## 前提
 
 - Python 3.12 系（`python3 --version`）。カタログ生成は標準ライブラリのみ（pandas 不要）。
-- 取得スクリプトは `requests` / `pandas` / `openpyxl` と `.env` の `ESTAT_APP_ID` を使う。
+- 取得スクリプトは `requests` / `pandas` / `openpyxl` と `.env` の `ESTAT_APP_ID` を使う。e-Stat の呼び方（appId の読み方・
+  失敗の言い方）は `estat_api.py` の 1 か所——appId と完全な URL は出さない（`estat_api_test.py`）。
 - `data/derived/station_dataset.csv` が存在すること（生成は `script/` のノートブック）。

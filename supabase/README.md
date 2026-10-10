@@ -26,6 +26,7 @@
 | `*_lines.sql` | 路線（運行系統・駅データ.jp）`lines` と路線の駅 `line_stations`（261008 L1）。投入は `pipeline/load_lines.py`。法令上の路線 `station_routes` は残す |
 | `*_lines_filter.sql` | 述語 `station_matches_filters` と `rank_by_column`・`scatter_points`・`list_stations` に路線コード `line_cds`（どれかの路線・ほかとは AND）、一覧 `line_names()`（261008 L2）。`line_cds` は default null なので旧版のアプリもそのまま呼べる。検証は `pipeline/golden_lines_test.py` |
 | `*_area_values.sql` | エリアの区域の値（261010 B5a）：区域の指標 `area_metrics`（カタログの写し）・区域 `areas`（行政区域と沿線）・値 `area_values`（double precision）。投入は `pipeline/load_area_values.py`、検証は `pipeline/golden_area_values_test.py`（`docs/area_values.md`） |
+| `*_area_summary.sql` | エリアの要約と色分けの関数（261010 B5b）：`area_rows`（区域の行と内訳の子）・`area_catalog`・`area_station_stats`（駅の分布・⚠ を除く）・`station_metric_values`（色分けの値）・`area_station_counts`。どれも `security invoker`・`set extra_float_digits = 3`（PostgREST の接続の設定のまま real を jsonb にすると有効 6 桁に丸まる）。検証は `pipeline/golden_area_summary_test.py` |
 
 上表は代表的なものだけ。実際に適用されるのは `supabase/migrations/` の全ファイル（タイムスタンプ順）。
 

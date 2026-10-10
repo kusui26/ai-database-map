@@ -103,6 +103,7 @@
 | 検証 | `pipeline/validate_area_values.py` | 独立の検証（推計＝社人研・固定値・沿線の不変条件・形・`--mesh`） |
 | 投入 | `pipeline/load_area_values.py` | → DB の `area_metrics`・`areas`・`area_values`（単一トランザクション・投入後の確認が崩れたらロールバック） |
 | DB の検証 | `pipeline/golden_area_values_test.py` | 本物の DB と PostgREST（anon）で 20 項目 |
+| 読む側（B5b） | `supabase/migrations/*_area_summary.sql`・`src/domain/area-summary/` | 共通 API `GET /api/areas`・`/api/areas/summary`（区域の値の作り方・無い値の理由はこの表のまま名乗る）。検証は `pipeline/golden_area_summary_test.py` |
 
 - DB：区域 3,764・値 80,994・3 つの表で 6.3MB（DB 全体 432MB → 439MB・無料枠 500MB）。値は double precision
   （全国の人口 1.2 億人は real では 1 人単位で持てない）。RLS・anon は SELECT だけ

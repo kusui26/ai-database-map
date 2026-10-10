@@ -231,6 +231,7 @@ python3 pipeline/build_line_corridors.py       # 沿線 601 路線 × 3 幅 → 
 python3 pipeline/validate_area_values.py       # 独立の検証（--mesh でメッシュの按分と公表値のずれも・約 5 分）
 python3 pipeline/load_area_values.py           # area_metrics / areas / area_values へ投入（単一トランザクション・投入後の確認つき）
 python3 pipeline/golden_area_values_test.py    # 投入後：本物の DB と REST（anon）で確かめる（当てる前は --trial）
+python3 pipeline/golden_area_summary_test.py   # 要約と色分けの関数（261010 B5b）：本物の DB と REST（anon）で（当てる前は --trial）
 python3 pipeline/build_area_values.py --check  # カタログ JSON が規則と一致するか
 ```
 
@@ -245,6 +246,7 @@ python3 pipeline/build_area_values.py --check  # カタログ JSON が規則と�
 | `validate_area_values.py` | build の照合を使わずに確かめる：推計＝社人研（13,601 組）・固定値・沿線 ≥ 最大の駅の円・≤ 駅の円の和・円が重ならない沿線は駅の値の和と一致・形 |
 | `load_area_values.py` | `copy_area_values()`。areas は stations を参照しないので全量投入では消えない（路線・駅を作り直したら沿線から作り直す） |
 | `golden_area_values_test.py` | 本物の DB で：件数・固定値・カタログの写し・内訳の和・沿線の単調性と**DB の駅の値**との比べ・無い値の理由・権限（anon は SELECT だけ）・大きさ・速さ・REST（anon） |
+| `golden_area_summary_test.py` | 要約と色分けの関数（B5b）を本物の DB で：区域の行と内訳の子・駅の数（政令市・東京 23 区・全国）・分布を numpy と照合（7 通りの絞り込み）・値の無い駅・権限と設定（`search_path`・`extra_float_digits`）・速さ・REST と直接の一致（大きな値も 1 桁まで） |
 
 **生成物**（`data/derived/`・gitignore）：`area_units.csv`（行政区域 1,961）・`area_values.csv`（46,737 値）・`line_corridors.csv`（1,803 沿線）・
 `line_corridor_values.csv`（34,257 値）。カタログ `src/shared/catalog/area-catalog.json`（24 指標）はコミットする契約物。

@@ -25,6 +25,7 @@ import {
 import { pointHazard } from '@/domain/hazard/point'
 import { hazardLayersWithPointAnswer } from '@/domain/hazard/catalog'
 import { type HazardPointEffect } from '@/ai/types'
+import { panelFixture } from './fixtures/panels'
 import {
   createCollector,
   type GrowthEffect,
@@ -405,6 +406,30 @@ describe('summarizePanels', () => {
     const summary = summarizePanels(panelsForRanking(rankingEffect))
     expect(summary).toContain('1位 流山おおたかの森')
     expect(summary).toContain('⚠') // 2位は lown フラグ
+  })
+
+  it('エリアの要約：区域の値は作り方・山・当たり具合つきの文のまま、駅の周りは「エリア全体の値ではない」と書く', () => {
+    const summary = summarizePanels([panelFixture('areaSummary')])
+    expect(summary).toContain('神奈川県横浜市の要約:')
+    expect(summary).toContain(
+      '将来推計人口 2050年 3,537,253 人（推計・2020年比 -6.4%）［推計（市区町村ごとの合計）］（推計の山 2025年・2025年の実績は推計より 0.9% 少ない）',
+    )
+    expect(summary).toContain('出せない値: 人口（1995〜2015年）')
+    expect(summary).toContain(
+      '駅の周り（1km圏・エリア全体の値ではない）: 人口の増減（2015→2020年）中央値 +2.5%',
+    )
+    expect(summary).toContain('地図の色分け: 人口増減率（2015→2020年・1km圏）。赤は増加')
+  })
+
+  it('エリアの要約：色分けしなかったら理由だけを渡す（「色分けした」と書かせない）', () => {
+    const panel = panelFixture('areaSummary')
+    if (panel.type !== 'areaSummary' || panel.legend === null) throw new Error('見本が違う')
+    const reasonJa = '値のある駅が 3 しかないので色分けしない（5 駅から）。'
+    const summary = summarizePanels([
+      { ...panel, legend: { ...panel.legend, classes: [], meaningJa: null, reasonJa } },
+    ])
+    expect(summary).toContain(reasonJa)
+    expect(summary).not.toContain('地図の色分け:')
   })
 })
 

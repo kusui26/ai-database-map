@@ -16,6 +16,7 @@
 
 import {
   ACCENT_COLOR,
+  radiusLabel,
   EVACUATION_LABELS_JA,
   HAZARD_LEVEL_COLORS,
   HAZARD_LEVEL_ICONS,
@@ -23,6 +24,14 @@ import {
 } from '@/shared/constants'
 import { formatNumber } from '@/shared/format'
 import {
+  type AreaComparisonTable,
+  type AreaStationStat,
+  type AreaSummaryCard,
+  type AreaTotalLine,
+  type StationLegend,
+} from '@/shared/area-summary'
+import {
+  type AreaSummaryPanel,
   type BarChartPanel,
   type EscapeDirectionPanel,
   type EvacuationListPanel,
@@ -39,7 +48,7 @@ import {
   type TrendChartPanel,
 } from '@/shared/protocol'
 import { type ProfileItem, type ProfileSection } from '@/shared/profile'
-import { scatterSvg, seriesColor, trendChartSvg } from './charts'
+import { CHART_BAR_COLOR, safeColor, scatterSvg, seriesColor, trendChartSvg } from './charts'
 import { el, type VNode } from './vnode'
 
 // --- 共通部品 -----------------------------------------------------------
@@ -149,9 +158,35 @@ function statTableNode(panel: StatTablePanel): VNode {
   ])
 }
 
+/**
+ * 棒の塗り。値に負があれば **0 を真ん中**に置き、負は左・正は右へ伸ばす（人口の増減など）。
+ * 負が無ければ以前のまま左から（半径別の地価など・見た目は変えない）。
+ */
+function barFill(bar: BarChartPanel['bars'][number], scale: number, signed: boolean): VNode[] {
+  const accent: Readonly<Record<string, string>> =
+    bar.emphasis === true ? { background: ACCENT_COLOR } : {}
+  if (!signed) {
+    const width = bar.value === null ? '0%' : `${Math.max(2, (bar.value / scale) * 100)}%`
+    return [el('div', { cls: 'bar-fill', style: { width, ...accent } })]
+  }
+  // 幅は小数 2 桁に丸める（属性を短く・出力を決定的に・チャートの座標と同じ）。
+  const half = bar.value === null ? 0 : Math.round((Math.abs(bar.value) / scale) * 50 * 100) / 100
+  const left = bar.value !== null && bar.value < 0 ? Math.round((50 - half) * 100) / 100 : 50
+  return [
+    el('div', { cls: 'bar-zero' }),
+    el('div', {
+      cls: 'bar-fill signed',
+      style: { left: `${left}%`, width: `${half}%`, ...accent },
+    }),
+  ]
+}
+
 function barChartNode(panel: BarChartPanel): VNode {
   const values = panel.bars.flatMap((bar) => (bar.value === null ? [] : [bar.value]))
-  const max = Math.max(...values, 1)
+  const signed = values.some((value) => value < 0)
+  const scale = signed
+    ? Math.max(...values.map((value) => Math.abs(value)), 1)
+    : Math.max(...values, 1)
   return panelBox([
     titleNode(panel.title, panel.unit),
     ...panel.bars.map((bar) =>
@@ -162,18 +197,7 @@ function barChartNode(panel: BarChartPanel): VNode {
             text: bar.flagged ? `⚠ ${bar.label}` : bar.label,
             ...(bar.emphasis === true ? { style: { 'font-weight': '600' } } : {}),
           }),
-          el('div', {
-            cls: 'bar-track',
-            children: [
-              el('div', {
-                cls: 'bar-fill',
-                style: {
-                  width: bar.value === null ? '0%' : `${Math.max(2, (bar.value / max) * 100)}%`,
-                  ...(bar.emphasis === true ? { background: ACCENT_COLOR } : {}),
-                },
-              }),
-            ],
-          }),
+          el('div', { cls: 'bar-track', children: barFill(bar, scale, signed) }),
           el('div', { cls: 'num', text: bar.formatted }),
         ],
       }),
@@ -297,6 +321,8 @@ function escapeDirectionNode(panel: EscapeDirectionPanel): VNode {
 
 /** プロフィールの表の列の数（名前・年 ／ 値 ／ 位置）。 */
 const PROFILE_COLUMNS = 3
+/** エリアの区域の値・駅の周りの表の列の数（注記の行を横に通す）。 */
+const AREA_TOTAL_COLUMNS = 3
 
 /** プロフィールの 1 項目の行（名前・年 ／ 値 ／ 県内・市内の位置）。注記は次の行に。 */
 function profileItemRows(item: ProfileItem): VNode[] {
@@ -373,6 +399,144 @@ function stationProfileNode(panel: StationProfilePanel): VNode {
   ])
 }
 
+/** 区域の値の行（名前 ／ 見出しの文 ／ 作り方）。推計の山と当たり具合は次の行に。 */
+function areaTotalRows(total: AreaTotalLine): VNode[] {
+  const row = el('tr', {
+    children: [
+      el('td', { text: total.labelJa }),
+      el('td', { text: total.headlineJa }),
+      el('td', { cls: 'muted', text: total.methodJa }),
+    ],
+  })
+  const extras = [
+    total.peak === null ? null : `推計の山：${total.peak.year}年 ${total.peak.valueJa}`,
+    total.accuracy?.textJa ?? null,
+  ].filter((text): text is string => text !== null)
+  if (extras.length === 0) return [row]
+  const note = el('td', {
+    cls: 'muted',
+    text: extras.join('・'),
+    attrs: { colspan: AREA_TOTAL_COLUMNS },
+  })
+  return [row, el('tr', { children: [note] })]
+}
+
+/** 駅の周りの 1 指標（名前・期間 ／ 中央値 ／ 中ほどの半分）と、上位・下位。 */
+function areaStationRows(stat: AreaStationStat): VNode[] {
+  const row = el('tr', {
+    children: [
+      el('td', {
+        children: [
+          el('div', { text: stat.labelJa }),
+          el('div', { cls: 'muted', text: stat.periodJa }),
+        ],
+      }),
+      el('td', { cls: 'num', text: stat.medianJa }),
+      el('td', { cls: 'muted', text: `${stat.rangeJa}（${stat.n} 駅）` }),
+    ],
+  })
+  const edges = [
+    stat.top.length === 0
+      ? null
+      : `上位 ${stat.top.map((each) => `${each.labelJa} ${each.valueJa}`).join('・')}`,
+    stat.bottom.length === 0
+      ? null
+      : `下位 ${stat.bottom.map((each) => `${each.labelJa} ${each.valueJa}`).join('・')}`,
+    stat.flaggedN > 0 ? `⚠ ${stat.flaggedN} 駅は参考値なので除いた` : null,
+    stat.noteJa,
+  ].filter((text): text is string => text !== null)
+  if (edges.length === 0) return [row]
+  const note = el('td', {
+    cls: 'muted',
+    text: edges.join('／'),
+    attrs: { colspan: AREA_TOTAL_COLUMNS },
+  })
+  return [row, el('tr', { children: [note] })]
+}
+
+/** エリア 1 つ（比較のときは見出しを付ける）。 */
+function areaCardNodes(card: AreaSummaryCard, comparing: boolean): (VNode | null)[] {
+  const facts = [
+    card.kindJa,
+    `駅 ${card.stationCount}`,
+    card.areaKm2 === null ? null : `${card.areaKm2} km²`,
+  ]
+  const stations = card.stations
+  return [
+    comparing ? el('div', { cls: 'title', text: card.labelJa }) : null,
+    el('div', { cls: 'muted', text: facts.filter((fact) => fact !== null).join('・') }),
+    card.totals.length === 0 ? null : el('table', { children: card.totals.flatMap(areaTotalRows) }),
+    notesNode(card.unavailableJa.map((item) => `出せない値：${item}`)),
+    stations.stats.length === 0
+      ? null
+      : el('div', {
+          cls: 'title',
+          text: `駅の周り（${radiusLabel(stations.radiusM)}圏・${stations.count} 駅）`,
+        }),
+    stations.stats.length === 0
+      ? null
+      : el('table', { children: stations.stats.flatMap(areaStationRows) }),
+  ]
+}
+
+/** 比べる表（行＝項目・列＝エリア）。 */
+function comparisonNode(comparison: AreaComparisonTable): VNode {
+  const head = el('tr', {
+    children: [el('th', { text: '' }), ...comparison.names.map((name) => el('th', { text: name }))],
+  })
+  const rows = comparison.rows.map((row) =>
+    el('tr', {
+      children: [
+        el('td', { cls: 'muted', text: row.labelJa }),
+        ...row.cells.map((cell) => el('td', { text: cell })),
+      ],
+    }),
+  )
+  return el('table', { children: [head, ...rows] })
+}
+
+/** 色分けの凡例（色は形を確かめてから描く・色分けしなかったら理由）。 */
+function legendNodes(legend: StationLegend): (VNode | null)[] {
+  const item = (color: string, label: string, count: number): VNode =>
+    el('div', {
+      children: [
+        el('span', { cls: 'swatch', style: { background: safeColor(color, CHART_BAR_COLOR) } }),
+        el('span', { text: `${label}（${count} 駅）` }),
+      ],
+    })
+  const classes = legend.classes.map((each) => item(each.color, each.labelJa, each.count))
+  const flagged =
+    legend.flagged.count > 0
+      ? item(legend.flagged.color, legend.flagged.labelJa, legend.flagged.count)
+      : null
+  return [
+    el('div', { cls: 'title', text: `地図の色分け：${legend.titleJa}` }),
+    legend.reasonJa === null ? null : el('div', { cls: 'muted', text: legend.reasonJa }),
+    ...classes,
+    flagged,
+    legend.missingCount > 0
+      ? el('div', { cls: 'muted', text: `値なし ${legend.missingCount} 駅（描かない）` })
+      : null,
+    legend.meaningJa === null ? null : el('div', { cls: 'muted', text: legend.meaningJa }),
+  ]
+}
+
+function areaSummaryNode(panel: AreaSummaryPanel): VNode {
+  const comparing = panel.comparison !== null
+  return panelBox([
+    titleNode(panel.title),
+    panel.comparison === null ? null : comparisonNode(panel.comparison),
+    ...panel.areas.flatMap((card) => areaCardNodes(card, comparing)),
+    ...(panel.legend === null ? [] : legendNodes(panel.legend)),
+    notesNode([
+      `見ていないこと: ${panel.notIncludedJa.join('・')}`,
+      ...panel.notesJa,
+      ...(panel.comparison?.notesJa ?? []),
+    ]),
+    sourcesNode(panel.sources),
+  ])
+}
+
 function markdownNode(panel: MarkdownPanel): VNode {
   // 段落だけを扱う（強調・リンクの解釈はしない＝本文をそのまま読ませる）。
   const paragraphs = panel.body.split(/\n{2,}/).filter((paragraph) => paragraph.trim() !== '')
@@ -416,6 +580,8 @@ export function panelToVNode(panel: Panel): VNode {
       return escapeDirectionNode(panel)
     case 'stationProfile':
       return stationProfileNode(panel)
+    case 'areaSummary':
+      return areaSummaryNode(panel)
     case 'markdown':
       return markdownNode(panel)
     default:

@@ -30,6 +30,11 @@ export function radiusLabel(radiusM: number): string {
   return known === undefined ? `${radiusM}m` : RADIUS_LABELS[known]
 }
 
+/** 6 段の半径のどれかか（型ガード）。 */
+export function isRadiusM(value: number): value is RadiusM {
+  return RADII_M.some((radius) => radius === value)
+}
+
 // --- カテゴリ（指標の大分類） --------------------------------------------
 
 /** 指標カテゴリ。catalog.json / GUI Chat Protocol と一致（plan_fable §3.1）。 */

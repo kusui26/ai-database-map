@@ -69,11 +69,20 @@ const MAP_ONLY: MapAction[] = [
 ]
 
 describe('writesUrl（この応答が URL を書くか）', () => {
-  it('駅の選択・ハザードのレイヤ・リセットは URL を書く', () => {
+  it('駅の選択・ハザードのレイヤ・駅の色分け・リセットは URL を書く', () => {
     const hazard: MapAction = { type: 'setHazardLayers', layers: ['flood_l2_depth'] }
+    const coloring: MapAction = {
+      type: 'colorStations',
+      metricKey: 'pop_gr_2020_2015_1km',
+      areas: ['muni:14100'],
+    }
+    const uncolor: MapAction = { type: 'colorStations', metricKey: null, areas: [] }
     const clear: MapAction = { type: 'clearOverlays' }
     expect(writesUrl(response([SELECT_TOKYO]))).toBe(true)
     expect(writesUrl(response([hazard]))).toBe(true)
+    // 色分けは `?color&colorIn` に書く（共有でき、戻るで戻せる・2026-10-11 B5c）。消すのも書く。
+    expect(writesUrl(response([coloring]))).toBe(true)
+    expect(writesUrl(response([uncolor]))).toBe(true)
     expect(writesUrl(response([clear]))).toBe(true)
   })
 

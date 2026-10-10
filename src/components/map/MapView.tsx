@@ -5,6 +5,7 @@
  * ベースは地理院 最適化ベクトルタイル（淡色・出典表示）。全駅 GeoJSON を 1 回取得し、
  * クラスタ（z<10）→ circle（乗降客数の平方根スケール）→ ラベル（z≥12）で描画。
  * クリックで選択（flyTo＋ハイライト＋半径サークル）、状態は URL（?grp&r）に同期。
+ * 駅の色分け（`?color&colorIn`・B5c）は凡例の入れ物が引いた結果をストアから受けて描く（`coloringSource.ts`）。
  */
 
 import { useEffect, useRef } from 'react'
@@ -25,6 +26,12 @@ import { addCurrentPositionLayers, syncCurrentPosition } from './currentPosition
 import { syncHazardLayers } from './hazardSource'
 import { addPointMarkerLayers, syncPointMarker } from './pointMarkerSource'
 import { addEvacuationPointLayers, syncEvacuationPoints } from './evacuationPointsSource'
+import {
+  addColoringLayer,
+  COLORING_LAYER_ID,
+  coloringFeatures,
+  syncColoring,
+} from './coloringSource'
 import { loadStations } from './stationsSource'
 import { useHazardUrlState } from './useHazardUrlState'
 import { useHazardTileTimes } from '@/hooks/useHazardTileTimes'
@@ -41,6 +48,8 @@ const EMPTY_FC: FeatureCollection = { type: 'FeatureCollection', features: [] }
 const NONE = '__none__'
 /** ハイライトした駅へ寄せるときの最大ズーム。 */
 const HIGHLIGHT_FIT_MAX_ZOOM = 12
+/** 色分けしたエリアへ寄せるときの最大ズーム（駅が数駅でも寄りすぎない）。 */
+const COLORING_FIT_MAX_ZOOM = 13
 
 /** 開いているパネル幅を避けて可視領域の中心へ寄せる flyTo padding（plan_fable §2.4 ルール④）。 */
 function flyPadding(
@@ -148,6 +157,9 @@ function addLayers(map: maplibregl.Map): void {
     },
   })
 
+  // 色分け（`?color&colorIn`・B5c）。ハイライトと同じく非クラスタ源。ハイライトの枠と選択駅はこの上に重なる。
+  addColoringLayer(map)
+
   // ハイライト（チャットのランキング上位など・複数駅を枠で示す）。
   // クラスタ源とは別の**非クラスタ源**から描くので、全国（低ズーム＝駅がクラスタに吸収される）でも枠が消えない。
   map.addLayer({
@@ -211,32 +223,50 @@ function addLayers(map: maplibregl.Map): void {
   addCurrentPositionLayers(map)
 }
 
+/** 駅を指せる層（重なっているときは、いちばん上の駅を指す）。 */
+const POINTER_LAYERS = [
+  'stations-circle',
+  COLORING_LAYER_ID,
+  'stations-highlight',
+  'stations-selected',
+]
+
+/**
+ * ホバーに出す駅：色分けの印があればそれ（値と段を持つ）、無ければいちばん上の駅。
+ * 色分けの印の上にはハイライトの枠と選択駅が重なるので、上から順に見るだけでは値が出ない。
+ */
+function hoveredFeature(
+  features: readonly maplibregl.MapGeoJSONFeature[] | undefined,
+): maplibregl.MapGeoJSONFeature | undefined {
+  return features?.find((feature) => feature.layer.id === COLORING_LAYER_ID) ?? features?.[0]
+}
+
 function addHandlers(
   map: maplibregl.Map,
   setGrpRef: { current: SetGrp },
   setHoveredRef: { current: (info: HoverInfo | null) => void },
 ): void {
-  const pointerLayers = ['stations-circle', 'stations-highlight', 'stations-selected']
-
-  for (const layer of pointerLayers) {
-    map.on('click', layer, (e) => {
-      const grp = e.features?.[0]?.properties?.grp
-      if (typeof grp === 'string') void setGrpRef.current(grp)
+  // 層を 1 つの組として受ける（重なった層ごとに同じ駅を何度も選ばない・層の境目でホバーが消えない）。
+  map.on('click', POINTER_LAYERS, (e) => {
+    const grp = e.features?.[0]?.properties?.grp
+    if (typeof grp === 'string') void setGrpRef.current(grp)
+  })
+  map.on('mousemove', POINTER_LAYERS, (e) => {
+    map.getCanvas().style.cursor = 'pointer'
+    const properties = hoveredFeature(e.features)?.properties
+    const name = properties?.name
+    const detailJa = properties?.detailJa
+    setHoveredRef.current({
+      name: typeof name === 'string' ? name : '',
+      detailJa: typeof detailJa === 'string' ? detailJa : null,
+      x: e.point.x,
+      y: e.point.y,
     })
-    map.on('mousemove', layer, (e) => {
-      map.getCanvas().style.cursor = 'pointer'
-      const name = e.features?.[0]?.properties?.name
-      setHoveredRef.current({
-        name: typeof name === 'string' ? name : '',
-        x: e.point.x,
-        y: e.point.y,
-      })
-    })
-    map.on('mouseleave', layer, () => {
-      map.getCanvas().style.cursor = ''
-      setHoveredRef.current(null)
-    })
-  }
+  })
+  map.on('mouseleave', POINTER_LAYERS, () => {
+    map.getCanvas().style.cursor = ''
+    setHoveredRef.current(null)
+  })
 
   map.on('click', 'clusters', (e) => {
     const feature = e.features?.[0]
@@ -279,6 +309,9 @@ export function MapView() {
   const setCenter = useMapStore((state) => state.setCenter)
   const setViewport = useMapStore((state) => state.setViewport)
   const highlightedGrps = useMapStore((state) => state.highlightedGrps)
+  const stationColoring = useMapStore((state) => state.stationColoring)
+  // 最後に寄せた色分けのエリア（同じエリアで指標だけ替えたときに寄せ直さない）。
+  const fittedAreasRef = useRef<string | null>(null)
   const flyToReq = useMapStore((state) => state.flyTo)
   const chatOpen = useChatStore((state) => state.open)
   const isDesktop = useIsDesktop()
@@ -432,6 +465,33 @@ export function MapView() {
       fitBoundsInView(map, bounds, paddingRef.current, HIGHLIGHT_FIT_MAX_ZOOM)
     }
   }, [ready, highlightedGrps])
+
+  // 色分け：非クラスタ源に色の付いた駅を流し込み（ほかの駅は薄く）、**エリアが替わったときだけ**その範囲へ寄せる。
+  // 同じエリアで指標だけ替えたとき（取り直しの間は駅が空になる）は寄せ直さない。消したら（null）次は寄せる。
+  useEffect(() => {
+    const map = mapRef.current
+    if (!ready || map === null) return
+    if (stationColoring === null) fittedAreasRef.current = null
+    const { collection, bounds } = coloringFeatures(
+      stationColoring?.stations ?? [],
+      coordsRef.current,
+    )
+    syncColoring(map, collection)
+    if (stationColoring === null || bounds === null) return
+    if (stationColoring.areasKey === fittedAreasRef.current) return
+    fittedAreasRef.current = stationColoring.areasKey
+    // 選択駅がある場合はその flyTo にカメラを任せる（ハイライトと同じ）。
+    if (grpRef.current !== null) return
+    fitBoundsInView(
+      map,
+      [
+        [bounds[0], bounds[1]],
+        [bounds[2], bounds[3]],
+      ],
+      paddingRef.current,
+      COLORING_FIT_MAX_ZOOM,
+    )
+  }, [ready, stationColoring])
 
   // 任意 flyTo：チャットの flyTo（駅選択を伴わない移動・seq で再実行）
   useEffect(() => {

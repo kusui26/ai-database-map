@@ -10,6 +10,9 @@
  * - `showPoint` … 駅ではない地点の印。水害は「その一点の話」なので駅選択とは別系統（§7.1）
  * - `highlightPoints` … **行き先**の印（避難先・§8.5）。起点（`showPoint`）とは別の印にする
  *
+ * 駅の色分け（`colorStations`・2026-10-11 B5c）は **`?color&colorIn` に書く**＝凡例の ✕ と同じ経路で、共有リンクにも残る。
+ * 回答が色分けを送らなければ前の色分けは残り（ハザードと同じ）、`clearOverlays` は色分けも消す。
+ *
  * URL を書く操作の履歴は、その回答の約束に従う（`answerHistory.ts`）——最初に書くなら push、
  * 送り直しは replace、回答の途中で「戻る／進む」を押されたら書かない（2026-10-02）。
  *
@@ -21,6 +24,7 @@ import { useCallback } from 'react'
 import { type MapAction, type MapResponse } from '@/shared/protocol'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { useHazardUrlState } from '@/components/map/useHazardUrlState'
+import { useColoringUrlState } from '@/components/map/useColoringUrlState'
 import { useMapUrlState } from '@/components/map/useMapUrlState'
 import { useChatStore } from '@/stores/chatStore'
 import { useMapStore } from '@/stores/mapStore'
@@ -33,6 +37,7 @@ const POINT_ZOOM = 15
 const URL_ACTION_TYPES: ReadonlySet<MapAction['type']> = new Set([
   'selectStation',
   'setHazardLayers',
+  'colorStations',
   'clearOverlays',
 ])
 
@@ -51,6 +56,7 @@ export function useApplyMapActions(): MapActionsApplier {
   // 携帯でチャットのシートが開いている＝駅詳細のシートを開くと回答を覆う。
   const sheetWouldCoverChat = !isDesktop && chatOpen
   const { setLayerKeys, setOpacity } = useHazardUrlState()
+  const { setColoring } = useColoringUrlState()
   const setHighlightedGrps = useMapStore((state) => state.setHighlightedGrps)
   const setMarkedPoint = useMapStore((state) => state.setMarkedPoint)
   const setHighlightedPoints = useMapStore((state) => state.setHighlightedPoints)
@@ -88,8 +94,20 @@ export function useApplyMapActions(): MapActionsApplier {
           case 'highlightPoints':
             setHighlightedPoints(action.points)
             break
+          case 'colorStations':
+            if (history === null) break
+            setColoring(
+              action.metricKey === null
+                ? null
+                : { metricKey: action.metricKey, areas: action.areas },
+              history,
+            )
+            break
           case 'clearOverlays':
-            if (history !== null) void setGrp(null, { history })
+            if (history !== null) {
+              void setGrp(null, { history })
+              setColoring(null, history)
+            }
             setHighlightedGrps([])
             setMarkedPoint(null)
             setHighlightedPoints([])
@@ -104,6 +122,7 @@ export function useApplyMapActions(): MapActionsApplier {
       sheetWouldCoverChat,
       setLayerKeys,
       setOpacity,
+      setColoring,
       setHighlightedGrps,
       setMarkedPoint,
       setHighlightedPoints,

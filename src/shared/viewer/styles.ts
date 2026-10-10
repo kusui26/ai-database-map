@@ -30,8 +30,12 @@ export const VIEWER_CSS = /* css */ `
 .panel svg { display: block; width: 100%; height: auto; }
 .bar-row { display: grid; grid-template-columns: 7em 1fr 6.5em; gap: 8px; align-items: center;
            font-size: 12px; margin: 3px 0; }
-.bar-track { background: #f1f5f9; border-radius: 4px; height: 12px; }
+.bar-track { background: #f1f5f9; border-radius: 4px; height: 12px; position: relative; }
 .bar-fill { background: ${CHART_BAR_COLOR}; border-radius: 4px; height: 12px; }
+.bar-fill.signed { position: absolute; top: 0; }
+.bar-zero { position: absolute; top: -2px; bottom: -2px; left: 50%; width: 1px; background: #94a3b8; }
+.swatch { display: inline-block; width: 10px; height: 10px; border-radius: 999px;
+          border: 1px solid rgba(71, 85, 105, 0.6); margin-right: 6px; vertical-align: -1px; }
 .level { display: inline-block; border-radius: 999px; padding: 1px 10px; color: #fff;
          font-size: 12px; font-weight: 600; }
 .items { padding-left: 0; margin: 6px 0; }

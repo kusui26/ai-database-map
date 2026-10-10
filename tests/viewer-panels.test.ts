@@ -190,3 +190,134 @@ describe('駅周辺のプロフィール（stationProfile・2026-10-09 B4）', (
     expect(html).toContain('出典: 国土交通省')
   })
 })
+
+describe('エリアの要約（areaSummary・2026-10-10 B5b）', () => {
+  const panel = panelFixture('areaSummary')
+  const html = htmlOf(panel)
+
+  it('区域の値は見出しの文・作り方・推計の山と当たり具合を出す', () => {
+    expect(html).toContain('神奈川県横浜市の要約')
+    expect(html).toContain('2050年 3,537,253 人（推計・2020年比 -6.4%）')
+    expect(html).toContain('推計（市区町村ごとの合計）')
+    expect(html).toContain('推計の山：2025年 3,786,702 人・2025年の実績は推計より 0.9% 少ない')
+  })
+
+  it('駅の周りは「駅の周り（1km圏・137 駅）」と名乗り、中央値・中ほどの半分・上位と下位・⚠ を出す', () => {
+    expect(html).toContain('駅の周り（1km圏・137 駅）')
+    expect(html).toContain('+0.2%〜+4.9%（136 駅）')
+    expect(html).toContain(
+      '上位 みなとみらい +24.3%／下位 産業振興センター -9.8%／⚠ 2 駅は参考値なので除いた',
+    )
+  })
+
+  it('出せない値・見ていないことを必ず出す', () => {
+    expect(html).toContain('出せない値：人口（1995〜2015年）')
+    expect(html).toContain(
+      '見ていないこと: 増えた・減った理由（再開発・転入・住宅の供給など）・年齢構成・世帯の形',
+    )
+  })
+
+  it('色分けの凡例：見本の色・段・駅の数・⚠・値なし・色の意味', () => {
+    expect(html).toContain('地図の色分け：人口増減率（2015→2020年・1km圏）')
+    expect(html).toContain('background: #0571b0')
+    expect(html).toContain('-5%未満（4 駅）')
+    expect(html).toContain('参考値（⚠）（2 駅）')
+    expect(html).toContain('値なし 1 駅（描かない）')
+    expect(html).toContain('赤は増加、青は減少')
+  })
+
+  it('凡例の色も `#hex` だけを受け入れる（サーバの応答を別の部品が描くとき）', () => {
+    if (panel.type !== 'areaSummary' || panel.legend === null) throw new Error('見本が違う')
+    const hostile: Panel = {
+      ...panel,
+      legend: {
+        ...panel.legend,
+        classes: [
+          {
+            index: 0,
+            color: 'red; background: url(x)',
+            lower: null,
+            upper: null,
+            labelJa: '全部',
+            count: 1,
+          },
+        ],
+      },
+    }
+    const out = htmlOf(hostile)
+    expect(out).not.toContain('url(x)')
+    expect(out).toContain('全部（1 駅）')
+  })
+
+  it('色分けしなかったら理由だけ（段も色の意味も出さない）', () => {
+    if (panel.type !== 'areaSummary' || panel.legend === null) throw new Error('見本が違う')
+    const unstyled: Panel = {
+      ...panel,
+      legend: {
+        ...panel.legend,
+        classes: [],
+        meaningJa: null,
+        reasonJa: '値のある駅が 3 しかないので色分けしない（5 駅から）。',
+      },
+    }
+    const out = htmlOf(unstyled)
+    expect(out).toContain('値のある駅が 3 しかないので色分けしない')
+    expect(out).not.toContain('赤は増加')
+  })
+
+  it('比較は比べる表（行＝項目・列＝エリア）とエリアごとの見出し', () => {
+    if (panel.type !== 'areaSummary') throw new Error('見本が違う')
+    const card = panel.areas[0]
+    if (card === undefined) throw new Error('見本が違う')
+    const compared: Panel = {
+      ...panel,
+      title: '横浜市・川崎市の比較',
+      areas: [card, { ...card, ref: 'muni:14130', nameJa: '川崎市', labelJa: '神奈川県川崎市' }],
+      comparison: {
+        refs: ['muni:14100', 'muni:14130'],
+        names: ['神奈川県横浜市', '神奈川県川崎市'],
+        rows: [{ labelJa: '人口の増減（2020→2025年）', cells: ['-0.7%', '+1.4%'] }],
+        baseYear: 2020,
+        notesJa: ['推移は 2020年を 100 とした指数。'],
+      },
+    }
+    const out = htmlOf(compared)
+    expect(out).toContain('<th>神奈川県横浜市</th><th>神奈川県川崎市</th>')
+    expect(out).toContain(
+      '<td class="muted">人口の増減（2020→2025年）</td><td>-0.7%</td><td>+1.4%</td>',
+    )
+    expect(out).toContain('<div class="title">神奈川県川崎市</div>')
+    expect(out).toContain('推移は 2020年を 100 とした指数。')
+  })
+})
+
+describe('棒の負の値（人口の増減の内訳・B5b）', () => {
+  const signed: Panel = {
+    type: 'barChart',
+    title: '横浜市の区ごとの人口の増減（2020→2025年）',
+    unit: '%',
+    format: 'percent1',
+    category: 'population',
+    bars: [
+      { label: '西区', value: 3.1, formatted: '+3.1%', flagged: false },
+      { label: '金沢区', value: -3.4, formatted: '-3.4%', flagged: false },
+      { label: '不明区', value: null, formatted: '—', flagged: false },
+    ],
+    flags: [],
+    note: null,
+  }
+
+  it('0 を真ん中に置き、正は右・負は左へ（絶対値の最大で半分の幅）', () => {
+    const html = htmlOf(signed)
+    expect(html).toContain('class="bar-zero"')
+    expect(html).toContain('left: 50%; width: 45.59%') // 西区 3.1 / 3.4 × 50（小数 2 桁）
+    expect(html).toContain('left: 0%; width: 50%') // 金沢区（最大）
+    expect(html).toContain('left: 50%; width: 0%') // 欠損
+  })
+
+  it('負の無い棒は以前のまま（0 の線を引かず、左から伸ばす）', () => {
+    const html = htmlOf(panelFixture('barChart'))
+    expect(html).not.toContain('bar-zero')
+    expect(html).not.toContain('signed')
+  })
+})

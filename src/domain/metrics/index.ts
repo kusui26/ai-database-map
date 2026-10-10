@@ -11,6 +11,24 @@ export function vintageLabel(vintage: number): string {
   return vintage === 2024 ? 'R6推計' : 'H30推計'
 }
 
+/** 年の書き方（所得は年度、売上は調査の年）。 */
+const YEAR_SUFFIX: Readonly<Partial<Record<Category, string>>> = {
+  income: '年度',
+  sales: '年調査',
+}
+
+/**
+ * いつの値か（「2020年」「2015→2020年」「2020→2040年・R6推計」「2025年度」「2021年調査」「現行」）。
+ * 駅周辺のプロフィール（B4）とエリア要約の駅の分布（B5b）が同じ言い方で書く。
+ */
+export function periodOf(entry: CatalogEntry): string {
+  const suffix = YEAR_SUFFIX[entry.category] ?? '年'
+  const vintage = entry.vintage === null ? '' : `・${vintageLabel(entry.vintage)}`
+  if (entry.year === null) return '現行'
+  const span = entry.yearBase === null ? `${entry.year}` : `${entry.yearBase}→${entry.year}`
+  return `${span}${suffix}${vintage}`
+}
+
 /** 指標の変種ラベル（年・期間・推計時点。**半径は含めない**＝半径は別セレクタ・P6c）。 */
 export function variantLabel(entry: CatalogEntry): string {
   const parts: string[] = []

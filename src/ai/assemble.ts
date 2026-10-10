@@ -6,7 +6,7 @@
  * → 「クリックでも会話でも、同じ場所に同じ物が出る」（.claude/CLAUDE.md §2・architecture.md §4）。
  */
 
-import { type Category } from '@/shared/constants'
+import { radiusLabel, type Category } from '@/shared/constants'
 import { formatNumber, type MetricFormat } from '@/shared/format'
 import {
   type PanelPromotion,
@@ -14,7 +14,13 @@ import {
   type RankingPromotion,
 } from '@/shared/promotion'
 import { type GrowthResponse, type RankingResponse } from '@/shared/api'
-import { type MapAction, type MapResponse, type Panel } from '@/shared/protocol'
+import { type AreaSummaryCard, type AreaTotalLine } from '@/shared/area-summary'
+import {
+  type AreaSummaryPanel,
+  type MapAction,
+  type MapResponse,
+  type Panel,
+} from '@/shared/protocol'
 import {
   busPanels,
   employeePanels,
@@ -381,6 +387,53 @@ function endpoints(
   return `${head} → ${last.x}年 ${formatNumber(last.y, format)}`
 }
 
+const nonEmpty = (part: string): boolean => part.length > 0
+
+/** 区域の値 1 系統（見出しの文に年と増減が入っている・作り方と推計の山・当たり具合を添える）。 */
+function areaTotalText(total: AreaTotalLine): string {
+  const extras = [
+    total.peak === null ? null : `推計の山 ${total.peak.year}年`,
+    total.accuracy?.textJa ?? null,
+  ].filter((extra): extra is string => extra !== null)
+  const tail = extras.length === 0 ? '' : `（${extras.join('・')}）`
+  return `${total.labelJa} ${total.headlineJa}［${total.methodJa}］${tail}`
+}
+
+/** エリア 1 つ（区域の値・出せない値・駅の周りの中央値。駅の周りはエリア全体の値ではないと書く）。 */
+function areaCardText(card: AreaSummaryCard): string {
+  const stations = card.stations.stats.map(
+    (stat) => `${stat.labelJa}（${stat.periodJa}）中央値 ${stat.medianJa}`,
+  )
+  const around = `駅の周り（${radiusLabel(card.stations.radiusM)}圏・エリア全体の値ではない）`
+  return [
+    `${card.labelJa}（${card.kindJa}・駅 ${card.stationCount}）`,
+    card.totals.map(areaTotalText).join('、'),
+    card.unavailableJa.length === 0 ? '' : `出せない値: ${card.unavailableJa.join(' ')}`,
+    stations.length === 0 ? '' : `${around}: ${stations.join('、')}`,
+  ]
+    .filter(nonEmpty)
+    .join(' ｜ ')
+}
+
+/** エリアの要約（エリアごとの行・比べる表・色分け。サーバが作った文のまま渡し、LLM に計算させない）。 */
+function areaSummaryText(panel: AreaSummaryPanel): string {
+  const rows = panel.comparison?.rows ?? []
+  const comparison = rows.map((row) => `${row.labelJa} ${row.cells.join(' / ')}`).join('、')
+  const legend = panel.legend
+  const coloring =
+    legend === null
+      ? ''
+      : (legend.reasonJa ?? `地図の色分け: ${legend.titleJa}。${legend.meaningJa ?? ''}`)
+  return [
+    `${panel.title}:`,
+    ...panel.areas.map(areaCardText),
+    comparison === '' ? '' : `比較: ${comparison}`,
+    coloring,
+  ]
+    .filter(nonEmpty)
+    .join('\n')
+}
+
 /** 1 パネル → 1 行のコンパクト要約（数値はパネルと同一）。 */
 function summarizePanel(panel: Panel): string {
   switch (panel.type) {
@@ -452,6 +505,8 @@ function summarizePanel(panel: Panel): string {
         .join('、')
       return `${panel.title}: ${panel.character.labelJa}（${panel.character.basisJa}）｜${items}`
     }
+    case 'areaSummary':
+      return areaSummaryText(panel)
     case 'markdown':
       return panel.body
   }

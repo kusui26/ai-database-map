@@ -16,9 +16,9 @@
  */
 
 import { type CatalogEntry, entries } from '@/shared/catalog'
-import { RADII_M, type RadiusM } from '@/shared/constants'
+import { type RadiusM } from '@/shared/constants'
 import { type ProfileItemId, type ProfileSectionId } from '@/shared/profile'
-import { familyCandidates } from '@/domain/metrics/family'
+import { resolveFamilyAtRadius } from '@/domain/metrics/family'
 
 /** 載せる指標 1 つ（ファミリ名・短い名前・増減率の期間）。 */
 export type ProfileItemSpec = {
@@ -94,27 +94,13 @@ export type ResolvedProfileSection = {
   readonly items: readonly ResolvedProfileItem[]
 }
 
-/** 選んだ半径に近い順の半径（段の数で近さを測る・同じ近さなら小さい方を先）。 */
-export function radiiByCloseness(radiusM: RadiusM): readonly RadiusM[] {
-  const at = RADII_M.indexOf(radiusM)
-  return [...RADII_M].sort(
-    (a, b) => Math.abs(RADII_M.indexOf(a) - at) - Math.abs(RADII_M.indexOf(b) - at) || a - b,
-  )
-}
-
 /** 1 項目 → 使う key（選んだ半径に無ければ近い半径に替える。どの半径にも無ければ null）。 */
 export function resolveProfileItem(
   spec: ProfileItemSpec,
   radiusM: RadiusM,
 ): ResolvedProfileItem | null {
-  for (const candidate of radiiByCloseness(radiusM)) {
-    const entry = familyCandidates(spec.family, candidate, spec.spanYears)[0]
-    if (entry !== undefined) {
-      const substituted = entry.radiusM !== null && entry.radiusM !== radiusM
-      return { spec, entry, substituted }
-    }
-  }
-  return null
+  const resolved = resolveFamilyAtRadius(spec.family, radiusM, spec.spanYears)
+  return resolved === null ? null : { spec, ...resolved }
 }
 
 /** プロフィール全体 → 選んだ半径で決まった項目（決まらない項目は落とす＝カタログに無い指標）。 */

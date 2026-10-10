@@ -10,6 +10,8 @@ import {
   type StationRow,
   type StationSummary,
 } from '@/shared/api'
+import { areaKindSchema, type AreaKind } from '@/shared/area-catalog'
+import { areaMissingSchema, type AreaMissing } from '@/shared/area-summary'
 import { stationHazardSummarySchema, type StationHazardSummary } from '@/shared/hazard-summary'
 import { type Viewport } from '@/shared/viewport'
 import { db, DbError } from './client'
@@ -640,6 +642,230 @@ export async function stationProfileRanks(
       },
     ]),
   )
+}
+
+// --- エリアの区域の値（行政区域・沿線・261010 B5b） ------------------------------
+const areaRowSchema = z.object({
+  key: z.string(),
+  kind: areaKindSchema,
+  code: z.string().nullable(),
+  line_cd: z.number().nullable(),
+  width_m: z.number().nullable(),
+  name: z.string(),
+  label: z.string(),
+  prefecture: z.string().nullable(),
+  parent_key: z.string().nullable(),
+  group_key: z.string().nullable(),
+  area_km2: z.number(),
+  missing: z.array(areaMissingSchema),
+  station_count: z.number(),
+  values: z.record(z.string(), z.number()),
+})
+
+/** 区域の 1 行（行政区域・沿線）と、その区域の値（区域の指標の key → 値）。 */
+export type AreaRow = {
+  readonly key: string
+  readonly kind: AreaKind
+  readonly code: string | null
+  readonly lineCd: number | null
+  readonly widthM: number | null
+  /** 駅の市区町村と同じ言い方（政令市の区は「横浜市港北区」）・沿線は路線の名前。 */
+  readonly nameJa: string
+  /** 題に使う言い方（「神奈川県横浜市」「東急東横線の沿線（駅から 1km）」）。 */
+  readonly labelJa: string
+  readonly prefecture: string | null
+  readonly parentKey: string | null
+  readonly groupKey: string | null
+  readonly areaKm2: number
+  readonly missing: readonly AreaMissing[]
+  /** 区域の駅の数（政令市＝区の駅・東京 23 区＝23 の区の駅・沿線＝路線の駅）。 */
+  readonly stationCount: number
+  readonly values: ReadonlyMap<string, number>
+}
+
+/**
+ * 区域の行と値（`area_rows` RPC・jsonb 1 つ）。`withChildren` なら内訳の子（政令市 → 区・都道府県 → 市区町村・
+ * 全国 → 都道府県・東京 23 区 → 23 の区）も返す。知らない鍵は返らない（呼び出し側が 400 にする）。
+ */
+export async function areaRows(keys: readonly string[], withChildren: boolean): Promise<AreaRow[]> {
+  if (keys.length === 0) return []
+  const rows = z
+    .array(areaRowSchema)
+    .parse(await rpc('area_rows', { keys: [...keys], with_children: withChildren }))
+  return rows.map((row) => ({
+    key: row.key,
+    kind: row.kind,
+    code: row.code,
+    lineCd: row.line_cd,
+    widthM: row.width_m,
+    nameJa: row.name,
+    labelJa: row.label,
+    prefecture: row.prefecture,
+    parentKey: row.parent_key,
+    groupKey: row.group_key,
+    areaKm2: row.area_km2,
+    missing: row.missing,
+    stationCount: row.station_count,
+    values: new Map(Object.entries(row.values)),
+  }))
+}
+
+const areaCatalogRowSchema = areaRowSchema.omit({
+  line_cd: true,
+  width_m: true,
+  area_km2: true,
+  values: true,
+})
+
+/** 行政区域の一覧の 1 行（値は持たない）。 */
+export type AreaCatalogRow = Omit<AreaRow, 'lineCd' | 'widthM' | 'areaKm2' | 'values'>
+
+/** 行政区域の一覧（`area_catalog` RPC・1,961 行は PostgREST の 1,000 行の上限を超えるので jsonb 1 つ）。 */
+export async function areaCatalogRows(): Promise<AreaCatalogRow[]> {
+  const rows = z.array(areaCatalogRowSchema).parse(await rpc('area_catalog', {}))
+  return rows.map((row) => ({
+    key: row.key,
+    kind: row.kind,
+    code: row.code,
+    nameJa: row.name,
+    labelJa: row.label,
+    prefecture: row.prefecture,
+    parentKey: row.parent_key,
+    groupKey: row.group_key,
+    missing: row.missing,
+    stationCount: row.station_count,
+  }))
+}
+
+const stationValueRowSchema = z.object({ grp: z.string(), label: z.string(), value: z.number() })
+const stationStatRowSchema = z.object({
+  key: z.string(),
+  n: z.number(),
+  flagged_n: z.number(),
+  q1: z.number().nullable(),
+  median: z.number().nullable(),
+  q3: z.number().nullable(),
+  top: z.array(stationValueRowSchema),
+  bottom: z.array(stationValueRowSchema),
+})
+const stationStatsSchema = z.object({
+  station_count: z.number(),
+  stats: z.array(stationStatRowSchema),
+})
+
+/** 分布の上位・下位の駅 1 つ。 */
+export type StationValueRow = {
+  readonly grp: string
+  readonly label: string
+  readonly value: number
+}
+
+/** エリアの駅の、ある指標の分布（⚠ の値は除いて数える）。 */
+export type StationStatRow = {
+  readonly key: string
+  readonly n: number
+  readonly flaggedN: number
+  readonly q1: number | null
+  readonly median: number | null
+  readonly q3: number | null
+  readonly top: readonly StationValueRow[]
+  readonly bottom: readonly StationValueRow[]
+}
+
+/**
+ * 分位の有効桁。`percentile_cont` は double で補間するので、2.3 と 2.4 の真ん中が 2.3499999999999996 になる
+ * （小数 1 桁に書くと 2.3 に落ちる）。値は real（有効約 7 桁）から作るので、有効 12 桁で丸めても情報は落ちない。
+ */
+const PERCENTILE_DIGITS = 12
+
+function percentileOf(value: number | null): number | null {
+  return value === null ? null : Number(value.toPrecision(PERCENTILE_DIGITS))
+}
+
+/**
+ * エリアの駅の値の分布（`area_station_stats` RPC）：駅の数と、指標ごとの値のある駅の数・⚠ の数・四分位・上位と下位の 3 駅。
+ * 絞り込みは一覧・ランキングと同じ述語。知らない key は返らない。
+ */
+export async function areaStationStats(
+  keys: readonly string[],
+  filter: StationFilter,
+): Promise<{ readonly stationCount: number; readonly stats: readonly StationStatRow[] }> {
+  const raw = stationStatsSchema.parse(
+    await rpc('area_station_stats', {
+      keys: [...keys],
+      ...filterArgs(filter),
+      routes: arrayOrNull(filter.routes),
+    }),
+  )
+  return {
+    stationCount: raw.station_count,
+    stats: raw.stats.map((row) => ({
+      key: row.key,
+      n: row.n,
+      flaggedN: row.flagged_n,
+      q1: percentileOf(row.q1),
+      median: percentileOf(row.median),
+      q3: percentileOf(row.q3),
+      top: row.top,
+      bottom: row.bottom,
+    })),
+  }
+}
+
+const metricValuesSchema = z.object({
+  station_count: z.number(),
+  values: z.array(z.tuple([z.string(), z.number().nullable(), z.number()])),
+})
+
+/** 駅 1 つの値（色分けの入力）。値の無い駅は null。 */
+export type StationMetricValue = {
+  readonly grp: string
+  readonly value: number | null
+  /** ⚠（指標の信頼性フラグが 1・値があるときだけ）。 */
+  readonly flagged: boolean
+}
+
+/**
+ * エリアの駅の値（`station_metric_values` RPC・jsonb 1 つ＝全国 9,273 駅でも 1 回で）。**値の無い駅も null で返る**——
+ * 2 つのエリアを合わせて色分けするとき、駅の集合の和で「値なし」を二重に数えないため。
+ */
+export async function stationMetricValues(
+  key: string,
+  filter: StationFilter,
+): Promise<{ readonly stationCount: number; readonly values: readonly StationMetricValue[] }> {
+  const raw = metricValuesSchema.parse(
+    await rpc('station_metric_values', {
+      column_key: key,
+      ...filterArgs(filter),
+      routes: arrayOrNull(filter.routes),
+    }),
+  )
+  return {
+    stationCount: raw.station_count,
+    values: raw.values.map(([grp, value, flag]) => ({ grp, value, flagged: flag === 1 })),
+  }
+}
+
+const lineStationRowSchema = z.object({
+  seq: z.number(),
+  stations: z.object({ grp: z.string(), label: z.string() }),
+})
+
+/** 路線の駅（路線の中の並び）。 */
+export type LineStation = { readonly seq: number; readonly grp: string; readonly label: string }
+
+/** 路線の駅を路線の順に（`line_stations` と `stations` を外部キーで結ぶ・1 路線は多くて百数十駅）。 */
+export async function lineStationsInOrder(lineCd: number): Promise<LineStation[]> {
+  const { data, error } = await db()
+    .from('line_stations')
+    .select('seq,stations(grp,label)')
+    .eq('line_cd', lineCd)
+    .order('seq')
+  if (error) throw new DbError(error.message)
+  return z
+    .array(lineStationRowSchema)
+    .parse(data)
+    .map((row) => ({ seq: row.seq, grp: row.stations.grp, label: row.stations.label }))
 }
 
 // --- 全駅 GeoJSON（RPC が単一 jsonb で返す・max-rows 回避） -------------

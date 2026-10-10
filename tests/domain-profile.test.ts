@@ -19,10 +19,11 @@ import { panelSchema } from '@/shared/protocol'
 import {
   incomeCityOnlyFlagKey,
   PROFILE_SECTIONS,
-  radiiByCloseness,
   rankedKeys,
   resolveProfileSections,
 } from '@/domain/profile/items'
+import { radiiByCloseness } from '@/domain/metrics/family'
+import { periodOf } from '@/domain/metrics'
 import {
   MIN_COMPARED_STATIONS,
   percentileOf,
@@ -43,7 +44,6 @@ import { profileHazardOf } from '@/domain/profile/hazard'
 import {
   buildStationProfile,
   comparisonAreaOf,
-  periodOf,
   PROFILE_CIRCLE_NOTE_JA,
   PROFILE_FLAG_NOTE_JA,
   PROFILE_NOT_COVERED_JA,

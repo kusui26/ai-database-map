@@ -127,12 +127,13 @@ function LineTrend({ panel, labels }: { panel: TrendChartPanel; labels: number[]
           pointRadius: compact ? 0 : 2,
           pointHoverRadius: 4,
           tension: 0.25,
-          fill: true,
+          // 凡例を出す図（系列が別のエリア）は塗らない——塗りが重なって濁り、実績と推計の重なる年が帯に見える。
+          fill: panel.legend !== true,
           spanGaps: false,
         }
       }),
     }),
-    [labels, panel.series, compact],
+    [labels, panel.series, panel.legend, compact],
   )
 
   const options: ChartOptions<'line'> = useMemo(
@@ -143,9 +144,20 @@ function LineTrend({ panel, labels }: { panel: TrendChartPanel; labels: number[]
       interaction: { mode: 'index', intersect: false },
       scales: buildScales(compact, isPercent, false),
       plugins: {
-        // 折れ線は**凡例を出さない**（Legend プラグインが未登録だった時代からの見た目を保つ）。
-        // 実線/破線と色で区別でき、系列名はツールチップに出る。出すかどうかは別途決める。
-        legend: { display: false },
+        // 折れ線は**既定で凡例を出さない**（Legend プラグインが未登録だった時代からの見た目を保つ）。
+        // 実線/破線と色で区別でき、系列名はツールチップに出る。系列が別のエリアのとき（`panel.legend`・B5b）だけ
+        // 下に出す——載せるのは実線の系列だけ（破線の推計は同じ色の実線と組で読む）。
+        legend: {
+          display: panel.legend === true,
+          position: 'bottom',
+          labels: {
+            boxWidth: 12,
+            boxHeight: 2,
+            padding: 10,
+            font: { size: 11 },
+            filter: (item) => panel.series[item.datasetIndex ?? -1]?.dashed !== true,
+          },
+        },
         tooltip: {
           callbacks: {
             title: (items) => (items[0] === undefined ? '' : `${items[0].label}年`),

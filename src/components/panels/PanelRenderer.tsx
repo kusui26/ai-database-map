@@ -13,6 +13,7 @@ import { EvacuationList } from './EvacuationList'
 import { HazardCard } from './HazardCard'
 import { StationCard } from './StationCard'
 import { StationProfile } from './StationProfile'
+import { AreaSummary } from './AreaSummary'
 import { TrendChart } from './TrendChart'
 import { StatTable } from './StatTable'
 import { BarChart } from './BarChart'
@@ -50,6 +51,8 @@ export function PanelRenderer({
       return <EscapeDirection panel={panel} />
     case 'stationProfile':
       return <StationProfile panel={panel} />
+    case 'areaSummary':
+      return <AreaSummary panel={panel} />
     default: {
       const exhaustive: never = panel
       return exhaustive

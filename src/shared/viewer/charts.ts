@@ -48,7 +48,7 @@ const SERIES_FALLBACK_COLORS: readonly [string, ...string[]] = [
 const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i
 
 /** 色として安全なら採用し、そうでなければ予備を返す。 */
-const safeColor = (value: string | undefined, fallback: string): string =>
+export const safeColor = (value: string | undefined, fallback: string): string =>
   value !== undefined && HEX_COLOR.test(value) ? value : fallback
 
 /** 棒の色（ビューアの CSS `.bar-fill` と ECharts のプレゼンタで共有する）。 */

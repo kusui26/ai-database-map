@@ -12,7 +12,7 @@
 
 import { type StationProfile, type StationRow } from '@/shared/api'
 import { type CatalogEntry } from '@/shared/catalog'
-import { radiusLabel, type Category, type RadiusM } from '@/shared/constants'
+import { radiusLabel, type RadiusM } from '@/shared/constants'
 import { formatWithUnit } from '@/shared/format'
 import { type StationHazardSummary } from '@/shared/hazard-summary'
 import { cityOfWard } from '@/shared/municipality'
@@ -24,7 +24,7 @@ import {
   type ProfileSource,
 } from '@/shared/profile'
 import type { ProfileRankRow } from '@/db/queries'
-import { vintageLabel } from '@/domain/metrics'
+import { periodOf } from '@/domain/metrics'
 import { familyCandidates } from '@/domain/metrics/family'
 import { sourcesForKeys } from '@/domain/sources'
 import { CHARACTER_RADIUS_M, CHARACTER_RULE_JA, classifyArea } from './character'
@@ -58,12 +58,6 @@ export const PROFILE_CIRCLE_NOTE_JA =
 /** ⚠ の意味（⚠ の値があるときだけ）。 */
 export const PROFILE_FLAG_NOTE_JA = '⚠ の値は、母数が小さいなどの理由で参考値です。'
 
-/** 年の書き方（所得は年度、売上は調査の年）。 */
-const YEAR_SUFFIX: Readonly<Partial<Record<Category, string>>> = {
-  income: '年度',
-  sales: '年調査',
-}
-
 /** プロフィールの材料（`load.ts` が DB から集める）。 */
 export type StationProfileInput = {
   readonly station: StationRow
@@ -82,15 +76,6 @@ export type StationProfileInput = {
 export function comparisonAreaOf(municipality: string | null): string | null {
   if (municipality === null || municipality === '') return null
   return cityOfWard(municipality) ?? municipality
-}
-
-/** いつの値か（「2020年」「2015→2020年」「2020→2040年・R6推計」「2025年度」「2021年調査」「現行」）。 */
-export function periodOf(entry: CatalogEntry): string {
-  const suffix = YEAR_SUFFIX[entry.category] ?? '年'
-  const vintage = entry.vintage === null ? '' : `・${vintageLabel(entry.vintage)}`
-  if (entry.year === null) return '現行'
-  const span = entry.yearBase === null ? `${entry.year}` : `${entry.yearBase}→${entry.year}`
-  return `${span}${suffix}${vintage}`
 }
 
 /** カタログのフラグ（バッジ用の notice を優先）が立っているか。 */

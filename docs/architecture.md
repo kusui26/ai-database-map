@@ -121,6 +121,9 @@ type MapResponse = {
 | `GET /api/stations?bbox=…&q=…` | 駅検索・bbox・最寄（`municipality`・`lines`・`nearStation`＋`withinM` などを付けると対象集合の一覧。一覧では `bbox` も絞り込み、近傍なら各駅に起点からの距離 `distM`）| `domain/stations` |
 | `GET /api/stations/:grp` | 駅詳細（指標・年次推移）| `domain/stations` |
 | `GET /api/stations/:grp/profile?radiusM=…` | **駅周辺のプロフィール**（駅×半径の要点 11 指標と**県内・市内での位置**〔順位・駅数・上位◯%〕、性格の目安〔従業者 ÷ 人口と人の密度の規則〕、災害の要約〔事前計算〕、**見ていないこと**。駅詳細の「概要」タブ・AI の `getStationProfile`・MCP の `get_station_profile` が同じものを読む）| `domain/profile` |
+| `GET /api/stations/classes?metric=…&area=…` | **駅の色分け**（指標とエリア〔`area` を 1〜4 回・合わせて 1 つの凡例〕→ 凡例〔段・色・範囲・駅の数・⚠・値なし・色の意味〕と駅ごとの段。水準は 5 分位・増減は 0 を中心に 5 段。駅が 5 未満などは理由を返す）| `domain/style` |
+| `GET /api/areas` | **エリアのカタログ**（行政区域 1,961 の鍵 `jp`／`pref:14`／`muni:14100`・名前・親・駅の数・無い値と理由、沿線の幅、区域の指標、エリアの文字列の書き方。AI・画面・MCP がここから選ぶ）| `domain/area-summary` |
+| `GET /api/areas/summary?area=…&radiusM=…&colorBy=…` | **エリアの要約**（`area` を 1〜4 回・2 つ以上は比較。区域の値〔行政区域は公表値・沿線はメッシュの按分・駅から N m は駅の円の値。作り方・出典・推計の山と当たり具合〕、無い値と理由、駅の分布〔中央値・四分位・上位と下位〕、内訳〔区・市区町村・都道府県・沿線の駅〕、比較〔そろう年・2020 年＝100 の指数〕、色分けの条件と凡例、注記、見ていないこと）| `domain/area-summary`・`domain/style` |
 | `GET /api/ranking?metric=…&prefecture=…` | ランキング（`operators`・`routes`・`routeTypes`・`lines` で絞る。会社は鍵＝S12 の会社名で受け、応答の `operatorLabels` と題は表示名。場所は `municipality`（前方一致）・`bbox`（西,南,東,北）・`nearStation`（起点の駅の grp）＋`withinM`（m）で絞り、応答に `municipality`・`bbox`・`near` を返す。近傍なら各行に起点からの距離 `distM`）| `domain/ranking`・`domain/area` |
 | `GET /api/growth?x=…&y=…&prefecture=…` | 増減率散布＋クラスタリング（絞り込みはランキングと同じ・場所も）| `domain/growth`・`domain/area` |
 | `GET /api/lines` | **路線（運行系統）の一覧**（JR山手線＝環状 30 駅など・駅データ.jp。共通の条件 `lines` に渡す `lineCd`）| `domain/lines` |

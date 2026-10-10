@@ -15,6 +15,11 @@ import {
   hazardSourceSchema,
 } from './hazard'
 import { areaCharacterSchema, profileHazardSchema, profileSectionSchema } from './profile'
+import {
+  areaComparisonTableSchema,
+  areaSummaryCardSchema,
+  stationLegendSchema,
+} from './area-summary'
 
 // --- メッセージ ---------------------------------------------------------
 export const messageSchema = z.object({
@@ -248,6 +253,11 @@ export const panelSchema = z.discriminatedUnion('type', [
     flags: z.array(reliabilityFlagSchema),
     series: z.array(trendSeriesSchema),
     stats: z.array(panelStatSchema).optional(), // 折れ線に添える要約 KPI（前年比・コロナ比等）
+    /**
+     * 折れ線の凡例を出すか（既定＝出さない）。系列が**別のエリア**のように、実線と破線と色だけでは読めないときに true
+     * （エリアの比較・2026-10-10 B5b）。凡例には実線の系列だけを載せ、破線（推計）は同じ色の実線と組で読む。
+     */
+    legend: z.boolean().optional(),
     placement: placementSchema,
     size: sizeSchema,
   }),
@@ -405,6 +415,31 @@ export const panelSchema = z.discriminatedUnion('type', [
     size: sizeSchema,
   }),
   z.object({
+    /**
+     * エリアの要約（2026-10-10 B5b・`docs/261001_fix_user_feedback_ui.md` §6.12.7）。区域の値は作り方・出典・年を持ち、
+     * 推計には当たり具合が付く——汎用の `statTable` に流すと文字列に潰れ、画面は作り方を出し分けられず、AI は年を読めない
+     * （`stationProfile` と同じ判断）。中身は共通 API（`GET /api/areas/summary`）の応答から、図に回すもの（年ごとの値＝
+     * `trendChart`・内訳の行＝`barChart`）を除いたもの（部品の形は `area-summary.ts`）。
+     */
+    type: z.literal('areaSummary'),
+    /** 「神奈川県横浜市の要約」「横浜市・川崎市の比較」。 */
+    title: z.string(),
+    /** エリア（指定の順・1〜4）。 */
+    areas: z.array(areaSummaryCardSchema).min(1),
+    /** 2 つ以上のときの比べる表（行＝項目・列＝エリア）。1 つなら null。 */
+    comparison: areaComparisonTableSchema.nullable(),
+    /** 地図の色分けの凡例（色分けしなかったときは理由〔`reasonJa`〕つき）。色分けを求めていなければ null。 */
+    legend: stationLegendSchema.nullable(),
+    /** 駅の周りを集計した半径（m）。 */
+    radiusM: z.number(),
+    notesJa: z.array(z.string()),
+    /** **見ていないこと**（必ず表示する）。 */
+    notIncludedJa: z.array(z.string()),
+    sources: z.array(sourceRefSchema),
+    placement: placementSchema,
+    size: sizeSchema,
+  }),
+  z.object({
     type: z.literal('markdown'),
     body: z.string(),
     placement: placementSchema,
@@ -429,6 +464,7 @@ export type HazardCardPanel = PanelOf<'hazardCard'>
 export type EvacuationListPanel = PanelOf<'evacuationList'>
 export type EscapeDirectionPanel = PanelOf<'escapeDirection'>
 export type StationProfilePanel = PanelOf<'stationProfile'>
+export type AreaSummaryPanel = PanelOf<'areaSummary'>
 
 /** パネル表示バリアント（チャット内=compact／ドロワー・モーダル=full）。 */
 export type PanelSize = NonNullable<z.infer<typeof sizeSchema>>

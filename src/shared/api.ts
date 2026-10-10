@@ -4,6 +4,7 @@
  */
 
 import { z } from 'zod'
+import { MAX_AREAS } from './area-ref'
 import { categorySchema, formatSchema, kindSchema, unitSchema } from './catalog'
 import {
   evacuationActionSchema,
@@ -968,6 +969,34 @@ export const stationProfileSchema = z.object({
   sources: z.array(profileSourceSchema),
 })
 export type StationProfile = z.infer<typeof stationProfileSchema>
+
+// --- エリア要約・駅の色分け（GET /api/areas/summary・/api/stations/classes・261010 B5b） -----------
+
+const AREAS_ERROR = `エリア（area）は 1〜${MAX_AREAS} つ（同じパラメータを繰り返す：area=muni:14100&area=muni:14130）`
+
+/**
+ * エリアの文字列の並び（`area` を**繰り返して**渡す。範囲の bbox がカンマを含むので、カンマでは区切らない）。
+ * 書き方の検証（jp・pref・muni・line・near・bbox）はドメイン（`src/domain/area-summary/refs.ts`）がする。
+ */
+const areaListParam = z
+  .array(z.string().trim().min(1, { error: 'エリアの文字列が空です（例：muni:14100）' }).max(200))
+  .min(1, { error: AREAS_ERROR })
+  .max(MAX_AREAS, { error: AREAS_ERROR })
+
+/** エリア要約の入力：エリア（1〜4・2 つ以上は比較）・駅の分布の半径（既定 1km）・色分けの指標（省略＝人口の増減・none＝なし）。 */
+export const areaSummaryQuerySchema = z.object({
+  areas: areaListParam,
+  radiusM: radiusParam.default(1000),
+  colorBy: z.string().trim().min(1).max(80).optional(),
+})
+export type AreaSummaryQuery = z.infer<typeof areaSummaryQuerySchema>
+
+/** 駅の色分けの入力：指標（ランキングできる key）とエリア（1〜4・合わせて 1 つの凡例）。 */
+export const stationClassesQuerySchema = z.object({
+  metric: z.string().trim().min(1).max(80),
+  areas: areaListParam,
+})
+export type StationClassesQuery = z.infer<typeof stationClassesQuerySchema>
 
 export const healthResponseSchema = z.object({ ok: z.literal(true) })
 export type HealthResponse = z.infer<typeof healthResponseSchema>

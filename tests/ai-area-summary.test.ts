@@ -304,12 +304,16 @@ function mcpTool(name: string): RegisteredTool {
 }
 
 describe('道具の説明（すべての問でモデルに見えている）', () => {
-  it('地図の表示範囲と、駅の道具の名前を書かない（関係の無い問の最初の一手が変わった・§6.17.1）', () => {
+  it('地図の表示範囲・駅の道具の名前・起点の駅から N m を書かない（関係の無い問の最初の一手が変わった・§6.17.1）', () => {
     const { description } = TOOL_SPECS.getAreaSummary
     // 「…地図の表示範囲の全体」と書くと「この区で人口が増えている駅は？」が地図の範囲で絞った（区で答えたのは 10 回中 6 回）
     expect(description).not.toContain('地図の表示範囲')
     // 「1 つの駅の値は駅の道具（getStationDetail・getStationProfile）」と書くと「東京駅の人口推移」が 5 回とも getStationProfile へ
     expect(description).not.toMatch(/getStation(Detail|Profile)/)
+    // 冒頭に「起点の駅から N m」と書くと「東京駅と新宿駅の人口を比べて」を駅から 1km のエリア 2 つとして比べた（5 回中 5 回）
+    expect(description).not.toContain('起点の駅から')
+    const { near } = TOOL_SPECS.getAreaSummary.inputSchema.shape.areas.element.shape
+    expect(near.unwrap().description).toContain('起点の駅から N m')
     // 駅を並べる問いとの線引きは残す（「横浜市で人口が増えている駅は？」は rankStations）
     expect(description).toContain('駅を並べる問い（「人口が増えている駅は？」）は rankStations')
   })

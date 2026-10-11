@@ -54,8 +54,20 @@ export type EvalExpectation = {
    * 値が無い・null・false は「付けていない」とみなす。
    */
   readonly forbidInputs?: Readonly<Record<string, readonly string[]>>
+  /**
+   * これらの地図の操作が**すべて**出る（例 `colorStations`＝エリアの駅を色分けした・2026-10-11 B5d）。
+   * 「色分けして」に、色分けしないまま「色分けしました」と答えるのを機械で落とす（§6.12.1）。
+   */
+  readonly mapActions?: readonly string[]
   /** これらを**すべて**含む（本文＋パネル）。 */
   readonly contains?: readonly string[]
+  /**
+   * **本文だけ**がこれらを**すべて**含む（2026-10-11 B5d）。パネルの JSON も見る `contains` では、図に出ている値を
+   * 本文が言わなくても通ってしまう——「横浜市は 2025 年に減った」を本文で言ったかを見るのはこちら。
+   */
+  readonly textContains?: readonly string[]
+  /** **本文だけ**がこれらの**いずれか**を含む。 */
+  readonly textContainsAny?: readonly string[]
   /** これらの**いずれか**を含む（拒否・言い換えの許容）。 */
   readonly containsAny?: readonly string[]
   /**
@@ -91,12 +103,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * 期待の値に観測が合うか：配列は「どれも含む」、オブジェクトは部分一致（入れ子も・2026-10-08 B2 の
- * `near: { withinM: 5000 }`）、それ以外は一致。
+ * 期待の値に観測が合うか：配列は「どの要素も、観測のどれかに合う」（オブジェクトの要素は部分一致・2026-10-11 B5d の
+ * `areas: [{ municipality: '横浜市' }]`）、オブジェクトは部分一致（入れ子も・2026-10-08 B2 の `near: { withinM: 5000 }`）、
+ * それ以外は一致。
  */
 function valueMatches(actual: unknown, expected: unknown): boolean {
   if (Array.isArray(expected)) {
-    return Array.isArray(actual) && expected.every((item) => actual.includes(item))
+    return (
+      Array.isArray(actual) &&
+      expected.every((item) => actual.some((each: unknown) => valueMatches(each, item)))
+    )
   }
   if (isRecord(expected)) return isRecord(actual) && inputMatches(actual, expected)
   return actual === expected
@@ -113,6 +129,26 @@ function inputMatches(
   expected: Record<string, unknown>,
 ): boolean {
   return Object.entries(expected).every(([key, value]) => valueMatches(observed[key], value))
+}
+
+/** 地図の操作が出たか（`mapActions`）。 */
+function mapActionChecks(expectation: EvalExpectation, observed: EvalObserved): CheckResult[] {
+  return (expectation.mapActions ?? []).map((type) => ({
+    name: `地図の操作 ${type} が出る`,
+    ok: observed.actionTypes.includes(type),
+  }))
+}
+
+/** 本文だけを見る（`textContains`・`textContainsAny`）。 */
+function textChecks(expectation: EvalExpectation, observed: EvalObserved): CheckResult[] {
+  const all = (expectation.textContains ?? []).map((needle) => ({
+    name: `本文が「${needle}」を含む`,
+    ok: observed.text.includes(needle),
+  }))
+  const anyOf = expectation.textContainsAny
+  if (anyOf === undefined) return all
+  const ok = anyOf.some((needle) => observed.text.includes(needle))
+  return [...all, { name: `本文がいずれかを含む (${anyOf.join(' / ')})`, ok }]
 }
 
 /** 1 問を採点する（全チェック ok で pass）。 */
@@ -164,9 +200,11 @@ export function scoreCase(expectation: EvalExpectation, observed: EvalObserved):
     const ok = calls.every((call) => keys.every((key) => !isSet(call.input[key])))
     checks.push({ name: `${name} に ${keys.join('・')} を付けない`, ok })
   }
+  checks.push(...mapActionChecks(expectation, observed))
   for (const needle of expectation.contains ?? []) {
     checks.push({ name: `「${needle}」を含む`, ok: observed.haystack.includes(needle) })
   }
+  checks.push(...textChecks(expectation, observed))
   if (expectation.containsAny !== undefined) {
     const ok = expectation.containsAny.some((needle) => observed.haystack.includes(needle))
     checks.push({ name: `いずれかを含む (${expectation.containsAny.join(' / ')})`, ok })

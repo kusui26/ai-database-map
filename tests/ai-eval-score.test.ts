@@ -103,6 +103,43 @@ describe('scoreCase', () => {
     expect(scoreCase({ containsAny: ['存在しない', '兵庫県'] }, observed).pass).toBe(true)
   })
 
+  it('配列の要素がオブジェクトなら、どの要素も観測のどれかに部分一致すればよい（areas・B5d）', () => {
+    const observed: EvalObserved = {
+      ...base,
+      toolCalls: [
+        {
+          name: 'getAreaSummary',
+          input: {
+            areas: [{ municipality: '横浜市' }, { inMapView: true, prefecture: '神奈川県' }],
+          },
+        },
+      ],
+    }
+    const expectAreas = (areas: unknown[]) =>
+      scoreCase({ toolCalls: [{ name: 'getAreaSummary', inputIncludes: { areas } }] }, observed)
+        .pass
+    expect(expectAreas([{ inMapView: true }])).toBe(true)
+    expect(expectAreas([{ municipality: '横浜市' }, { inMapView: true }])).toBe(true)
+    expect(expectAreas([{ municipality: '川崎市' }])).toBe(false)
+    expect(expectAreas([{ inMapView: false }])).toBe(false)
+  })
+
+  it('mapActions は地図の操作の有無、textContains は本文だけを見る（図の JSON では通さない）', () => {
+    const observed: EvalObserved = {
+      ...base,
+      actionTypes: ['colorStations'],
+      text: '横浜市は 2025 年に減りました。',
+      haystack: '横浜市は 2025 年に減りました。 {"rateJa":"-0.7%"}',
+    }
+    expect(scoreCase({ mapActions: ['colorStations'] }, observed).pass).toBe(true)
+    expect(scoreCase({ mapActions: ['highlightStations'] }, observed).pass).toBe(false)
+    expect(scoreCase({ contains: ['-0.7%'] }, observed).pass).toBe(true)
+    expect(scoreCase({ textContains: ['-0.7%'] }, observed).pass).toBe(false)
+    expect(scoreCase({ textContains: ['2025'] }, observed).pass).toBe(true)
+    expect(scoreCase({ textContainsAny: ['西区', '2025'] }, observed).pass).toBe(true)
+    expect(scoreCase({ textContainsAny: ['西区', '港北区'] }, observed).pass).toBe(false)
+  })
+
   it('mapResponse が不正なら常に不合格', () => {
     expect(
       scoreCase({ textNonEmpty: true }, { ...base, text: 'x', mapResponseValid: false }).pass,
@@ -194,9 +231,9 @@ describe('scoreCase: 付けてはいけない引数（forbidInputs・2026-10-09 
 })
 
 describe('EVAL_CASES', () => {
-  it('56 問・id 一意・全問に期待あり', () => {
-    expect(EVAL_CASES.length).toBe(56)
-    expect(new Set(EVAL_CASES.map((c) => c.id)).size).toBe(56)
+  it('62 問・id 一意・全問に期待あり', () => {
+    expect(EVAL_CASES.length).toBe(62)
+    expect(new Set(EVAL_CASES.map((c) => c.id)).size).toBe(62)
     for (const testCase of EVAL_CASES) {
       expect(testCase.query.length).toBeGreaterThan(0)
       expect(Object.keys(testCase.expect).length).toBeGreaterThan(0)
@@ -215,6 +252,7 @@ describe('EVAL_CASES', () => {
       'context-followup-landprice',
       'context-explicit-override',
       'area-profile-selected',
+      'area-color-map',
       'map-context',
       'map-context-ward',
       'map-context-too-wide',
@@ -236,6 +274,21 @@ describe('EVAL_CASES', () => {
     for (const testCase of profile) {
       expect(testCase.expect.toolCalls?.[0]?.name, testCase.id).toBe('getStationProfile')
       expect(testCase.expect.panels, testCase.id).toContain('stationProfile')
+    }
+  })
+
+  it('エリアの全体の問は、エリアの要約を呼ぶ（駅の順位で代用させない・B5d）', () => {
+    const area = EVAL_CASES.filter((testCase) => testCase.category === 'エリアの全体')
+    expect(area.map((testCase) => testCase.id)).toEqual([
+      'area-summary',
+      'area-summary-line',
+      'area-summary-wards',
+      'area-compare',
+      'area-color-map',
+      'area-pref-share',
+    ])
+    for (const testCase of area) {
+      expect(testCase.expect.toolCalls?.[0]?.name, testCase.id).toBe('getAreaSummary')
     }
   })
 

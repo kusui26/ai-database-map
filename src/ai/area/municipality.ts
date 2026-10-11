@@ -8,21 +8,25 @@
  *
  * 同じ名前は、都道府県 → 地図の範囲の順に決め（`decide.ts`）、決まらなければ候補を返して聞き返す。
  * 決めた市区町村は、SQL に前方一致の値（`value`）で渡し、都道府県を添える（府中市は東京都と広島県にある）。
+ *
+ * 索引は 2 つある（同じ決め方を使う・2026-10-11 B5d）：駅から作る索引（駅のある市区町村・ランキングや一覧の絞り込み）と、
+ * エリアの一覧から作る索引（駅の無い町村も含む全区域・エリアの要約 `getAreaSummary`）。
  */
 
 import { type Viewport } from '@/shared/viewport'
 import { decidePlace, type PlaceCandidate, type PlaceDecision } from './decide'
 import { prefectureNamed, splitPrefecture } from './keys'
-import { type AreaIndex, type PlaceEntry } from './place-index'
+import { type PlaceEntry, type PlaceIndex } from './place-index'
 import {
   type AreaProblem,
   listNames,
   MAX_AREA_CANDIDATES,
   type MunicipalityCandidate,
+  type PrefectureField,
 } from './problems'
 
-export type MunicipalityResult =
-  | { readonly ok: true; readonly place: PlaceEntry; readonly notes: readonly string[] }
+export type MunicipalityResult<P extends PlaceEntry = PlaceEntry> =
+  | { readonly ok: true; readonly place: P; readonly notes: readonly string[] }
   | { readonly ok: false; readonly problem: AreaProblem }
 
 /** 名前に補う末尾（「世田谷」→ 世田谷区）。 */
@@ -44,7 +48,7 @@ function toCandidate(place: PlaceEntry): MunicipalityCandidate {
 }
 
 /** 名前（市全体を含む）で当たる場所。 */
-function named(key: string, index: AreaIndex): PlaceEntry[] {
+function named<P extends PlaceEntry>(key: string, index: PlaceIndex<P>): P[] {
   return [...(index.placesByName.get(key) ?? []), ...(index.citiesByName.get(key) ?? [])]
 }
 
@@ -54,7 +58,7 @@ function named(key: string, index: AreaIndex): PlaceEntry[] {
  */
 const DOMINANCE_RATIO = 5
 
-function dominant(places: readonly PlaceEntry[]): PlaceEntry | null {
+function dominant<P extends PlaceEntry>(places: readonly P[]): P | null {
   const [top, ...rest] = [...places].sort((a, b) => b.stationCount - a.stationCount)
   if (top === undefined || rest.length === 0) return null
   return rest.every((place) => top.stationCount >= place.stationCount * DOMINANCE_RATIO)
@@ -62,12 +66,12 @@ function dominant(places: readonly PlaceEntry[]): PlaceEntry | null {
     : null
 }
 
-function candidate(place: PlaceEntry, strong: boolean): PlaceCandidate<PlaceEntry> {
+function candidate<P extends PlaceEntry>(place: P, strong: boolean): PlaceCandidate<P> {
   return { item: place, strong, points: place.points }
 }
 
 /** 末尾を補った言い方の候補（抜きん出た 1 つがあれば、それだけを強い候補に）。 */
-function completed(key: string, index: AreaIndex): PlaceCandidate<PlaceEntry>[] {
+function completed<P extends PlaceEntry>(key: string, index: PlaceIndex<P>): PlaceCandidate<P>[] {
   const places = SUFFIXES.flatMap((suffix) => named(`${key}${suffix}`, index))
   const top = dominant(places)
   return places.map((place) => candidate(place, top === null || place === top))
@@ -77,13 +81,16 @@ function completed(key: string, index: AreaIndex): PlaceCandidate<PlaceEntry>[] 
  * 区の名前だけで当たる場所（「港北」も「港北区」として引く＝「中央」と「中央区」で同じ候補になる）。
  * 都道府県の言い方（「神奈川」）は区で補わない——横浜市神奈川区ではなく、prefectures へ促す。
  */
-function wardsOf(key: string, index: AreaIndex): readonly PlaceEntry[] {
+function wardsOf<P extends PlaceEntry>(key: string, index: PlaceIndex<P>): readonly P[] {
   if (key.endsWith('区')) return index.placesByWard.get(key) ?? []
   return prefectureNamed(key) === null ? (index.placesByWard.get(`${key}区`) ?? []) : []
 }
 
 /** 言い方 → 候補（強い → 弱いの順・同じ場所は 1 度だけ）。 */
-function candidatesOf(key: string, index: AreaIndex): PlaceCandidate<PlaceEntry>[] {
+function candidatesOf<P extends PlaceEntry>(
+  key: string,
+  index: PlaceIndex<P>,
+): PlaceCandidate<P>[] {
   const exact = named(key, index)
   const strong =
     exact.length > 0 ? exact.map((place) => candidate(place, true)) : completed(key, index)
@@ -93,7 +100,7 @@ function candidatesOf(key: string, index: AreaIndex): PlaceCandidate<PlaceEntry>
 }
 
 /** 名前に含む市区町村（近い名前・駅の多い順）。 */
-function similarPlaces(key: string, index: AreaIndex): string[] {
+function similarPlaces<P extends PlaceEntry>(key: string, index: PlaceIndex<P>): string[] {
   if (key.length === 0) return []
   return index.places
     .filter((place) => place.value.includes(key))
@@ -102,41 +109,64 @@ function similarPlaces(key: string, index: AreaIndex): string[] {
     .map(placeLabelOf)
 }
 
-function unknownPlace(input: string, key: string, index: AreaIndex): AreaProblem {
+/** 索引の種類 → 都道府県で絞る引数の名前（駅の索引はランキング・一覧、全区域の索引はエリアの要約が使う）。 */
+const PREFECTURE_FIELD: Readonly<Record<PlaceIndex<PlaceEntry>['scope'], PrefectureField>> = {
+  stations: 'prefectures',
+  areas: 'prefecture',
+}
+
+/** 知らない名前の断り方（駅の索引は駅のある市区町村だけを収める）。 */
+const UNKNOWN_PLACE_JA: Readonly<
+  Record<PlaceIndex<PlaceEntry>['scope'], (input: string) => string>
+> = {
+  stations: (input) =>
+    `市区町村「${input}」の駅が見つかりません（駅のある市区町村だけを扱えます）。名前を確かめてください。`,
+  areas: (input) => `市区町村「${input}」が見つかりません。名前を確かめてください。`,
+}
+
+function unknownPlace<P extends PlaceEntry>(
+  input: string,
+  key: string,
+  index: PlaceIndex<P>,
+): AreaProblem {
   const prefecture = prefectureNamed(key)
   if (prefecture !== null) {
     return {
       input,
-      problem: `「${input}」は都道府県です。municipality ではなく prefectures に「${prefecture}」を渡してください。`,
+      problem: `「${input}」は都道府県です。municipality ではなく ${PREFECTURE_FIELD[index.scope]} に「${prefecture}」を渡してください。`,
     }
   }
   const didYouMean = similarPlaces(key, index)
   return {
     input,
-    problem: `市区町村「${input}」の駅が見つかりません（駅のある市区町村だけを扱えます）。名前を確かめてください。`,
+    problem: UNKNOWN_PLACE_JA[index.scope](input),
     ...(didYouMean.length > 0 ? { didYouMean } : {}),
   }
 }
 
 /** 駅の多い順（同じ数は元の順のまま）。説明と候補の並びを、索引の並び（たまたまの順）に左右させない。 */
-function byStationCount(places: readonly PlaceEntry[]): PlaceEntry[] {
+function byStationCount<P extends PlaceEntry>(places: readonly P[]): P[] {
   return [...places].sort((a, b) => b.stationCount - a.stationCount)
 }
 
-function ambiguous(input: string, places: readonly PlaceEntry[]): AreaProblem {
+function ambiguous(
+  input: string,
+  places: readonly PlaceEntry[],
+  field: PrefectureField,
+): AreaProblem {
   const sorted = byStationCount(places)
   return {
     input,
-    problem: `市区町村「${input}」は ${sorted.length} か所にあります（${listNames(sorted.map(placeLabelOf))}）。どこか利用者に聞くか、candidates の municipality と prefectures で呼び直してください。`,
+    problem: `市区町村「${input}」は ${sorted.length} か所にあります（${listNames(sorted.map(placeLabelOf))}）。どこか利用者に聞くか、candidates の municipality と ${field} で呼び直してください。`,
     candidates: sorted.slice(0, MAX_AREA_CANDIDATES).map(toCandidate),
   }
 }
 
 /** 決め方 → 説明（言い方と同じ名前で、ほかの候補も無ければ書かない）。`said` は都道府県を除いた言い方。 */
-function placeNotes(
+function placeNotes<P extends PlaceEntry>(
   input: string,
   said: string,
-  decision: Extract<PlaceDecision<PlaceEntry>, { kind: 'one' }>,
+  decision: Extract<PlaceDecision<P>, { kind: 'one' }>,
 ): string[] {
   const chosen = placeLabelOf(decision.item)
   const others = listNames(byStationCount(decision.others).map(placeLabelOf))
@@ -152,10 +182,10 @@ function placeNotes(
 }
 
 /** 候補が都道府県の指定の外にしか無いとき（「横浜市」× 東京都）。 */
-function outOfScope(
+function outOfScope<P extends PlaceEntry>(
   input: string,
   scope: readonly string[],
-  found: readonly PlaceCandidate<PlaceEntry>[],
+  found: readonly PlaceCandidate<P>[],
 ): AreaProblem {
   const places = byStationCount(found.map((candidate) => candidate.item))
   return {
@@ -165,27 +195,28 @@ function outOfScope(
   }
 }
 
-/** 言い方の頭の都道府県と、ツールの prefectures が食い違うか（「神奈川県横浜市」× 東京都）。 */
+/** 言い方の頭の都道府県と、ツールの都道府県の指定（`field`）が食い違うか（「神奈川県横浜市」× 東京都）。 */
 function conflict(
   input: string,
   fromInput: string | null,
   prefectures: readonly string[],
+  field: PrefectureField,
 ): AreaProblem | null {
   if (fromInput === null || prefectures.length === 0 || prefectures.includes(fromInput)) return null
   return {
     input,
-    problem: `市区町村「${input}」は ${fromInput} で、prefectures の指定（${prefectures.join('・')}）と合いません。`,
+    problem: `市区町村「${input}」は ${fromInput} で、${field} の指定（${prefectures.join('・')}）と合いません。`,
   }
 }
 
-export function resolveMunicipality(
+export function resolveMunicipality<P extends PlaceEntry>(
   input: string,
   prefectures: readonly string[],
   viewport: Viewport | null,
-  index: AreaIndex,
-): MunicipalityResult {
+  index: PlaceIndex<P>,
+): MunicipalityResult<P> {
   const { prefecture, rest } = splitPrefecture(input)
-  const clash = conflict(input, prefecture, prefectures)
+  const clash = conflict(input, prefecture, prefectures, PREFECTURE_FIELD[index.scope])
   if (clash !== null) return { ok: false, problem: clash }
   const found = candidatesOf(rest, index)
   if (found.length === 0) return { ok: false, problem: unknownPlace(input, rest, index) }
@@ -197,5 +228,5 @@ export function resolveMunicipality(
     return { ok: true, place: decision.item, notes: placeNotes(input, rest, decision) }
   }
   const items = decision.kind === 'ambiguous' ? decision.items : scoped.map((c) => c.item)
-  return { ok: false, problem: ambiguous(input, items) }
+  return { ok: false, problem: ambiguous(input, items, PREFECTURE_FIELD[index.scope]) }
 }

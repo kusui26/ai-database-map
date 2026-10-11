@@ -11,7 +11,13 @@ import { type Viewport } from '@/shared/viewport'
 import { decidePlace, type PlaceCandidate, type PlaceDecision } from './decide'
 import { placeKey, stationKeys } from './keys'
 import { type AreaIndex } from './place-index'
-import { type AreaProblem, listNames, MAX_AREA_CANDIDATES, type StationCandidate } from './problems'
+import {
+  type AreaProblem,
+  listNames,
+  MAX_AREA_CANDIDATES,
+  type PrefectureField,
+  type StationCandidate,
+} from './problems'
 
 export type OriginResult =
   | { readonly ok: true; readonly station: CatalogStation; readonly notes: readonly string[] }
@@ -66,10 +72,14 @@ function unknownStation(input: string, index: AreaIndex): AreaProblem {
   }
 }
 
-function ambiguous(input: string, stations: readonly CatalogStation[]): AreaProblem {
+function ambiguous(
+  input: string,
+  stations: readonly CatalogStation[],
+  field: PrefectureField,
+): AreaProblem {
   return {
     input,
-    problem: `起点の「${input}」という駅は ${stations.length} か所にあります（${listNames(stations.map(stationPlace))}）。どの駅か利用者に聞くか、prefectures を添えるか、candidates の station（grp）で呼び直してください。`,
+    problem: `起点の「${input}」という駅は ${stations.length} か所にあります（${listNames(stations.map(stationPlace))}）。どの駅か利用者に聞くか、${field} を添えるか、candidates の station（grp）で呼び直してください。`,
     candidates: stations.slice(0, MAX_AREA_CANDIDATES).map(toCandidate),
   }
 }
@@ -102,11 +112,15 @@ function placeCandidate(station: CatalogStation): PlaceCandidate<CatalogStation>
   return { item: station, strong: true, points: [{ lon: station.lon, lat: station.lat }] }
 }
 
+/**
+ * 起点の駅を決める。`field` は都道府県で絞る引数の名前（呼び直し方の言い方・エリアの要約はエリアごとの `prefecture`）。
+ */
 export function resolveOrigin(
   input: string,
   prefectures: readonly string[],
   viewport: Viewport | null,
   index: AreaIndex,
+  field: PrefectureField = 'prefectures',
 ): OriginResult {
   const found = stationsNamed(input, index)
   if (found.length === 0) return { ok: false, problem: unknownStation(input, index) }
@@ -118,5 +132,5 @@ export function resolveOrigin(
     return { ok: true, station: decision.item, notes: originNotes(input, decision) }
   }
   const items = decision.kind === 'ambiguous' ? decision.items : scoped
-  return { ok: false, problem: ambiguous(input, items) }
+  return { ok: false, problem: ambiguous(input, items, field) }
 }

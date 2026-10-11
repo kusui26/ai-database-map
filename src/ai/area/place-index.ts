@@ -17,7 +17,7 @@ import { placeKey } from './keys'
 /** 経度・緯度。 */
 export type LonLat = { readonly lon: number; readonly lat: number }
 
-/** 市区町村（または政令市の市全体）。`value` は前方一致で SQL に渡す値。 */
+/** 市区町村（または政令市の市全体）。`value` は前方一致で SQL に渡す値（市区町村の名前）。 */
 export type PlaceEntry = {
   readonly prefecture: string
   readonly value: string
@@ -25,21 +25,33 @@ export type PlaceEntry = {
   readonly points: readonly LonLat[]
 }
 
-export type AreaIndex = {
+/**
+ * 市区町村の名前の索引（`municipality.ts` が引く）。駅から作る索引（駅のある市区町村）と、エリアの一覧から作る索引
+ * （駅の無い町村も含む全区域・2026-10-11 B5d・`src/ai/area-summary/admin-index.ts`）が同じ形で、同じ決め方を使う。
+ */
+export type PlaceIndex<P extends PlaceEntry> = {
+  /** どの市区町村を収めた索引か（知らない名前の断り方が変わる）。 */
+  readonly scope: 'stations' | 'areas'
+  /** 名前そのもの（鍵 → 都道府県ごとの市区町村）。 */
+  readonly placesByName: ReadonlyMap<string, readonly P[]>
+  /** 政令市の市全体（「横浜市」→ 区をまとめた 1 つ）。 */
+  readonly citiesByName: ReadonlyMap<string, readonly P[]>
+  /** 区の名前だけ（「港北区」→ 横浜市港北区）。 */
+  readonly placesByWard: ReadonlyMap<string, readonly P[]>
+  /** 全部の市区町村と市全体（近い名前を挙げるとき）。 */
+  readonly places: readonly P[]
+}
+
+export type AreaIndex = PlaceIndex<PlaceEntry> & {
   readonly stationsByKey: ReadonlyMap<string, readonly CatalogStation[]>
   readonly stationsByGrp: ReadonlyMap<string, CatalogStation>
-  /** 名前そのもの（鍵 → 都道府県ごとの市区町村）。 */
-  readonly placesByName: ReadonlyMap<string, readonly PlaceEntry[]>
-  /** 政令市の市全体（「横浜市」→ 区をまとめた 1 つ）。 */
-  readonly citiesByName: ReadonlyMap<string, readonly PlaceEntry[]>
-  /** 区の名前だけ（「港北区」→ 横浜市港北区）。 */
-  readonly placesByWard: ReadonlyMap<string, readonly PlaceEntry[]>
-  /** 全部の市区町村と市全体（近い名前を挙げるとき）。 */
-  readonly places: readonly PlaceEntry[]
 }
 
 /** 鍵ごとにまとめる（鍵が null のものは入れない・入った順を保つ）。 */
-function groupBy<T>(items: readonly T[], keyOf: (item: T) => string | null): Map<string, T[]> {
+export function groupBy<T>(
+  items: readonly T[],
+  keyOf: (item: T) => string | null,
+): Map<string, T[]> {
   return items.reduce((map, item) => {
     const key = keyOf(item)
     if (key !== null) map.set(key, [...(map.get(key) ?? []), item])
@@ -89,7 +101,8 @@ function groupCities(places: readonly PlaceEntry[]): PlaceEntry[] {
   })
 }
 
-function wardKey(place: PlaceEntry): string | null {
+/** 区の名前だけの鍵（「横浜市港北区」→ 港北区・区の無い市区町村は null）。 */
+export function wardKey(place: PlaceEntry): string | null {
   const ward = wardOf(place.value)
   return ward === null ? null : placeKey(ward)
 }
@@ -98,6 +111,7 @@ export function buildAreaIndex(stations: readonly CatalogStation[]): AreaIndex {
   const places = groupPlaces(stations)
   const cities = groupCities(places)
   return {
+    scope: 'stations',
     stationsByKey: groupBy(stations, (station) => placeKey(station.name)),
     stationsByGrp: new Map(stations.map((station) => [station.grp, station])),
     placesByName: groupBy(places, (place) => placeKey(place.value)),

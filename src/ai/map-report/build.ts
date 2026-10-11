@@ -235,8 +235,11 @@ export function coloringSummary(scene: MapScene): MapReportColoring | null {
     titleJa: legend.titleJa,
     scopeJa: coloringScopeJa(classes),
     drawnStations: points.length,
+    // 駅のある段だけ（増減の 5 段は 0 を中心に固定なので、空の段もある）。
     classesJa: isColored(legend)
-      ? legend.classes.map((cls) => `${cls.labelJa}（${cls.count} 駅）`)
+      ? legend.classes
+          .filter((cls) => cls.count > 0)
+          .map((cls) => `${cls.labelJa}（${cls.count} 駅）`)
       : [],
     meaningJa: legend.meaningJa,
     reasonJa: legend.reasonJa,

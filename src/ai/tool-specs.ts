@@ -113,6 +113,11 @@ import { routeNameDeps } from './routes/catalog'
 import { resolveNameFilters, type NameResolution } from './routes/resolve'
 import { areaDeps } from './area/catalog'
 import { resolveAreaInput, type AreaInput, type AreaInputResolution } from './area/resolve'
+import {
+  AREA_SUMMARY_DESCRIPTION_JA,
+  AREA_SUMMARY_INPUT_SCHEMA,
+  runAreaSummary,
+} from './area-summary/tool'
 
 /** 既定の集約半径（1km＝アプリ既定）。 */
 const DEFAULT_RADIUS_M: RadiusM = 1000
@@ -1482,6 +1487,19 @@ export const TOOL_SPECS = {
   }),
 
   /**
+   * エリアの要約（2026-10-11 B5d・`docs/261001_fix_user_feedback_ui.md` §6.12.9）。市区町村・都道府県・路線の沿線・
+   * 起点の駅から N m・地図の範囲の全体（区域の値・推移・将来・内訳・比較）と、地図の駅の色分けを 1 回で返す。
+   * 中身は `area-summary/tool.ts`（入力の形・名前の解決・LLM への要約と答え方）。
+   */
+  getAreaSummary: defineSpec({
+    name: 'getAreaSummary',
+    description: AREA_SUMMARY_DESCRIPTION_JA,
+    inputSchema: AREA_SUMMARY_INPUT_SCHEMA,
+    errorFallbackJa: 'エリアの要約の取得に失敗しました',
+    run: runAreaSummary,
+  }),
+
+  /**
    * 都道府県×指標のランキング（上位/下位）。指標はキーでもファミリ名でもよい。
    * 会社・路線の名前を解決し（路線は運行系統の路線コード・2026-10-08 L3）、決まらない・0 件のときは図を作らない（2026-10-07 B1）。
    */
@@ -1833,6 +1851,7 @@ export const TOOL_SPEC_NAMES = [
   'getHazardSummary',
   'getStationDetail',
   'getStationProfile',
+  'getAreaSummary',
   'rankStations',
   'compareGrowth',
   'getHazardAtPoint',

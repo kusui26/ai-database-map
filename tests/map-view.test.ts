@@ -124,6 +124,18 @@ describe('mapViewPrompt（LLM に足す文脈）', () => {
     expect(prompt).toContain('**inMapView は付けない**')
   })
 
+  it('駅を並べる問いと区そのものの値の問いを、道具を名指しして言い分ける（2026-10-11 B5d）', () => {
+    // エリアの要約（getAreaSummary・municipality を持つ）を足しただけで、「この区で人口が増えている駅は？」が地図の範囲の
+    // 順位表に戻った（4 回中 0 回が区・main では 4 回とも区）。どの道具に municipality を渡すかを言い切ると 4 回とも区。
+    const prompt = mapViewPrompt(describeMapView(TAKEBASHI_VIEW, INDEX))
+    expect(prompt).toContain(
+      '駅を並べる・比べる問い（「この区で人口が増えている駅は？」）は rankStations / compareGrowth / listStations に municipality:"千代田区"・prefectures:["東京都"] を渡し',
+    )
+    expect(prompt).toContain(
+      '区そのものの値（「この区の人口は増えている？」）は getAreaSummary の areas:[{municipality:"千代田区", prefecture:"東京都"}]',
+    )
+  })
+
   it('首都圏の初期表示（約 179km）では「この区」を読ませない。広さは整数の km', () => {
     const prompt = mapViewPrompt(describeMapView(TOKYO_VIEW, INDEX))
     expect(prompt).toContain('約 179km × 105km')

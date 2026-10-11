@@ -6,6 +6,7 @@
  * 変換する。LLM はパネルや数値を生成しない（＝幻覚しない）。数値・意味づけは domain が持つ。
  */
 
+import { type AreaSummaryResponse } from '@/shared/area-summary'
 import { type Category, type RadiusM } from '@/shared/constants'
 import {
   type GrowthResponse,
@@ -88,10 +89,20 @@ export type EscapeEffect = {
   readonly escape: HazardEscapeResponse
 }
 
+/**
+ * エリアの要約ツールの副産物（2026-10-11 B5d）。中身は共通 API（`/api/areas/summary`）の応答そのもので、
+ * パネル（要約・推移・内訳）と地図の色分け（`colorStations`）になる。
+ */
+export type AreaSummaryEffect = {
+  readonly kind: 'areaSummary'
+  readonly response: AreaSummaryResponse
+}
+
 /** ツールが記録しうる副産物（assemble がパネル/地図操作に変換）。 */
 export type ToolEffect =
   | StationDetailEffect
   | StationProfileEffect
+  | AreaSummaryEffect
   | RankingEffect
   | GrowthEffect
   | HazardPointEffect

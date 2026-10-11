@@ -27,7 +27,9 @@ AI Database Map の MCP ツール（`station-data` サーバ）で駅周辺の�
    1 回で作り、ローカルの pandas で分析する（実務は [analyze-csv](../analyze-csv/SKILL.md)）。
    `get_station_detail` を駅数ぶん繰り返さない。1 駅の周辺が「どんなエリアか」は
    `get_station_profile` を 1 回（要点・県内／市内での位置・性格の目安・災害の要約・見ていないこと）。
-   性格の目安と位置はサーバの判定のまま使い、作り直さない。
+   性格の目安と位置はサーバの判定のまま使い、作り直さない。エリアの**全体**（「横浜市の人口は増えている？」
+   「東横線の沿線は 2050 年に？」「横浜市と川崎市を比べて」）は `get_area_summary` を 1 回——区域の値は公表値
+   （沿線はメッシュの按分）で、**駅の値を足して作らない**（駅の円は重なる）。答え方は返却の `answerGuide` に従う。
 3. **指標キーはカタログが唯一の真実**：指標名を推測で書かない。
    `get_metrics_catalog` で正確なキー・ラベル・単位・
    利用可能な半径と年次を引いてから `rank_stations` / `compare_growth` に渡す。
@@ -91,7 +93,7 @@ AI Database Map の MCP ツール（`station-data` サーバ）で駅周辺の�
 （接頭辞は環境で変わる——**末尾の名前で見分ける**）があれば、表と文章に加えて図を出す。
 
 - **サーバから取れる図はサーバに作らせる**：`get_station_detail` / `rank_stations` /
-  `compare_growth` に **`present: "echarts"`** を足すと、`structuredContent.presenters.echarts` に
+  `compare_growth` / `get_area_summary` に **`present: "echarts"`** を足すと、`structuredContent.presenters.echarts` に
   `presentChart` の `document` がそのまま入る。**転記せずそのまま渡す**（単位・年次・⚠ が落ちない）。
   **自分で計算した値**（合成スコア等）の図は自分で書いてよい——単位・年次・正規化の脚注を自分で添える
 - **地図は 3 手**：`mapActions` を `render_map` に渡す → 返った URL を保存

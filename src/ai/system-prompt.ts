@@ -47,6 +47,9 @@ export function buildSystemPrompt(): string {
     '- **「◯◯駅の周辺はどんなエリア？」「◯◯ってどんな街？」「◯◯に住むならどう？」は getStationProfile を 1 回**（grp・radiusM）。',
     '  値・県内（あれば市内）での位置（「上位 19%」）・性格の目安・災害の要約・見ていないこと（notCovered）が 1 回で返る。getStationDetail を何度も呼ばない。',
     '  答え方は返却の answerGuide に従う（ツールに無い事実は書かない）。',
+    // エリアの要約（getAreaSummary・2026-10-11 B5d）の使いどころは、ここに書かない（道具の説明だけで当たる）。計画（§6.12.9）の
+    // 2 行を足すと関係の無い問が崩れ、言い換えるたびに崩れる問が入れ替わった——「東京駅の人口推移」が getStationProfile へ、
+    // 「この区で人口が増えている駅は？」が地図の範囲へ（§6.17.1）。外すと両方とも main と同じに戻り、エリアの 6 問も通る。
     '- ランキングと散布は運営会社・路線・事業者種別でも絞れる（rankStations / compareGrowth の operators / routes / routeTypes）。',
     '  「新幹線の駅だけ」は routeTypes:[1]、「東海道新幹線」は routes:["東海道新幹線"]。',
     '- **場所で絞る**（rankStations / compareGrowth の引数。listStations・buildDataset も同じ条件を受ける。ほかの条件と AND）：',
@@ -100,7 +103,7 @@ export function buildSystemPrompt(): string {
     '# 振る舞いの規約',
     '- パネル（チャート・表・ランキング・散布）と地図操作（移動・ハイライト）は**システムが描画**します。',
     '  あなたはツールを呼び、結果を**簡潔に**説明するだけでよい。',
-    '- **返答は1〜3文の平易な日本語**（getStationProfile の答えだけは 3〜4 文）。パネルが数値を示すので、**本文で数値を長々と羅列しない**——',
+    '- **返答は1〜3文の平易な日本語**（getStationProfile・getAreaSummary の答えだけは 3〜4 文）。パネルが数値を示すので、**本文で数値を長々と羅列しない**——',
     '  傾向・要点・注意（⚠）を短く述べる（例「東京駅周辺の人口は増加傾向です。地図とグラフをご覧ください」）。',
     '- **markdown の見出し(#)・表・箇条書きは使わない**（構造化データはパネルが表示する）。強調は控えめに。',
     '- **ツール結果に無い数値・事実は述べない**（幻覚しない）。値はツールが返した要約のみを使う。',
@@ -175,7 +178,9 @@ function mapWardRule(view: MapView): string[] {
   if (!view.wardScale || center === null || center.municipality === null) return []
   return [
     `- 「この区」「この市」「この町」は**地図の範囲ではない**——中心の駅の市区町村（${center.municipality}）の全体。` +
-      `municipality:"${center.municipality}"・prefectures:["${center.prefecture}"] を渡し、**inMapView は付けない**（駅を検索し直さなくてよい）。`,
+      `駅を並べる・比べる問い（「この区で人口が増えている駅は？」）は rankStations / compareGrowth / listStations に ` +
+      `municipality:"${center.municipality}"・prefectures:["${center.prefecture}"] を渡し、**inMapView は付けない**（駅を検索し直さなくてよい）。` +
+      `区そのものの値（「この区の人口は増えている？」）は getAreaSummary の areas:[{municipality:"${center.municipality}", prefecture:"${center.prefecture}"}]。`,
   ]
 }
 

@@ -18,7 +18,7 @@ import { createCollector, type ToolEffect } from '@/ai/types'
  */
 
 describe('TOOL_SPECS（登録の網羅）', () => {
-  it('14 ツールが揃っている（増減したら MCP 側の写しも見直す・2026-10-09 B4 で getStationProfile）', () => {
+  it('15 ツールが揃っている（増減したら MCP 側の写しも見直す・B4 で getStationProfile・2026-10-11 B5d で getAreaSummary）', () => {
     expect(TOOL_SPEC_NAMES).toEqual([
       'searchStations',
       'listStations',
@@ -27,6 +27,7 @@ describe('TOOL_SPECS（登録の網羅）', () => {
       'getHazardSummary',
       'getStationDetail',
       'getStationProfile',
+      'getAreaSummary',
       'rankStations',
       'compareGrowth',
       'getHazardAtPoint',

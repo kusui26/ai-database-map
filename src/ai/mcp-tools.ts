@@ -34,6 +34,7 @@ import { toEChartsDocument, type EChartsDocument } from '@/shared/presenters/ech
 import { type MapAction, type Panel } from '@/shared/protocol'
 import { checkRateLimit } from './rate-limit'
 import {
+  panelsForAreaSummary,
   panelsForEscape,
   panelsForEvacuation,
   panelsForGrowth,
@@ -45,6 +46,7 @@ import {
   mapActionsForEffect,
 } from './assemble'
 import { metricsCatalogDigest } from './catalog-digest'
+import { MCP_INPUT_SCHEMA as MCP_AREA_SUMMARY_INPUT_SCHEMA } from './area-summary/tool'
 import { TOOL_SPECS, type TOOL_SPEC_NAMES, type ToolSpec } from './tool-specs'
 import { type ToolEffect } from './types'
 
@@ -106,6 +108,11 @@ export type McpToolConfig = {
    * **`run` には渡らない**ので、指定しなければ応答は従来と同一。
    */
   readonly chartable?: boolean
+  /**
+   * MCP に見せる入力（Spec と違うときだけ・2026-10-11 B5d）。入れ子の引数（`getAreaSummary` の `areas[].inMapView`）は
+   * 一番上の階層しか見ない `withoutChatOnly` では外せないので、地図の範囲を持たない形を明示する。解析は Spec の入力で行う。
+   */
+  readonly mcpInputSchema?: z.ZodObject
 }
 
 /**
@@ -211,6 +218,16 @@ export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
     maxResultSizeChars: 40_000,
     perMinute: 30,
   },
+  getAreaSummary: {
+    mcpName: 'get_area_summary',
+    titleJa: 'エリアの要約（区域の値・推移・内訳・比較・色分け）',
+    descriptionEn:
+      'One-call summary of a whole area — a municipality (incl. 横浜市 as a whole, wards, and towns without stations), a prefecture, Japan, a railway line corridor (stations ± 500/1000/2000 m), or a circle around a station: official population up to the 2025 census with its change, the projection to 2050/2070 with its peak and its gap from the 2025 census, establishments and employees, a breakdown by ward / municipality / station, a comparison of 2–4 areas, and the distribution of station-radius values. It also colors the stations of the areas on the map by a metric (colorStations). Area totals are official figures or mesh apportionment — never sums of station values. Names are resolved server-side (candidates are returned when ambiguous); follow the returned answerGuide.',
+    maxResultSizeChars: 40_000,
+    perMinute: 20,
+    chartable: true, // trendChart / barChart（要約そのものは表と文なので変換しない）
+    mcpInputSchema: MCP_AREA_SUMMARY_INPUT_SCHEMA,
+  },
   rankStations: {
     mcpName: 'rank_stations',
     titleJa: '駅ランキング',
@@ -298,6 +315,8 @@ function panelsForEffect(effect: ToolEffect): Panel[] {
       return panelsForStationDetail(effect)
     case 'stationProfile':
       return panelsForStationProfile(effect)
+    case 'areaSummary':
+      return panelsForAreaSummary(effect)
     case 'ranking':
       return panelsForRanking(effect)
     case 'growth':
@@ -363,7 +382,10 @@ function registerSpec<Schema extends z.ZodTypeAny, Out>(
     {
       title: config.titleJa,
       description: mcpDescription(key),
-      inputSchema: advertisedSchema(spec.inputSchema, config.chartable === true),
+      inputSchema: advertisedSchema(
+        config.mcpInputSchema ?? spec.inputSchema,
+        config.chartable === true,
+      ),
       annotations: { readOnlyHint: true },
       // `ui`（MCP Apps の iframe ビューア）は**付けない**——PR-11 で撤収した（決定 11）。
       // 描画は母艦のプレゼンタ／ビューア・プラグインが structuredContent から行う。
@@ -433,6 +455,7 @@ export function registerMcpTools(
   registerSpec(server, 'getHazardSummary', s.getHazardSummary, origin, options)
   registerSpec(server, 'getStationDetail', s.getStationDetail, origin, options)
   registerSpec(server, 'getStationProfile', s.getStationProfile, origin, options)
+  registerSpec(server, 'getAreaSummary', s.getAreaSummary, origin, options)
   registerSpec(server, 'rankStations', s.rankStations, origin, options)
   registerSpec(server, 'compareGrowth', s.compareGrowth, origin, options)
   registerSpec(server, 'getHazardAtPoint', s.getHazardAtPoint, origin, options)

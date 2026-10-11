@@ -129,6 +129,28 @@ describe('システムプロンプト：駅周辺のプロフィール（2026-10
   })
 })
 
+describe('システムプロンプト：エリアの要約（2026-10-11 B5d）', () => {
+  /**
+   * 使いどころは道具の説明だけに書く。計画（§6.12.9）の 2 行を「ツールの使い方」に足すと関係の無い問が崩れ、言い換えるたびに
+   * 崩れる問が入れ替わった（「東京駅の人口推移」が getStationProfile へ・「この区で人口が増えている駅は？」が地図の範囲へ・§6.17.1）。
+   * 外すと両方とも main と同じに戻り、エリアの 6 問も道具の説明だけで当たる。実際の応答は `tests/chat-eval.test.ts` が見る。
+   */
+  it('「ツールの使い方」に getAreaSummary の行を足さない', () => {
+    const prompt = buildSystemPrompt()
+    const usage = prompt.slice(
+      prompt.indexOf('# ツールの使い方'),
+      prompt.indexOf('# 利用可能なデータ'),
+    )
+    expect(usage.length).toBeGreaterThan(0)
+    expect(usage).not.toContain('getAreaSummary')
+    expect(prompt).not.toContain('1 駅の周りは getStationProfile')
+  })
+
+  it('答えの長さだけは getStationProfile と同じ 3〜4 文', () => {
+    expect(buildSystemPrompt()).toContain('getStationProfile・getAreaSummary の答えだけは 3〜4 文')
+  })
+})
+
 describe('システムプロンプト：合成スコアの推薦は画面へ引き渡す', () => {
   /**
    * チャットが持つのは `rankStations`（**単一指標**）だけ。それで並べたものを「おすすめ」と

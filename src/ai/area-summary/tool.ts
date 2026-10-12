@@ -1,14 +1,15 @@
 /**
  * AI の道具 `getAreaSummary`（MCP は `get_area_summary`・2026-10-11 B5d・`docs/261001_fix_user_feedback_ui.md` §6.12.9）。
  *
- * 市区町村・都道府県・路線の沿線・起点の駅から N m・地図の表示範囲の**全体**（区域の値・推移・将来・内訳・比較）と、
- * 地図の駅の色分けを 1 回で返す。共通 API（`/api/areas/summary`）と同じ `loadAreaSummary` を呼ぶ——画面と AI が同じ答えを出す。
+ * 市区町村・都道府県・路線の沿線・地図の表示範囲（アプリのチャット）・起点の駅から N m（MCP）の**全体**（区域の値・推移・将来・
+ * 内訳・比較）と、地図の駅の色分けを 1 回で返す。共通 API（`/api/areas/summary`）と同じ `loadAreaSummary` を呼ぶ——画面と AI が同じ答えを出す。
  *
  * - 名前は B2・L3・B3 と同じ決め方で決め（`resolve.ts`）、決まらなければ図を作らずに候補を返す（推測で選ばない）
  * - 色分けの指標はほかの道具と同じくファミリ名かキーで受け、半径つきのキーに決める（`metric-resolver.ts`）
  * - 答え方は返却の `answerGuide` に載せる（`for-llm.ts`）
- * - 地図の範囲（`inMapView`）はアプリのチャットだけ。MCP には地図が無いので、その引数を見せない（`MCP_INPUT_SCHEMA`）。
- *   道具の説明にも書かない（`AREA_SUMMARY_DESCRIPTION_JA` の注）
+ * - 見せる入力は呼び手ごとに絞り、解くのは 1 つの型（`AREA_SUMMARY_INPUT_SCHEMA`）：アプリのチャットには起点の駅（near）を見せず
+ *   （`CHAT_INPUT_SCHEMA`）、地図の無い MCP には地図の範囲（inMapView）を見せない（`MCP_INPUT_SCHEMA`）。どちらも道具の説明に書かない
+ *   （`AREA_SUMMARY_DESCRIPTION_JA` の注）
  */
 
 import { z } from 'zod'
@@ -56,8 +57,10 @@ const LINE_DESCRIPTION =
 const WIDTH_DESCRIPTION = `沿線の幅（駅から ${LINE_WIDTHS_M.join('/')} m・既定 ${DEFAULT_LINE_WIDTH_M}）。line のときだけ`
 const NEAR_DESCRIPTION =
   '起点の駅から N m の円（「竹橋から 5km」→ station:"竹橋"・withinM:5000）。station は駅名か searchStations の grp'
+/** 地図の範囲。「この区」の断りは、ランキング・散布・一覧の inMapView と同じ（`tool-specs.ts`・§6.17.1）。 */
 const IN_MAP_VIEW_DESCRIPTION =
-  'true で、利用者の地図に表示中の範囲（「このあたり」「この辺」）。範囲はサーバが持っているので数は書かない。頼まれていないのに使わない'
+  'true で、利用者の地図に表示中の範囲（「このあたり」「この辺」）。範囲はサーバが持っているので数は書かない。' +
+  '「この区」「この市」「この町」は地図の範囲ではない（地図の中心の市区町村を municipality に渡す）。頼まれていないのに使わない'
 
 const nearSchema = z
   .object({
@@ -66,17 +69,18 @@ const nearSchema = z
   })
   .describe(NEAR_DESCRIPTION)
 
-/** エリア 1 つ（地図の範囲を除く・MCP にも見せる形）。 */
+/** エリア 1 つの書き方のうち、アプリのチャットと MCP に共通のもの（市区町村・都道府県・路線の沿線）。 */
 const areaShape = {
   prefecture: z.string().optional().describe(PREFECTURE_DESCRIPTION),
   municipality: z.string().optional().describe(MUNICIPALITY_DESCRIPTION),
   line: z.string().optional().describe(LINE_DESCRIPTION),
   widthM: z.number().optional().describe(WIDTH_DESCRIPTION),
-  near: nearSchema.optional(),
 }
-/** エリア 1 つの説明（アプリのチャットは地図の範囲を含む・MCP は含まない）。 */
-const AREA_DESCRIPTION =
-  'エリア 1 つ。prefecture・municipality・line・near・inMapView のどれか 1 つ（prefecture は municipality・line・near に添えてもよい）'
+const nearField = { near: nearSchema.optional() }
+const inMapViewField = { inMapView: z.boolean().optional().describe(IN_MAP_VIEW_DESCRIPTION) }
+/** エリア 1 つの説明（アプリのチャットは地図の範囲・MCP は起点の駅から N m）。 */
+const CHAT_AREA_DESCRIPTION =
+  'エリア 1 つ。prefecture・municipality・line・inMapView のどれか 1 つ（prefecture は municipality・line に添えてもよい）'
 const MCP_AREA_DESCRIPTION =
   'エリア 1 つ。prefecture・municipality・line・near のどれか 1 つ（prefecture は municipality・line・near に添えてもよい）'
 const AREAS_DESCRIPTION = `エリア 1〜${MAX_AREAS} つ（2 つ以上は比較・同じ年で比べる）`
@@ -89,34 +93,43 @@ const commonShape = {
   radiusM: z.number().optional().describe(RADIUS_DESCRIPTION),
 }
 
-/** アプリのチャットの入力（エリアに地図の範囲を含む）。 */
-export const AREA_SUMMARY_INPUT_SCHEMA = z.object({
-  areas: z
-    .array(
-      z
-        .object({
-          ...areaShape,
-          inMapView: z.boolean().optional().describe(IN_MAP_VIEW_DESCRIPTION),
-        })
-        .describe(AREA_DESCRIPTION),
-    )
+/** エリア 1〜4 つ（エリア 1 つの形と説明は呼び手ごと）。 */
+function areasOf<Shape extends z.ZodRawShape>(shape: Shape, description: string) {
+  return z
+    .array(z.object(shape).describe(description))
     .min(1)
     .max(MAX_AREAS)
-    .describe(AREAS_DESCRIPTION),
+    .describe(AREAS_DESCRIPTION)
+}
+
+/**
+ * 解く入力（アプリのチャットと MCP の両方を、この型で解く）。起点の駅（near）と地図の範囲（inMapView）の両方を持つ——
+ * 見せる型は呼び手ごとに絞る（下の 2 つ）。
+ */
+export const AREA_SUMMARY_INPUT_SCHEMA = z.object({
+  areas: areasOf(
+    { ...areaShape, ...nearField, ...inMapViewField },
+    'エリア 1 つ（解く型・モデルには見せない）。prefecture・municipality・line・near・inMapView のどれか 1 つ',
+  ),
   ...commonShape,
 })
 export type AreaSummaryToolInput = z.output<typeof AREA_SUMMARY_INPUT_SCHEMA>
+
+/**
+ * アプリのチャット（Gemini）に見せる入力：起点の駅（near）を見せない。「駅から N m」は駅の半径の値（駅詳細と同じ）で、
+ * 見せると「東京駅と新宿駅の人口を比べて」を「駅から 1km」のエリア 2 つとして比べた（§6.17.1）。地図の範囲は見せる。
+ */
+export const CHAT_INPUT_SCHEMA = z.object({
+  areas: areasOf({ ...areaShape, ...inMapViewField }, CHAT_AREA_DESCRIPTION),
+  ...commonShape,
+})
 
 /**
  * MCP に見せる入力（地図の範囲は無い）。MCP の SDK はこの型で入力を検めるので、`areas[].inMapView` が送られてきても
  * 外れて空のエリアになり、理由（書ける引数の一覧・inMapView を含めない）つきで断る。
  */
 export const MCP_INPUT_SCHEMA = z.object({
-  areas: z
-    .array(z.object(areaShape).describe(MCP_AREA_DESCRIPTION))
-    .min(1)
-    .max(MAX_AREAS)
-    .describe(AREAS_DESCRIPTION),
+  areas: areasOf({ ...areaShape, ...nearField }, MCP_AREA_DESCRIPTION),
   ...commonShape,
 })
 

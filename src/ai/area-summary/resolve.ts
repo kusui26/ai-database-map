@@ -230,15 +230,16 @@ async function targetStep(
 }
 
 /**
- * 指すものが無いエリア（都道府県だけ・全国も。それも無ければ空）。空のときに挙げる書き方は、地図の範囲が届いているときだけ
- * inMapView を含める——MCP（地図が無い）では、SDK が広告した入力の型（inMapView が無い）で外すので `{ inMapView: true }` も空になる。
- * そこで inMapView を勧めると、同じ呼び直しを繰り返させる。
+ * 指すものが無いエリア（都道府県だけ・全国も。それも無ければ空）。空のときの理由は書き方を名指ししない——呼び手ごとに使える書き方が違い
+ * （アプリのチャットは地図の範囲、MCP は起点の駅から N m）、使えない書き方を勧めると同じ呼び直しを繰り返させる。
+ * MCP の SDK は広告した入力の型で検めるので、MCP の `{ inMapView: true }` もここに来る。
  */
 async function prefectureOnlyStep(prefecture: string, context: Context): Promise<Step> {
   if (prefecture !== '') return prefectureStep(prefecture, context)
-  const fields = ['prefecture', 'municipality', 'line', 'near']
-  const usable = context.viewport === null ? fields : [...fields, 'inMapView']
-  return fail(context.label, `エリアが空です（${usable.join('・')} のどれかを書く）。`)
+  return fail(
+    context.label,
+    'エリアが空です。市区町村・都道府県・路線など、areas の説明にある書き方を 1 つ書いてください。',
+  )
 }
 
 /** エリア 1 つ → エリアの文字列。 */

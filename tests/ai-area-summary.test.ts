@@ -342,7 +342,7 @@ describe('MCP（15 本目・get_area_summary）', () => {
   it('MCP に地図の範囲は無い：inMapView が送られてきても外れて空のエリアになり、理由つきで断る（集計しない）', async () => {
     const result = await callLikeSdk(mcpTool('get_area_summary'), { areas: [{ inMapView: true }] })
     const text = JSON.stringify(result.structuredContent)
-    expect(text).toContain('エリアが空です（prefecture・municipality・line・near のどれかを書く）')
+    expect(text).toContain('エリアが空です')
     // 使えない inMapView を勧めない（勧めると、同じ呼び直しを繰り返す）
     expect(text).not.toContain('inMapView')
     expect(db.areaRows).not.toHaveBeenCalled()

@@ -293,10 +293,11 @@ describe('エリアの形', () => {
     expect(both.problems[0]?.problem).toContain('municipality・line')
     const empty = await problemsOf([{}])
     expect(empty.problems[0]?.problem).toContain('エリアが空です')
-    // 地図の範囲が届いていない（MCP など）ときは inMapView を勧めない。届いていれば勧める
-    expect(empty.problems[0]?.problem).not.toContain('inMapView')
-    const withMap = await problemsOf([{}], YOKOHAMA_VIEW)
-    expect(withMap.problems[0]?.problem).toContain('near・inMapView のどれか')
+    // 呼び手ごとに使える書き方が違うので、書き方を名指ししない（チャットに near、MCP に inMapView を勧めない）
+    for (const viewport of [null, YOKOHAMA_VIEW]) {
+      const { problems } = await problemsOf([{}], viewport)
+      expect(problems[0]?.problem).not.toMatch(/inMapView|near/)
+    }
   })
 
   it('同じエリアの重なりは 1 つにまとめて言う', async () => {

@@ -113,6 +113,11 @@ import { routeNameDeps } from './routes/catalog'
 import { resolveNameFilters, type NameResolution } from './routes/resolve'
 import { areaDeps } from './area/catalog'
 import { resolveAreaInput, type AreaInput, type AreaInputResolution } from './area/resolve'
+import {
+  AREA_SUMMARY_DESCRIPTION_JA,
+  AREA_SUMMARY_INPUT_SCHEMA,
+  runAreaSummary,
+} from './area-summary/tool'
 
 /** 既定の集約半径（1km＝アプリ既定）。 */
 const DEFAULT_RADIUS_M: RadiusM = 1000
@@ -157,9 +162,13 @@ const BBOX_DESCRIPTION = '範囲 [west, south, east, north]（経度・緯度）
 /**
  * 地図に表示中の範囲（「このあたり」・2026-10-09 B3）。範囲はサーバが持っている（送信時の地図の表示範囲）ので、
  * LLM に 4 つの数を書き写させない。地図の無い呼び出し（MCP）には広告しない（`mcp-tools.ts`）。
+ * 「この区」の断りは 2026-10-12 B5d：エリアの要約（getAreaSummary）を足すと、システムプロンプトの規則だけでは「この区で人口が
+ * 増えている駅は？」が地図の範囲で絞る回が残った（main は 13 回中 13 回が区）。引数を選ぶその場に同じ断りを置き、
+ * getAreaSummary の inMapView にもそろえて 6 回中 6 回（`docs/261001_fix_user_feedback_ui.md` §6.17.1）。
  */
 const IN_MAP_VIEW_DESCRIPTION =
   'true で、利用者の地図に表示中の範囲の駅だけ（「このあたり」「この辺」「地図に出ている範囲で」）。範囲はサーバが持っているので数は書かない（bbox と一緒に使わない）。' +
+  '「この区」「この市」「この町」は地図の範囲ではない（地図の中心の市区町村を municipality に渡す）。' +
   '頼まれていないのに使わない（「全国で」「神奈川県で」はそのとおりに）。地図が日本全体に近い広さだと使えない'
 
 /** 起点の駅と半径（ランキング・散布。図の条件は ⤢ で開き直せるよう駅で受ける）。 */
@@ -1482,6 +1491,19 @@ export const TOOL_SPECS = {
   }),
 
   /**
+   * エリアの要約（2026-10-11 B5d・`docs/261001_fix_user_feedback_ui.md` §6.12.9）。市区町村・都道府県・路線の沿線・
+   * 起点の駅から N m・地図の範囲の全体（区域の値・推移・将来・内訳・比較）と、地図の駅の色分けを 1 回で返す。
+   * 中身は `area-summary/tool.ts`（入力の形・名前の解決・LLM への要約と答え方）。
+   */
+  getAreaSummary: defineSpec({
+    name: 'getAreaSummary',
+    description: AREA_SUMMARY_DESCRIPTION_JA,
+    inputSchema: AREA_SUMMARY_INPUT_SCHEMA,
+    errorFallbackJa: 'エリアの要約の取得に失敗しました',
+    run: runAreaSummary,
+  }),
+
+  /**
    * 都道府県×指標のランキング（上位/下位）。指標はキーでもファミリ名でもよい。
    * 会社・路線の名前を解決し（路線は運行系統の路線コード・2026-10-08 L3）、決まらない・0 件のときは図を作らない（2026-10-07 B1）。
    */
@@ -1833,6 +1855,7 @@ export const TOOL_SPEC_NAMES = [
   'getHazardSummary',
   'getStationDetail',
   'getStationProfile',
+  'getAreaSummary',
   'rankStations',
   'compareGrowth',
   'getHazardAtPoint',

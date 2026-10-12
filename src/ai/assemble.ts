@@ -34,6 +34,7 @@ import {
   stationCardPanelOf,
 } from '@/domain/stations/panels'
 import { stationProfilePanel } from '@/domain/profile/panel'
+import { areaSummaryPanels } from '@/domain/area-summary/panel'
 import { rankingPanel } from '@/domain/ranking/panel'
 import { scatterPanel } from '@/domain/growth/panel'
 import {
@@ -45,6 +46,7 @@ import {
 import { hazardLayersToShow } from '@/domain/hazard/catalog'
 import { isWarningMode, warningModeLayers } from '@/domain/hazard/warning-mode'
 import {
+  type AreaSummaryEffect,
   type EscapeEffect,
   type EvacuationEffect,
   type GrowthEffect,
@@ -107,6 +109,14 @@ export function panelsForStationProfile(effect: StationProfileEffect): Panel[] {
   ].map(inline)
 }
 
+/**
+ * エリアの要約ツール → パネル（要約・推移・内訳の 3 つまで・compact/inline・2026-10-11 B5d）。
+ * 画面のエリアの図（B5e）と同じ組み立て（`areaSummaryPanels`）を通す。
+ */
+export function panelsForAreaSummary(effect: AreaSummaryEffect): Panel[] {
+  return areaSummaryPanels(effect.response, 'compact').map(inline)
+}
+
 /** ランキングツール → パネル（rankingTable・compact/inline）。 */
 export function panelsForRanking(effect: RankingEffect): Panel[] {
   return [inline(rankingPanel(effect.response, 'compact'))]
@@ -144,6 +154,8 @@ function panelsFor(effect: ToolEffect): Panel[] {
       return panelsForStationDetail(effect)
     case 'stationProfile':
       return panelsForStationProfile(effect)
+    case 'areaSummary':
+      return panelsForAreaSummary(effect)
     case 'ranking':
       return panelsForRanking(effect)
     case 'growth':
@@ -176,6 +188,14 @@ export function mapActionsForEffect(effect: ToolEffect): MapAction[] {
         { type: 'flyTo', lon: station.lon, lat: station.lat, zoom: DETAIL_ZOOM },
         { type: 'selectStation', grp: station.grp, radiusM },
       ]
+    }
+    case 'areaSummary': {
+      // エリアの駅を色分けする（地図はその駅の範囲へ自分で寄せる・B5c）。色分けしなかった（駅が少ない・
+      // colorBy:none）ときは送らない——前の色分けを消さず、していない色分けを地図に出さない。
+      const { coloring } = effect.response
+      return coloring === null
+        ? []
+        : [{ type: 'colorStations', metricKey: coloring.metricKey, areas: coloring.areas }]
     }
     case 'ranking': {
       const grps = effect.response.rows.map((row) => row.grp)
@@ -337,6 +357,8 @@ function promotionOf(effect: ToolEffect): PanelPromotion | null {
       return { kind: 'scatter', xKey: x.key, yKey: y.key, ...filters }
     }
     // 種類を足したら、ここで昇格させるかを決める（列挙しておけば型検査が漏れを捕まえる）。
+    // エリアの要約の ⤢ は、エリアの図ができてから（B5e）。
+    case 'areaSummary':
     case 'hazardPoint':
     case 'hazardAlerts':
     case 'evacuation':

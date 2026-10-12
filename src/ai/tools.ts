@@ -21,6 +21,7 @@ import { type MapResponse } from '@/shared/protocol'
 import { type Viewport } from '@/shared/viewport'
 import { type EffectCollector } from './types'
 import { TOOL_SPECS, type ToolRunContext, type ToolRunResult } from './tool-specs'
+import { CHAT_INPUT_SCHEMA as CHAT_AREA_SUMMARY_INPUT_SCHEMA } from './area-summary/tool'
 
 /** `executeFromSpec` が要る最小の形（スキーマには触れない＝推論を壊さない）。 */
 type RunnableSpec<In, Out> = {
@@ -87,6 +88,12 @@ export function createTools(
       description: s.getStationProfile.description,
       inputSchema: s.getStationProfile.inputSchema,
       execute: executeFromSpec(s.getStationProfile, collector, ctx),
+    }),
+    getAreaSummary: tool({
+      description: s.getAreaSummary.description,
+      // 起点の駅（near）を見せない形（2 駅の比較がエリアの比較に流れた・`area-summary/tool.ts`）。解くのは Spec の入力
+      inputSchema: CHAT_AREA_SUMMARY_INPUT_SCHEMA,
+      execute: executeFromSpec(s.getAreaSummary, collector, ctx),
     }),
     rankStations: tool({
       description: s.rankStations.description,

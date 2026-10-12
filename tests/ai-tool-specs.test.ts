@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { z } from 'zod'
 import {
   TOOL_SPECS,
   TOOL_SPEC_NAMES,
@@ -6,6 +7,7 @@ import {
   type ToolRunResult,
 } from '@/ai/tool-specs'
 import { createTools, executeFromSpec } from '@/ai/tools'
+import { CHAT_INPUT_SCHEMA as AREA_SUMMARY_CHAT_INPUT_SCHEMA } from '@/ai/area-summary/tool'
 import { createCollector, type ToolEffect } from '@/ai/types'
 
 /**
@@ -18,7 +20,7 @@ import { createCollector, type ToolEffect } from '@/ai/types'
  */
 
 describe('TOOL_SPECS（登録の網羅）', () => {
-  it('14 ツールが揃っている（増減したら MCP 側の写しも見直す・2026-10-09 B4 で getStationProfile）', () => {
+  it('15 ツールが揃っている（増減したら MCP 側の写しも見直す・B4 で getStationProfile・2026-10-11 B5d で getAreaSummary）', () => {
     expect(TOOL_SPEC_NAMES).toEqual([
       'searchStations',
       'listStations',
@@ -27,6 +29,7 @@ describe('TOOL_SPECS（登録の網羅）', () => {
       'getHazardSummary',
       'getStationDetail',
       'getStationProfile',
+      'getAreaSummary',
       'rankStations',
       'compareGrowth',
       'getHazardAtPoint',
@@ -64,14 +67,26 @@ describe('Gemini のツール表面 ＝ Spec（同一の参照・ずれない）
     key: (typeof TOOL_SPEC_NAMES)[number],
   ): key is (typeof GEMINI_EXCLUDED)[number] => GEMINI_EXCLUDED.some((each) => each === key)
 
-  it('全ツールの説明とスキーマが Spec と同じ物体（アプリ内で出せない 3 本は除外）', () => {
+  it('全ツールの説明とスキーマが Spec と同じ物体（アプリ内で出せない 3 本は除外・getAreaSummary は下の例外）', () => {
     for (const key of TOOL_SPEC_NAMES) {
       if (isExcluded(key)) continue
       const spec = TOOL_SPECS[key]
       const built = tools[key]
       expect(built.description, key).toBe(spec.description)
-      expect(built.inputSchema, key).toBe(spec.inputSchema)
+      const expected = key === 'getAreaSummary' ? AREA_SUMMARY_CHAT_INPUT_SCHEMA : spec.inputSchema
+      expect(built.inputSchema, key).toBe(expected)
     }
+  })
+
+  it('getAreaSummary だけは、Spec の型から起点の駅（near）を外した形を見せる（2026-10-11 B5d・§6.17.1）', () => {
+    // 見せると「東京駅と新宿駅の人口を比べて」を「駅から 1km」のエリア 2 つとして比べた。解くのは Spec の型（MCP は near を使う）
+    const keysOf = (schema: z.ZodObject): string[] => Object.keys(schema.shape)
+    const specAreas = TOOL_SPECS.getAreaSummary.inputSchema.shape.areas.element
+    const chatAreas = AREA_SUMMARY_CHAT_INPUT_SCHEMA.shape.areas.element
+    expect(keysOf(chatAreas)).toEqual(keysOf(specAreas).filter((key) => key !== 'near'))
+    expect(keysOf(AREA_SUMMARY_CHAT_INPUT_SCHEMA)).toEqual(
+      keysOf(TOOL_SPECS.getAreaSummary.inputSchema),
+    )
   })
 
   it('buildDataset / getHazardSummary / renderMap は Gemini に出さない', () => {

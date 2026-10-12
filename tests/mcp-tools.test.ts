@@ -158,9 +158,15 @@ describe('registerMcpTools（登録の網羅と中身）', () => {
     expect(resources.some((uri) => uri.startsWith('ui://'))).toBe(false)
   })
 
-  it('表示用 `present` は、数値パネルを返す 3 ツールにだけ広告される', () => {
+  it('表示用 `present` は、数値パネルを返す 4 ツールにだけ広告される', () => {
     const chartable = TOOL_SPEC_NAMES.filter((key) => MCP_TOOL_CONFIGS[key].chartable === true)
-    expect(chartable).toEqual(['getStationDetail', 'rankStations', 'compareGrowth'])
+    // エリアの要約（B5d）は推移と内訳の図を ECharts にできる（要約そのものは表と文なので変換しない）。
+    expect(chartable).toEqual([
+      'getStationDetail',
+      'getAreaSummary',
+      'rankStations',
+      'compareGrowth',
+    ])
     // ハザード系・一覧・CSV には付けない（チャートにできるものが無い／危険度は図にしない）。
     for (const key of ['getHazardAtPoint', 'listStations', 'buildDataset'] as const) {
       expect(MCP_TOOL_CONFIGS[key].chartable, key).not.toBe(true)
@@ -184,6 +190,25 @@ describe('registerMcpTools（登録の網羅と中身）', () => {
     // データセット（MCP だけ）の対象集合には、はじめから足さない（アプリのチャットに出していない）
     const dataset = TOOL_SPECS.buildDataset.inputSchema.shape.stations.unwrap()
     expect(shapeKeysOf(dataset)).not.toContain('inMapView')
+  })
+
+  it('エリアの要約の areas[].inMapView も、Spec にはあるが MCP には広告しない（入れ子・B5d）', () => {
+    const { tools, server } = fakeServer()
+    registerMcpTools(server, 'http://localhost:3000')
+    const area = TOOL_SPECS.getAreaSummary.inputSchema.shape.areas.element
+    expect(shapeKeysOf(area)).toContain('inMapView')
+    const tool = tools.find((registered) => registered.name === 'get_area_summary')
+    if (tool === undefined) throw new Error('get_area_summary が登録されていない')
+    const schema = tool.config.inputSchema
+    if (!(schema instanceof z.ZodObject)) throw new Error('ZodObject ではありません')
+    const areas = schema.shape.areas
+    if (!(areas instanceof z.ZodArray)) throw new Error('areas が配列ではありません')
+    const element = areas.element
+    if (!(element instanceof z.ZodObject))
+      throw new Error('areas の要素が ZodObject ではありません')
+    expect(shapeKeysOf(element)).toEqual(['prefecture', 'municipality', 'line', 'widthM', 'near'])
+    // ほかの引数と、図を返す道具の present はそのまま
+    expect(shapeKeysOf(schema)).toEqual(['areas', 'colorBy', 'radiusM', 'present'])
   })
 
   it('MCP に inMapView が送られてきても、地図の範囲が無いので理由つきで断る（集計しない）', async () => {

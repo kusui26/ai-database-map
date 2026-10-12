@@ -25,6 +25,12 @@ export type AreaProblem = {
   readonly didYouMean?: readonly string[]
 }
 
+/**
+ * 都道府県で絞る引数の名前（呼び直し方の言い方に使う）。ランキング・一覧・散布は `prefectures`（配列・道具の一番上）、
+ * エリアの要約（`getAreaSummary`・2026-10-11 B5d）はエリアごとの `prefecture`（1 つ）。
+ */
+export type PrefectureField = 'prefectures' | 'prefecture'
+
 /** 候補として挙げる数の上限。 */
 export const MAX_AREA_CANDIDATES = 8
 /** 説明に並べるほかの候補の数（多ければ「など」）。 */

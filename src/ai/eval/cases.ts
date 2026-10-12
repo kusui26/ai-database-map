@@ -1,5 +1,5 @@
 /**
- * 評価：ゴールデン 56 問（駅詳細・ランキング・会社と路線の名前・場所（市区町村・起点から N km）・散布・比較・曖昧駅名・カタログ探索・データ外拒否・**災害**・地図文脈（選択駅・「このあたり」）・エリアの性格（駅周辺のプロフィール））。
+ * 評価：ゴールデン 62 問（駅詳細・ランキング・会社と路線の名前・場所（市区町村・起点から N km）・散布・比較・曖昧駅名・カタログ探索・データ外拒否・**災害**・地図文脈（選択駅・「このあたり」）・エリアの性格（駅周辺のプロフィール）・エリアの全体（区域の値・比較・地図の色分け））。
  * 各問は自然言語クエリと、機械判定できる期待（score.ts）を持つ。代表性を重視して分野を網羅する。
  *
  * **災害の 6 問だけは性格が違う**（`docs/260824_flood.md` §6.5・§10.4）。
@@ -41,6 +41,8 @@ const SHIBUYA_VIEW = [139.66, 35.63, 139.74, 35.69] as const
 const KOHOKU_VIEW = [139.58, 35.49, 139.68, 35.57] as const
 /** 日本全体（ズーム 4〜5）。「このあたり」がどこか決まらない（B3）。 */
 const JAPAN_VIEW = [122.9, 24.0, 153.9, 45.6] as const
+/** 横浜の中心（横浜駅・関内・みなとみらいの周り・約 11km 四方）。「このあたりの駅を色分けして」の問（B5d）。 */
+const YOKOHAMA_CENTER_VIEW = [139.58, 35.4, 139.7, 35.5] as const
 
 export const EVAL_CASES: readonly EvalCase[] = [
   // --- 駅詳細（カテゴリの選択・半径・選択） ---
@@ -663,6 +665,86 @@ export const EVAL_CASES: readonly EvalCase[] = [
       toolCalls: [{ name: 'getStationProfile', inputIncludes: { grp: '東京#0' } }],
       panels: ['stationProfile'],
       maxCalls: { searchStations: 0 },
+    },
+  },
+
+  // --- エリアの全体：区域の値・比較・地図の色分け（2026-10-11 B5d・計画書 §6.12.1・§6.12.11） ---
+  // 以前は区域の値を返す道具が無く、駅の順位で代用していた。区域の問いには区域の値で答え、本文で年と値を言うかを
+  // **本文だけ**で見る（図の JSON には値が出ているので、`contains` では本文が言わなくても通ってしまう）。
+  {
+    // 横浜市は 2025 年の国勢調査で 2020 年から -0.7%（駅の順位では「多くの駅で増加傾向」と答えていた）。
+    id: 'area-summary',
+    category: 'エリアの全体',
+    query: '横浜市全体の人口は増えている？',
+    expect: {
+      toolCalls: [{ name: 'getAreaSummary' }],
+      panels: ['areaSummary'],
+      contains: ['muni:14100'],
+      maxCalls: { getAreaSummary: 1, rankStations: 0 },
+      textContains: ['2025', '0.7%'],
+    },
+  },
+  {
+    // 「減る」という前提に乗らない：東急東横線の 1km の沿線は、推計で 2020→2050 年に +4.9%（増える）。
+    id: 'area-summary-line',
+    category: 'エリアの全体',
+    query: '東急東横線沿線の人口は2050年までにどれだけ減る？',
+    expect: {
+      toolCalls: [{ name: 'getAreaSummary' }],
+      panels: ['areaSummary'],
+      contains: ['line:26001@1000'],
+      maxCalls: { getAreaSummary: 1, rankStations: 0 },
+      textContains: ['4.9%'],
+    },
+  },
+  {
+    // 「どのあたり」は区の内訳で答える（2020→2025 に増えたのは西区・中区・神奈川区・港北区など）。地図は駅を色分けする。
+    id: 'area-summary-wards',
+    category: 'エリアの全体',
+    query: '横浜市のどのあたりで人口が伸びている？',
+    expect: {
+      toolCalls: [{ name: 'getAreaSummary' }],
+      contains: ['muni:14100'],
+      mapActions: ['colorStations'],
+      textContainsAny: ['西区', '中区', '神奈川区', '港北区'],
+    },
+  },
+  {
+    // 2 つのエリアは 1 回で比べる（同じ指標を x と y にした散布や、順位表 2 枚にしない）。
+    id: 'area-compare',
+    category: 'エリアの全体',
+    query: '横浜市と川崎市の人口の伸びを比べて',
+    expect: {
+      toolCalls: [{ name: 'getAreaSummary' }],
+      panels: ['areaSummary'],
+      contains: ['muni:14100', 'muni:14130'],
+      maxCalls: { getAreaSummary: 1 },
+      noRankScatter: true,
+    },
+  },
+  {
+    // 以前は色分けの道具が無く、上位の駅を輪で囲って「色分けして表示しました」と書いた（§6.12.1）。
+    // 地図の範囲の駅を地価で色分けする（範囲の数は書かせない）。
+    id: 'area-color-map',
+    category: 'エリアの全体',
+    query: 'このあたりの駅を地価で色分けして',
+    bbox: YOKOHAMA_CENTER_VIEW,
+    expect: {
+      toolCalls: [{ name: 'getAreaSummary', inputIncludes: { areas: [{ inMapView: true }] } }],
+      mapActions: ['colorStations'],
+      contains: ['"metricKey":"lp_'],
+    },
+  },
+  {
+    // 市と県を同じ年で並べる（比べる表）。
+    id: 'area-pref-share',
+    category: 'エリアの全体',
+    query: '横浜市は神奈川県全体と比べてどう？',
+    expect: {
+      toolCalls: [{ name: 'getAreaSummary' }],
+      panels: ['areaSummary'],
+      contains: ['muni:14100', 'pref:14'],
+      maxCalls: { getAreaSummary: 1 },
     },
   },
 

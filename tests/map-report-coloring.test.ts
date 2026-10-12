@@ -306,6 +306,21 @@ describe('render_map ツール', () => {
     })
   })
 
+  it('駅の無い段は要約に並べない（増減の 5 段は 0 を中心に固定なので空の段がある・2026-10-11 B5d）', async () => {
+    // 1% 以上増えた駅だけ（減った段・横ばいの段は 0 駅）。エリアの要約の色分けの言い方と同じにする。
+    const growing = YOKOHAMA_POP_GR.filter((each) => each.value !== null && each.value >= 1)
+    db.stationMetricValues.mockResolvedValue({ stationCount: growing.length, values: growing })
+    const { forLlm } = await run([COLOR_YOKOHAMA])
+    // 凡例は 5 段（減少の 2 段は 0 駅）。要約は駅のある 3 段だけ
+    expect(forLlm).toMatchObject({
+      coloring: {
+        scopeJa: '神奈川県横浜市の 91 駅',
+        classesJa: ['-2〜+2%（ほぼ横ばい）（13 駅）', '+2〜+10%（72 駅）', '+10%以上（6 駅）'],
+      },
+    })
+    expect(JSON.stringify(forLlm)).not.toContain('（0 駅）')
+  })
+
   it('色分けの無い地図は従来どおり（要約の色分けは null）', async () => {
     const { forLlm } = await run([{ type: 'showPoint', lon: 139.6, lat: 35.4, labelJa: '横浜' }])
     expect(forLlm).toMatchObject({ coloring: null })

@@ -11,6 +11,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
+import { TOOL_SPECS } from '@/ai/tool-specs'
 import {
   describeMapView,
   isTooWideForArea,
@@ -122,6 +123,32 @@ describe('mapViewPrompt（LLM に足す文脈）', () => {
     const prompt = mapViewPrompt(describeMapView(TAKEBASHI_VIEW, INDEX))
     expect(prompt).toContain('「この区」「この市」「この町」は**地図の範囲ではない**')
     expect(prompt).toContain('**inMapView は付けない**')
+  })
+
+  it('駅を並べる問いと区そのものの値の問いを、道具を名指しして言い分ける（2026-10-11 B5d）', () => {
+    // エリアの要約（getAreaSummary・municipality を持つ）を足しただけで、「この区で人口が増えている駅は？」が地図の範囲の
+    // 順位表に戻った（4 回中 0 回が区・main では 4 回とも区）。どの道具に municipality を渡すかを言い切ると 4 回とも区。
+    const prompt = mapViewPrompt(describeMapView(TAKEBASHI_VIEW, INDEX))
+    expect(prompt).toContain(
+      '駅を並べる・比べる問い（「この区で人口が増えている駅は？」）は rankStations / compareGrowth / listStations に municipality:"千代田区"・prefectures:["東京都"] を渡し',
+    )
+    expect(prompt).toContain(
+      '区そのものの値（「この区の人口は増えている？」）は getAreaSummary の areas:[{municipality:"千代田区", prefecture:"東京都"}]',
+    )
+  })
+
+  it('inMapView の説明にも「この区」は地図の範囲ではないと書く（引数を選ぶその場の手がかり・2026-10-12 B5d）', () => {
+    // 道具を足すと、規則だけでは「この区で人口が増えている駅は？」が地図の範囲で絞る回が残った（§6.17.1）。
+    // 地図の範囲を受ける 4 つの道具の inMapView に、同じ断りをそろえて書く
+    const descriptions = [
+      TOOL_SPECS.rankStations.inputSchema.shape.inMapView.description,
+      TOOL_SPECS.compareGrowth.inputSchema.shape.inMapView.description,
+      TOOL_SPECS.listStations.inputSchema.shape.inMapView.description,
+      TOOL_SPECS.getAreaSummary.inputSchema.shape.areas.element.shape.inMapView.description,
+    ]
+    for (const description of descriptions) {
+      expect(description).toContain('「この区」「この市」「この町」は地図の範囲ではない')
+    }
   })
 
   it('首都圏の初期表示（約 179km）では「この区」を読ませない。広さは整数の km', () => {

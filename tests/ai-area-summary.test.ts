@@ -203,6 +203,26 @@ describe('比較・色分けの指定・半径', () => {
     })
   })
 
+  it('答え方：データに無い理由・地域の様子・評価を書かない（2026-10-14・答えに「経済の中心地」「臨海部」を足していた）', () => {
+    for (const phrase of [
+      'データに無いことは書かない',
+      '名前から思い浮かべた地域の様子（臨海部',
+      '「中心的な地域」',
+      '割合が大きくても「中心」とまとめない',
+      'どう読むかは利用者が決める',
+    ]) {
+      expect(AREA_SUMMARY_ANSWER_GUIDE_JA, phrase).toContain(phrase)
+    }
+  })
+
+  it('答え方：「どのあたり」は内訳の名前と値で答える（2026-10-14・区を挙げず市の合計だけ答えたことがある）', () => {
+    expect(AREA_SUMMARY_ANSWER_GUIDE_JA).toContain(
+      '「どのあたり」の問いには内訳（breakdown）の名前と値で答える',
+    )
+    // 失敗の形を名指しすると（「全体の値だけで終えない」）、かえって全体の値だけで答えた（2026-10-14・7 回中 4 回）
+    expect(AREA_SUMMARY_ANSWER_GUIDE_JA).not.toContain('全体の値だけ')
+  })
+
   it('色分けしない（none）なら地図の操作を送らず、そう言う（色分けしたと書かせない）', async () => {
     const { effects, forLlm } = await run({ areas: [{ municipality: '横浜市' }], colorBy: 'none' })
     expect(mapActionsForEffect(areaEffectOf(effects))).toEqual([])

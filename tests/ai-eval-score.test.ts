@@ -140,6 +140,23 @@ describe('scoreCase', () => {
     expect(scoreCase({ textContainsAny: ['西区', '港北区'] }, observed).pass).toBe(false)
   })
 
+  it('textNotContains は本文だけを見る（図の JSON に同じ文字があっても落とさない・2026-10-14）', () => {
+    const observed: EvalObserved = {
+      ...base,
+      text: '横浜市の人口は神奈川県の 40.8% です。',
+      haystack: '横浜市の人口は神奈川県の 40.8% です。 {"note":"中心地"}',
+    }
+    expect(scoreCase({ textNotContains: ['中心地'] }, observed).pass).toBe(true)
+    // 同じものを notContains（本文＋図）で見ると、図の文字に当たってしまう
+    expect(scoreCase({ notContains: ['中心地'] }, observed).pass).toBe(false)
+    const evaluative: EvalObserved = { ...observed, text: '横浜市は神奈川県の経済の中心地です。' }
+    const result = scoreCase({ textNotContains: ['中心地', '臨海部'] }, evaluative)
+    expect(result.pass).toBe(false)
+    expect(result.checks.filter((check) => !check.ok).map((check) => check.name)).toEqual([
+      '本文が「中心地」を含まない',
+    ])
+  })
+
   it('mapResponse が不正なら常に不合格', () => {
     expect(
       scoreCase({ textNonEmpty: true }, { ...base, text: 'x', mapResponseValid: false }).pass,

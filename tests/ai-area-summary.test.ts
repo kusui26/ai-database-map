@@ -34,6 +34,7 @@ import { type Viewport } from '@/shared/viewport'
 import { NAME_ROWS, NAME_STATIONS, YOKOHAMA_VIEW } from './fixtures/area-names'
 import {
   KAWASAKI_POP_GR,
+  KANAGAWA_ROWS,
   KAWASAKI_ROWS,
   TOYOKO_ROWS,
   YOKOHAMA_LP_MED,
@@ -59,7 +60,7 @@ vi.mock('@/db/queries', async (importOriginal) => {
 const names = vi.hoisted(() => ({ summaryAreasDeps: vi.fn() }))
 vi.mock('@/ai/area-summary/deps', () => names)
 
-const ALL_ROWS = [...YOKOHAMA_ROWS, ...KAWASAKI_ROWS, ...TOYOKO_ROWS]
+const ALL_ROWS = [...YOKOHAMA_ROWS, ...KAWASAKI_ROWS, ...TOYOKO_ROWS, ...KANAGAWA_ROWS]
 const CTX: ToolRunContext = { origin: 'http://localhost:3000' }
 
 const NAME_DEPS: SummaryAreasDeps = {
@@ -177,6 +178,28 @@ describe('比較・色分けの指定・半径', () => {
         areas: ['muni:14100', 'muni:14130'],
       },
     ])
+  })
+
+  it('横浜市と神奈川県：比べる表に占める割合の行が入り、答え方は割合を作らせない（2026-10-13 B5d″）', async () => {
+    const { forLlm } = await run({
+      areas: [{ municipality: '横浜市' }, { prefecture: '神奈川県' }],
+      colorBy: 'none',
+    })
+    expect(llmOf(forLlm)).toMatchObject({
+      comparison: {
+        rows: expect.arrayContaining([
+          '人口の占める割合（2025年）：神奈川県の 40.8% / —',
+          '将来推計人口の占める割合（2050年）：神奈川県の 41.5% / —',
+          '従業者の占める割合（2021年）：神奈川県の 43.3% / —',
+        ]),
+        notes: expect.arrayContaining([
+          '占める割合は、比べるエリアのうち入っているいちばん近いエリアに対する割合（区は市、市は県、県は全国）。',
+        ]),
+      },
+      answerGuide: expect.stringContaining(
+        '割合は comparison の「占める割合」の行にあるときだけ言う',
+      ),
+    })
   })
 
   it('色分けしない（none）なら地図の操作を送らず、そう言う（色分けしたと書かせない）', async () => {

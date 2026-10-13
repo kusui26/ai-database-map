@@ -27,6 +27,7 @@ import { cityOfWard } from '@/shared/municipality'
 import { sourcesForKeys } from '@/domain/sources'
 import { adminBreakdown, lineBreakdown } from './breakdown'
 import { compareAreas } from './compare'
+import { nearestContainers, type AdminPlace } from './share'
 import { AREA_NOT_INCLUDED_JA, notesFor, sourcesFor } from './notes'
 import { type ResolvedArea } from './resolve'
 import { stationStatOf, type ResolvedStationStat } from './stations'
@@ -308,6 +309,23 @@ function coloringOf(
 }
 
 /** 共通 API の応答（エリアの並びは指定どおり）。 */
+/** 比べるエリアのうち行政区域の上下（占める割合の入れ物を決める・沿線・駅から N m・範囲は入れない）。 */
+function adminPlacesOf(parts: readonly AreaSummaryParts[]): AdminPlace[] {
+  return parts.flatMap(({ area }) =>
+    area.type === 'admin'
+      ? [
+          {
+            ref: area.ref,
+            kind: area.row.kind,
+            prefecture: area.row.prefecture,
+            parentRef: area.row.parentKey,
+            groupRef: area.row.groupKey,
+          },
+        ]
+      : [],
+  )
+}
+
 export function buildAreaSummaryResponse(
   parts: readonly AreaSummaryParts[],
   stats: readonly ResolvedStationStat[],
@@ -317,7 +335,7 @@ export function buildAreaSummaryResponse(
   const summaries = parts.map((each) => buildAreaSummary(each, stats, radiusM))
   return {
     areas: summaries,
-    comparison: compareAreas(summaries),
+    comparison: compareAreas(summaries, nearestContainers(adminPlacesOf(parts))),
     coloring: coloringOf(legend, summaries),
     legend,
     radiusM,

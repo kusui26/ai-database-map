@@ -22,6 +22,8 @@ B5b では、パネルを出す道具（AI の `getAreaSummary`・B5d）と画�
 4. 竹橋から 3km（6 つ以外の半径）：区域の値の代わりに理由。推移・内訳は出さない
 5. 紋別市（駅が無い）：駅の周りを出さず、色分けしない理由を出す
 6. 既存の棒（駅詳細の地価・半径別）は以前のまま：名前の列は 3.25rem・0 の線を引かない
+7. 中区・横浜市・神奈川県（2026-10-13 B5d″）：比べる表の人口・推計・従業者の行の**すぐ下**に占める割合（中区は横浜市の、横浜市は
+   神奈川県の・神奈川県は「—」）と注記。3 つの列でもページと会話の欄は横にはみ出さない
 """
 
 import json
@@ -386,6 +388,30 @@ def scenario_compare(browser: Browser, name: str, viewport: dict, response: dict
     context.close()
 
 
+def table_rows(section: Locator) -> list[str]:
+    return [text.replace("\n", " ").replace("\t", " ") for text in section.locator("table tr").all_inner_texts()]
+
+
+def scenario_share(browser: Browser, name: str, viewport: dict, response: dict) -> None:
+    print(f"[中区・横浜市・神奈川県：占める割合の行・{name}]")
+    panels = area_panels(response)
+    context, page, errors = ask(browser, viewport, panels, "中区と横浜市と神奈川県を比べて")
+    summary = section_of(page, "横浜市中区・横浜市・神奈川県の比較")
+    text = summary.inner_text()
+    for needle in ["人口の占める割合（2025年）", "横浜市の 4.1%", "神奈川県の 40.8%", "将来推計人口の占める割合（2050年）", "神奈川県の 41.5%", "従業者の占める割合（2021年）", "横浜市の 11.6%", "占める割合は、比べるエリアのうち入っているいちばん近いエリアに対する割合"]:
+        check(f"比較に「{needle}」", needle in text)
+    rows = table_rows(summary)
+    labels = [row.split(" ")[0] for row in rows]
+    for value_row, share_row in [("人口（2025年）", "人口の占める割合（2025年）"), ("将来推計人口（2050年）", "将来推計人口の占める割合（2050年）"), ("従業者（民営）", "従業者の占める割合（2021年）")]:
+        at = labels.index(value_row) if value_row in labels else -1
+        check(f"「{share_row}」は「{value_row}」のすぐ下", at >= 0 and at + 1 < len(labels) and labels[at + 1] == share_row, str(labels))
+    check("ページは横にはみ出さない", not page_overflows(page))
+    check("会話の欄は横にはみ出さない（表は表の中で送る）", not chat_overflows(summary))
+    summary.screenshot(path=f"{OUT}/area-share-summary-{name}.png")
+    check("画面のエラーなし", not errors, "; ".join(errors))
+    context.close()
+
+
 def scenario_line(browser: Browser, response: dict) -> None:
     print("[東急東横線の沿線：路線の駅の順・正の増減は左から・長い駅名が切れない（携帯）]")
     panels = area_panels(response)
@@ -453,9 +479,11 @@ with sync_playwright() as playwright:
     browser = playwright.chromium.launch()
     YOKOHAMA = fetch_summary("muni:14100")
     COMPARE = fetch_summary("muni:14100", "muni:14130")
+    SHARE = fetch_summary("muni:14104", "muni:14100", "pref:14")
     for name, viewport in VIEWPORTS:
         scenario_single(browser, name, viewport, YOKOHAMA)
         scenario_compare(browser, name, viewport, COMPARE)
+        scenario_share(browser, name, viewport, SHARE)
     scenario_line(browser, fetch_summary("line:26001@1000"))
     scenario_no_totals(browser, fetch_summary("near:竹橋#0@3000"))
     scenario_no_stations(browser, fetch_summary("muni:01219"))

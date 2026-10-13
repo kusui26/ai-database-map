@@ -107,6 +107,24 @@ export const TOKYO23_ROWS: readonly AreaRow[] = [
   areaRow({ key: "muni:13123", kind: "municipality", code: "13123", lineCd: null, widthM: null, nameJa: "江戸川区", labelJa: "東京都江戸川区", prefecture: "東京都", parentKey: "pref:13", groupKey: "muni:13100", areaKm2: 49.9, missing: [], stationCount: 11, values: { pop_2020: 697932, pop_2025: 704696, pop_pred_2024_2020: 697931.9996, pop_pred_2024_2050: 679002.9997 } }),
 ]
 
+// prettier-ignore
+/** 神奈川県（都道府県・2026-10-13 B5d″ の占める割合の比べ先）。 */
+export const KANAGAWA_ROWS: readonly AreaRow[] = [
+  areaRow({ key: "pref:14", kind: "prefecture", code: "14", lineCd: null, widthM: null, nameJa: "神奈川県", labelJa: "神奈川県", prefecture: "神奈川県", parentKey: "jp", groupKey: null, areaKm2: 2416.55, missing: [], stationCount: 348, values: { pop_1995: 8245900, pop_2000: 8489974, pop_2005: 8791597, pop_2010: 9048331, pop_2015: 9126214, pop_2020: 9237337, pop_2025: 9193922, emp_n_2012: 3370740, emp_n_2016: 3464316, emp_n_2021: 3525744, estab_n_2012: 290603, estab_n_2016: 287942, estab_n_2021: 285325, pop_pred_2024_2020: 9237336.9958, pop_pred_2024_2025: 9200726.9972, pop_pred_2024_2030: 9121807.0033, pop_pred_2024_2035: 9011992.997, pop_pred_2024_2040: 8869022.0033, pop_pred_2024_2045: 8702575.0063, pop_pred_2024_2050: 8524491.9996, pop_pred_2024_2055: 8321069.9975, pop_pred_2024_2060: 8087210.0039, pop_pred_2024_2065: 7818858.0068, pop_pred_2024_2070: 7536220.9982 } }),
+]
+
+// prettier-ignore
+/** 東京都（都道府県・23 区の比べ先）。 */
+export const TOKYO_ROWS: readonly AreaRow[] = [
+  areaRow({ key: "pref:13", kind: "prefecture", code: "13", lineCd: null, widthM: null, nameJa: "東京都", labelJa: "東京都", prefecture: "東京都", parentKey: "jp", groupKey: null, areaKm2: 2199.94, missing: [], stationCount: 654, values: { pop_1995: 11773605, pop_2000: 12064101, pop_2005: 12576601, pop_2010: 13159388, pop_2015: 13515271, pop_2020: 14047594, pop_2025: 14236627, emp_n_2012: 8655267, emp_n_2016: 9005511, emp_n_2021: 9592059, estab_n_2012: 627357, estab_n_2016: 621671, estab_n_2021: 628239, pop_pred_2024_2020: 14047593.9969, pop_pred_2024_2025: 14198913.999, pop_pred_2024_2030: 14348591.0013, pop_pred_2024_2035: 14458983.0046, pop_pred_2024_2040: 14507418.9953, pop_pred_2024_2045: 14482740.9916, pop_pred_2024_2050: 14399143.9986, pop_pred_2024_2055: 14255223.9979, pop_pred_2024_2060: 14061560.005, pop_pred_2024_2065: 13811583.9965, pop_pred_2024_2070: 13523968.9967 } }),
+]
+
+// prettier-ignore
+/** 全国。 */
+export const JAPAN_ROWS: readonly AreaRow[] = [
+  areaRow({ key: "jp", kind: "country", code: null, lineCd: null, widthM: null, nameJa: "全国", labelJa: "全国", prefecture: null, parentKey: null, groupKey: null, areaKm2: 377979.67, missing: [], stationCount: 9273, values: { pop_1995: 125570246, pop_2000: 126925843, pop_2005: 127767994, pop_2010: 128057352, pop_2015: 127094745, pop_2020: 126146099, pop_2025: 122972528, emp_n_2012: 55837252, emp_n_2016: 56872826, emp_n_2021: 57949915, estab_n_2012: 5453635, estab_n_2016: 5340783, estab_n_2021: 5156063, pop_pred_2024_2020: 126146098.9788, pop_pred_2024_2025: 123262449.9864, pop_pred_2024_2030: 120115783.0072, pop_pred_2024_2035: 116638899.9703, pop_pred_2024_2040: 112837403.9541, pop_pred_2024_2045: 108801339.0031, pop_pred_2024_2050: 104686386.034, pop_pred_2024_2055: 100508400.9466, pop_pred_2024_2060: 96147840.0063, pop_pred_2024_2065: 91586503.9633, pop_pred_2024_2070: 86996003.9825 } }),
+]
+
 /** 横浜市の 137 駅の、1km 圏の分布（`area_station_stats`）。 */
 // prettier-ignore
 export const YOKOHAMA_STATION_STATS: { readonly stationCount: number; readonly stats: readonly StationStatRow[] } = {

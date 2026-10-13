@@ -66,11 +66,14 @@ import { areasResponseOf } from '@/domain/area-summary/catalog'
 import {
   HAMAMATSU_ROWS,
   IWAKI_ROWS,
+  JAPAN_ROWS,
+  KANAGAWA_ROWS,
   KAWASAKI_ROWS,
   MONBETSU_ROWS,
   TAKEBASHI,
   TAKEBASHI_5KM,
   TOKYO23_ROWS,
+  TOKYO_ROWS,
   TOYOKO_ROWS,
   YOKOHAMA_POP_GR,
   YOKOHAMA_ROWS,
@@ -611,6 +614,109 @@ describe('比較（2〜4 つ）', () => {
     )
     expect(comparison?.rows.at(-1)?.cells).toEqual(['公表値', 'なし（駅の分布だけ）'])
     expect(comparison?.index[1]?.points).toEqual([])
+  })
+})
+
+describe('占める割合（2026-10-13 B5d″・§6.19）', () => {
+  /** 比べる表の行（見出しとセル）を、共通 API と同じ組み立てで（入れ物は行政区域の行から決まる）。 */
+  function tableOf(areas: readonly ResolvedArea[]): string[][] {
+    const response = buildAreaSummaryResponse(
+      areas.map((area) => parts(area)),
+      STATS,
+      RADIUS,
+      null,
+    )
+    return response.comparison?.rows.map((row) => [row.labelJa, ...row.cells]) ?? []
+  }
+  const notesOf = (areas: readonly ResolvedArea[]): readonly string[] =>
+    buildAreaSummaryResponse(
+      areas.map((area) => parts(area)),
+      STATS,
+      RADIUS,
+      null,
+    ).comparison?.notesJa ?? []
+  const wardOf = (key: string): ResolvedArea => {
+    const row = YOKOHAMA_ROWS.find((each) => each.key === key)
+    if (row === undefined) throw new Error(key)
+    return { type: 'admin', ref: row.key, row, children: [] }
+  }
+  const SHARE_NOTE =
+    '占める割合は、比べるエリアのうち入っているいちばん近いエリアに対する割合（区は市、市は県、県は全国）。'
+
+  it('横浜市と神奈川県：人口・推計・従業者の行のすぐ下に「神奈川県の …%」（神奈川県は「—」）', () => {
+    expect(tableOf([admin(YOKOHAMA_ROWS), admin(KANAGAWA_ROWS)])).toEqual([
+      ['人口（2025年）', '3,750,952 人', '9,193,922 人'],
+      ['人口の占める割合（2025年）', '神奈川県の 40.8%', '—'],
+      ['人口の増減（2020→2025年）', '-0.7%', '-0.5%'],
+      ['将来推計人口（2050年）', '3,537,253 人', '8,524,492 人'],
+      ['将来推計人口の占める割合（2050年）', '神奈川県の 41.5%', '—'],
+      ['将来の増減（2020→2050年・推計）', '-6.4%', '-7.7%'],
+      ['従業者（民営）', '1,527,783 人（2021年）', '3,525,744 人（2021年）'],
+      ['従業者の占める割合（2021年）', '神奈川県の 43.3%', '—'],
+      ['駅の数', '0 駅', '0 駅'],
+      ['区域の値の作り方', '公表値', '公表値'],
+    ])
+    expect(notesOf([admin(YOKOHAMA_ROWS), admin(KANAGAWA_ROWS)])).toContain(SHARE_NOTE)
+  })
+
+  it('中区・横浜市・神奈川県：いちばん近い入れ物に対して（中区は横浜市・横浜市は神奈川県）。値が無ければ「—」', () => {
+    const table = tableOf([wardOf('muni:14104'), admin(YOKOHAMA_ROWS), admin(KANAGAWA_ROWS)])
+    const rowOf = (label: string) => table.find((row) => row[0] === label)
+    expect(rowOf('人口の占める割合（2025年）')).toEqual([
+      '人口の占める割合（2025年）',
+      '横浜市の 4.1%',
+      '神奈川県の 40.8%',
+      '—',
+    ])
+    expect(rowOf('将来推計人口の占める割合（2050年）')?.slice(1)).toEqual([
+      '横浜市の 4.2%',
+      '神奈川県の 41.5%',
+      '—',
+    ])
+    // 固定データの区には従業者の値が無い（内訳に使う 4 つだけ）→ 「—」。横浜市と神奈川県の 2021 年でそろえる
+    expect(rowOf('従業者の占める割合（2021年）')?.slice(1)).toEqual(['—', '神奈川県の 43.3%', '—'])
+  })
+
+  it('千代田区・東京23区・東京都・全国：1 つずつ外の入れ物に対して（4 つまで）', () => {
+    const chiyoda = TOKYO23_ROWS.find((row) => row.key === 'muni:13101')
+    if (chiyoda === undefined) throw new Error('千代田区')
+    const table = tableOf([
+      { type: 'admin', ref: chiyoda.key, row: chiyoda, children: [] },
+      admin(TOKYO23_ROWS),
+      admin(TOKYO_ROWS),
+      admin(JAPAN_ROWS),
+    ])
+    expect(table.find((row) => row[0] === '人口の占める割合（2025年）')?.slice(1)).toEqual([
+      '東京23区の 0.7%',
+      '東京都の 69.8%',
+      '全国の 11.6%',
+      '—',
+    ])
+    expect(table.find((row) => row[0] === '従業者の占める割合（2021年）')?.slice(1)).toEqual([
+      '—',
+      '東京都の 84.6%',
+      '全国の 16.6%',
+      '—',
+    ])
+  })
+
+  it('含む・含まれるが無い組み合わせ（横浜市と川崎市）は、割合の行も注記も出さない', () => {
+    const table = tableOf([admin(YOKOHAMA_ROWS), admin(KAWASAKI_ROWS)])
+    expect(table.some((row) => row[0]?.includes('占める割合'))).toBe(false)
+    expect(notesOf([admin(YOKOHAMA_ROWS), admin(KAWASAKI_ROWS)])).not.toContain(SHARE_NOTE)
+  })
+
+  it('沿線・駅から N m は入れ物にも中身にもならない（神奈川県と並べても「—」）', () => {
+    const table = tableOf([line(), admin(YOKOHAMA_ROWS), admin(KANAGAWA_ROWS)])
+    // 沿線が入ると人口は 2020 年でそろえる。割合もその年で
+    expect(table.find((row) => row[0] === '人口の占める割合（2020年）')?.slice(1)).toEqual([
+      '—',
+      '神奈川県の 40.9%',
+      '—',
+    ])
+    expect(
+      tableOf([near(5000), admin(KANAGAWA_ROWS)]).some((row) => row[0]?.includes('占める割合')),
+    ).toBe(false)
   })
 })
 

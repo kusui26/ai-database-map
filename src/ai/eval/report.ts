@@ -89,6 +89,17 @@ export type ReportContext = {
   readonly baseUrl: string
   readonly threshold: number
   readonly criticalCategories: readonly string[]
+  /**
+   * 流す予定の問の数（2026-10-14）。runner は 1 問ごとにレポートを書き直すので、終わる前に止まっても、そこまでの
+   * レポートが残る——予定より少なければ「途中で止まった」と見出しに書く（全部終えた回と取り違えない）。
+   */
+  readonly planned?: number
+}
+
+/** 予定より少なく終わったときの見出しの行（終えたなら無し）。 */
+function partialLines(runs: readonly EvalRun[], planned: number | undefined): string[] {
+  if (planned === undefined || runs.length >= planned) return []
+  return [`**途中で止まった：${runs.length}/${planned} 問まで**`, '']
 }
 
 /** Markdown のレポート。比べるときに並べやすいよう、見出しの数値は固定の順に出す。 */
@@ -102,6 +113,7 @@ export function renderReport(
     '',
     `対象: ${context.baseUrl}`,
     '',
+    ...partialLines(runs, context.planned),
     `**合格率: ${summary.passed}/${summary.total}（閾値 ${context.threshold}）**`,
     '',
     `**落としてはいけない分野（${context.criticalCategories.join('・')}）の失敗: ${

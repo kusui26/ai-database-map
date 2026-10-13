@@ -14,6 +14,12 @@
  * Gemini 無料枠は 1 分あたりの回数に上限があり（Flash-Lite は 15 回）、1 問が多段ツールで数回
  * モデルを呼ぶため、問間にスロットルを入れ、quota で失敗した問は 1 度だけクールダウン再試行する。
  * 合格率・各問の内訳・所要時間・再試行に頼った問を出力する（集計は `src/ai/eval/report.ts`）。
+ *
+ * **1 問の失敗で評価全体を止めない**（2026-10-14）：打ち切り・サーバに届かない・ストリームが途中で切れる・
+ * サーバがエラーの状態で返す、を「応答が得られない（理由）」として記録し、再試行のあと次の問へ進む。
+ * レポートは 1 問ごとに書き直すので、終わる前に止まってもそこまでが残る（見出しに「途中で止まった」）。
+ * 長い評価は `caffeinate -i` で流す（PC がスリープすると応答が止まる）。打ち切りと再試行の待ちは
+ * `EVAL_REQUEST_TIMEOUT_MS`・`EVAL_RETRY_COOLDOWN_MS` で変えられる（壊れ方を再現して確かめるため・既定は 75 秒と 65 秒）。
  */
 
 import { writeFileSync } from 'node:fs'
@@ -22,6 +28,7 @@ import { mapResponseSchema } from '@/shared/protocol'
 import { EVAL_CASES, type EvalCase } from '@/ai/eval/cases'
 import { emptyFigureCount, scoreCase, type EvalObserved } from '@/ai/eval/score'
 import { type EvalRun, renderReport, summarizeRuns } from '@/ai/eval/report'
+import { httpErrorJa, requestErrorJa } from '@/ai/eval/request-error'
 
 const ENABLED = process.env.EVAL === '1'
 const BASE_URL = process.env.CHAT_BASE_URL ?? 'http://localhost:3000'
@@ -57,7 +64,7 @@ const PASS_THRESHOLD = Number(process.env.EVAL_PASS ?? '60')
  */
 const CRITICAL_CATEGORIES: readonly string[] = ['災害', '拒否']
 const THROTTLE_MS = Number(process.env.EVAL_THROTTLE_MS ?? '45000')
-const REQUEST_TIMEOUT_MS = 75_000
+const REQUEST_TIMEOUT_MS = Number(process.env.EVAL_REQUEST_TIMEOUT_MS ?? '75000')
 const REPORT_PATH = process.env.EVAL_REPORT ?? ''
 /**
  * 何を測ったか（例「gemini-3.5-flash-lite / temperature 既定」）。**モデルは runner からは見えない**
@@ -70,7 +77,7 @@ const ONLY = (process.env.EVAL_ONLY ?? '').split(',').filter((id) => id.length >
 const CATEGORY = process.env.EVAL_CATEGORY ?? ''
 
 /** 失敗した問を流し直す前の待ち（無料枠の 1 分窓をまたぐ）。 */
-const RETRY_COOLDOWN_MS = 65_000
+const RETRY_COOLDOWN_MS = Number(process.env.EVAL_RETRY_COOLDOWN_MS ?? '65000')
 
 /** 流す問（id・分野で絞る）。打ち切りの長さを決めるので、テストの外で決める。 */
 const SELECTED_CASES = EVAL_CASES.filter(
@@ -99,13 +106,50 @@ function failedInputs(observed: AskResult): string {
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
-type AskResult = EvalObserved & { errored: boolean }
+/** 1 問の観測。`errorJa` は応答が得られなかった理由（得られたなら null）。 */
+type AskResult = EvalObserved & { errored: boolean; errorJa: string | null }
+
+/** 応答が得られなかった問の観測（何も観測していない）。 */
+function failedAsk(errorJa: string): AskResult {
+  return {
+    toolCalls: [],
+    panelTypes: [],
+    actionTypes: [],
+    text: '',
+    haystack: '',
+    mapResponseValid: false,
+    emptyFigureCount: 0,
+    errored: true,
+    errorJa,
+  }
+}
+
+/**
+ * 1 問を投げる。**例外は記録して返す**——打ち切り・サーバに届かない・ストリームが途中で切れる、で評価全体を
+ * 止めない（2026-10-13 はスリープ中に止まった応答の打ち切りで、62 問の評価が 5 問目で止まり、レポートも残らなかった）。
+ */
+async function ask(testCase: EvalCase): Promise<AskResult> {
+  try {
+    return await askOnce(testCase)
+  } catch (error) {
+    return failedAsk(requestErrorJa(error, REQUEST_TIMEOUT_MS))
+  }
+}
+
+/** エラーの本文（JSON として読めなければ null・理由に添えるだけなので、読めなくても止めない）。 */
+async function errorBodyOf(response: Response): Promise<unknown> {
+  try {
+    return await response.json()
+  } catch {
+    return null
+  }
+}
 
 /**
  * 1 クエリを /api/chat に投げ、ツール列・パネル・本文を SSE から収集する。地図の文脈（選択駅・P8e と
  * 表示範囲・L3）は、問が持つときだけ同送する（画面の送信と同じ形・`components/chat/sendContext.ts`）。
  */
-async function ask(testCase: EvalCase): Promise<AskResult> {
+async function askOnce(testCase: EvalCase): Promise<AskResult> {
   const { query, selectedGrp, radiusM, bbox } = testCase
   const toolCalls: { name: string; input: Record<string, unknown> }[] = []
   let panelTypes: string[] = []
@@ -115,6 +159,7 @@ async function ask(testCase: EvalCase): Promise<AskResult> {
   let mapResponseValid = false
   let emptyFigures = 0
   let errored = false
+  let errorJa: string | null = null
 
   const response = await fetch(`${BASE_URL}/api/chat`, {
     method: 'POST',
@@ -126,17 +171,8 @@ async function ask(testCase: EvalCase): Promise<AskResult> {
     }),
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
-  if (response.body === null)
-    return {
-      toolCalls,
-      panelTypes,
-      actionTypes,
-      text,
-      haystack: '',
-      mapResponseValid,
-      emptyFigureCount: emptyFigures,
-      errored: true,
-    }
+  if (!response.ok) return failedAsk(httpErrorJa(response.status, await errorBodyOf(response)))
+  if (response.body === null) return failedAsk(`応答に本文が無い（HTTP ${response.status}）`)
 
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
@@ -176,6 +212,9 @@ async function ask(testCase: EvalCase): Promise<AskResult> {
           text += chunk.delta
         } else if (type === 'error') {
           errored = true
+          // サーバが画面に出す文（「AI（Gemini）が一時的に応答できない状態です」など）を、そのまま理由に残す
+          errorJa =
+            typeof chunk.errorText === 'string' ? `サーバの応答がエラー：${chunk.errorText}` : null
         }
       }
     }
@@ -190,7 +229,21 @@ async function ask(testCase: EvalCase): Promise<AskResult> {
     mapResponseValid,
     emptyFigureCount: emptyFigures,
     errored,
+    errorJa,
   }
+}
+
+/** レポートを組み、`EVAL_REPORT` があればファイルに書く（予定より少なければ「途中で止まった」と書く）。 */
+function writeReport(runs: readonly EvalRun[], planned: number): string {
+  const report = renderReport(runs, summarizeRuns(runs, CRITICAL_CATEGORIES), {
+    label: LABEL,
+    baseUrl: BASE_URL,
+    threshold: PASS_THRESHOLD,
+    criticalCategories: CRITICAL_CATEGORIES,
+    planned,
+  })
+  if (REPORT_PATH.length > 0) writeFileSync(REPORT_PATH, report)
+  return report
 }
 
 /** 1 問を投げ、所要時間も測る（採点するのは、この 1 回の結果）。 */
@@ -224,7 +277,10 @@ describe.skipIf(!ENABLED)(`eval — ゴールデン ${EVAL_CASES.length} 問`, (
         const { observed, elapsedMs } = retried ? await timedAsk(testCase) : first
 
         const result = scoreCase(testCase.expect, observed)
-        const failed = result.checks.filter((check) => !check.ok).map((check) => check.name)
+        const failed = [
+          ...(observed.errorJa === null ? [] : [`応答が得られない：${observed.errorJa}`]),
+          ...result.checks.filter((check) => !check.ok).map((check) => check.name),
+        ]
         runs.push({
           id: testCase.id,
           category: testCase.category,
@@ -242,17 +298,12 @@ describe.skipIf(!ENABLED)(`eval — ゴールデン ${EVAL_CASES.length} 問`, (
             `  panels=${observed.panelTypes.join(',')}` +
             (failed.length > 0 ? `  ✗ ${failed.join('；')}  inputs=${failedInputs(observed)}` : ''),
         )
+        // 1 問ごとに書き直す（終わる前に止まっても、そこまでのレポートが残る）
+        writeReport(runs, cases.length)
       }
 
       const summary = summarizeRuns(runs, CRITICAL_CATEGORIES)
-      const report = renderReport(runs, summary, {
-        label: LABEL,
-        baseUrl: BASE_URL,
-        threshold: PASS_THRESHOLD,
-        criticalCategories: CRITICAL_CATEGORIES,
-      })
-      console.log('\n' + report)
-      if (REPORT_PATH.length > 0) writeFileSync(REPORT_PATH, report)
+      console.log('\n' + writeReport(runs, cases.length))
 
       // **災害・拒否は 1 問も落とさない**（絞って流したときも当てる——ここが本題だから）。
       expect(summary.criticalFailures, '落としてはいけない分野で失敗した').toEqual([])

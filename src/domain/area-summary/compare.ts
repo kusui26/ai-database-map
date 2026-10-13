@@ -5,7 +5,7 @@
  * - 推移は 2020 年を 100 とした指数で重ねる（大きさの違うエリアの伸び方を比べる）。実績は実績の 2020 年、
  *   推計は推計の 2020 年を 100 にする（推計は推計の中で比べる・§12-23）
  * - 種類の違うエリア（横浜市と東横線の沿線）も並べてよいが、作り方（公表値・按分）を行で書く
- * - 片方がもう片方に入っているとき（区と市・市と県）は、人口・推計・従業者の行のすぐ下に**占める割合**の行を足す
+ * - 片方がもう片方に入っているとき（区と市・市と県）は、人口・推計・事業所・従業者の行のすぐ下に**占める割合**の行を足す
  *   （いちばん近い入れ物に対して・`share.ts`・2026-10-13 B5d″）。入れ物のあるエリアが無ければ行を出さない
  */
 
@@ -163,25 +163,45 @@ function futureRows(summaries: readonly AreaSummary[], containers: Containers): 
   ]
 }
 
-/** 従業者の占める割合（割合に加わるエリアにそろう最新の年・そろわなければ置かない）。 */
-function employeeShareRows(summaries: readonly AreaSummary[], containers: Containers): Row[] {
+/** 経済センサスの値（事業所・従業者）。値の行はエリアごとの最新の年、割合はそろえた年。 */
+const CENSUS_ROWS: readonly { readonly id: AreaTotalId; readonly nameJa: string }[] = [
+  { id: 'establishments', nameJa: '事業所' },
+  { id: 'employees', nameJa: '従業者' },
+]
+
+/** 経済センサスの値の占める割合（割合に加わるエリアにそろう最新の年・そろわなければ置かない）。 */
+function censusShareRows(
+  summaries: readonly AreaSummary[],
+  containers: Containers,
+  census: (typeof CENSUS_ROWS)[number],
+): Row[] {
   const refs = new Set([...containers.keys(), ...containers.values()])
   const years = commonYears(
     summaries.filter((summary) => refs.has(summary.ref)),
-    'employees',
+    census.id,
   )
   const latest = years[years.length - 1]
   if (latest === undefined) return []
-  return shareRows(summaries, containers, `従業者の占める割合（${latest}年）`, (s) =>
-    valueAt(s, 'employees', latest),
+  return shareRows(summaries, containers, `${census.nameJa}の占める割合（${latest}年）`, (s) =>
+    valueAt(s, census.id, latest),
   )
 }
 
-/** 従業者と占める割合・駅の数・区域の値の作り方。 */
+/**
+ * 事業所・従業者（民営）と占める割合（2026-10-14 に事業所を足した——区域の値には事業所があるのに比べる表に無く、
+ * モデルが従業者の割合と「いずれも 4 割強」とひとまとめにした・§6.21）。
+ */
+function censusRows(summaries: readonly AreaSummary[], containers: Containers): Row[] {
+  return CENSUS_ROWS.flatMap((census) => [
+    rowOf(summaries, `${census.nameJa}（民営）`, (s) => leadCell(totalOf(s, census.id))),
+    ...censusShareRows(summaries, containers, census),
+  ])
+}
+
+/** 事業所・従業者と占める割合・駅の数・区域の値の作り方。 */
 function otherRows(summaries: readonly AreaSummary[], containers: Containers): Row[] {
   return [
-    rowOf(summaries, '従業者（民営）', (s) => leadCell(totalOf(s, 'employees'))),
-    ...employeeShareRows(summaries, containers),
+    ...censusRows(summaries, containers),
     rowOf(summaries, '駅の数', (s) => `${formatNumber(s.stationCount, 'int')} 駅`),
     rowOf(
       summaries,

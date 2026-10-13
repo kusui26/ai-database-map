@@ -292,7 +292,14 @@ function mcpTools(): RegisteredTool[] {
   return tools
 }
 
-/** SDK と同じく、広告した型で入力を検めてから呼ぶ（知らない引数は外れる）。 */
+/** 先頭の content のテキスト（型ガードで取り出す）。 */
+function firstTextOf(result: McpToolResult): string {
+  const item = result.content[0]
+  if (item === undefined || item.type !== 'text') throw new Error('先頭がテキストではありません')
+  return item.text
+}
+
+/** SDK と同じく、広告した型で入力を検めてから呼ぶ（広告する型は loose なので、知らない引数も道具の手前まで届く）。 */
 function callLikeSdk(tool: RegisteredTool, args: unknown): Promise<McpToolResult> {
   return tool.callback(tool.inputSchema.parse(args))
 }
@@ -339,12 +346,30 @@ describe('MCP（15 本目・get_area_summary）', () => {
     expect(structured.result.answerGuide).toBe(AREA_SUMMARY_ANSWER_GUIDE_JA)
   })
 
-  it('MCP に地図の範囲は無い：inMapView が送られてきても外れて空のエリアになり、理由つきで断る（集計しない）', async () => {
-    const result = await callLikeSdk(mcpTool('get_area_summary'), { areas: [{ inMapView: true }] })
-    const text = JSON.stringify(result.structuredContent)
-    expect(text).toContain('エリアが空です')
-    // 使えない inMapView を勧めない（勧めると、同じ呼び直しを繰り返す）
-    expect(text).not.toContain('inMapView')
+  it('MCP に地図の範囲は無い：入れ子の areas[].inMapView も黙って外さず、場所つきで断る（集計しない・2026-10-13）', async () => {
+    // 以前は SDK が外して空のエリアになり、「エリアが空です」と理由を取り違えていた
+    const result = await callLikeSdk(mcpTool('get_area_summary'), {
+      areas: [{ municipality: '横浜市' }, { inMapView: true }],
+    })
+    expect(result.isError).toBe(true)
+    const parsed: unknown = JSON.parse(firstTextOf(result))
+    expect(parsed).toMatchObject({
+      unknownArgs: [
+        {
+          arg: 'areas[1].inMapView',
+          usable: ['prefecture', 'municipality', 'line', 'widthM', 'near'],
+          note: expect.stringContaining('MCP の呼び出しには地図が無い'),
+        },
+      ],
+    })
     expect(db.areaRows).not.toHaveBeenCalled()
+  })
+
+  it('MCP で起点の駅（near）は使える（チャットには見せないが、MCP には見せる）', async () => {
+    const result = await callLikeSdk(mcpTool('get_area_summary'), {
+      areas: [{ near: { station: '竹橋', withinM: 5000 } }],
+      colorBy: 'none',
+    })
+    expect(firstTextOf(result)).not.toContain('広告していない引数')
   })
 })

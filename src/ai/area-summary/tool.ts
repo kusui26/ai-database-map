@@ -94,12 +94,8 @@ const commonShape = {
 }
 
 /** エリア 1〜4 つ（エリア 1 つの形と説明は呼び手ごと）。 */
-function areasOf<Shape extends z.ZodRawShape>(shape: Shape, description: string) {
-  return z
-    .array(z.object(shape).describe(description))
-    .min(1)
-    .max(MAX_AREAS)
-    .describe(AREAS_DESCRIPTION)
+function areasOf<Element extends z.ZodObject>(element: Element) {
+  return z.array(element).min(1).max(MAX_AREAS).describe(AREAS_DESCRIPTION)
 }
 
 /**
@@ -108,8 +104,11 @@ function areasOf<Shape extends z.ZodRawShape>(shape: Shape, description: string)
  */
 export const AREA_SUMMARY_INPUT_SCHEMA = z.object({
   areas: areasOf(
-    { ...areaShape, ...nearField, ...inMapViewField },
-    'エリア 1 つ（解く型・モデルには見せない）。prefecture・municipality・line・near・inMapView のどれか 1 つ',
+    z
+      .object({ ...areaShape, ...nearField, ...inMapViewField })
+      .describe(
+        'エリア 1 つ（解く型・モデルには見せない）。prefecture・municipality・line・near・inMapView のどれか 1 つ',
+      ),
   ),
   ...commonShape,
 })
@@ -120,16 +119,17 @@ export type AreaSummaryToolInput = z.output<typeof AREA_SUMMARY_INPUT_SCHEMA>
  * 見せると「東京駅と新宿駅の人口を比べて」を「駅から 1km」のエリア 2 つとして比べた（§6.17.1）。地図の範囲は見せる。
  */
 export const CHAT_INPUT_SCHEMA = z.object({
-  areas: areasOf({ ...areaShape, ...inMapViewField }, CHAT_AREA_DESCRIPTION),
+  areas: areasOf(z.object({ ...areaShape, ...inMapViewField }).describe(CHAT_AREA_DESCRIPTION)),
   ...commonShape,
 })
 
 /**
- * MCP に見せる入力（地図の範囲は無い）。MCP の SDK はこの型で入力を検めるので、`areas[].inMapView` が送られてきても
- * 外れて空のエリアになり、理由（書ける引数の一覧・inMapView を含めない）つきで断る。
+ * MCP に見せる入力（地図の範囲は無い）。MCP の SDK はこの型で入力を検めるので、エリア 1 つは**知らない引数も通す**
+ * （loose・2026-10-13）——`areas[0].inMapView` が送られてきたら、道具を呼ぶ前に広告していない引数として断る
+ * （`mcp-unknown-args.ts`）。strip のままだと黙って外れ、空のエリアや条件の違うエリアになる。
  */
 export const MCP_INPUT_SCHEMA = z.object({
-  areas: areasOf({ ...areaShape, ...nearField }, MCP_AREA_DESCRIPTION),
+  areas: areasOf(z.looseObject({ ...areaShape, ...nearField }).describe(MCP_AREA_DESCRIPTION)),
   ...commonShape,
 })
 

@@ -227,10 +227,14 @@ describe('MCP（get_station_profile）', () => {
     return tool
   }
 
-  it('同じ Spec をそのまま登録する（数値の図ではないので present は広告しない）', () => {
+  it('Spec と同じ引数で登録する（数値の図ではないので present は広告しない）', () => {
+    // 広告する型は知らない引数も通す（loose・2026-10-13）ので Spec と同じ参照ではない。引数の顔ぶれは同じ
     const tool = registered()
     expect(MCP_TOOL_CONFIGS.getStationProfile.chartable).not.toBe(true)
-    expect(tool.inputSchema).toBe(TOOL_SPECS.getStationProfile.inputSchema)
+    if (!(tool.inputSchema instanceof z.ZodObject)) throw new Error('ZodObject ではありません')
+    expect(Object.keys(tool.inputSchema.shape)).toEqual(
+      Object.keys(TOOL_SPECS.getStationProfile.inputSchema.shape),
+    )
   })
 
   it('structuredContent に要約とパネル（駅カード＋プロフィール）・地図操作が載る', async () => {

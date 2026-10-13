@@ -26,7 +26,10 @@ import { PANEL_FIXTURES, panelFixture } from './fixtures/panels'
  * ⑦表示用パラメータ `present`（PR-12）が**数値パネルを返すツールにだけ**広告され、
  * **ドメインには届かない**こと。指定しなければ応答は従来と 1 バイトも変わらない。
  * ⑧アプリのチャットだけの引数 `inMapView`（「このあたり」＝利用者の地図の範囲・2026-10-09 B3）は、
- * 地図の無い MCP には**広告しない**こと。送られてきても、範囲が無いので理由つきで断る。
+ * 地図の無い MCP には**広告しない**こと。
+ * ⑨**広告していない引数を黙って外さない**こと（2026-10-13）。SDK は広告した型で引数を検めるので、広告する型は
+ * 知らない引数も通し（loose）、道具を呼ぶ前に見つけて、集計せずに理由と呼び直し方を返す。テストは SDK と同じく
+ * 広告した型で検めてから呼ぶ（`callLikeSdk`）——以前のテストは生の引数で呼び、SDK が外すことを見ていなかった。
  */
 
 /** 偽サーバ：登録内容を記録するだけ。`McpToolRegistry` をそのまま実装（キャスト不要）。 */
@@ -40,6 +43,20 @@ type RegisteredTool = {
     _meta: Record<string, unknown>
   }
   callback: (input: unknown) => Promise<McpToolResult>
+}
+
+/** SDK と同じく、広告した型で引数を検めてから呼ぶ（strip なら知らない引数はここで外れる）。 */
+function callLikeSdk(tool: RegisteredTool, args: unknown): Promise<McpToolResult> {
+  return tool.callback(tool.config.inputSchema.parse(args))
+}
+
+/** 名前で登録済みの道具を引く。 */
+function registered(name: string): RegisteredTool {
+  const { tools, server } = fakeServer()
+  registerMcpTools(server, 'http://localhost:3000')
+  const tool = tools.find((each) => each.name === name)
+  if (tool === undefined) throw new Error(`${name} が登録されていない`)
+  return tool
 }
 
 /** `_meta.ui`（MCP Apps のビューア指定）の有無。撤収済みなので**常に無い**のが不変条件。 */
@@ -112,7 +129,7 @@ describe('名前と設定（Claude の制約・審査基準）', () => {
 })
 
 describe('registerMcpTools（登録の網羅と中身）', () => {
-  it('全ツール（Spec の名簿どおり）とカタログ resource だけを、Spec と同じスキーマで登録する', () => {
+  it('全ツール（Spec の名簿どおり）とカタログ resource だけを、Spec と同じ引数で登録する', () => {
     const { tools, resources, server } = fakeServer()
     registerMcpTools(server, 'http://localhost:3000')
 
@@ -129,14 +146,16 @@ describe('registerMcpTools（登録の網羅と中身）', () => {
       // `chartable` のツールだけ、表示用の `present` が 1 つ増える。
       const specKeys = shapeKeysOf(TOOL_SPECS[key].inputSchema)
       const domainKeys = specKeys.filter((name) => name !== 'inMapView')
-      if (MCP_TOOL_CONFIGS[key].chartable === true) {
-        expect(shapeKeysOf(tool.config.inputSchema), key).toEqual([...domainKeys, 'present'])
-      } else if (domainKeys.length !== specKeys.length) {
-        expect(shapeKeysOf(tool.config.inputSchema), key).toEqual(domainKeys)
-      } else {
-        // それ以外は**同一の参照**（Gemini と MCP でずれない）。
-        expect(tool.config.inputSchema, key).toBe(TOOL_SPECS[key].inputSchema)
-      }
+      const chartable = MCP_TOOL_CONFIGS[key].chartable === true
+      expect(shapeKeysOf(tool.config.inputSchema), key).toEqual(
+        chartable ? [...domainKeys, 'present'] : domainKeys,
+      )
+      // 知らない引数も通す（loose）——SDK に黙って外させず、道具の手前で断るため。広告する JSON Schema は
+      // 余分な引数を許す宣言が足されるだけ（以前の strip も宣言なし＝許す）
+      expect(
+        z.toJSONSchema(tool.config.inputSchema, { io: 'input' }).additionalProperties,
+        key,
+      ).toEqual({})
       expect(tool.config.description, key).toBe(mcpDescription(key))
       expect(tool.config.title, key).toBe(MCP_TOOL_CONFIGS[key].titleJa)
       // 全ツール読み取り専用（Claude が確認なしで実行できる・審査基準）。
@@ -211,15 +230,41 @@ describe('registerMcpTools（登録の網羅と中身）', () => {
     expect(shapeKeysOf(schema)).toEqual(['areas', 'colorBy', 'radiusM', 'present'])
   })
 
-  it('MCP に inMapView が送られてきても、地図の範囲が無いので理由つきで断る（集計しない）', async () => {
-    const { tools, server } = fakeServer()
-    registerMcpTools(server, 'http://localhost:3000')
-    const rank = tools.find((tool) => tool.name === 'rank_stations')
-    if (rank === undefined) throw new Error('rank_stations が登録されていない')
-    const result = await rank.callback({ metric: 'pop_gr', inMapView: true })
+  it('MCP に inMapView が送られてきたら、黙って外さず、集計せずに理由と呼び直し方を返す（B3・2026-10-13）', async () => {
+    // 以前は SDK が外し、地図の範囲で絞ったつもりのまま全国で集計していた（本番ビルドの MCP で確かめた）
+    const result = await callLikeSdk(registered('rank_stations'), {
+      metric: 'pop_gr',
+      inMapView: true,
+    })
+    expect(result.isError).toBe(true)
+    const text = firstText(result)
+    expect(text).toContain('広告していない引数があります（inMapView）')
+    expect(text).toContain('集計していません')
+    // 呼び直し方：MCP には地図が無い・範囲なら bbox
+    expect(text).toContain('MCP の呼び出しには地図が無い')
+    expect(text).toContain('bbox')
+  })
+
+  it('名前の書き違い（prefectures を prefecture）も断り、その場所で使える引数を返す', async () => {
+    const result = await callLikeSdk(registered('rank_stations'), {
+      metric: 'pop_gr',
+      prefecture: '東京都',
+    })
+    expect(result.isError).toBe(true)
+    const parsed: unknown = JSON.parse(firstText(result))
+    expect(parsed).toMatchObject({
+      unknownArgs: [{ arg: 'prefecture', usable: expect.arrayContaining(['prefectures', 'bbox']) }],
+    })
+  })
+
+  it('答えを変えない引数は見逃す：図を返せない道具への present・値が false や null の引数', async () => {
+    const result = await callLikeSdk(registered('get_metrics_catalog'), {
+      present: 'echarts',
+      inMapView: false,
+      note: null,
+    })
     expect(result.isError).toBeUndefined()
-    expect(firstText(result)).toContain('地図の表示範囲が届いていません')
-    expect(result.structuredContent).toMatchObject({ panels: [] })
+    expect(firstText(result)).not.toContain('広告していない引数')
   })
 
   it('`present` はドメインへ届かない（Spec の Zod が落とす）', () => {

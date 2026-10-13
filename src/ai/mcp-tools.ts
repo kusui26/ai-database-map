@@ -33,6 +33,7 @@ import { z } from 'zod'
 import { toEChartsDocument, type EChartsDocument } from '@/shared/presenters/echarts'
 import { type MapAction, type Panel } from '@/shared/protocol'
 import { checkRateLimit } from './rate-limit'
+import { blockingUnknownArgs, unknownArgsForLlm, unknownArgsOf } from './mcp-unknown-args'
 import {
   panelsForAreaSummary,
   panelsForEscape,
@@ -132,7 +133,8 @@ const PRESENT_FIELD = z
 
 /**
  * アプリのチャットだけの引数（2026-10-09 B3）。`inMapView`＝「このあたり」（利用者の地図に表示中の範囲）は、
- * MCP の呼び出しには地図が無いので広告しない（送られてきても、範囲が無いので理由つきで断る＝二重の守り）。
+ * MCP の呼び出しには地図が無いので広告しない。送られてきたら、広告していない引数として理由つきで断る
+ * （`mcp-unknown-args.ts`・2026-10-13。以前は SDK が黙って外し、全国で集計していた）。
  */
 const CHAT_ONLY_FIELDS: readonly string[] = ['inMapView']
 
@@ -143,11 +145,25 @@ function withoutChatOnly(schema: z.ZodObject): z.ZodObject {
   return kept.length === entries.length ? schema : z.object(Object.fromEntries(kept))
 }
 
-/** 広告用の入力スキーマ（チャットだけの引数を外し、`chartable` のツールにだけ `present` を足す。Spec 本体は無改変）。 */
+/**
+ * 広告用の入力スキーマ（チャットだけの引数を外し、`chartable` のツールにだけ `present` を足す。Spec 本体は無改変）。
+ * **知らない引数も通す**（loose・2026-10-13）：SDK はこの型で引数を検めるので、strip のままだと広告していない引数が
+ * 黙って外れて道具に届く。通しておき、道具を呼ぶ前に見つけて断る（`mcp-unknown-args.ts`）。広告する JSON Schema は
+ * 余分な引数を許す宣言（`additionalProperties: {}`）が足されるだけで、以前の strip（宣言なし＝許す）と意味は同じ。
+ */
 function advertisedSchema(schema: z.ZodTypeAny, chartable: boolean): z.ZodTypeAny {
   if (!(schema instanceof z.ZodObject)) return schema
   const base = withoutChatOnly(schema)
-  return chartable ? base.extend({ present: PRESENT_FIELD }) : base
+  const advertised = (chartable ? base.extend({ present: PRESENT_FIELD }) : base).loose()
+  return schema.description === undefined ? advertised : advertised.describe(schema.description)
+}
+
+/** 広告していない引数があれば、集計せずに断る結果（無ければ null・`mcp-unknown-args.ts`）。 */
+function unknownArgsRefusal(inputSchema: z.ZodTypeAny, input: unknown): McpToolResult | null {
+  const unknown = blockingUnknownArgs(unknownArgsOf(inputSchema, input))
+  if (unknown.length === 0) return null
+  const text = JSON.stringify(unknownArgsForLlm(unknown))
+  return { content: [{ type: 'text', text }], isError: true }
 }
 
 /**
@@ -377,15 +393,16 @@ function registerSpec<Schema extends z.ZodTypeAny, Out>(
   const config = MCP_TOOL_CONFIGS[key]
   const perMinute = options.perMinuteOverrides?.[key] ?? config.perMinute
   const now = options.now ?? Date.now
+  const inputSchema = advertisedSchema(
+    config.mcpInputSchema ?? spec.inputSchema,
+    config.chartable === true,
+  )
   server.registerTool(
     config.mcpName,
     {
       title: config.titleJa,
       description: mcpDescription(key),
-      inputSchema: advertisedSchema(
-        config.mcpInputSchema ?? spec.inputSchema,
-        config.chartable === true,
-      ),
+      inputSchema,
       annotations: { readOnlyHint: true },
       // `ui`（MCP Apps の iframe ビューア）は**付けない**——PR-11 で撤収した（決定 11）。
       // 描画は母艦のプレゼンタ／ビューア・プラグインが structuredContent から行う。
@@ -404,6 +421,8 @@ function registerSpec<Schema extends z.ZodTypeAny, Out>(
           isError: true,
         }
       }
+      const refusal = unknownArgsRefusal(inputSchema, input)
+      if (refusal !== null) return refusal
       try {
         // `present` は表示用なので、ドメインへ渡る入力からは落ちる（Zod の strip）。
         const present = config.chartable === true ? presentOf(input) : null

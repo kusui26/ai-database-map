@@ -5,24 +5,24 @@
 
 ## どこを正にするか
 
-**`warning/map.json` が実際に使っている区域コードを正とする。** 区域定義（`area.json` の class20）
-とはズレていて、実測（2026-08-27）では次のとおりだった。
+**アプリが読む `r8/map.json` が実際に使っている区域コードを正とする**（`src/lib/hazard/jma.ts` と同じ URL）。
+区域定義（`area.json` の class20）や旧 `warning/data/warning/map.json` とはズレることがある。
 
-| | 件数 |
-|---|--:|
-| `map.json` の区域コード（7 桁） | **1,796** |
-| うち `area.json` の class20 にあるもの | 1,788 |
-| **どの区域定義にも無いもの** | **8**（`1410000` 横浜市・`1415000` 相模原市・`1620100` 富山市…） |
+- 2026-08-27：旧 `map.json` は横浜市・相模原市・富山市など 8 市を 1 区域（`1410000` 横浜市…）で出していて、
+  区域定義（「横浜市北部／南部」）と食い違っていた。この表は旧 `map.json` から作った
+- 2026-10-15：アプリは r8 に移っていたが、この表は旧のまま残っていた。r8 は 8 市を区域定義どおり分けて出す
+  （`1410011` 横浜市北部・`1410012` 横浜市南部…）ので、**表の `1410000` は 1 件も当たらず、警報が出ていても
+  「発表なし」と答えていた**。r8 から作り直すと、引ける発表区域は 1,805 件（分かれる市町村 74）
 
-つまり **`area.json` は横浜市を「北部／南部」に分けているのに、警報は「横浜市」で出る**。
-区域定義だけを見て表を作ると、**引いても当たらないコード**を持つことになる。
+表とアプリが読む `map.json` が食い違わないよう、URL はアプリと同じものにする。それでも気象庁が区域を
+変えれば表は古くなるので、アプリは**表の区域が発表に見当たらなければ「発表なし」と言わない**
+（`src/lib/hazard/alert-source.ts`）。
 
 ## なぜ生成するのか（手書きしないのか）
 
-区域コードは **1,796 件のうち 1,724 件（96%）が「5桁 + 00」** で素直に対応するが、
-残りが 2 つの理由で崩れる。
+区域コードの多くは「5桁 + 00」で素直に対応するが、残りが 2 つの理由で崩れる。
 
-1. **1 つの市が複数の区域に分かれる**（横浜市北部／南部、富山市平地／山間部…）。40 市町村ぶん
+1. **1 つの市が複数の区域に分かれる**（横浜市北部／南部、富山市平地／山間部…）
 2. **政令市の区は区域に対応しない**。大阪市北区（27127）で前方一致を試みても**何も当たらない**——
    気象庁は「大阪市」単位でしか発表しないので、まず市コードへ畳む必要がある
 
@@ -48,7 +48,10 @@ OUT = ROOT / "src" / "shared" / "hazard" / "jma-areas.json"
 MUNI_URL = "https://maps.gsi.go.jp/js/muni.js"
 AREA_URL = "https://www.jma.go.jp/bosai/common/const/area.json"
 #: 警報・注意報が**実際にどの区域コードで発表されるか**の正。区域定義（area.json）とはズレる。
-WARNING_MAP_URL = "https://www.jma.go.jp/bosai/warning/data/warning/map.json"
+#: **アプリが読むのと同じ `r8`**（`src/lib/hazard/jma.ts`）。旧 `warning/data/warning/map.json` は 2026-05 から
+#: 更新が止まっていて、しかも区域の分け方が r8 と違う（旧は「横浜市」1 区域、r8 は「横浜市北部・南部」）。
+#: 旧から作った表では 8 市の発表が 1 件も引けず、警報が出ていても「発表なし」と答えていた（2026-10-15 に発見）。
+WARNING_MAP_URL = "https://www.jma.go.jp/bosai/warning/data/r8/map.json"
 USER_AGENT = "Mozilla/5.0 (AI Database Map / jma area table)"
 TIMEOUT_S = 60
 
@@ -91,13 +94,15 @@ def read_class20_names() -> dict[str, str]:
 
 
 def read_warning_areas() -> set[str]:
-    """`map.json` → 警報・注意報が**実際に発表される**区域コード（7 桁）。ここが正。"""
+    """`r8/map.json` → 警報・注意報が**実際に発表される**区域コード（7 桁）。ここが正。
+
+    r8 は気象台ごとに `warning.class20Items[].areaCode` を持つ（発表の無い区域も「発表警報・注意報はなし」で並ぶ）。
+    """
     offices = json.loads(fetch(WARNING_MAP_URL))
     codes = {
-        area["code"]
+        item["areaCode"]
         for office in offices
-        for area_type in office.get("areaTypes", [])
-        for area in area_type.get("areas", [])
+        for item in (office.get("warning") or {}).get("class20Items", [])
     }
     return {code for code in codes if len(code) == 7}
 
@@ -218,7 +223,7 @@ def build() -> tuple[dict[str, object], list[str]]:
         "version": 1,
         "generatedAt": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
         "generatedFrom": "pipeline/build_jma_areas.py",
-        "sourceJa": "気象庁 気象警報・注意報（map.json の発表区域）／区域定義（area.json の名称）／国土地理院 市区町村コード（muni.js）",
+        "sourceJa": "気象庁 気象警報・注意報（r8/map.json の発表区域）／区域定義（area.json の名称）／国土地理院 市区町村コード（muni.js）",
         "municipalityCount": len(entries),
         "municipalities": entries,
     }

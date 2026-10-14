@@ -68,6 +68,11 @@ export type EvalExpectation = {
   readonly textContains?: readonly string[]
   /** **本文だけ**がこれらの**いずれか**を含む。 */
   readonly textContainsAny?: readonly string[]
+  /**
+   * **本文だけ**がこれらを**含まない**（2026-10-14）。答えに、データに無い評価や地域の様子（「経済の中心地」「臨海部」）を
+   * 足していないかを見る——パネルの JSON も見る `notContains` では、図の文字に当たってしまう。
+   */
+  readonly textNotContains?: readonly string[]
   /** これらの**いずれか**を含む（拒否・言い換えの許容）。 */
   readonly containsAny?: readonly string[]
   /**
@@ -139,16 +144,20 @@ function mapActionChecks(expectation: EvalExpectation, observed: EvalObserved): 
   }))
 }
 
-/** 本文だけを見る（`textContains`・`textContainsAny`）。 */
+/** 本文だけを見る（`textContains`・`textContainsAny`・`textNotContains`）。 */
 function textChecks(expectation: EvalExpectation, observed: EvalObserved): CheckResult[] {
   const all = (expectation.textContains ?? []).map((needle) => ({
     name: `本文が「${needle}」を含む`,
     ok: observed.text.includes(needle),
   }))
+  const none = (expectation.textNotContains ?? []).map((needle) => ({
+    name: `本文が「${needle}」を含まない`,
+    ok: !observed.text.includes(needle),
+  }))
   const anyOf = expectation.textContainsAny
-  if (anyOf === undefined) return all
+  if (anyOf === undefined) return [...all, ...none]
   const ok = anyOf.some((needle) => observed.text.includes(needle))
-  return [...all, { name: `本文がいずれかを含む (${anyOf.join(' / ')})`, ok }]
+  return [...all, { name: `本文がいずれかを含む (${anyOf.join(' / ')})`, ok }, ...none]
 }
 
 /** 1 問を採点する（全チェック ok で pass）。 */

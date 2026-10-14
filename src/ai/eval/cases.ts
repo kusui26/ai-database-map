@@ -707,6 +707,9 @@ export const EVAL_CASES: readonly EvalCase[] = [
       contains: ['muni:14100'],
       mapActions: ['colorStations'],
       textContainsAny: ['西区', '中区', '神奈川区', '港北区'],
+      // データに無い地域の様子を足さない（2026-10-11 の答えに「臨海部や中心部で人口が伸びています」、2026-10-14 の main は
+      // 3 回とも「臨海部や主要な鉄道路線沿い」）。「中心」は、これまでの答えでは毎回、地域の言い方（「中心部」「中心市街地」）だった
+      textNotContains: ['臨海部', '中心', '都心', '路線沿い'],
     },
   },
   {
@@ -745,6 +748,8 @@ export const EVAL_CASES: readonly EvalCase[] = [
       panels: ['areaSummary'],
       contains: ['muni:14100', 'pref:14'],
       maxCalls: { getAreaSummary: 1 },
+      // データに無い評価を足さない（2026-10-14 の答えに「経済や人口の中心地」「経済活動の中心」「中心的な地域」「経済や人口の中核」）
+      textNotContains: ['中心', '中核'],
     },
   },
 

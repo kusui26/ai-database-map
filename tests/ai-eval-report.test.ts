@@ -113,4 +113,20 @@ describe('レポート', () => {
   it('表の行に、所要時間・再試行の印・失敗チェックが出る', () => {
     expect(report).toContain('| 2 | b | 駅詳細 | ❌ | 1.0s | ↻ | 1 | パネル rankingTable が出る |')
   })
+
+  it('予定の問を終えていなければ「途中の結果」を合格率の前に書く。全部終えたら書かない（2026-10-14）', () => {
+    const context = {
+      label: 'x',
+      baseUrl: 'http://localhost:3399',
+      threshold: 60,
+      criticalCategories: ['災害'],
+    }
+    const partial = renderReport(runs, summarizeRuns(runs, ['災害']), { ...context, planned: 62 })
+    expect(partial).toContain('**途中の結果：2/62 問まで**')
+    expect(partial.indexOf('途中の結果')).toBeLessThan(partial.indexOf('合格率'))
+    const done = renderReport(runs, summarizeRuns(runs, ['災害']), { ...context, planned: 2 })
+    expect(done).not.toContain('途中の結果')
+    // 予定を渡さない呼び出し（以前の形）も書かない
+    expect(report).not.toContain('途中の結果')
+  })
 })

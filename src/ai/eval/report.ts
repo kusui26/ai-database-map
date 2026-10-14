@@ -91,15 +91,16 @@ export type ReportContext = {
   readonly criticalCategories: readonly string[]
   /**
    * 流す予定の問の数（2026-10-14）。runner は 1 問ごとにレポートを書き直すので、終わる前に止まっても、そこまでの
-   * レポートが残る——予定より少なければ「途中で止まった」と見出しに書く（全部終えた回と取り違えない）。
+   * レポートが残る——予定より少なければ「途中の結果」と見出しに書く（全部終えた回と取り違えない。流している途中に
+   * 開いたときも、途中で止まったときも同じ言い方で正しい）。
    */
   readonly planned?: number
 }
 
-/** 予定より少なく終わったときの見出しの行（終えたなら無し）。 */
+/** 予定の問をまだ終えていないときの見出しの行（終えたなら無し）。 */
 function partialLines(runs: readonly EvalRun[], planned: number | undefined): string[] {
   if (planned === undefined || runs.length >= planned) return []
-  return [`**途中で止まった：${runs.length}/${planned} 問まで**`, '']
+  return [`**途中の結果：${runs.length}/${planned} 問まで**`, '']
 }
 
 /** Markdown のレポート。比べるときに並べやすいよう、見出しの数値は固定の順に出す。 */

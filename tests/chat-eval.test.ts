@@ -17,7 +17,7 @@
  *
  * **1 問の失敗で評価全体を止めない**（2026-10-14）：打ち切り・サーバに届かない・ストリームが途中で切れる・
  * サーバがエラーの状態で返す、を「応答が得られない（理由）」として記録し、再試行のあと次の問へ進む。
- * レポートは 1 問ごとに書き直すので、終わる前に止まってもそこまでが残る（見出しに「途中で止まった」）。
+ * レポートは 1 問ごとに書き直すので、終わる前に止まってもそこまでが残る（見出しに「途中の結果」）。
  * 長い評価は `caffeinate -i` で流す（PC がスリープすると応答が止まる）。打ち切りと再試行の待ちは
  * `EVAL_REQUEST_TIMEOUT_MS`・`EVAL_RETRY_COOLDOWN_MS` で変えられる（壊れ方を再現して確かめるため・既定は 75 秒と 65 秒）。
  */
@@ -233,7 +233,7 @@ async function askOnce(testCase: EvalCase): Promise<AskResult> {
   }
 }
 
-/** レポートを組み、`EVAL_REPORT` があればファイルに書く（予定より少なければ「途中で止まった」と書く）。 */
+/** レポートを組み、`EVAL_REPORT` があればファイルに書く（予定の問を終えていなければ「途中の結果」と書く）。 */
 function writeReport(runs: readonly EvalRun[], planned: number): string {
   const report = renderReport(runs, summarizeRuns(runs, CRITICAL_CATEGORIES), {
     label: LABEL,

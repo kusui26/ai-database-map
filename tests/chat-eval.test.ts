@@ -104,6 +104,16 @@ function failedInputs(observed: AskResult): string {
   return calls.join(' ').slice(0, FAILED_INPUT_MAX_CHARS)
 }
 
+/**
+ * 落ちた問の本文の頭（2026-10-14）。全問の評価で「臨海部」を足した答えや、災害の問で市町村に触れなかった答えが、
+ * 入力だけでは読めなかった——揺れか退行かは本文で見分ける。
+ */
+const FAILED_TEXT_MAX_CHARS = 300
+
+function failedText(observed: AskResult): string {
+  return observed.text.replaceAll('\n', ' ').slice(0, FAILED_TEXT_MAX_CHARS)
+}
+
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
 /** 1 問の観測。`errorJa` は応答が得られなかった理由（得られたなら null）。 */
@@ -296,7 +306,9 @@ describe.skipIf(!ENABLED)(`eval — ゴールデン ${EVAL_CASES.length} 問`, (
             `  ${(elapsedMs / 1000).toFixed(1)}s${retried ? ' ↻' : ''}` +
             `  tools=${observed.toolCalls.map((call) => call.name).join(',')}` +
             `  panels=${observed.panelTypes.join(',')}` +
-            (failed.length > 0 ? `  ✗ ${failed.join('；')}  inputs=${failedInputs(observed)}` : ''),
+            (failed.length > 0
+              ? `  ✗ ${failed.join('；')}  inputs=${failedInputs(observed)}  text=${failedText(observed)}`
+              : ''),
         )
         // 1 問ごとに書き直す（終わる前に止まっても、そこまでのレポートが残る）
         writeReport(runs, cases.length)

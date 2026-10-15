@@ -9,7 +9,7 @@
  */
 
 import { HAZARD_DISCLAIMER_JA } from '@/shared/hazard'
-import { jmaMunicipality, type JmaMunicipality } from '@/shared/jma'
+import { jmaMunicipality, type JmaAreaRef, type JmaMunicipality } from '@/shared/jma'
 import type { HazardAlertsResponse, HazardAlertArea } from '@/shared/api'
 import type { SourceRef } from '@/shared/protocol'
 import { GSI_REVERSE_GEOCODER_SOURCE, JMA_WARNING_SOURCE } from '@/domain/hazard/sources'
@@ -78,6 +78,29 @@ function warningsFor(municipality: JmaMunicipality, map: WarningMap): readonly A
  */
 function areaLabelJa(municipality: JmaMunicipality): string {
   return municipality.areas.map((area) => area.nameJa).join('・')
+}
+
+/**
+ * 対応表の区域のうち、気象庁の発表（`r8/map.json`）に見当たらないもの。r8 は発表の無い区域も「発表警報・注意報はなし」
+ * で並べるので、見当たらないのは**表が古い**ときである（2026-10-15、横浜市など 8 市の区域コードが変わっていて、
+ * 1 件も引けないまま「発表なし」と答えていた・`pipeline/build_jma_areas.py`）。
+ */
+function missingAreas(municipality: JmaMunicipality, map: WarningMap): readonly JmaAreaRef[] {
+  return municipality.areas.filter((area) => !map.has(area.code))
+}
+
+/** 見当たらない区域の注記。**確かめていない区域を「発表なし」に数えない。** */
+function missingNoteJa(missing: readonly JmaAreaRef[]): string {
+  const names = missing.map((area) => area.nameJa).join('・')
+  return `${names}の発表を気象庁の情報から見つけられず、確かめられていません（区域の対応表が古い可能性があります）。`
+}
+
+/** 表が古いことを運用に知らせる（答えは注記で正直に返すが、直すのはデータ）。 */
+function reportMissingAreas(code: string, missing: readonly JmaAreaRef[]): void {
+  const codes = missing.map((area) => area.code).join(',')
+  console.error(
+    `気象庁の発表に区域が見当たりません（市区町村 ${code}・区域 ${codes}）。pipeline/build_jma_areas.py で対応表を作り直してください`,
+  )
 }
 
 /** 発表時刻（複数区域なら最初に見つかったもの。同じ官署なので実質 1 つ）。 */
@@ -164,6 +187,71 @@ async function lookupMunicipality(lon: number, lat: number): Promise<Municipalit
   }
 }
 
+/** 区域が決まり、気象庁の発表も読めたときの「今」。 */
+type AreaAlertsInput = {
+  readonly request: HazardAlertRequest
+  readonly placeJa: string
+  readonly code: string
+  readonly municipality: JmaMunicipality
+  readonly map: WarningMap
+  readonly forecasts: readonly FloodForecast[]
+}
+
+/**
+ * 対応表の区域が発表に見当たらず、発表も 1 つも拾えなかったとき。**「発表なし」と言わない**——確かめていないだけで、
+ * 警報が出ているかもしれない。発表時刻も空にする（「いつの情報で発表なし」とも読ませない）。
+ */
+function unconfirmed(input: AreaAlertsInput, missing: readonly JmaAreaRef[]): HazardAlertsResponse {
+  const { request, placeJa, code, municipality } = input
+  return {
+    ...unresolved(request, placeJa, missingNoteJa(missing)),
+    area: toArea(code, municipality),
+    headlineJa: `${areaLabelJa(municipality)}の気象庁の発表を確かめられませんでした。`,
+  }
+}
+
+/** 区域の発表から拾えたもの（見当たらなかった区域も持つ）。 */
+type FoundAlerts = {
+  readonly warnings: readonly AlertWarning[]
+  readonly floods: readonly FloodForecastWarning[]
+  readonly missing: readonly JmaAreaRef[]
+}
+
+/** 拾えた発表から「今」を組む。見当たらなかった区域があれば注記に書く（拾えた発表は出す）。 */
+function reported(input: AreaAlertsInput, found: FoundAlerts): HazardAlertsResponse {
+  const { request, placeJa, code, municipality, map } = input
+  const { warnings, floods, missing } = found
+  // 河川の予報も同じ物差しで混ぜる（氾濫危険情報は警戒レベル4相当）。
+  const alertLevel = heaviestAlertLevel([...warnings, ...floods])
+  return {
+    point: { lon: request.lon, lat: request.lat, placeJa },
+    area: toArea(code, municipality),
+    alertLevel,
+    level: hazardLevelOfAlert(alertLevel),
+    headlineJa: alertHeadlineJa(areaLabelJa(municipality), warnings, floods),
+    warnings: [...warnings],
+    floodForecasts: [...floods],
+    reasonsJa: [...alertReasonsJa(warnings, floods)],
+    reportedAt: reportedAtOf(municipality, map),
+    limitationsJa: [ALERT_LIMITATION_JA],
+    sources: [...SOURCES],
+    notesJa: missing.length === 0 ? [] : [missingNoteJa(missing)],
+    disclaimerJa: HAZARD_DISCLAIMER_JA,
+  }
+}
+
+function areaAlerts(input: AreaAlertsInput): HazardAlertsResponse {
+  const { code, municipality, map, forecasts } = input
+  const warnings = warningsFor(municipality, map)
+  const floods = floodsFor(municipality, forecasts)
+  const missing = missingAreas(municipality, map)
+  if (missing.length > 0) reportMissingAreas(code, missing)
+  if (missing.length > 0 && warnings.length === 0 && floods.length === 0) {
+    return unconfirmed(input, missing)
+  }
+  return reported(input, { warnings, floods, missing })
+}
+
 /** その地点の「今」。**警戒レベル相当までしか言わない**（避難情報は市町村が出すもの・§7.4）。 */
 export async function hazardAlertsAt(request: HazardAlertRequest): Promise<HazardAlertsResponse> {
   const placeJa = request.placeJa ?? DEFAULT_PLACE_JA
@@ -182,23 +270,5 @@ export async function hazardAlertsAt(request: HazardAlertRequest): Promise<Hazar
     const noArea = unresolved(request, placeJa, '気象庁の警報・注意報を取得できませんでした')
     return { ...noArea, area: toArea(code, municipality) }
   }
-  const warnings = warningsFor(municipality, map)
-  const floods = floodsFor(municipality, forecasts)
-  // 河川の予報も同じ物差しで混ぜる（氾濫危険情報は警戒レベル4相当）。
-  const alertLevel = heaviestAlertLevel([...warnings, ...floods])
-  return {
-    point: { lon: request.lon, lat: request.lat, placeJa },
-    area: toArea(code, municipality),
-    alertLevel,
-    level: hazardLevelOfAlert(alertLevel),
-    headlineJa: alertHeadlineJa(areaLabelJa(municipality), warnings, floods),
-    warnings: [...warnings],
-    floodForecasts: [...floods],
-    reasonsJa: [...alertReasonsJa(warnings, floods)],
-    reportedAt: reportedAtOf(municipality, map),
-    limitationsJa: [ALERT_LIMITATION_JA],
-    sources: [...SOURCES],
-    notesJa: [],
-    disclaimerJa: HAZARD_DISCLAIMER_JA,
-  }
+  return areaAlerts({ request, placeJa, code, municipality, map, forecasts })
 }

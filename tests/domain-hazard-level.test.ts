@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
   ALERT_LIMITATION_JA,
@@ -201,11 +202,34 @@ describe('jma: 市区町村 → 発表区域の対応表', () => {
     expect(jmaMunicipality('13122')?.nameJa).toBe('葛飾区')
   })
 
-  /** 政令市の区コードは発表区域に前方一致しない。**市へ畳んでから引く**（§8.4）。 */
+  /**
+   * 政令市の区コードは発表区域に前方一致しない。**市へ畳んでから引く**（§8.4）。
+   * 横浜市は r8 で北部・南部に分かれて発表される。区からはどちら側か分からないので**両方**を見る（安全側）。
+   */
   it('政令市の区は市へ畳まれる', () => {
-    expect(jmaMunicipality('14101')?.areas.map((area) => area.nameJa)).toEqual(['横浜市'])
+    expect(jmaMunicipality('14101')?.areas.map((area) => area.nameJa)).toEqual([
+      '横浜市北部',
+      '横浜市南部',
+    ])
     expect(jmaMunicipality('27127')?.areas.map((area) => area.nameJa)).toEqual(['大阪市'])
     expect(jmaMunicipality('23106')?.areas.map((area) => area.nameJa)).toEqual(['名古屋市'])
+  })
+
+  /**
+   * 表は**アプリが読むのと同じ `r8/map.json`** の発表区域から作る（2026-10-15）。パイプラインが凍った旧 `map.json`
+   * （横浜市を 1 区域 `1410000` で出していた）を読んだままだったので、r8 では 8 市の発表が 1 件も引けず「発表なし」と
+   * 答えていた。URL が食い違えば、ここで落ちる。
+   */
+  it('対応表はアプリと同じ r8 の発表区域から作る（8 市は分かれた区域で引く）', () => {
+    const urlOf = (path: string): string =>
+      /WARNING_MAP_URL = ['"]([^'"]+)['"]/.exec(readFileSync(path, 'utf-8'))?.[1] ?? ''
+    const appUrl = urlOf('src/lib/hazard/jma.ts')
+    expect(appUrl).toContain('/warning/data/r8/map.json')
+    expect(urlOf('pipeline/build_jma_areas.py')).toBe(appUrl)
+    expect(jmaAreaTable.sourceJa).toContain('r8/map.json')
+    expect(jmaMunicipality('14100')?.areas.map((area) => area.code)).toEqual(['1410011', '1410012'])
+    expect(jmaMunicipality('14150')?.areas.map((area) => area.code)).toEqual(['1415011', '1415012'])
+    expect(jmaMunicipality('24201')?.areas.map((area) => area.code)).toEqual(['2420111', '2420112'])
   })
 
   /** 区ごとに発表される政令市（神戸市・広島市）は、市で聞かれたら区を全部束ねる。 */

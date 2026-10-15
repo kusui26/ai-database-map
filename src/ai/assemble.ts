@@ -60,6 +60,8 @@ import {
 
 /** 地図ラベルが出るズーム（P4a と揃える）。 */
 const DETAIL_ZOOM = 12
+/** 市区町村の名前で引いた警報で、地図を寄せる縮尺（市全体が収まる程度・2026-10-15）。 */
+const MUNICIPALITY_ZOOM = 11
 
 /** パネルにチャット内インライン表示のヒントを付す（⤢ で drawer/modal へ昇格・§2.4）。 */
 function inline(panel: Panel): Panel {
@@ -171,6 +173,21 @@ function panelsFor(effect: ToolEffect): Panel[] {
   }
 }
 
+/**
+ * 警報をどこに出すか。地点で引いたら地点に印、市区町村の名前で引いたら区域へ寄せるだけ（印は置かない・2026-10-15）、
+ * 名前で場所を決められなかったら地図は動かさない。
+ */
+function alertsWhereActions(effect: HazardAlertsEffect): MapAction[] {
+  const { point } = effect.alerts
+  if (point !== null) {
+    return [{ type: 'showPoint', lon: point.lon, lat: point.lat, labelJa: point.placeJa }]
+  }
+  const center = effect.mapCenter ?? null
+  return center === null
+    ? []
+    : [{ type: 'flyTo', lon: center.lon, lat: center.lat, zoom: MUNICIPALITY_ZOOM }]
+}
+
 /** 副産物 → 地図操作（詳細＝flyTo＋選択／ランキング＝上位をハイライト）。 */
 export function mapActionsForEffect(effect: ToolEffect): MapAction[] {
   switch (effect.kind) {
@@ -224,12 +241,12 @@ export function mapActionsForEffect(effect: ToolEffect): MapAction[] {
       // 地点を指したうえで、**いまの危険度の面（キキクル）と想定区域**を出す（§6.5）。
       // 出すレイヤは警戒モードの UI と**同じドメイン関数**が決める——
       // チャットで聞いたときと画面で警戒モードに入ったときで、地図が違ったら混乱する。
-      const { point, alertLevel, warnings, floodForecasts } = effect.alerts
+      const { alertLevel, warnings, floodForecasts } = effect.alerts
       const layers = isWarningMode(alertLevel)
         ? warningModeLayers(warnings, floodForecasts.length > 0)
         : []
       return [
-        { type: 'showPoint', lon: point.lon, lat: point.lat, labelJa: point.placeJa },
+        ...alertsWhereActions(effect),
         // 空配列は「すべて消す」の意味なので、出すものが無いときは送らない（§6.4）。
         ...(layers.length > 0 ? [{ type: 'setHazardLayers' as const, layers: [...layers] }] : []),
       ]
@@ -367,12 +384,34 @@ function promotionOf(effect: ToolEffect): PanelPromotion | null {
   }
 }
 
+/** 名前で場所を決められなかった警報（地点も区域も無い・カードは「調べていません」と注意書き）。 */
+function isUnlocatedAlerts(effect: ToolEffect): boolean {
+  return (
+    effect.kind === 'hazardAlerts' && effect.alerts.point === null && effect.alerts.area === null
+  )
+}
+
+/**
+ * 画面に出す副産物（2026-10-15）。名前で場所を決められなかった警報のカードは、同じ回答で場所の決まった警報があれば
+ * 出さない（モデルが呼び直して引けた）。決まらないままなら最後の 1 枚だけ——何度呼び直しても、注意書きのカードは 1 枚。
+ * パネル（`assemble`）と ⤢ の条件（`promotionsFor`）の両方がここを通るので、並びはずれない。
+ */
+export function shownEffects(effects: readonly ToolEffect[]): readonly ToolEffect[] {
+  const located = effects.some(
+    (effect) => effect.kind === 'hazardAlerts' && !isUnlocatedAlerts(effect),
+  )
+  const last = effects.findLastIndex(isUnlocatedAlerts)
+  return effects.filter(
+    (effect, index) => !isUnlocatedAlerts(effect) || (!located && index === last),
+  )
+}
+
 /**
  * パネルと**同じ並び**の ⤢ の条件。副産物ごとに、先頭パネル（駅カード・順位表・散布）にだけ条件を付け、
  * 残り（駅詳細の本文のグラフなど）は null。`assemble` と同じ順に副産物を並べるので、添字でそのまま対応する。
  */
 export function promotionsFor(effects: readonly ToolEffect[]): PanelPromotions {
-  return effects.flatMap((effect) =>
+  return shownEffects(effects).flatMap((effect) =>
     panelsFor(effect).map((_panel, index) => (index === 0 ? promotionOf(effect) : null)),
   )
 }
@@ -384,7 +423,7 @@ export function promotionsFor(effects: readonly ToolEffect[]): PanelPromotions {
 export function assemble(effects: readonly ToolEffect[], text: string): MapResponse {
   const panels: Panel[] = []
   const mapActions: MapAction[] = []
-  for (const effect of effects) {
+  for (const effect of shownEffects(effects)) {
     panels.push(...panelsFor(effect))
     mapActions.push(...mapActionsForEffect(effect))
   }

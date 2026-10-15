@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { alertBadgeJa } from '@/domain/hazard/panels'
 import { hazardAlertsAt } from '@/lib/hazard/alert-source'
 import { resetJmaCache } from '@/lib/hazard/jma'
 
@@ -107,5 +108,27 @@ describe('対応表の区域が気象庁の発表に見当たらない', () => {
     expect(response.reportedAt).toBe(REPORTED_AT)
     expect(response.notesJa).toEqual([])
     expect(errorLog).not.toHaveBeenCalled()
+  })
+})
+
+describe('気象庁の表が取れない', () => {
+  /** 区域は決まっている。取れなかったのは発表のほう（2026-10-15 まで「発表区域を特定できませんでした」と言っていた）。 */
+  it('区域は言い、「発表を取得できませんでした」と言う（バッジは「未確認」）', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL) => {
+        const url = String(input)
+        if (url.includes('reverse-geocoder')) return jsonResponse(NAKA_YOKOHAMA)
+        if (url.includes('/flood/')) return jsonResponse('[]')
+        return new Response('upstream down', { status: 503 })
+      }),
+    )
+    const response = await alertsAtNakaYokohama()
+    expect(response.headlineJa).toBe('横浜市北部・横浜市南部の気象庁の発表を取得できませんでした。')
+    expect(response.headlineJa).not.toContain('特定できませんでした')
+    expect(response.area?.municipalityJa).toBe('横浜市 中区')
+    expect(response.reportedAt).toBeNull()
+    expect(response.notesJa.join()).toContain('一時的な不調の可能性があります')
+    expect(alertBadgeJa(response)).toBe('未確認')
   })
 })

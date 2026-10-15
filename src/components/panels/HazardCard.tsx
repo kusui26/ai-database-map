@@ -26,15 +26,18 @@ import { cn } from '@/lib/utils'
 import { Emphasis } from './Emphasis'
 import { SourceList } from './SourceList'
 
-/** 危険度バッジ（色 ＋ 記号 ＋ ラベルの 3 重）。 */
-function LevelBadge({ level }: { level: HazardCardPanel['level'] }) {
+/**
+ * 危険度バッジ（色 ＋ 記号 ＋ ラベルの 3 重）。ラベルはサーバが決めたもの（警報のカードは「警戒レベル3相当」「注意報あり」
+ * 「発表なし」「未確認」）があればそれ、無ければ危険度のラベル。
+ */
+function LevelBadge({ panel }: { panel: HazardCardPanel }) {
   return (
     <span
       className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold text-white"
-      style={{ backgroundColor: HAZARD_LEVEL_COLORS[level] }}
+      style={{ backgroundColor: HAZARD_LEVEL_COLORS[panel.level] }}
     >
-      <span aria-hidden>{HAZARD_LEVEL_ICONS[level]}</span>
-      {HAZARD_LEVEL_LABELS_JA[level]}
+      <span aria-hidden>{HAZARD_LEVEL_ICONS[panel.level]}</span>
+      {panel.levelLabelJa ?? HAZARD_LEVEL_LABELS_JA[panel.level]}
     </span>
   )
 }
@@ -55,6 +58,9 @@ function SourceBadge({ item }: { item: HazardItem }) {
 
 /** 該当ハザード 1 件（公式凡例の色見本＋レイヤ名＋階級＋意味＋出所）。 */
 function HazardRow({ item }: { item: HazardItem }) {
+  // 括弧の言い方はサーバが決める（警報の行は null＝添えない）。無ければ危険度のラベル。
+  const levelLabelJa =
+    item.levelLabelJa === undefined ? HAZARD_LEVEL_LABELS_JA[item.level] : item.levelLabelJa
   return (
     <li className="flex items-start gap-2 border-b border-slate-100 py-1.5 last:border-b-0">
       <span
@@ -72,9 +78,9 @@ function HazardRow({ item }: { item: HazardItem }) {
             {HAZARD_LEVEL_ICONS[item.level]}
           </span>
           {item.valueJa}
-          <span className="ml-1 text-xs font-normal text-slate-400">
-            （{HAZARD_LEVEL_LABELS_JA[item.level]}）
-          </span>
+          {levelLabelJa !== null && (
+            <span className="ml-1 text-xs font-normal text-slate-400">（{levelLabelJa}）</span>
+          )}
         </p>
         {item.meaningJa !== null && <p className="text-xs text-slate-500">{item.meaningJa}</p>}
       </div>
@@ -93,7 +99,7 @@ export function HazardCard({ panel }: { panel: HazardCardPanel }) {
         <h2 className={cn('font-bold text-slate-900', compact ? 'text-base' : 'text-lg')}>
           {panel.placeJa}
         </h2>
-        <LevelBadge level={panel.level} />
+        <LevelBadge panel={panel} />
       </div>
 
       <p className="mt-2 text-sm font-medium text-slate-800">

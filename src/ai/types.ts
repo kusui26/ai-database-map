@@ -69,6 +69,11 @@ export type HazardPointEffect = {
 export type HazardAlertsEffect = {
   readonly kind: 'hazardAlerts'
   readonly alerts: HazardAlertsResponse
+  /**
+   * 市区町村の名前で引いたときに地図を寄せる先（区域の駅の範囲の真ん中・2026-10-15）。印は置かない——警報は区域に出る
+   * もので、点を置くと「その点の話」に読める。地点で引いたときと、駅の無い町村は持たない。
+   */
+  readonly mapCenter?: { readonly lon: number; readonly lat: number } | null
 }
 
 /**

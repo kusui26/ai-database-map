@@ -25,6 +25,7 @@ import type {
 import { ALERT_LEVEL_LABELS_JA, HAZARD_GROUP_LABELS_JA, type HazardGroup } from '@/shared/constants'
 import { evacuationDisasterLabelJa, type EvacuationDisasterKey } from '@/shared/evacuation'
 import { getHazardLayer } from '@/shared/hazard'
+import { type JmaWarningKind } from '@/shared/jma'
 import { jstDateTimeJa, parseIso } from '@/shared/time'
 import { hazardLevelOfAlert } from './level'
 
@@ -193,6 +194,8 @@ function alertItem(warning: HazardAlertWarning): HazardItem {
     // 補足の文（「２７日８時から１３時まで、警戒レベル４相当」）があればそちらを出す。
     meaningJa: warning.detailJa ?? warning.areaJa,
     level: hazardLevelOfAlert(warning.alertLevel),
+    // 値に警戒レベル相当が入っている（平時の「想定区域外」「警戒」を括弧で添えない・2026-10-15）
+    levelLabelJa: null,
     color: null,
     source: 'jma',
     coverage: null,
@@ -208,11 +211,45 @@ function floodItem(forecast: HazardFloodForecast): HazardItem {
     valueJa: `${forecast.nameJa}・${ALERT_LEVEL_LABELS_JA[forecast.alertLevel]}`,
     meaningJa: null,
     level: hazardLevelOfAlert(forecast.alertLevel),
+    levelLabelJa: null,
     color: null,
     source: 'jma',
     coverage: null,
     certainty: 'exact',
   }
+}
+
+/** 発表を確かめられなかったときのバッジ（「発表なし」と読ませない）。 */
+export const ALERT_UNCONFIRMED_LABEL_JA = '未確認'
+
+/** 警戒レベルの体系の外の発表（暴風警報・雷注意報など）の言い方。重い種別から順に見る。 */
+const OUT_OF_SCALE_BADGES_JA: readonly (readonly [JmaWarningKind, string])[] = [
+  ['特別警報', '特別警報あり'],
+  ['警報', '警報あり'],
+  ['注意報', '注意報あり'],
+]
+
+/** 警戒レベル相当が付かない発表があるときのバッジ（いちばん重い種別・種別の分からない発表は「発表あり」）。 */
+function outOfScaleBadgeJa(warnings: readonly HazardAlertWarning[]): string | null {
+  if (warnings.length === 0) return null
+  const found = OUT_OF_SCALE_BADGES_JA.find(([kind]) => warnings.some((w) => w.kindJa === kind))
+  return found === undefined ? '発表あり' : found[1]
+}
+
+/**
+ * 警報のカードのバッジ（2026-10-15）。**警戒バナーと同じ言い方**（「警戒レベル3相当」）にする——平時のハザードマップの
+ * 言い方（「想定区域外」）は警報に当たらない。
+ *
+ * - 警戒レベル相当がある →「警戒レベル◯相当」（**分かっている重い発表は、時刻が無くても先に出す**——「未確認」で隠さない）
+ * - 発表時刻が無い：気象庁の発表を確かめられなかった（区域が決まらない・表が取れない・名前で場所を決められない）→「未確認」
+ * - 警戒レベルの体系の外の発表だけ（暴風警報・雷注意報）→「警報あり」「注意報あり」——**レベル 0 を「発表なし」と言わない**
+ *   （暴風警報が出ていても「発表なし」と読める）
+ * - 何も出ていない →「発表なし」
+ */
+export function alertBadgeJa(alerts: HazardAlertsResponse): string {
+  if (alerts.alertLevel > 0) return ALERT_LEVEL_LABELS_JA[alerts.alertLevel]
+  if (alerts.reportedAt === null) return ALERT_UNCONFIRMED_LABEL_JA
+  return outOfScaleBadgeJa(alerts.warnings) ?? ALERT_LEVEL_LABELS_JA[0]
 }
 
 /**
@@ -228,8 +265,9 @@ export function hazardAlertCardPanel(
   const reported = reportedAtJa(alerts.reportedAt)
   return {
     type: 'hazardCard',
-    placeJa: alerts.point.placeJa,
+    placeJa: alerts.placeJa,
     level: alerts.level,
+    levelLabelJa: alertBadgeJa(alerts),
     headlineJa: alerts.headlineJa,
     evacuation: null,
     certainty: 'exact',

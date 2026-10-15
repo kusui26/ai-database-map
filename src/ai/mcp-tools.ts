@@ -274,7 +274,8 @@ export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
   getHazardAlerts: {
     mcpName: 'get_hazard_alerts',
     titleJa: 'いまの警報・注意報',
-    descriptionEn: 'Current JMA warnings/advisories and alert-level equivalents for a point.',
+    descriptionEn:
+      'Current JMA warnings/advisories and alert-level equivalents for a station (grp), a coordinate, or a municipality or station name in placeJa (resolved server-side; names shared by several places return candidates). Evacuation orders come from municipalities and are not included.',
     // 気象庁・逆ジオ（上流）を毎回叩く → いちばん厳しく。
     maxResultSizeChars: 40_000,
     perMinute: 10,

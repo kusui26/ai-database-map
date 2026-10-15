@@ -548,8 +548,17 @@ export type HazardAlertArea = z.infer<typeof hazardAlertAreaSchema>
  * 混ぜて表示しない（§7.4 は 2 段に分けている）。
  */
 export const hazardAlertsResponseSchema = z.object({
-  point: z.object({ lon: z.number(), lat: z.number(), placeJa: z.string() }),
-  /** 海上・国外など、市区町村が決まらないときは null。 */
+  /**
+   * どの場所の答えか（見出しやカードの主語）。地点で引けば地点の呼び名（「亀有駅」「この地点」）、市区町村の名前で引けば
+   * その市区町村（「横浜市港北区」）、名前で場所を決められなければ言われた名前のまま（2026-10-15）。
+   */
+  placeJa: z.string(),
+  /**
+   * 地点で引いたときの地点（`/api/hazard/alerts` は常に地点）。AI の道具が**市区町村の名前で引いたとき**と、名前で場所を
+   * 決められなかったときは null——警報は区域に出るもので、名前から 1 点を作ると「その点の話」に読める（2026-10-15）。
+   */
+  point: z.object({ lon: z.number(), lat: z.number(), placeJa: z.string() }).nullable(),
+  /** 海上・国外など、市区町村が決まらないとき（名前で場所を決められなかったときも）は null。 */
   area: hazardAlertAreaSchema.nullable(),
   alertLevel: alertLevelSchema,
   /** カードや地図で使う危険度（警戒レベル相当からの写像）。 */

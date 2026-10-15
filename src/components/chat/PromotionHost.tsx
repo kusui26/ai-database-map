@@ -16,7 +16,7 @@ import { useIsWide } from '@/hooks/useIsWide'
 import { useFigureHost } from '@/components/figure/useFigureHost'
 // FAB と同じ遅延ロードを使う（Suspense 境界の定義を二重に持たない・260805）。
 // 同じモジュールなので、FAB 側の先読みがそのままここにも効く。
-import { RankingDialog, ScatterDialog } from '@/components/lazyDialogs'
+import { AreaDialog, RankingDialog, ScatterDialog } from '@/components/lazyDialogs'
 
 export function PromotionHost() {
   const isWide = useIsWide()
@@ -29,21 +29,36 @@ export function PromotionHost() {
   }
 
   // key＝外から図が変わったときだけ作り直す（戻る/進む・⤢・FAB。条件の書き戻しでは作り直さない）。
-  return figure.kind === 'ranking' ? (
-    <RankingDialog
-      key={bodyKey}
-      open
-      onOpenChange={onOpenChange}
-      initial={figure}
-      onConditions={onConditions}
-    />
-  ) : (
-    <ScatterDialog
-      key={bodyKey}
-      open
-      onOpenChange={onOpenChange}
-      initial={figure}
-      onConditions={onConditions}
-    />
-  )
+  switch (figure.kind) {
+    case 'ranking':
+      return (
+        <RankingDialog
+          key={bodyKey}
+          open
+          onOpenChange={onOpenChange}
+          initial={figure}
+          onConditions={onConditions}
+        />
+      )
+    case 'scatter':
+      return (
+        <ScatterDialog
+          key={bodyKey}
+          open
+          onOpenChange={onOpenChange}
+          initial={figure}
+          onConditions={onConditions}
+        />
+      )
+    case 'area':
+      return (
+        <AreaDialog
+          key={bodyKey}
+          open
+          onOpenChange={onOpenChange}
+          initial={figure}
+          onConditions={onConditions}
+        />
+      )
+  }
 }

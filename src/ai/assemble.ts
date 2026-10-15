@@ -6,15 +6,20 @@
  * → 「クリックでも会話でも、同じ場所に同じ物が出る」（.claude/CLAUDE.md §2・architecture.md §4）。
  */
 
-import { radiusLabel, type Category } from '@/shared/constants'
+import { NO_COLORING, radiusLabel, type Category } from '@/shared/constants'
 import { formatNumber, type MetricFormat } from '@/shared/format'
 import {
+  type AreaPromotion,
   type PanelPromotion,
   type PanelPromotions,
   type RankingPromotion,
 } from '@/shared/promotion'
 import { type GrowthResponse, type RankingResponse } from '@/shared/api'
-import { type AreaSummaryCard, type AreaTotalLine } from '@/shared/area-summary'
+import {
+  type AreaSummaryCard,
+  type AreaSummaryResponse,
+  type AreaTotalLine,
+} from '@/shared/area-summary'
 import {
   type AreaSummaryPanel,
   type MapAction,
@@ -353,6 +358,19 @@ function promotionFilters(
 }
 
 /**
+ * エリアの要約 → ⤢ の条件（エリアの図・2026-10-15 B5e）。エリアは応答の正規の形、色分けはサーバが決めた指標
+ * （既定でも key を載せる）。色分けしなかった（`colorBy:none`）なら `none`——開いた図も同じく色分けしない。
+ */
+function areaPromotionOf(response: AreaSummaryResponse): AreaPromotion {
+  return {
+    kind: 'area',
+    areas: response.areas.map((area) => area.ref),
+    radiusM: response.radiusM,
+    colorBy: response.legend?.metricKey ?? NO_COLORING,
+  }
+}
+
+/**
  * 副産物 → ⤢ の条件。**図を生んだ条件そのもの**（ツールの応答・焦点カテゴリ）から作る。
  * 画面が推し量らない——同じ指標の図が 2 つあっても、それぞれが自分の条件を持つ（`shared/promotion.ts`）。
  * ハザード系は昇格しない（null）。
@@ -373,9 +391,9 @@ function promotionOf(effect: ToolEffect): PanelPromotion | null {
       const filters = promotionFilters(effect.response, effect.excludeLowN)
       return { kind: 'scatter', xKey: x.key, yKey: y.key, ...filters }
     }
-    // 種類を足したら、ここで昇格させるかを決める（列挙しておけば型検査が漏れを捕まえる）。
-    // エリアの要約の ⤢ は、エリアの図ができてから（B5e）。
     case 'areaSummary':
+      return areaPromotionOf(effect.response)
+    // 種類を足したら、ここで昇格させるかを決める（列挙しておけば型検査が漏れを捕まえる）。
     case 'hazardPoint':
     case 'hazardAlerts':
     case 'evacuation':

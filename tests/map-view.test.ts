@@ -12,14 +12,13 @@
 
 import { describe, expect, it } from 'vitest'
 import { TOOL_SPECS } from '@/ai/tool-specs'
+import { describeMapView, MAP_CENTER_STATION_MAX_M } from '@/ai/area/map-view'
 import {
-  describeMapView,
   isTooWideForArea,
-  MAP_CENTER_STATION_MAX_M,
   MAP_VIEW_MAX_LAT_SPAN_DEG,
   MAP_VIEW_MAX_LON_SPAN_DEG,
   MAP_WARD_MAX_SPAN_KM,
-} from '@/ai/area/map-view'
+} from '@/domain/map/view-scale'
 import { buildAreaIndex } from '@/ai/area/place-index'
 import { mapViewPrompt } from '@/ai/system-prompt'
 import { type Viewport } from '@/shared/viewport'

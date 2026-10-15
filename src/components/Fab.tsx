@@ -8,9 +8,10 @@ import { useGeoStore } from '@/stores/geoStore'
 import { useMapStore } from '@/stores/mapStore'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { usePrefetchOnIdle } from '@/hooks/usePrefetchOnIdle'
-// 図（ランキング・散布）は URL の `?fig` に書くだけ。出すのは図の入れ物（広い画面はキャンバス、
+import { useMapUrlState } from './map/useMapUrlState'
+// 図（ランキング・散布・エリア）は URL の `?fig` に書くだけ。出すのは図の入れ物（広い画面はキャンバス、
 // 狭い画面はモーダル）で、FAB はもう自分でダイアログを持たない（2026-10-02・計画書 §12-6）。
-import { DEFAULT_RANKING_FIGURE, DEFAULT_SCATTER_FIGURE } from './figure/url'
+import { DEFAULT_AREA_FIGURE, DEFAULT_RANKING_FIGURE, DEFAULT_SCATTER_FIGURE } from './figure/url'
 import { useFigureUrl } from './figure/useFigureUrl'
 // 初期バンドルから外す：ダイアログ（散布は Chart.js を含む）は初回オープンまで読み込まない。
 // 遅延ロードの定義は共通モジュールに置く（Suspense 境界の付け忘れを 1 か所に閉じ込めるため）。
@@ -23,6 +24,21 @@ import { cn } from '@/lib/utils'
 const FAB_GAP_PX = 8
 /** チャットを開いているときの FAB の左端（パネル幅から算出・260804）。 */
 const FAB_LEFT_WITH_CHAT_PX = PANEL_GAP_PX + PANEL_WIDTH_PX + FAB_GAP_PX
+/** チャットを閉じているときの FAB の左端（`sm:left-4`）。 */
+const FAB_LEFT_PX = 16
+/**
+ * ラベルつきの FAB の行の幅（5 つ・2026-10-15 実測 524px）。これが右の余白（駅詳細を開いていればその左）まで入らない幅では
+ * 記号だけにする——以前はボタンが縮んでラベルが縦に折れ（「ラ／ン／キ／ン／グ」）、エリアを足すと最後のボタンが画面の外に出た
+ * （チャットを開いた 768px）。それでも入らない幅（チャットを開いた 640px 台）は折り返す。
+ */
+const FAB_LABELED_ROW_PX = 524
+/** 記号だけのボタン 1 つの幅（左右の余白 12 ＋記号 16 ＋ 12）。 */
+const FAB_ICON_PX = 40
+/**
+ * 駅詳細を開いているときの FAB の右端（駅詳細の幅＋余白・キャンバスと同じ算出）。以前は駅詳細の裏に FAB が隠れていた
+ * （チャットも開いた 1024px でランキングから右が押せない。駅を選んでからエリアの図を開けない）。
+ */
+const FAB_RIGHT_WITH_DETAIL_PX = PANEL_GAP_PX + PANEL_WIDTH_PX + PANEL_GAP_PX
 
 function TrophyIcon() {
   return (
@@ -53,6 +69,23 @@ function ScatterIcon() {
       <circle cx="12" cy="9" r="1.4" />
       <circle cx="16" cy="12" r="1.4" />
       <circle cx="18" cy="7" r="1.4" />
+    </svg>
+  )
+}
+
+/** エリア（区域の形と、その中の駅）。 */
+function AreaIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden className="size-4">
+      <path
+        d="M4 7.5 10 4l9.5 3.5-1.5 9L11 20.5 4.5 16 4 7.5Z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+      <circle cx="10" cy="10" r="1.4" fill="currentColor" />
+      <circle cx="14.5" cy="12" r="1.4" fill="currentColor" />
+      <circle cx="10.5" cy="15" r="1.4" fill="currentColor" />
     </svg>
   )
 }
@@ -91,29 +124,33 @@ function FabButton({
   onClick,
   title,
   active = false,
+  showLabel,
 }: {
   icon: ReactNode
   label: string
   onClick?: () => void
   title?: string
   active?: boolean
+  /** ラベルを出せる幅か（携帯はいつも記号だけ）。 */
+  showLabel: boolean
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      title={title}
+      // ラベルを出さないときは、ホバーで名前が分かるようにする。
+      title={title ?? (showLabel ? undefined : label)}
       aria-label={label}
       aria-pressed={active}
       className={cn(
-        'inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium shadow-lg ring-1 backdrop-blur transition',
+        'pointer-events-auto inline-flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium whitespace-nowrap shadow-lg ring-1 backdrop-blur transition',
         active
           ? 'bg-blue-600 text-white ring-blue-500 hover:bg-blue-500'
           : 'bg-white/90 text-slate-700 ring-slate-200 hover:bg-white',
       )}
     >
       {icon}
-      <span className="hidden sm:inline">{label}</span>
+      <span className={cn('hidden', showLabel && 'sm:inline')}>{label}</span>
     </button>
   )
 }
@@ -122,8 +159,8 @@ function FabButton({
 const recommendOpenParser = parseAsBoolean.withDefault(false).withOptions({ history: 'push' })
 
 /**
- * 左下 FAB（現在地＝Phase 2／ランキング＝P6a／散布図＝P6b／おすすめ＝W4）。
- * ランキング・散布は URL の図を開くだけ（入れ物が出す）。おすすめは初回オープンで初めてマウント（遅延ロード）。
+ * 左下 FAB（現在地＝Phase 2／ランキング＝P6a／散布図＝P6b／エリア＝B5e／おすすめ＝W4）。
+ * ランキング・散布・エリアは URL の図を開くだけ（入れ物が出す）。おすすめは初回オープンで初めてマウント（遅延ロード）。
  */
 export function Fab() {
   const { openFigure } = useFigureUrl()
@@ -135,6 +172,13 @@ export function Fab() {
   const chatOpen = useChatStore((state) => state.open)
   const isDesktop = useIsDesktop()
   const shifted = isDesktop && chatOpen
+  const left = shifted ? FAB_LEFT_WITH_CHAT_PX : FAB_LEFT_PX
+  // 駅詳細を開いていれば、その左で折り返す（記号 1 つも入らないほど狭ければ、以前のまま）。
+  const { grp } = useMapUrlState()
+  const roomBesideDetail = useIsDesktop(left + FAB_ICON_PX + FAB_RIGHT_WITH_DETAIL_PX)
+  const besideDetail = isDesktop && grp !== null && roomBesideDetail
+  const right = besideDetail ? FAB_RIGHT_WITH_DETAIL_PX : PANEL_GAP_PX
+  const labelsFit = useIsDesktop(left + FAB_LABELED_ROW_PX + right)
   // クリック後にチャンク取得を待たせないため、地図が出たあとのアイドル時間に先読みしておく。
   // 地図の準備完了を待つのは、早く始めると地図の取得と帯域を奪い合って LCP が悪化するため。
   const mapReady = useMapStore((state) => state.ready)
@@ -146,12 +190,17 @@ export function Fab() {
   return (
     <>
       <div
-        style={shifted ? { left: FAB_LEFT_WITH_CHAT_PX } : undefined}
+        style={{
+          ...(shifted ? { left: FAB_LEFT_WITH_CHAT_PX } : {}),
+          ...(besideDetail ? { right: FAB_RIGHT_WITH_DETAIL_PX } : {}),
+        }}
         // sm:bottom-9＝デスクトップは下端の出典の帯（MAP_ATTRIBUTION_STRIP_PX）に踏み込まない。
         // モバイルは帯を作らない（出典側を FAB より上に置く・globals.css）ので bottom-4 のまま。
-        className="pointer-events-auto absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 gap-2 transition-[left] duration-300 sm:bottom-9 sm:left-4 sm:translate-x-0"
+        // 折り返したときに空いたところで地図の操作を止めないよう、行そのものは押せず、ボタンだけを押せる。
+        className="pointer-events-none absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 gap-2 transition-[left] duration-300 sm:bottom-9 sm:left-4 sm:translate-x-0 sm:flex-wrap"
       >
         <FabButton
+          showLabel={labelsFit}
           icon={<LocationIcon />}
           label="現在地"
           title="現在地の災害リスクを見る"
@@ -159,16 +208,26 @@ export function Fab() {
           onClick={geoActive ? stopGeo : startGeo}
         />
         <FabButton
+          showLabel={labelsFit}
           icon={<TrophyIcon />}
           label="ランキング"
           onClick={() => openFigure(DEFAULT_RANKING_FIGURE)}
         />
         <FabButton
+          showLabel={labelsFit}
           icon={<ScatterIcon />}
           label="散布図"
           onClick={() => openFigure(DEFAULT_SCATTER_FIGURE)}
         />
         <FabButton
+          showLabel={labelsFit}
+          icon={<AreaIcon />}
+          label="エリア"
+          title="市区町村・沿線の人口の要約と、駅の色分け"
+          onClick={() => openFigure(DEFAULT_AREA_FIGURE)}
+        />
+        <FabButton
+          showLabel={labelsFit}
           icon={<StarIcon />}
           label="おすすめ"
           title="エリアの中でおすすめの駅を出す"

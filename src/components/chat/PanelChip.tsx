@@ -41,13 +41,17 @@ export function chipLabel(
   return '結果'
 }
 
+/** 図の種類ごとの印（線の形）。 */
+const ICON_PATHS: Readonly<Record<PanelPromotion['kind'], string>> = {
+  scatter:
+    'M4 20V4M4 20h16M9 15.5a1 1 0 1 0 0-.001M14 9.5a1 1 0 1 0 0-.001M18 13.5a1 1 0 1 0 0-.001',
+  ranking: 'M4 20h4V10H4v10ZM10 20h4V4h-4v16ZM16 20h4v-7h-4v7Z',
+  area: 'M5 6l6-2 8 3-1 9-7 4-6-5 0-9Z',
+  detail: 'M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Z',
+}
+
 function IconFor({ kind }: { kind: PanelPromotion['kind'] }) {
-  const path =
-    kind === 'scatter'
-      ? 'M4 20V4M4 20h16M9 15.5a1 1 0 1 0 0-.001M14 9.5a1 1 0 1 0 0-.001M18 13.5a1 1 0 1 0 0-.001'
-      : kind === 'ranking'
-        ? 'M4 20h4V10H4v10ZM10 20h4V4h-4v16ZM16 20h4v-7h-4v7Z'
-        : 'M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Z'
+  const path = ICON_PATHS[kind]
   return (
     <svg
       viewBox="0 0 24 24"

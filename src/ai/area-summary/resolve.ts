@@ -9,7 +9,7 @@
  */
 
 import { resolveMunicipality } from '@/ai/area/municipality'
-import { isTooWideForArea } from '@/ai/area/map-view'
+import { isTooWideForArea } from '@/domain/map/view-scale'
 import { resolveOrigin } from '@/ai/area/origin'
 import { prefectureNamed, placeKey } from '@/ai/area/keys'
 import { type AreaIndex } from '@/ai/area/place-index'

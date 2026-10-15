@@ -5,11 +5,14 @@
  * それより狭いと、外に出す場所が無いか、出すとチャットを覆う。そこで**会話の中に図を出す**（compact）。
  * ⤢ で、クリックの UI と同じ場所（モーダル・駅詳細のシート）へ広げる。
  *
- * | 画面幅 | 駅詳細 | ランキング・散布 |
- * |---|---|---|
- * | 広い | チップ（右の駅詳細が自動で開く） | チップ（キャンバスが自動で開く） |
- * | 狭い | チップ（右の駅詳細が自動で開く） | **会話の中** |
- * | 携帯 | **会話の中**（詳細のシートはチャットを覆うので自動では開かない） | **会話の中** |
+ * | 画面幅 | 駅詳細 | ランキング・散布 | エリア（2026-10-15 B5e） |
+ * |---|---|---|---|
+ * | 広い | チップ（右の駅詳細が自動で開く） | チップ（キャンバスが自動で開く） | **会話の中**（⤢ で列） |
+ * | 狭い | チップ（右の駅詳細が自動で開く） | **会話の中** | **会話の中**（⤢ でモーダル） |
+ * | 携帯 | **会話の中**（詳細のシートはチャットを覆うので自動では開かない） | **会話の中** | **会話の中** |
+ *
+ * エリアはどの幅でも会話の中に出し、図を自動では開かない——エリアの答えの主役は**地図の色分け**で、図を開くと地図を覆う
+ * （広い画面の列でも、色分けした地図の一部を隠す）。図は ⤢ で、条件を変えたいときに開く。
  */
 
 import { type PanelPromotion } from '@/shared/promotion'
@@ -35,9 +38,9 @@ export type Presentation = 'chip' | 'inline'
 type PresentationByKind = Readonly<Record<PanelPromotion['kind'], Presentation>>
 
 const PRESENTATIONS: Readonly<Record<Viewport, PresentationByKind>> = {
-  wide: { detail: 'chip', ranking: 'chip', scatter: 'chip' },
-  narrow: { detail: 'chip', ranking: 'inline', scatter: 'inline' },
-  phone: { detail: 'inline', ranking: 'inline', scatter: 'inline' },
+  wide: { detail: 'chip', ranking: 'chip', scatter: 'chip', area: 'inline' },
+  narrow: { detail: 'chip', ranking: 'inline', scatter: 'inline', area: 'inline' },
+  phone: { detail: 'inline', ranking: 'inline', scatter: 'inline', area: 'inline' },
 }
 
 /** 図の種類 × 画面幅 → 出し方。 */

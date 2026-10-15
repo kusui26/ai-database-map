@@ -31,7 +31,7 @@ import { placementStyle, usePopoverPlacement } from './usePopoverPlacement'
 const POPOVER_WIDTH_PX = 320
 
 /** 路線色の見本（白に近い色でも見えるよう縁を付ける）。色の無い路線は灰色。 */
-function LineSwatch({ color }: { color: string | null }) {
+export function LineSwatch({ color }: { color: string | null }) {
   return (
     <span
       aria-hidden

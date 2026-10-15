@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * ランキング／散布のモーダルを遅延ロードするための**単一の入口**（260805）。
+ * ランキング／散布／エリア（2026-10-15 B5e）のモーダルを遅延ロードするための**単一の入口**（260805）。
  *
  * `next/dynamic` は **`ssr: false` か `loading` を渡したときだけ**自前の Suspense 境界を作る
  * （出荷実装の `hasSuspenseBoundary = !opts.ssr || !!opts.loading`）。どちらも渡さないと
@@ -21,6 +21,7 @@ import dynamic from 'next/dynamic'
 
 const loadRankingDialog = () => import('./ranking/RankingDialog')
 const loadScatterDialog = () => import('./scatter/ScatterDialog')
+const loadAreaDialog = () => import('./area/AreaDialog')
 const loadRecommendDialog = () => import('./recommend/RecommendDialog')
 
 export const RankingDialog = dynamic(() => loadRankingDialog().then((m) => m.RankingDialog), {
@@ -28,6 +29,11 @@ export const RankingDialog = dynamic(() => loadRankingDialog().then((m) => m.Ran
 })
 
 export const ScatterDialog = dynamic(() => loadScatterDialog().then((m) => m.ScatterDialog), {
+  loading: () => null,
+})
+
+/** エリアの図（2026-10-15 B5e）。 */
+export const AreaDialog = dynamic(() => loadAreaDialog().then((m) => m.AreaDialog), {
   loading: () => null,
 })
 
@@ -43,5 +49,6 @@ export const RecommendDialog = dynamic(() => loadRecommendDialog().then((m) => m
 export const DIALOG_LOADERS: readonly (() => Promise<unknown>)[] = [
   loadRankingDialog,
   loadScatterDialog,
+  loadAreaDialog,
   loadRecommendDialog,
 ]

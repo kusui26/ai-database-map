@@ -1000,6 +1000,16 @@ export const areaSummaryQuerySchema = z.object({
 })
 export type AreaSummaryQuery = z.infer<typeof areaSummaryQuerySchema>
 
+/**
+ * エリアの図を開いた直後のエリアの入力（2026-10-15 B5e）：選択中の駅（grp）か、地図の見えている範囲（bbox「西,南,東,北」）。
+ * 両方あれば駅を先に見る。
+ */
+export const areaLocateQuerySchema = z.object({
+  grp: z.string().trim().min(1).max(80).optional(),
+  bbox: z.string().trim().min(1).max(200).optional(),
+})
+export type AreaLocateQuery = z.infer<typeof areaLocateQuerySchema>
+
 /** 駅の色分けの入力：指標（ランキングできる key）とエリア（1〜4・合わせて 1 つの凡例）。 */
 export const stationClassesQuerySchema = z.object({
   metric: z.string().trim().min(1).max(80),

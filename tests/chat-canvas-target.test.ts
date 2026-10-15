@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { type Panel } from '@/shared/protocol'
 import {
+  type AreaPromotion,
   type DetailPromotion,
   type PanelPromotions,
   type RankingPromotion,
@@ -171,6 +172,48 @@ describe('canvasTargetOf（キャンバスに出す対象・260802）', () => {
 
   it('サーバの条件が届いていなければ開かない（推し量らない）', () => {
     expect(canvasTargetOf([assistant('a1', [scatter], [])])).toBeNull()
+  })
+})
+
+const areaSummary: Panel = {
+  type: 'areaSummary',
+  title: '神奈川県横浜市の要約',
+  areas: [],
+  comparison: null,
+  legend: null,
+  radiusM: 1000,
+  notesJa: [],
+  notIncludedJa: [],
+  sources: [],
+}
+const areaTrend: Panel = {
+  type: 'trendChart',
+  title: '神奈川県横浜市の人口の推移（実績・将来推計）',
+  unit: '人',
+  format: 'int',
+  flags: [],
+  series: [],
+}
+const areaPromotion: AreaPromotion = {
+  kind: 'area',
+  areas: ['muni:14100'],
+  radiusM: 1000,
+  colorBy: 'pop_gr_2020_2015_1km',
+}
+
+describe('canvasTargetOf：エリアの図は自動で開かない（2026-10-15 B5e）', () => {
+  it('エリアの要約だけの回答では出さない（地図の色分けを図で覆わない・⤢ で開く）', () => {
+    const message = assistant('a1', [areaSummary, areaTrend], [areaPromotion, null])
+    expect(canvasTargetOf([message])).toBeNull()
+  })
+
+  it('エリアとランキングが並べば、ランキングだけを開く（エリアがあとに並んでも）', () => {
+    const message = assistant(
+      'a2',
+      [ranking, areaSummary, areaTrend],
+      [rankingPromotion, areaPromotion, null],
+    )
+    expect(canvasTargetOf([message])?.promotion).toEqual(rankingPromotion)
   })
 })
 

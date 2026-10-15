@@ -13,9 +13,9 @@
  */
 
 import { z } from 'zod'
-import { loadAreaSummary, NO_COLORING } from '@/domain/area-summary/load'
+import { loadAreaSummary } from '@/domain/area-summary/load'
 import { DEFAULT_LINE_WIDTH_M, LINE_WIDTHS_M, MAX_AREAS } from '@/shared/area-ref'
-import { isRadiusM, RADII_M, radiusLabel, type RadiusM } from '@/shared/constants'
+import { isRadiusM, NO_COLORING, RADII_M, radiusLabel, type RadiusM } from '@/shared/constants'
 import { resolveMetricKey } from '@/ai/metric-resolver'
 // 型だけ（`tool-specs.ts` がこのファイルを読むので、実行時の循環を作らない）。
 import type { ToolRunContext, ToolRunResult } from '@/ai/tool-specs'

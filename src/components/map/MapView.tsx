@@ -12,7 +12,7 @@ import { useEffect, useRef } from 'react'
 import type { FeatureCollection } from 'geojson'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { ACCENT_COLOR, PANEL_WIDTH_PX } from '@/shared/constants'
+import { ACCENT_COLOR } from '@/shared/constants'
 import { circlePolygon } from '@/shared/geo'
 import { type Viewport } from '@/shared/viewport'
 import { type HoverInfo, useMapStore } from '@/stores/mapStore'
@@ -36,34 +36,19 @@ import { loadStations } from './stationsSource'
 import { useHazardUrlState } from './useHazardUrlState'
 import { useHazardTileTimes } from '@/hooks/useHazardTileTimes'
 import { boundsOf, mapInsets, type MapInsets, visibleCorners } from './visibleBounds'
-import { fitBoundsInView } from './camera'
+import { coloringFitNeeded, fitBoundsInView, type ColoringFit } from './camera'
+import { flyPadding, type OpenPanels } from './padding'
+import { useAreaColumn } from '@/components/figure/useAreaColumn'
 import { useMapUrlState } from './useMapUrlState'
 
 const STYLE_URL = process.env.NEXT_PUBLIC_MAP_STYLE_URL ?? '/map/gsi-pale-style.json'
 const TOKYO_STATION: [number, number] = [139.767, 35.681]
-const BASE_PAD = 64
-// 左チャット／右ドロワーの幅は共通定数（260804）。ここを合わせないと flyTo が
-// 選択駅をパネルの裏に置いてしまう。
 const EMPTY_FC: FeatureCollection = { type: 'FeatureCollection', features: [] }
 const NONE = '__none__'
 /** ハイライトした駅へ寄せるときの最大ズーム。 */
 const HIGHLIGHT_FIT_MAX_ZOOM = 12
 /** 色分けしたエリアへ寄せるときの最大ズーム（駅が数駅でも寄りすぎない）。 */
 const COLORING_FIT_MAX_ZOOM = 13
-
-/** 開いているパネル幅を避けて可視領域の中心へ寄せる flyTo padding（plan_fable §2.4 ルール④）。 */
-function flyPadding(
-  isDesktop: boolean,
-  chatOpen: boolean,
-  drawerOpen: boolean,
-): maplibregl.PaddingOptions {
-  return {
-    top: BASE_PAD,
-    bottom: BASE_PAD,
-    left: isDesktop && chatOpen ? PANEL_WIDTH_PX + BASE_PAD : BASE_PAD,
-    right: isDesktop && drawerOpen ? PANEL_WIDTH_PX + BASE_PAD : BASE_PAD,
-  }
-}
 
 /**
  * パネルに隠れていない部分の範囲（2026-10-09 B3）。チャットの「このあたり」が、チャット欄・駅詳細の裏の駅を
@@ -73,6 +58,11 @@ function visibleViewport(map: maplibregl.Map, insets: MapInsets): Viewport {
   const { clientWidth, clientHeight } = map.getContainer()
   const corners = visibleCorners(clientWidth, clientHeight, insets)
   return boundsOf(corners.map(([x, y]) => map.unproject([x, y])))
+}
+
+/** いま開いているパネルを避ける余白（地図の幅は寄せるときに測る・`padding.ts`）。 */
+function paddingFor(map: maplibregl.Map, open: OpenPanels): maplibregl.PaddingOptions {
+  return flyPadding(open, map.getContainer().clientWidth)
 }
 
 type Coord = { readonly lon: number; readonly lat: number; readonly name: string }
@@ -310,8 +300,8 @@ export function MapView() {
   const setViewport = useMapStore((state) => state.setViewport)
   const highlightedGrps = useMapStore((state) => state.highlightedGrps)
   const stationColoring = useMapStore((state) => state.stationColoring)
-  // 最後に寄せた色分けのエリア（同じエリアで指標だけ替えたときに寄せ直さない）。
-  const fittedAreasRef = useRef<string | null>(null)
+  // 最後に寄せた色分けのエリアと列（同じエリアで指標だけ替えたときに寄せ直さない・列を開いたら寄せ直す）。
+  const fittedRef = useRef<ColoringFit | null>(null)
   const flyToReq = useMapStore((state) => state.flyTo)
   const chatOpen = useChatStore((state) => state.open)
   const isDesktop = useIsDesktop()
@@ -322,12 +312,13 @@ export function MapView() {
   const setHoveredRef = useRef(setHovered)
   setHoveredRef.current = setHovered
 
-  // flyTo padding は開いているパネル（チャット/ドロワー）に依存するが、
-  // その変化だけで再 flyTo はしたくないので ref 経由で参照する。
-  const paddingRef = useRef<maplibregl.PaddingOptions>(
-    flyPadding(isDesktop, chatOpen, grp !== null),
-  )
-  paddingRef.current = flyPadding(isDesktop, chatOpen, grp !== null)
+  // flyTo padding は開いているパネル（チャット/ドロワー/エリアの図の列）に依存するが、
+  // その変化だけで再 flyTo はしたくないので ref 経由で参照する（地図の幅は寄せるときに測る）。
+  const areaColumn = useAreaColumn()
+  const areaColumnOpen = areaColumn.open
+  const openPanels: OpenPanels = { isDesktop, chatOpen, drawerOpen: grp !== null, areaColumnOpen }
+  const openPanelsRef = useRef<OpenPanels>(openPanels)
+  openPanelsRef.current = openPanels
   // 表示範囲の報告（moveend）も、開いているパネルを ref で読む（パネルの開閉だけで地図を作り直さない）。
   const drawerOpen = grp !== null
   const insetsRef = useRef<MapInsets>(mapInsets(isDesktop, chatOpen, drawerOpen))
@@ -435,7 +426,7 @@ export function MapView() {
         map.flyTo({
           center: [coord.lon, coord.lat],
           zoom: Math.max(map.getZoom(), 12),
-          padding: paddingRef.current,
+          padding: paddingFor(map, openPanelsRef.current),
         })
       }
     }
@@ -462,24 +453,29 @@ export function MapView() {
     source.setData({ type: 'FeatureCollection', features })
     // 選択駅がある場合はその flyTo にカメラを任せる（二重のカメラ操作を避ける）。
     if (features.length > 0 && grpRef.current === null) {
-      fitBoundsInView(map, bounds, paddingRef.current, HIGHLIGHT_FIT_MAX_ZOOM)
+      fitBoundsInView(map, bounds, paddingFor(map, openPanelsRef.current), HIGHLIGHT_FIT_MAX_ZOOM)
     }
   }, [ready, highlightedGrps])
 
   // 色分け：非クラスタ源に色の付いた駅を流し込み（ほかの駅は薄く）、**エリアが替わったときだけ**その範囲へ寄せる。
   // 同じエリアで指標だけ替えたとき（取り直しの間は駅が空になる）は寄せ直さない。消したら（null）次は寄せる。
+  // エリアの図の列を開いたときも寄せ直す（⤢ で開くとエリアは同じまま、列が駅を覆う・`coloringFitNeeded`）。
   useEffect(() => {
     const map = mapRef.current
     if (!ready || map === null) return
-    if (stationColoring === null) fittedAreasRef.current = null
+    if (stationColoring === null) fittedRef.current = null
     const { collection, bounds } = coloringFeatures(
       stationColoring?.stations ?? [],
       coordsRef.current,
     )
     syncColoring(map, collection)
     if (stationColoring === null || bounds === null) return
-    if (stationColoring.areasKey === fittedAreasRef.current) return
-    fittedAreasRef.current = stationColoring.areasKey
+    // 列の図がこの色分けのエリアを出しているときだけ、列を数える（違えば図が新しい色分けを書いて、そこで寄せる）。
+    const columnShowsIt = areaColumn.areasKey === stationColoring.areasKey
+    const fit: ColoringFit = { areasKey: stationColoring.areasKey, withColumn: columnShowsIt }
+    const needed = coloringFitNeeded(fittedRef.current, fit.areasKey, columnShowsIt)
+    fittedRef.current = fit
+    if (!needed) return
     // 選択駅がある場合はその flyTo にカメラを任せる（ハイライトと同じ）。
     if (grpRef.current !== null) return
     fitBoundsInView(
@@ -488,10 +484,10 @@ export function MapView() {
         [bounds[0], bounds[1]],
         [bounds[2], bounds[3]],
       ],
-      paddingRef.current,
+      paddingFor(map, openPanelsRef.current),
       COLORING_FIT_MAX_ZOOM,
     )
-  }, [ready, stationColoring])
+  }, [ready, stationColoring, areaColumn.areasKey])
 
   // 任意 flyTo：チャットの flyTo（駅選択を伴わない移動・seq で再実行）
   useEffect(() => {
@@ -500,7 +496,7 @@ export function MapView() {
     map.flyTo({
       center: [flyToReq.lon, flyToReq.lat],
       zoom: flyToReq.zoom ?? Math.max(map.getZoom(), 12),
-      padding: paddingRef.current,
+      padding: paddingFor(map, openPanelsRef.current),
     })
   }, [ready, flyToReq])
 

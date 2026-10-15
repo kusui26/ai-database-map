@@ -118,6 +118,15 @@ export const areasResponseSchema = z.object({
 })
 export type AreasResponse = z.infer<typeof areasResponseSchema>
 
+/** エリアの図を開いた直後のエリア（GET /api/areas/locate・2026-10-15 B5e）。 */
+export const areaLocateResponseSchema = z.object({
+  /** エリアの文字列（`muni:14109`・`pref:13`・`jp`）。 */
+  ref: z.string(),
+  /** 決めた手がかり（「選択中の駅（新横浜）の市区町村」「地図の中心に近い駅（東京）の都道府県」）。 */
+  basisJa: z.string(),
+})
+export type AreaLocateResponse = z.infer<typeof areaLocateResponseSchema>
+
 // --- エリア要約（GET /api/areas/summary） ---------------------------------------------------
 
 /** 要約のエリアの種類（行政区域・沿線に、駅から N m・範囲を足したもの）。 */

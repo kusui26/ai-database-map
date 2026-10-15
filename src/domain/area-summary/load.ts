@@ -17,21 +17,14 @@ import {
 import { areaCatalog } from '@/shared/area-catalog'
 import { type AreaSummaryResponse } from '@/shared/area-summary'
 import { type CatalogEntry } from '@/shared/catalog'
-import { isRadiusM, type RadiusM } from '@/shared/constants'
-import {
-  classifyAreas,
-  colorableEntry,
-  defaultColorEntry,
-  notColorableJa,
-} from '@/domain/style/load'
+import { isRadiusM, NO_COLORING, type RadiusM } from '@/shared/constants'
+import { classifyAreas } from '@/domain/style/load'
+import { colorableEntry, defaultColorEntry, notColorableJa } from '@/domain/style/color-metric'
 import { lineBreakdownEntries } from './breakdown'
 import { buildAreaSummaryResponse, stationKeyOf, type AreaSummaryParts } from './build'
 import { parseAreaRefs } from './refs'
 import { resolveAreas, stationFilterOf, type ResolvedArea } from './resolve'
 import { resolveStationStats } from './stations'
-
-/** 色分けを付けない指定（`colorBy=none`）。 */
-export const NO_COLORING = 'none'
 
 export type AreaSummaryRequest = {
   readonly areas: readonly string[]

@@ -49,3 +49,20 @@ export function fitBoundsInView(
   map.jumpTo({ center, padding: NO_PADDING })
   map.fitBounds(bounds, { padding, maxZoom, duration: FIT_DURATION_MS })
 }
+
+/** 最後に色分けへ寄せたときの条件（エリアと、そのときエリアの図の列を開いていたか・2026-10-15 B5e）。 */
+export type ColoringFit = { readonly areasKey: string; readonly withColumn: boolean }
+
+/**
+ * 色分けしたエリアへ寄せ直すか。**エリアが替わったとき**（B5c：同じエリアで指標を替えても地図を跳ねさせない）と、
+ * **エリアの図の列を開いたとき**（チャットの回答の色分けを ⤢ で開くと、エリアは同じまま、列が駅を覆う）。列を閉じても寄せ直さない
+ * （見える地図が広がるだけ）。
+ */
+export function coloringFitNeeded(
+  last: ColoringFit | null,
+  areasKey: string,
+  columnOpen: boolean,
+): boolean {
+  if (last === null || last.areasKey !== areasKey) return true
+  return columnOpen && !last.withColumn
+}

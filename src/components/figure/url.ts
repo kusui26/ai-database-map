@@ -1,6 +1,6 @@
 /**
- * 開いている図（ランキング・散布）の URL（`?fig` と条件）。キャンバス・モーダル・FAB・チャットの ⤢ が
- * **同じ 1 つの状態**を読み書きする（2026-10-02・`docs/261001_fix_user_feedback_ui.md` §5.5）。
+ * 開いている図（ランキング・散布・エリア）の URL（`?fig` と条件）。キャンバス・モーダル・FAB・チャットの ⤢ が
+ * **同じ 1 つの状態**を読み書きする（2026-10-02・`docs/261001_fix_user_feedback_ui.md` §5.5。エリアは 2026-10-15 B5e・§6.12.10）。
  *
  * ## なぜ URL に載せるか
  *
@@ -11,24 +11,32 @@
  *
  * - 開く・閉じるは push（戻るで取り消せる）。図の中で条件を変えたら replace（戻るが調整を遡らない）
  * - 既定と同じ値は URL に書かない（`withDefault` と nuqs の clearOnDefault）
- * - 指標が無い図（FAB で開いた直後）は、中身の既定の指標で開く（ここはカタログを読まない）
+ * - 指標が無い図（FAB で開いた直後）は、中身の既定の指標で開く（ここはカタログを読まない）。
+ *   エリアの無いエリアの図も同じく、中身が既定のエリアを決めて書き戻す
  *
- * 初期バンドル（FAB）から読まれるので、`@/shared/*` からは**型だけ**を借りる（zod とカタログを連れてこない）。
+ * 初期バンドル（FAB）から読まれるので、`@/shared/*` からは型と、zod を持たない値（範囲の読み方・半径・エリアの数の上限）だけを
+ * 借りる（zod とカタログを連れてこない）。
  */
 
 import {
   parseAsArrayOf,
   parseAsBoolean,
   parseAsInteger,
+  parseAsNativeArrayOf,
   parseAsString,
   parseAsStringLiteral,
   type inferParserType,
 } from 'nuqs'
 import type { Order } from '@/shared/api'
+import { MAX_AREAS } from '@/shared/area-ref'
+import { isRadiusM, type RadiusM } from '@/shared/constants'
 import { viewportFromTuple, type Viewport } from '@/shared/viewport'
 
 /** 図の種類（URL の `?fig` の値）。 */
-export const FIGURE_KINDS = ['ranking', 'scatter'] as const
+export const FIGURE_KINDS = ['ranking', 'scatter', 'area'] as const
+
+/** エリアの図の、駅の周りの既定の半径（共通 API と AI の道具の既定と同じ 1km・§6.12.15-5）。 */
+export const DEFAULT_AREA_RADIUS_M: RadiusM = 1000
 
 const ORDERS = ['desc', 'asc'] as const satisfies readonly Order[]
 const NO_NAMES: string[] = []
@@ -66,7 +74,21 @@ export type ScatterFigure = FigureFilters & {
   readonly yKey: string | null
 }
 
-export type Figure = RankingFigure | ScatterFigure
+/**
+ * エリアの図（2026-10-15 B5e）。エリアが空なら FAB で開いた直後——中身が既定のエリア（選択中の駅の市区町村・
+ * 地図の中心に近い駅）を決めて書き戻す。
+ */
+export type AreaFigure = {
+  readonly kind: 'area'
+  /** エリアの文字列（1〜4・`shared/area-ref.ts` の形）。空＝開いた直後。 */
+  readonly areas: readonly string[]
+  /** 駅の周りの半径（m・色分けの指標もこの半径）。 */
+  readonly radiusM: number
+  /** 色分けの指標（null＝既定の人口の増減・`none`＝色分けしない）。 */
+  readonly colorBy: string | null
+}
+
+export type Figure = RankingFigure | ScatterFigure | AreaFigure
 
 const NO_FILTERS: FigureFilters = {
   prefectures: [],
@@ -96,6 +118,14 @@ export const DEFAULT_SCATTER_FIGURE: ScatterFigure = {
   ...NO_FILTERS,
 }
 
+/** FAB で開いたときのエリアの図（エリアは中身が決める・半径と色分けは既定）。 */
+export const DEFAULT_AREA_FIGURE: AreaFigure = {
+  kind: 'area',
+  areas: [],
+  radiusM: DEFAULT_AREA_RADIUS_M,
+  colorBy: null,
+}
+
 /** URL のパラメータ。接頭辞 `fig` は、地図（`grp` `r` `tab`）やおすすめ（`rec*`）と衝突させないため。 */
 export const FIGURE_PARSERS = {
   fig: parseAsStringLiteral(FIGURE_KINDS),
@@ -114,6 +144,13 @@ export const FIGURE_PARSERS = {
   figTypes: parseAsArrayOf(parseAsInteger).withDefault(NO_CODES),
   figLines: parseAsArrayOf(parseAsInteger).withDefault(NO_CODES),
   figLowN: parseAsBoolean.withDefault(true),
+  /**
+   * エリアの図：エリア（繰り返す——範囲の `bbox:139.55,35.40,…` が `,` を含むので区切り文字でつながない・色分けの `colorIn` と
+   * 同じ形）・駅の周りの半径（m）・色分けの指標（2026-10-15 B5e）。
+   */
+  figAreas: parseAsNativeArrayOf(parseAsString),
+  figR: parseAsInteger.withDefault(DEFAULT_AREA_RADIUS_M),
+  figColor: parseAsString,
 }
 
 export type FigureUrlValues = inferParserType<typeof FIGURE_PARSERS>
@@ -128,8 +165,28 @@ function nearOfUrl(grp: string | null, radiusM: number | null): FigureFilters['n
   return grp === null || grp === '' || radiusM === null ? null : { grp, radiusM }
 }
 
+/**
+ * URL のエリア → 図のエリア（空の文字列と重なりを除き、4 つまで）。書き方の検証は共通 API がする——ここで黙って捨てると、
+ * 壊れたリンクを開いた人に理由が届かない（図が API の理由を出し、エリアを外せる）。
+ */
+function areasOfUrl(raw: readonly string[]): string[] {
+  const refs = raw.map((ref) => ref.trim()).filter((ref) => ref !== '')
+  return [...new Set(refs)].slice(0, MAX_AREAS)
+}
+
+/** URL → エリアの図（6 段以外の半径は既定に戻す）。 */
+function areaFigureOfUrl(values: FigureUrlValues): AreaFigure {
+  return {
+    kind: 'area',
+    areas: areasOfUrl(values.figAreas),
+    radiusM: isRadiusM(values.figR) ? values.figR : DEFAULT_AREA_RADIUS_M,
+    colorBy: values.figColor,
+  }
+}
+
 /** URL → 開いている図（開いていなければ null）。 */
 export function figureFromUrl(values: FigureUrlValues): Figure | null {
+  if (values.fig === 'area') return areaFigureOfUrl(values)
   const filters: FigureFilters = {
     prefectures: values.figPref,
     municipality: values.figMuni,
@@ -150,8 +207,17 @@ export function figureFromUrl(values: FigureUrlValues): Figure | null {
   return null
 }
 
-/** 絞り込みの URL の値（図の種類・指標・順を除いた残り）。 */
-type FilterUrlValues = Omit<FigureUrlValues, 'fig' | 'figM' | 'figX' | 'figY' | 'figO'>
+/** エリアの図だけが使う URL の値。 */
+type AreaUrlValues = Pick<FigureUrlValues, 'figAreas' | 'figR' | 'figColor'>
+
+/** 絞り込みの URL の値（図の種類・指標・順・エリアの図の値を除いた残り）。 */
+type FilterUrlValues = Omit<
+  FigureUrlValues,
+  'fig' | 'figM' | 'figX' | 'figY' | 'figO' | keyof AreaUrlValues
+>
+
+/** エリアの図の値を使わない図（ランキング・散布）で、前に開いていたエリアの図の条件を残さない。 */
+const NO_AREA_URL: AreaUrlValues = { figAreas: [], figR: DEFAULT_AREA_RADIUS_M, figColor: null }
 
 /** 絞り込み → URL の値（ランキングと散布で同じ）。 */
 function filtersToUrl(filters: FigureFilters): FilterUrlValues {
@@ -170,9 +236,25 @@ function filtersToUrl(filters: FigureFilters): FilterUrlValues {
   }
 }
 
+/** エリアの図 → URL の値（ランキング・散布の条件は既定に戻す）。 */
+function areaFigureToUrl(figure: AreaFigure): FigureUrlValues {
+  return {
+    fig: 'area',
+    figM: null,
+    figX: null,
+    figY: null,
+    figO: 'desc',
+    ...filtersToUrl(NO_FILTERS),
+    figAreas: [...figure.areas],
+    figR: figure.radiusM,
+    figColor: figure.colorBy,
+  }
+}
+
 /** 図 → URL の値。使わない値は null（または既定）にして、前に開いていた図の条件を残さない。 */
 export function figureToUrl(figure: Figure): FigureUrlValues {
-  const filters = filtersToUrl(figure)
+  if (figure.kind === 'area') return areaFigureToUrl(figure)
+  const filters = { ...filtersToUrl(figure), ...NO_AREA_URL }
   if (figure.kind === 'ranking') {
     const { metricKey, order } = figure
     return { fig: 'ranking', figM: metricKey, figX: null, figY: null, figO: order, ...filters }

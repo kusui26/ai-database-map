@@ -233,6 +233,12 @@ export const PANEL_WIDTH_CSS = `min(${PANEL_WIDTH_PX}px, calc(100% - ${PANEL_GAP
 export const MAP_ATTRIBUTION_STRIP_PX = 36
 
 /**
+ * 左下の FAB の行の高さ（px・ボタン 1 段＝上下の余白 8 ＋ 行 20 ＋ 8）。広い画面のエリアの図の列は、出典の帯とこの行の上で
+ * 止める——列の下に FAB を見せ、図を開いたままランキング・散布・おすすめへ移れるように（2026-10-15 B5e）。
+ */
+export const FAB_ROW_HEIGHT_PX = 36
+
+/**
  * 地図の出典に出す MapLibre の表記（MapLibre 既定の `customAttribution` と同じ HTML）。
  *
  * `attributionControl` にオプションを渡すと、MapLibre の既定オプション（この表記を含む）が
@@ -446,6 +452,12 @@ export function distanceLabel(meters: number): string {
 export function nearLabel(originLabel: string, radiusM: number): string {
   return `${originLabel}から ${distanceLabel(radiusM)}`
 }
+
+/**
+ * 色分けをしない指定（共通 API `/api/areas/summary` の `colorBy=none`・エリアの図の URL `figColor=none`・
+ * ⤢ の条件）。地図の初期バンドルからも読むので、ここ（依存の無い定数）に置く（2026-10-15 B5e）。
+ */
+export const NO_COLORING = 'none'
 
 // --- ハザード（水害・docs/260824_flood.md §5.4） --------------------------
 // 水害レイヤは「駅×半径の指標」ではなく**地図のレイヤ**という別の軸なので、

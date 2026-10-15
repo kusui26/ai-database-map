@@ -50,8 +50,47 @@ function scatter(title: string): Panel {
   }
 }
 const markdown: Panel = { type: 'markdown', body: 'こんにちは' }
+const areaSummary: Panel = {
+  type: 'areaSummary',
+  title: '神奈川県横浜市の要約',
+  areas: [],
+  comparison: null,
+  legend: null,
+  radiusM: 1000,
+  notesJa: [],
+  notIncludedJa: [],
+  sources: [],
+}
+const breakdown: Panel = {
+  type: 'barChart',
+  title: '横浜市の区ごとの人口の増減',
+  unit: '%',
+  format: 'percent1',
+  bars: [],
+  flags: [],
+  note: null,
+}
+const hazardCard: Panel = {
+  type: 'hazardCard',
+  placeJa: '東京駅',
+  level: 'none',
+  headlineJa: '想定区域外です。',
+  evacuation: null,
+  items: [],
+  reasonsJa: [],
+  coverageNotesJa: [],
+  certainty: 'exact',
+  sources: [],
+  disclaimerJa: '避難の判断は市町村の情報に従ってください。',
+}
 
 const detailPromotion: PanelPromotion = { kind: 'detail', grp: '東京#0', category: 'population' }
+const areaPromotion: PanelPromotion = {
+  kind: 'area',
+  areas: ['muni:14100'],
+  radiusM: 1000,
+  colorBy: 'pop_gr_2020_2015_1km',
+}
 const rankingPromotion: PanelPromotion = {
   kind: 'ranking',
   metricKey: 'pop_gr_2020_2015_1km',
@@ -121,6 +160,63 @@ describe('buildPanelGroups：束ね方', () => {
 
   it('パネルが無ければグループも無い', () => {
     expect(buildPanelGroups([], [])).toEqual([])
+  })
+})
+
+describe('buildPanelGroups：エリアの要約（2026-10-15 B5e）', () => {
+  it('要約・推移・内訳を 1 グループに束ね、要約の条件で開く（⤢ はエリアの図）', () => {
+    const groups = buildPanelGroups([areaSummary, trend, breakdown], [areaPromotion, null, null])
+    expect(groups).toEqual([{ panels: [areaSummary, trend, breakdown], promotion: areaPromotion }])
+  })
+
+  it('駅詳細のあとのエリアは別のグループ（要約は先頭になる型）', () => {
+    const groups = buildPanelGroups(
+      [stationCard, trend, areaSummary, trend],
+      [detailPromotion, null, areaPromotion, null],
+    )
+    expect(groups.map((group) => group.promotion?.kind)).toEqual(['detail', 'area'])
+    expect(groups.map((group) => group.panels.length)).toEqual([2, 2])
+  })
+
+  it('要約の条件の種類が食い違えば昇格しない', () => {
+    const groups = buildPanelGroups([areaSummary], [detailPromotion])
+    expect(groups[0]?.promotion).toBeNull()
+  })
+})
+
+describe('buildPanelGroups：続きに入れるのは先頭の効果が作る型だけ（2026-10-15）', () => {
+  it('駅詳細のあとのハザードのカードは別のグループ（以前は駅詳細に入り、広い画面ではチップの裏に隠れた）', () => {
+    const groups = buildPanelGroups([stationCard, trend, hazardCard], [detailPromotion, null, null])
+    expect(groups).toEqual([
+      { panels: [stationCard, trend], promotion: detailPromotion },
+      { panels: [hazardCard], promotion: null },
+    ])
+  })
+
+  it('エリアのあとのハザードのカードも別のグループ', () => {
+    const groups = buildPanelGroups([areaSummary, trend, hazardCard], [areaPromotion, null, null])
+    expect(groups.map((group) => group.panels.length)).toEqual([2, 1])
+    expect(groups[1]?.promotion).toBeNull()
+  })
+
+  it('駅のプロフィール（概要）は駅カードの続き（B4 のグループのまま）', () => {
+    const profile: Panel = {
+      type: 'stationProfile',
+      grp: '東京#0',
+      title: '東京の周辺（1km圏）',
+      placeJa: '東京',
+      radiusM: 1000,
+      areaJa: null,
+      positionsLegendJa: '',
+      character: { kind: 'unknown', labelJa: '', summaryJa: '', basisJa: '', radiusM: 1000 },
+      sections: [],
+      hazard: null,
+      notCoveredJa: [],
+      notesJa: [],
+      sources: [],
+    }
+    const groups = buildPanelGroups([stationCard, profile], [detailPromotion, null])
+    expect(groups).toEqual([{ panels: [stationCard, profile], promotion: detailPromotion }])
   })
 })
 

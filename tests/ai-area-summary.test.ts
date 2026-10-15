@@ -30,6 +30,7 @@ import { resetRateLimitStore } from '@/ai/rate-limit'
 import { TOOL_SPECS, type ToolRunContext } from '@/ai/tool-specs'
 import { type AreaSummaryEffect, type ToolEffect } from '@/ai/types'
 import { mapResponseSchema } from '@/shared/protocol'
+import { panelPromotionsSchema } from '@/shared/promotion'
 import { type Viewport } from '@/shared/viewport'
 import { NAME_ROWS, NAME_STATIONS, YOKOHAMA_VIEW } from './fixtures/area-names'
 import {
@@ -147,7 +148,7 @@ describe('横浜市全体（区域の値・内訳・駅の周り・色分け）'
     expect(areaEffectOf(effects).response.areas[0]?.ref).toBe('muni:14100')
   })
 
-  it('パネルは要約・推移・内訳（会話の中）、地図は横浜市の駅の色分け、⤢ はまだ無い', async () => {
+  it('パネルは要約・推移・内訳（会話の中）、地図は横浜市の駅の色分け、⤢ はエリアの図を同じ条件で開く', async () => {
     const { effects } = await run({ areas: [{ municipality: '横浜市' }] })
     const effect = areaEffectOf(effects)
     const panels = panelsForAreaSummary(effect)
@@ -156,10 +157,32 @@ describe('横浜市全体（区域の値・内訳・駅の周り・色分け）'
     expect(mapActionsForEffect(effect)).toEqual([
       { type: 'colorStations', metricKey: 'pop_gr_2020_2015_1km', areas: ['muni:14100'] },
     ])
-    expect(promotionsFor(effects)).toEqual([null, null, null])
+    // ⤢ の条件は要約のパネルにだけ付く（推移・内訳は同じ図の続き）。既定の色分けでも key を載せる（2026-10-15 B5e）
+    expect(promotionsFor(effects)).toEqual([
+      { kind: 'area', areas: ['muni:14100'], radiusM: 1000, colorBy: 'pop_gr_2020_2015_1km' },
+      null,
+      null,
+    ])
+    // チャットのルートは送る前にこの型で検める（通らなければ回答ごと落ちる）
+    expect(panelPromotionsSchema.safeParse(promotionsFor(effects)).success).toBe(true)
     expect(mapResponseSchema.safeParse(assemble(effects, '横浜市は減っています。')).success).toBe(
       true,
     )
+  })
+})
+
+describe('⤢ の条件の型（エリアの図・2026-10-15 B5e）', () => {
+  const area = { kind: 'area', areas: ['muni:14100'], radiusM: 1000, colorBy: 'none' }
+
+  it('エリアは 1〜4 つ（空・5 つは通さない＝図を開けない条件を送らない）', () => {
+    expect(panelPromotionsSchema.safeParse([area]).success).toBe(true)
+    expect(panelPromotionsSchema.safeParse([{ ...area, areas: [] }]).success).toBe(false)
+    const five = ['jp', 'pref:13', 'pref:14', 'muni:14100', 'muni:14130']
+    expect(panelPromotionsSchema.safeParse([{ ...area, areas: five }]).success).toBe(false)
+  })
+
+  it('色分けの指標は必ず載せる（既定でも key・しなければ none）', () => {
+    expect(panelPromotionsSchema.safeParse([{ ...area, colorBy: undefined }]).success).toBe(false)
   })
 })
 
@@ -178,6 +201,13 @@ describe('比較・色分けの指定・半径', () => {
         areas: ['muni:14100', 'muni:14130'],
       },
     ])
+    // ⤢ は比べたエリアを同じ並びで開く
+    expect(promotionsFor(effects)[0]).toEqual({
+      kind: 'area',
+      areas: ['muni:14100', 'muni:14130'],
+      radiusM: 1000,
+      colorBy: 'pop_gr_2020_2015_1km',
+    })
   })
 
   it('横浜市と神奈川県：比べる表に占める割合の行が入り、答え方は割合を作らせない（2026-10-13 B5d″）', async () => {
@@ -231,6 +261,8 @@ describe('比較・色分けの指定・半径', () => {
       meaning: '色分けしていない（colorBy:none）。',
     })
     expect(db.stationMetricValues).not.toHaveBeenCalled()
+    // ⤢ で開く図も色分けしない（地図の色分けを図が勝手に足さない）
+    expect(promotionsFor(effects)[0]).toMatchObject({ kind: 'area', colorBy: 'none' })
   })
 
   it('色分けの指標はファミリ名で受け、半径つきのキーに決める（地価の中央値・1km）', async () => {
@@ -245,12 +277,15 @@ describe('比較・色分けの指定・半径', () => {
     expect(mapActionsForEffect(areaEffectOf(effects))[0]).toMatchObject({
       metricKey: 'lp_med_2026_1km',
     })
+    expect(promotionsFor(effects)[0]).toMatchObject({ colorBy: 'lp_med_2026_1km' })
   })
 
   it('6 つ以外の半径は 1km にして言う', async () => {
     const { effects, forLlm } = await run({ areas: [{ municipality: '横浜市' }], radiusM: 3000 })
     expect(areaEffectOf(effects).response.radiusM).toBe(1000)
     expect(llmOf(forLlm).nameNotes).toContain('半径 3000m は無いため、1km圏で集計しました。')
+    // ⤢ は集計した半径で開く（頼まれた 3000m ではない）
+    expect(promotionsFor(effects)[0]).toMatchObject({ radiusM: 1000 })
   })
 })
 

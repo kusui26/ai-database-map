@@ -3,25 +3,33 @@
  *
  * 散布・ランキングだけがキャンバスの対象。駅詳細は `selectStation` で
  * **右ドロワーが自動で開く**ため対象外（docs/260802_ai_chat_canvs.md §4）。
+ * エリアも対象外（2026-10-15 B5e）——答えの主役は地図の色分けで、図を自動で開くと地図を覆う（⤢ で開く・`presentation.ts`）。
  *
  * `key` は「どの回答の、どの条件か」を表す。呼び出し側は**この key が変わったときだけ**
  * 適用することで、(1) 初期表示では出さない (2) ストリーミング中に同じ図で開き直さない
  * (3) ユーザーが閉じたあと勝手に開き直さない、を同時に満たす（§5）。
  */
 
-import { type PanelPromotion, type Promotion } from '@/shared/promotion'
+import {
+  type PanelPromotion,
+  type RankingPromotion,
+  type ScatterPromotion,
+} from '@/shared/promotion'
 import { type ChatUIMessage } from './types'
 import { buildPanelGroups } from './panelGroups'
 import { mapResponseOf, panelPromotionsOf } from './messageParts'
 
+/** 回答のたびにキャンバスへ自動で出す図（散布・ランキング）。 */
+type AutoOpenPromotion = RankingPromotion | ScatterPromotion
+
 export type CanvasTarget = {
   /** 回答 ID ＋ 条件。同じ図なら同じ値になる。 */
   readonly key: string
-  readonly promotion: Promotion
+  readonly promotion: AutoOpenPromotion
 }
 
-/** キャンバスで開ける昇格か（駅詳細は右ドロワーが担当する）。 */
-function isCanvasKind(promotion: PanelPromotion | null): promotion is Promotion {
+/** キャンバスへ自動で出す昇格か（駅詳細は右ドロワー、エリアは ⤢ が担当する）。 */
+function isCanvasKind(promotion: PanelPromotion | null): promotion is AutoOpenPromotion {
   return promotion !== null && (promotion.kind === 'scatter' || promotion.kind === 'ranking')
 }
 

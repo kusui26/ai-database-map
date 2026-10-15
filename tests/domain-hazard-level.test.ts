@@ -18,7 +18,12 @@ import {
   jmaWarningKind,
 } from '@/shared/jma'
 import { ALERT_LEVELS, ALERT_LEVEL_LABELS_JA } from '@/shared/constants'
-import { hazardAlertCardPanel, reportedAtJa } from '@/domain/hazard/panels'
+import {
+  ALERT_UNCONFIRMED_LABEL_JA,
+  alertBadgeJa,
+  hazardAlertCardPanel,
+  reportedAtJa,
+} from '@/domain/hazard/panels'
 import { hazardAlertsResponseSchema } from '@/shared/api'
 import { panelSchema } from '@/shared/protocol'
 
@@ -252,6 +257,7 @@ describe('jma: 市区町村 → 発表区域の対応表', () => {
 describe('panels: いまの警戒状況 → hazardCard', () => {
   function alerts(warnings: readonly AlertWarning[], reportedAt: string | null = null) {
     return hazardAlertsResponseSchema.parse({
+      placeJa: '亀有駅',
       point: { lon: 139.847, lat: 35.7645, placeJa: '亀有駅' },
       area: {
         municipalityCode: '13122',
@@ -306,6 +312,61 @@ describe('panels: いまの警戒状況 → hazardCard', () => {
   it('壊れた発表時刻は落ちずに省かれる', () => {
     expect(reportedAtJa(null)).toBeNull()
     expect(reportedAtJa('こわれた日時')).toBeNull()
+  })
+
+  /**
+   * バッジは**警戒バナーと同じ言い方**（2026-10-15）。平時のハザードマップの「想定区域外」は警報に当たらない。
+   * 発表時刻が無い＝気象庁の発表を確かめられなかったときは「未確認」（「発表なし」と読ませない）。
+   */
+  it('バッジは「発表なし」「警戒レベル◯相当」、確かめられなければ「未確認」', () => {
+    const at = '2026-10-15T07:50:00+09:00'
+    expect(hazardAlertCardPanel(alerts([], at)).levelLabelJa).toBe('発表なし')
+    expect(hazardAlertCardPanel(alerts([warning({ alertLevel: 3 })], at)).levelLabelJa).toBe(
+      '警戒レベル3相当',
+    )
+    expect(hazardAlertCardPanel(alerts([])).levelLabelJa).toBe(ALERT_UNCONFIRMED_LABEL_JA)
+    // 分かっている重い発表は、時刻が無くても先に出す（「未確認」で隠さない）
+    expect(alertBadgeJa(alerts([warning({ alertLevel: 4 })]))).toBe('警戒レベル4相当')
+    for (const level of ALERT_LEVELS) {
+      expect(
+        alertBadgeJa(alerts(level === 0 ? [] : [warning({ alertLevel: level })], at)),
+      ).not.toBe('想定区域外')
+    }
+  })
+
+  /**
+   * 警戒レベルの体系の外の発表（暴風警報・雷注意報）はレベル 0。**レベル 0 を「発表なし」と言わない**——本番の MCP で
+   * 「札幌市に雷注意報が発表されています」のカードのバッジが「発表なし」になっていた（2026-10-15）。
+   */
+  it('体系の外の発表だけなら、いちばん重い種別で「警報あり」「注意報あり」（発表なしと言わない）', () => {
+    const at = '2026-10-15T07:50:00+09:00'
+    const thunder = warning({ code: '14', nameJa: '雷注意報', kindJa: '注意報', alertLevel: 0 })
+    const storm = warning({ code: '05', nameJa: '暴風警報', kindJa: '警報', alertLevel: 0 })
+    const unknown = warning({
+      code: '99',
+      nameJa: '未知の発表（コード 99）',
+      kindJa: null,
+      alertLevel: 0,
+    })
+    expect(alertBadgeJa(alerts([thunder], at))).toBe('注意報あり')
+    expect(alertBadgeJa(alerts([thunder, storm], at))).toBe('警報あり')
+    expect(alertBadgeJa(alerts([unknown], at))).toBe('発表あり')
+    expect(alertBadgeJa(alerts([], at))).toBe('発表なし')
+    // 行も平時の言い方を括弧で添えない（値に警戒レベル相当が入っている）——「雷注意報 発表（想定区域外）」と出ていた
+    const items = hazardAlertCardPanel(
+      alerts([thunder, storm, warning({ alertLevel: 3 })], at),
+    ).items
+    expect(items.map((item) => item.levelLabelJa)).toEqual([null, null, null])
+    // 警戒レベル相当があれば、そちら（見出しと同じ物差し）
+    expect(alertBadgeJa(alerts([storm, warning({ alertLevel: 3 })], at))).toBe('警戒レベル3相当')
+  })
+
+  /** 市区町村の名前で引いたとき・決められなかったときは地点を持たない（警報は区域に出る）。主語は placeJa。 */
+  it('地点を持たない応答も通り、カードの主語は placeJa', () => {
+    const named = { ...alerts([], '2026-10-15T07:50:00+09:00'), placeJa: '札幌市', point: null }
+    const panel = hazardAlertCardPanel(hazardAlertsResponseSchema.parse(named))
+    expect(panel.placeJa).toBe('札幌市')
+    expect(() => panelSchema.parse(panel)).not.toThrow()
   })
 })
 

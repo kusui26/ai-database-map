@@ -86,11 +86,14 @@ function sourcesNode(sources: readonly SourceRef[]): VNode | null {
   return el('div', { cls: 'muted', text: `出典: ${labels.join(' / ')}` })
 }
 
-/** 危険度のバッジ（色＋記号＋テキストの 3 要素）。 */
-function levelBadge(level: HazardCardPanel['level']): VNode {
+/**
+ * 危険度のバッジ（色＋記号＋テキストの 3 要素）。テキストはサーバが決めたもの（警報のカードは「警戒レベル3相当」「注意報あり」
+ * 「発表なし」「未確認」）があればそれ、無ければ危険度のラベル。
+ */
+function levelBadge(level: HazardCardPanel['level'], labelJa?: string): VNode {
   return el('span', {
     cls: 'level',
-    text: `${HAZARD_LEVEL_ICONS[level]} ${HAZARD_LEVEL_LABELS_JA[level]}`,
+    text: `${HAZARD_LEVEL_ICONS[level]} ${labelJa ?? HAZARD_LEVEL_LABELS_JA[level]}`,
     style: { background: HAZARD_LEVEL_COLORS[level] },
   })
 }
@@ -249,7 +252,10 @@ function scatterNode(panel: ScatterPanel): VNode {
 function hazardCardNode(panel: HazardCardPanel): VNode {
   return panelBox([
     el('div', {
-      children: [levelBadge(panel.level), el('span', { cls: 'muted', text: ` ${panel.placeJa}` })],
+      children: [
+        levelBadge(panel.level, panel.levelLabelJa),
+        el('span', { cls: 'muted', text: ` ${panel.placeJa}` }),
+      ],
     }),
     el('div', { cls: 'title', text: panel.headlineJa }),
     panel.evacuation === null

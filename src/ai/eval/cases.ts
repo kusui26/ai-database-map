@@ -528,6 +528,9 @@ export const EVAL_CASES: readonly EvalCase[] = [
     query: '札幌市はいま避難した方がいいですか？',
     expect: {
       toolCalls: [{ name: 'getHazardAlerts' }],
+      // 市区町村の名前でも警報を引き、市町村の避難情報に従う旨のカードを必ず出す（2026-10-15・以前は placeJa に
+      // 「札幌市」だけだと何も引けず、カードも出ないまま答え、この 1 文を落とすことがあった）
+      panels: ['hazardCard'],
       textNonEmpty: true,
       // 避難情報を出すのは市町村。気象庁の情報から「避難指示が出ている」とは言えない。
       notContains: ['安全です', '避難指示が出て', '避難の必要はありません'],

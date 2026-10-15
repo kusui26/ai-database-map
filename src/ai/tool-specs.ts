@@ -98,7 +98,14 @@ import { loadStationProfile } from '@/domain/profile/load'
 import { buildRanking } from '@/domain/ranking/presenter'
 import { buildGrowth } from '@/domain/growth/presenter'
 import { hazardPointAt } from '@/lib/hazard/point-source'
-import { hazardAlertsAt } from '@/lib/hazard/alert-source'
+import {
+  hazardAlertsAt,
+  hazardAlertsInMunicipality,
+  unlocatedAlerts,
+} from '@/lib/hazard/alert-source'
+import { resolveAlertPlace, type AlertPlace } from '@/ai/hazard/alert-place'
+import { summaryAreasDeps } from '@/ai/area-summary/deps'
+import { type AreaProblem } from '@/ai/area/problems'
 import { evacuationSitesAt } from '@/lib/hazard/evacuation-source'
 import { escapeDirectionAt } from '@/lib/hazard/escape-source'
 import { reportedAtJa } from '@/domain/hazard/panels'
@@ -987,7 +994,7 @@ function hazardSummaryForLlm(point: HazardPointResponse) {
  */
 function alertSummaryForLlm(alerts: HazardAlertsResponse) {
   return {
-    placeJa: alerts.point.placeJa,
+    placeJa: alerts.placeJa,
     areaJa: alerts.area === null ? null : alerts.area.areas.map((area) => area.nameJa).join('・'),
     municipalityJa: alerts.area?.municipalityJa ?? null,
     alertLevel: alerts.alertLevel,
@@ -1007,6 +1014,81 @@ function alertSummaryForLlm(alerts: HazardAlertsResponse) {
     limitationsJa: alerts.limitationsJa,
     notesJa: alerts.notesJa,
     disclaimerJa: alerts.disclaimerJa,
+  }
+}
+
+/** 警報の場所を名前で決められなかった → LLM 向け（候補つき）。画面には注意書きのカードを出す。 */
+type AlertPlaceErrorJa = {
+  readonly error: string
+  readonly hint: string
+  readonly problems: readonly AreaProblem[]
+}
+
+const ALERT_PLACE_HINT_JA =
+  'problems を見て、候補があればそれで呼び直し、決められなければどこか利用者に聞いてください（推測で選ばない）。'
+
+/** 名前で場所を決められなかったとき：モデルには問題、画面には「調べていません」と注意書きのカード。 */
+function unlocatedResult(
+  placeJa: string,
+  problem: AreaProblem,
+  screenNoteJa: string,
+): ToolRunResult<AlertPlaceErrorJa> {
+  return {
+    effects: [{ kind: 'hazardAlerts' as const, alerts: unlocatedAlerts(placeJa, screenNoteJa) }],
+    forLlm: { error: '場所を決められません', hint: ALERT_PLACE_HINT_JA, problems: [problem] },
+  }
+}
+
+/** 名前の索引（全区域・全駅。どちらもサーバの中で 1 時間持つ・エリアの要約と同じもの）。 */
+async function alertPlaceIndexes() {
+  const deps = summaryAreasDeps()
+  const [admin, stations] = await Promise.all([deps.adminIndex(), deps.stationIndex()])
+  return { admin, stations }
+}
+
+/** 決めた場所の「今」（市区町村も駅も発表区域で直接・駅は駅の位置に印・駅の市区町村が分からなければ地点で）。 */
+async function alertsEffectOf(place: Exclude<AlertPlace, { kind: 'none' }>) {
+  const now = Date.now()
+  const { placeJa } = place
+  if (place.kind === 'municipality') {
+    const alerts = await hazardAlertsInMunicipality({ code: place.code, placeJa, now })
+    return { kind: 'hazardAlerts' as const, alerts, mapCenter: place.center }
+  }
+  const point = { lon: place.lon, lat: place.lat }
+  const alerts =
+    place.code === null
+      ? await hazardAlertsAt({ ...point, placeJa, now })
+      : await hazardAlertsInMunicipality({ code: place.code, placeJa, now, point })
+  return { kind: 'hazardAlerts' as const, alerts }
+}
+
+/**
+ * 名前（placeJa）だけで呼ばれたときの「今」（2026-10-15・`docs/261001_fix_user_feedback_ui.md` §6.23）。
+ * 決まらなければ、モデルには候補を返して聞き返させ、**画面には注意書きのカードを必ず出す**（「避難した方がいい？」の
+ * 答えの画面から、市町村の避難情報に従う旨を落とさない）。索引が読めないときも同じ。
+ */
+async function alertsByName(
+  placeJa: string,
+  viewport: Viewport | null,
+): Promise<ToolRunResult<AlertPlaceErrorJa | ReturnType<typeof alertSummaryForLlm>>> {
+  const indexes = await alertPlaceIndexes().catch(() => null)
+  if (indexes === null) {
+    const problem = {
+      input: placeJa,
+      problem: '場所の一覧を読めませんでした（一時的な不調の可能性があります）。',
+    }
+    return unlocatedResult(
+      placeJa,
+      problem,
+      '場所の一覧を読めず、いまの発表を調べていません。少し時間をおいて聞いてください。',
+    )
+  }
+  const place = resolveAlertPlace(placeJa, viewport, indexes)
+  if (place.kind === 'none') return unlocatedResult(placeJa, place.problem, place.screenNoteJa)
+  const effect = await alertsEffectOf(place)
+  return {
+    effects: [effect],
+    forLlm: { ...alertSummaryForLlm(effect.alerts), ...nameNotesOf(place.notes) },
   }
 }
 
@@ -1736,12 +1818,16 @@ export const TOOL_SPECS = {
       placeJa: z.string().optional().describe('地点の呼び名。例: 亀有駅、現在地'),
     }),
     errorFallbackJa: '警戒状況の取得に失敗しました',
-    run: async ({
-      grp,
-      lon,
-      lat,
-      placeJa,
-    }): Promise<ToolRunResult<HintErrorJa | ReturnType<typeof alertSummaryForLlm>>> => {
+    run: async (
+      { grp, lon, lat, placeJa },
+      ctx,
+    ): Promise<
+      ToolRunResult<HintErrorJa | AlertPlaceErrorJa | ReturnType<typeof alertSummaryForLlm>>
+    > => {
+      // 駅（grp）も緯度経度も無く、名前だけなら、名前で場所を決める（「札幌市」「港北区」「亀有駅」）。
+      const named =
+        grp === undefined && (lon === undefined || lat === undefined) ? (placeJa?.trim() ?? '') : ''
+      if (named.length > 0) return alertsByName(named, ctx.viewport ?? null)
       const target = await resolveHazardTarget({ grp, lon, lat, placeJa })
       if ('error' in target) return pure(target)
       const alerts = await hazardAlertsAt({ ...target, now: Date.now() })

@@ -447,6 +447,12 @@ export function nearLabel(originLabel: string, radiusM: number): string {
   return `${originLabel}から ${distanceLabel(radiusM)}`
 }
 
+/**
+ * 色分けをしない指定（共通 API `/api/areas/summary` の `colorBy=none`・エリアの図の URL `figColor=none`・
+ * ⤢ の条件）。地図の初期バンドルからも読むので、ここ（依存の無い定数）に置く（2026-10-15 B5e）。
+ */
+export const NO_COLORING = 'none'
+
 // --- ハザード（水害・docs/260824_flood.md §5.4） --------------------------
 // 水害レイヤは「駅×半径の指標」ではなく**地図のレイヤ**という別の軸なので、
 // `Category` とは混ぜず、ここに独立した語彙を置く（metric_catalog に水害を混ぜない）。

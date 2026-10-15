@@ -9,29 +9,12 @@
 import { stationMetricValues, type StationMetricValue } from '@/db/queries'
 import { formatAreaRef } from '@/shared/area-ref'
 import { type StationClassesResponse } from '@/shared/area-summary'
-import { getEntry, type CatalogEntry } from '@/shared/catalog'
-import { type RadiusM } from '@/shared/constants'
-import { resolveFamilyAtRadius } from '@/domain/metrics/family'
+import { type CatalogEntry } from '@/shared/catalog'
 import { parseAreaRefs } from '@/domain/area-summary/refs'
 import { resolveAreas, stationFilterOf, type ResolvedArea } from '@/domain/area-summary/resolve'
 import { classifyStations, type Classification, type StyleInput } from './classify'
+import { colorableEntry, notColorableJa } from './color-metric'
 import { classRows, coloringAreaLabelJa } from './rows'
-
-/** 色分けできる指標（ランキングと同じ：カタログにあり、並べられるもの。フラグ・文字の列は除く）。 */
-export function colorableEntry(key: string): CatalogEntry | null {
-  const entry = getEntry(key)
-  return entry !== undefined && entry.rankable ? entry : null
-}
-
-/** 既定の色分け：人口の増減（5 年・その半径）。 */
-export function defaultColorEntry(radiusM: RadiusM): CatalogEntry | null {
-  return resolveFamilyAtRadius('pop_gr', radiusM, 5)?.entry ?? null
-}
-
-/** 色分けできない指標の断り方。 */
-export function notColorableJa(key: string): string {
-  return `色分けできない指標です: ${key}（GET /api/metrics で rankable な key を選ぶ）`
-}
 
 /** エリアの駅の値（値のある駅だけ）と、エリアの駅の数（値の無い駅も数える）。 */
 type AreaStationValues = { readonly inputs: readonly StyleInput[]; readonly stationCount: number }

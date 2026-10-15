@@ -35,7 +35,7 @@ import {
   schemeOf,
   type StyleInput,
 } from '@/domain/style/classify'
-import { colorableEntry, defaultColorEntry, notColorableJa } from '@/domain/style/load'
+import { colorableEntry, defaultColorEntry, notColorableJa } from '@/domain/style/color-metric'
 import { classRows } from '@/domain/style/rows'
 import { KAWASAKI_POP_GR, YOKOHAMA_LP_MED, YOKOHAMA_POP_GR } from './fixtures/area-summary'
 

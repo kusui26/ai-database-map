@@ -16,7 +16,7 @@ import { NEAR_MAX_RADIUS_M, NEAR_MIN_RADIUS_M, distanceLabel } from '@/shared/co
 import { isValidLonLat, viewportFromTuple, type Viewport } from '@/shared/viewport'
 import { resolveMunicipality } from './municipality'
 import { resolveOrigin } from './origin'
-import { isTooWideForArea } from './map-view'
+import { isTooWideForArea } from '@/domain/map/view-scale'
 import { type AreaIndex } from './place-index'
 import { type AreaProblem } from './problems'
 

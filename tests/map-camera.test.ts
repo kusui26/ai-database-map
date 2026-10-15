@@ -10,7 +10,12 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { FIT_DURATION_MS, fitBoundsInView, type CameraMap } from '@/components/map/camera'
+import {
+  coloringFitNeeded,
+  FIT_DURATION_MS,
+  fitBoundsInView,
+  type CameraMap,
+} from '@/components/map/camera'
 
 type Call =
   | { readonly kind: 'jumpTo'; readonly options: Parameters<CameraMap['jumpTo']>[0] }
@@ -56,5 +61,30 @@ describe('範囲へ寄せる（残った余白で寄せ損ねない）', () => {
         options: { padding: PANELS, maxZoom: 13, duration: FIT_DURATION_MS },
       },
     ])
+  })
+})
+
+describe('色分けへ寄せ直すか（coloringFitNeeded・2026-10-15 B5e）', () => {
+  const YOKOHAMA = JSON.stringify(['muni:14100'])
+  const KAWASAKI = JSON.stringify(['muni:14130'])
+
+  it('初めての色分け・エリアが替わったときは寄せる', () => {
+    expect(coloringFitNeeded(null, YOKOHAMA, false)).toBe(true)
+    expect(coloringFitNeeded({ areasKey: YOKOHAMA, withColumn: false }, KAWASAKI, false)).toBe(true)
+  })
+
+  it('同じエリアで指標だけ替えたときは寄せない（B5c：地図を跳ねさせない）', () => {
+    expect(coloringFitNeeded({ areasKey: YOKOHAMA, withColumn: false }, YOKOHAMA, false)).toBe(
+      false,
+    )
+    expect(coloringFitNeeded({ areasKey: YOKOHAMA, withColumn: true }, YOKOHAMA, true)).toBe(false)
+  })
+
+  it('同じエリアのまま、エリアの図の列を開いたら寄せ直す（⤢ で開くと列が駅を覆う）', () => {
+    expect(coloringFitNeeded({ areasKey: YOKOHAMA, withColumn: false }, YOKOHAMA, true)).toBe(true)
+  })
+
+  it('列を閉じても寄せ直さない（見える地図が広がるだけ）', () => {
+    expect(coloringFitNeeded({ areasKey: YOKOHAMA, withColumn: true }, YOKOHAMA, false)).toBe(false)
   })
 })

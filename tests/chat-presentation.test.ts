@@ -32,7 +32,9 @@ describe('viewportOf（幅の判定 → 区分）', () => {
 })
 
 describe('presentationOf（図の種類 × 幅 → 出し方）', () => {
-  const cases: ReadonlyArray<[Viewport, 'detail' | 'ranking' | 'scatter', 'chip' | 'inline']> = [
+  const cases: ReadonlyArray<
+    [Viewport, 'detail' | 'ranking' | 'scatter' | 'area', 'chip' | 'inline']
+  > = [
     // 広い画面：図の実体はチャットの外（駅詳細は右のパネル、ランキング・散布はキャンバス）。
     ['wide', 'detail', 'chip'],
     ['wide', 'ranking', 'chip'],
@@ -45,6 +47,10 @@ describe('presentationOf（図の種類 × 幅 → 出し方）', () => {
     ['phone', 'detail', 'inline'],
     ['phone', 'ranking', 'inline'],
     ['phone', 'scatter', 'inline'],
+    // エリア（2026-10-15 B5e）：どの幅でも会話の中。答えの主役は地図の色分けで、図を自動で開くと地図を覆う（⤢ で開く）。
+    ['wide', 'area', 'inline'],
+    ['narrow', 'area', 'inline'],
+    ['phone', 'area', 'inline'],
   ]
 
   it.each(cases)('%s で %s は %s', (viewport, kind, expected) => {

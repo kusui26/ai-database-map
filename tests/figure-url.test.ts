@@ -1,5 +1,5 @@
 /**
- * src/components/figure/url：開いている図（ランキング・散布）を URL（`?fig` と条件）に載せる（2026-10-02）。
+ * src/components/figure/url：開いている図（ランキング・散布・エリア）を URL（`?fig` と条件）に載せる（2026-10-02・エリアは 2026-10-15 B5e）。
  *
  * 図を開いたら、ブラウザの「戻る」で閉じ、「進む」で同じ条件のまま開き直したい（フィードバック #4・
  * `docs/261001_fix_user_feedback_ui.md` §5.5）。以前は図の状態が Zustand と FAB の `useState` にしか
@@ -10,15 +10,23 @@
 
 import { createLoader, createSerializer } from 'nuqs'
 import { describe, expect, it } from 'vitest'
-import { type RankingPromotion, type ScatterPromotion } from '@/shared/promotion'
 import {
+  type AreaPromotion,
+  type RankingPromotion,
+  type ScatterPromotion,
+} from '@/shared/promotion'
+import {
+  DEFAULT_AREA_FIGURE,
+  DEFAULT_AREA_RADIUS_M,
   DEFAULT_RANKING_FIGURE,
   DEFAULT_SCATTER_FIGURE,
   FIGURE_PARSERS,
   figureFromUrl,
   figureKey,
   figureToUrl,
+  type AreaFigure,
   type Figure,
+  type FigureFilters,
 } from '@/components/figure/url'
 
 const serialize = createSerializer(FIGURE_PARSERS)
@@ -27,6 +35,18 @@ const load = createLoader(FIGURE_PARSERS)
 /** 図 → URL の文字列 → 図。 */
 function roundTrip(figure: Figure): Figure | null {
   return figureFromUrl(load(serialize(figureToUrl(figure))))
+}
+
+/** 絞り込みのある図（ランキング・散布）として読む。 */
+function filtersOfUrl(url: string): FigureFilters | null {
+  const figure = figureFromUrl(load(url))
+  return figure === null || figure.kind === 'area' ? null : figure
+}
+
+/** エリアの図として読む。 */
+function areaOfUrl(url: string): AreaFigure | null {
+  const figure = figureFromUrl(load(url))
+  return figure?.kind === 'area' ? figure : null
 }
 
 /** AI の ⤢ の条件（サーバが作る形）。図としてそのまま開ける。 */
@@ -121,14 +141,14 @@ describe('図 → URL → 図（往復）', () => {
 
 describe('場所の URL が崩れていたら、その条件は絞らない（開けない図にしない）', () => {
   it('範囲の数が足りない・逆さ', () => {
-    expect(figureFromUrl(load('?fig=ranking&figBbox=139.5,35.4,139.8'))?.bbox).toBeNull()
-    expect(figureFromUrl(load('?fig=ranking&figBbox=139.8,35.4,139.5,35.6'))?.bbox).toBeNull()
+    expect(filtersOfUrl('?fig=ranking&figBbox=139.5,35.4,139.8')?.bbox).toBeNull()
+    expect(filtersOfUrl('?fig=ranking&figBbox=139.8,35.4,139.5,35.6')?.bbox).toBeNull()
   })
 
   it('起点と半径の片方だけ・空の起点', () => {
-    expect(figureFromUrl(load('?fig=scatter&figNear=%E7%AB%B9%E6%A9%8B%230'))?.near).toBeNull()
-    expect(figureFromUrl(load('?fig=scatter&figWithin=5000'))?.near).toBeNull()
-    expect(figureFromUrl(load('?fig=scatter&figNear=&figWithin=5000'))?.near).toBeNull()
+    expect(filtersOfUrl('?fig=scatter&figNear=%E7%AB%B9%E6%A9%8B%230')?.near).toBeNull()
+    expect(filtersOfUrl('?fig=scatter&figWithin=5000')?.near).toBeNull()
+    expect(filtersOfUrl('?fig=scatter&figNear=&figWithin=5000')?.near).toBeNull()
   })
 
   it('場所を外した図の URL には、場所のパラメータを残さない', () => {
@@ -183,5 +203,76 @@ describe('figureKey（同じ図かを見分ける）', () => {
     expect(figureKey(DEFAULT_RANKING_FIGURE)).not.toBe(
       figureKey({ ...DEFAULT_RANKING_FIGURE, metricKey: 'pop_gr_2020_2015_1km' }),
     )
+  })
+})
+
+/** AI の ⤢ の条件（エリアの要約の応答から作る形・2026-10-15 B5e）。図としてそのまま開ける。 */
+const areaPromotion: AreaPromotion = {
+  kind: 'area',
+  areas: ['muni:14100', 'muni:14130'],
+  radiusM: 500,
+  colorBy: 'lp_med_2026_500m',
+}
+
+describe('エリアの図（2026-10-15 B5e）', () => {
+  it('?fig=area だけなら、FAB で開いた直後（エリアは中身が決める・半径 1km・既定の色分け）', () => {
+    expect(figureFromUrl(load('?fig=area'))).toEqual(DEFAULT_AREA_FIGURE)
+    expect(DEFAULT_AREA_FIGURE).toEqual({ kind: 'area', areas: [], radiusM: 1000, colorBy: null })
+  })
+
+  it('既定の値は URL に出ない（FAB の図は ?fig=area だけ）', () => {
+    expect(serialize(figureToUrl(DEFAULT_AREA_FIGURE))).toBe('?fig=area')
+  })
+
+  it('AI の ⤢ の条件（比較・半径・色分け）が往復する', () => {
+    expect(roundTrip(areaPromotion)).toEqual(areaPromotion)
+    expect(serialize(figureToUrl(areaPromotion))).toBe(
+      '?fig=area&figAreas=muni:14100&figAreas=muni:14130&figR=500&figColor=lp_med_2026_500m',
+    )
+  })
+
+  it('エリアは区切り文字でつながずに繰り返す（範囲の `,`・起点の駅の `#` を含んでも崩れない）', () => {
+    const figure: AreaFigure = {
+      ...DEFAULT_AREA_FIGURE,
+      areas: ['bbox:139.55,35.4,139.72,35.53', 'near:竹橋#0@5000', 'line:26001@2000'],
+    }
+    expect(roundTrip(figure)).toEqual(figure)
+  })
+
+  it('色分けしない（none）も往復する', () => {
+    const figure: AreaFigure = { ...DEFAULT_AREA_FIGURE, areas: ['jp'], colorBy: 'none' }
+    expect(roundTrip(figure)).toEqual(figure)
+  })
+
+  it('壊れた URL：空のエリアと重なりは除き、4 つまで・6 段以外の半径は既定に戻す', () => {
+    const url =
+      '?fig=area&figAreas=muni:14100&figAreas=&figAreas=muni:14100&figAreas=pref:14' +
+      '&figAreas=jp&figAreas=muni:13101&figAreas=muni:13102&figR=3000'
+    expect(areaOfUrl(url)).toEqual({
+      kind: 'area',
+      areas: ['muni:14100', 'pref:14', 'jp', 'muni:13101'],
+      radiusM: DEFAULT_AREA_RADIUS_M,
+      colorBy: null,
+    })
+  })
+
+  it('書き方の検証は共通 API に任せる（知らないエリアも、そのまま図に渡して理由を出させる）', () => {
+    expect(areaOfUrl('?fig=area&figAreas=muni:99999')?.areas).toEqual(['muni:99999'])
+  })
+
+  it('エリアの図を開くと、ランキング・散布の条件を消す（逆も同じ）', () => {
+    const area = figureToUrl(areaPromotion)
+    expect(area).toMatchObject({ figM: null, figX: null, figY: null, figPref: [], figLines: [] })
+    const ranking = figureToUrl(rankingPromotion)
+    expect(ranking).toMatchObject({ figAreas: [], figR: DEFAULT_AREA_RADIUS_M, figColor: null })
+    expect(serialize(ranking)).not.toContain('figAreas')
+  })
+
+  it('同じ図かの鍵：エリアの並び・半径・色分けのどれが違っても別の図', () => {
+    const key = figureKey(areaPromotion)
+    expect(figureKey({ ...areaPromotion })).toBe(key)
+    expect(figureKey({ ...areaPromotion, areas: ['muni:14130', 'muni:14100'] })).not.toBe(key)
+    expect(figureKey({ ...areaPromotion, radiusM: 1000 })).not.toBe(key)
+    expect(figureKey({ ...areaPromotion, colorBy: null })).not.toBe(key)
   })
 })

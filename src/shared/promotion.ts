@@ -13,6 +13,7 @@
 
 import { z } from 'zod'
 import { bboxSchema, orderSchema } from './api'
+import { MAX_AREAS } from './area-ref'
 import { categorySchema } from './catalog'
 import { DETAIL_TABS } from './constants'
 
@@ -53,6 +54,17 @@ export const scatterPromotionSchema = z.object({
   ...filtersShape,
 })
 
+/**
+ * エリアの図（2026-10-15 B5e・`docs/261001_fix_user_feedback_ui.md` §6.12.10）。回答と同じ要約・同じ色分けで開く：
+ * エリアの文字列（1〜4・応答の正規の形）・駅の周りの半径・色分けの指標（サーバが決めた key。色分けしなかったら `none`）。
+ */
+export const areaPromotionSchema = z.object({
+  kind: z.literal('area'),
+  areas: z.array(z.string()).min(1).max(MAX_AREAS),
+  radiusM: z.number().int(),
+  colorBy: z.string(),
+})
+
 /** 駅詳細のタブ（`DETAIL_TABS` と同じ値）。 */
 export const detailTabSchema = z.literal([...DETAIL_TABS])
 
@@ -72,20 +84,19 @@ export const detailPromotionSchema = z.object({
 export const panelPromotionSchema = z.discriminatedUnion('kind', [
   rankingPromotionSchema,
   scatterPromotionSchema,
+  areaPromotionSchema,
   detailPromotionSchema,
 ])
 
 /**
- * パネルと**同じ並び**の昇格。図の先頭パネル（駅カード・順位表・散布）にだけ条件が入り、
- * それ以外（駅詳細の本文のグラフ・ハザードのカード等）は null。
+ * パネルと**同じ並び**の昇格。図の先頭パネル（駅カード・順位表・散布・エリアの要約）にだけ条件が入り、
+ * それ以外（駅詳細の本文のグラフ・エリアの推移と内訳・ハザードのカード等）は null。
  */
 export const panelPromotionsSchema = z.array(panelPromotionSchema.nullable())
 
 export type RankingPromotion = z.infer<typeof rankingPromotionSchema>
 export type ScatterPromotion = z.infer<typeof scatterPromotionSchema>
+export type AreaPromotion = z.infer<typeof areaPromotionSchema>
 export type DetailPromotion = z.infer<typeof detailPromotionSchema>
 export type PanelPromotion = z.infer<typeof panelPromotionSchema>
 export type PanelPromotions = z.infer<typeof panelPromotionsSchema>
-
-/** モーダル・キャンバスで開く昇格（ランキング／散布）。駅詳細は右ドロワーが担当する。 */
-export type Promotion = RankingPromotion | ScatterPromotion

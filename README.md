@@ -128,6 +128,8 @@ pnpm start
 
 ## データ出典・ライセンス
 
+このリポジトリのソースコードは [MIT License](LICENSE) です。データは MIT の対象外で、下の表と各出典の条件に従います。対象は、アプリが表示する統計・ハザード情報・地図タイルと、リポジトリ内の気象庁の区域表、`condminium/OpenStreetMap_tokyo_sample.csv`（© OpenStreetMap contributors・ODbL）です。
+
 指標カタログ（`src/shared/catalog/catalog.json`）の各エントリが `source` / `license` を持ち、アプリ内の「このアプリ・データ出典」ダイアログに**自動生成**で表示されます。
 
 | 出典                                              | 対象           | ライセンス                                   |

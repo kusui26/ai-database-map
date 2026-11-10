@@ -9,27 +9,18 @@
  *
  * 「おすすめの駅は？」に対して、チャットの道具は `rankStations`（**単一指標**）しかない。
  * それで並べたものを「おすすめ」と呼ぶと、正規化も重みも災害の扱いも敏感度も無いまま順位が
- * 独り歩きする——W1〜W5 で画面側が守ってきた規範（`docs/260912_gui_chat_protocol.md` §13.4）を、
- * 同じアプリの別の口が破ることになる。**できないのではなく、画面がすでに正しくやっている**ので、
- * そちらへ引き渡す。チャットからも呼べるようにするか（W6）は、必要になってから決める。
+ * 独り歩きする（`docs/260912_gui_chat_protocol.md` §13.4 の規範）。以前は画面のおすすめ（W1〜W5）へ
+ * 引き渡していたが、2026-11 に画面ごと外した（`docs/261110_fix_PLAN.md` §3）。無くなったボタンへは案内しない。
+ * 合成の推薦は、利用者の AI がプラグインのスキル（`station-recommendation`）で作る。
  */
 
 import { distanceLabel, RADII_M, radiusLabel } from '@/shared/constants'
-import { RECOMMEND_PRESETS } from '@/domain/recommend/presets'
 import { type MapView } from './area/map-view'
 import { systemCatalogSummary } from './catalog-digest'
 
 /** 集約半径の表示（例 "500m/1km/2km/5km/10km/20km"）。 */
 function radiiLabel(): string {
   return RADII_M.map((radius) => (radius >= 1000 ? `${radius / 1000}km` : `${radius}m`)).join('/')
-}
-
-/**
- * おすすめ画面が見ている軸（プリセットから引く）。**手で並べない**——指標を足したときに、
- * プロンプトだけ古いまま「無い指標を案内する」状態になる。4 つのプリセットは同じ 6 軸を共有する。
- */
-function recommendAxesLabel(): string {
-  return RECOMMEND_PRESETS.family.metrics.map((metric) => metric.labelJa).join('・')
 }
 
 /** チャットのシステムプロンプトを構築する（カタログ要約を注入）。 */
@@ -113,10 +104,7 @@ export function buildSystemPrompt(): string {
     '- **「おすすめの駅は？」「どこに住むのがよい？」のように複数の指標をまとめた推薦は、自分で順位を作らない。**',
     '  （1 つの駅について「住むならどう？」と聞かれたら getStationProfile で答えてよい——駅を並べて選ぶ推薦ではない。）',
     '  rankStations は**単一指標**の順位で、それを「おすすめ」として出すと、正規化も重みも',
-    '  災害の扱いも敏感度も無いまま、順位だけが独り歩きする（アプリ本体はそれらを揃えて出している）。',
-    '  代わりに**画面下の「おすすめ」ボタン**を案内する——エリアの中での相対評価・重みの調整・',
-    '  災害の足切り／段階減点・限界と出典が揃う。質問にエリア（市区町村・都道府県）があれば、それを添えて案内する。',
-    `  **その画面が見ているのは ${recommendAxesLabel()} だけ**。`,
+    '  災害の扱いも敏感度も無いまま、順位だけが独り歩きする。',
     '  子育て環境・治安・学区・物件価格などは**収録していないので、案内文に混ぜない**。',
     '- **単一指標の問い**（例「乗降客数の多い駅」「人口増加率の高い駅」）は今までどおり rankStations で答えてよい。',
     '- 都道府県は正式名（例「神奈川県」）。指標は**ファミリ名＋半径**で渡し、キー文字列を推測で作らない。',

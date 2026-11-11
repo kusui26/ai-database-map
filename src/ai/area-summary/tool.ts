@@ -123,6 +123,20 @@ export const CHAT_INPUT_SCHEMA = z.object({
   ...commonShape,
 })
 
+/** エリア 1 つの説明（「この区」の問いの回・地図の範囲を見せない）。 */
+const CHAT_WARD_AREA_DESCRIPTION =
+  'エリア 1 つ。prefecture・municipality・line のどれか 1 つ（prefecture は municipality・line に添えてもよい）'
+
+/**
+ * アプリのチャットで、質問が「この区」を指す回に見せる入力：地図の範囲（inMapView）も見せない
+ * （2026-11-12・`docs/261110_fix_PLAN.md` §3.4.1・`ai/area/ward-question.ts`）。「この区の人口は増えている？」は
+ * 区の全体（municipality）で、地図の範囲ではない。解くのは同じ `AREA_SUMMARY_INPUT_SCHEMA`。
+ */
+export const CHAT_WARD_INPUT_SCHEMA = z.object({
+  areas: areasOf(z.object({ ...areaShape }).describe(CHAT_WARD_AREA_DESCRIPTION)),
+  ...commonShape,
+})
+
 /**
  * MCP に見せる入力（地図の範囲は無い）。MCP の SDK はこの型で入力を検めるので、エリア 1 つは**知らない引数も通す**
  * （loose・2026-10-13）——`areas[0].inMapView` が送られてきたら、道具を呼ぶ前に広告していない引数として断る

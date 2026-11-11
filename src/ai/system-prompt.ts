@@ -16,7 +16,7 @@
 
 import { distanceLabel, RADII_M, radiusLabel } from '@/shared/constants'
 import { RECOMMEND_PRESETS } from '@/domain/recommend/presets'
-import { type MapView } from './area/map-view'
+import { type MapView, wardOfView } from './area/map-view'
 import { systemCatalogSummary } from './catalog-digest'
 
 /** 集約半径の表示（例 "500m/1km/2km/5km/10km/20km"）。 */
@@ -174,13 +174,13 @@ function mapCenterText(view: MapView): string {
  * 地図の範囲（inMapView）で答えるようになった（6 回中 0 回が区。main のプロンプトでは 6 回とも区）。
  */
 function mapWardRule(view: MapView): string[] {
-  const { center } = view
-  if (!view.wardScale || center === null || center.municipality === null) return []
+  const ward = wardOfView(view)
+  if (ward === null) return []
   return [
-    `- 「この区」「この市」「この町」は**地図の範囲ではない**——中心の駅の市区町村（${center.municipality}）の全体。` +
+    `- 「この区」「この市」「この町」は**地図の範囲ではない**——中心の駅の市区町村（${ward.municipality}）の全体。` +
       `駅を並べる・比べる問い（「この区で人口が増えている駅は？」）は rankStations / compareGrowth / listStations に ` +
-      `municipality:"${center.municipality}"・prefectures:["${center.prefecture}"] を渡し、**inMapView は付けない**（駅を検索し直さなくてよい）。` +
-      `区そのものの値（「この区の人口は増えている？」）は getAreaSummary の areas:[{municipality:"${center.municipality}", prefecture:"${center.prefecture}"}]。`,
+      `municipality:"${ward.municipality}"・prefectures:["${ward.prefecture}"] を渡し、**inMapView は付けない**（駅を検索し直さなくてよい）。` +
+      `区そのものの値（「この区の人口は増えている？」）は getAreaSummary の areas:[{municipality:"${ward.municipality}", prefecture:"${ward.prefecture}"}]。`,
   ]
 }
 

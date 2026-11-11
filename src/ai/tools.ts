@@ -21,7 +21,10 @@ import { type MapResponse } from '@/shared/protocol'
 import { type Viewport } from '@/shared/viewport'
 import { type EffectCollector } from './types'
 import { TOOL_SPECS, type ToolRunContext, type ToolRunResult } from './tool-specs'
-import { CHAT_INPUT_SCHEMA as CHAT_AREA_SUMMARY_INPUT_SCHEMA } from './area-summary/tool'
+import {
+  CHAT_INPUT_SCHEMA as CHAT_AREA_SUMMARY_INPUT_SCHEMA,
+  CHAT_WARD_INPUT_SCHEMA as CHAT_WARD_AREA_SUMMARY_INPUT_SCHEMA,
+} from './area-summary/tool'
 
 /** `executeFromSpec` が要る最小の形（スキーマには触れない＝推論を壊さない）。 */
 type RunnableSpec<In, Out> = {
@@ -56,6 +59,15 @@ export function executeFromSpec<In, Out>(
   }
 }
 
+/** その回の道具の見せ方（`/api/chat` が質問と地図から決める）。 */
+export type ChatToolOptions = {
+  /**
+   * モデルに見せる型から地図の範囲（`inMapView`）を外す——質問が「この区」を指し、地図が区を決められる回
+   * （`ai/area/ward-question.ts`・`docs/261110_fix_PLAN.md` §3.4.1）。外すのは見せる型だけで、解く型（Spec）は変えない。
+   */
+  readonly hideMapView?: boolean
+}
+
 /**
  * リクエストごとにツール群を生成する（collector をクロージャで束ねる）。
  * ツール記述はカタログ由来のダイジェスト（system-prompt.ts）と合わせて LLM を誘導する。
@@ -65,9 +77,12 @@ export function createTools(
   collector: EffectCollector,
   origin: string,
   viewport: Viewport | null = null,
+  options: ChatToolOptions = {},
 ) {
   const s = TOOL_SPECS
   const ctx: ToolRunContext = { origin, viewport }
+  // 「この区」の回は、地図の範囲で絞る選択肢そのものを見せない（言葉で止めきれない取り違えは型から外す）。
+  const hideMapView = options.hideMapView === true
   return {
     searchStations: tool({
       description: s.searchStations.description,
@@ -76,7 +91,9 @@ export function createTools(
     }),
     listStations: tool({
       description: s.listStations.description,
-      inputSchema: s.listStations.inputSchema,
+      inputSchema: hideMapView
+        ? s.listStations.inputSchema.omit({ inMapView: true })
+        : s.listStations.inputSchema,
       execute: executeFromSpec(s.listStations, collector, ctx),
     }),
     getStationDetail: tool({
@@ -92,17 +109,23 @@ export function createTools(
     getAreaSummary: tool({
       description: s.getAreaSummary.description,
       // 起点の駅（near）を見せない形（2 駅の比較がエリアの比較に流れた・`area-summary/tool.ts`）。解くのは Spec の入力
-      inputSchema: CHAT_AREA_SUMMARY_INPUT_SCHEMA,
+      inputSchema: hideMapView
+        ? CHAT_WARD_AREA_SUMMARY_INPUT_SCHEMA
+        : CHAT_AREA_SUMMARY_INPUT_SCHEMA,
       execute: executeFromSpec(s.getAreaSummary, collector, ctx),
     }),
     rankStations: tool({
       description: s.rankStations.description,
-      inputSchema: s.rankStations.inputSchema,
+      inputSchema: hideMapView
+        ? s.rankStations.inputSchema.omit({ inMapView: true })
+        : s.rankStations.inputSchema,
       execute: executeFromSpec(s.rankStations, collector, ctx),
     }),
     compareGrowth: tool({
       description: s.compareGrowth.description,
-      inputSchema: s.compareGrowth.inputSchema,
+      inputSchema: hideMapView
+        ? s.compareGrowth.inputSchema.omit({ inMapView: true })
+        : s.compareGrowth.inputSchema,
       execute: executeFromSpec(s.compareGrowth, collector, ctx),
     }),
     getHazardAtPoint: tool({

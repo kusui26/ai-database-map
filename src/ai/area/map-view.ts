@@ -70,3 +70,20 @@ export function describeMapView(viewport: Viewport, index: AreaIndex | null): Ma
   const wardScale = isWardScale(viewport)
   return { widthKm, heightKm, tooWide, center, centerSearched, wardScale }
 }
+
+/** 「この区」「この市」が指す市区町村。 */
+export type MapWard = {
+  readonly municipality: string
+  readonly prefecture: string
+}
+
+/**
+ * 「この区」「この市」「この町」が指す市区町村——区や市が画面の主役になるほど寄っていて、中心の駅の市区町村が
+ * 分かるときだけ（それ以外は null）。地図の節の規則（`system-prompt.ts` の `mapWardRule`）と、その回に道具から
+ * 地図の範囲を外すか（`ward-question.ts`）が、**同じこの判定**を通る。
+ */
+export function wardOfView(view: MapView): MapWard | null {
+  const { center } = view
+  if (!view.wardScale || center === null || center.municipality === null) return null
+  return { municipality: center.municipality, prefecture: center.prefecture }
+}

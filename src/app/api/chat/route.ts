@@ -48,7 +48,8 @@ import { createCollector, type ToolEffect } from '@/ai/types'
 import { type ChatUIMessage, createTools } from '@/ai/tools'
 import { buildSystemPrompt, mapContextPrompt, mapViewPrompt } from '@/ai/system-prompt'
 import { areaDeps } from '@/ai/area/catalog'
-import { describeMapView } from '@/ai/area/map-view'
+import { describeMapView, type MapView } from '@/ai/area/map-view'
+import { hidesMapViewOption } from '@/ai/area/ward-question'
 import { isTooWideForArea } from '@/domain/map/view-scale'
 import { type AreaIndex } from '@/ai/area/place-index'
 import { assemble, promotionsFor, textOrFallback, type ChatOutcome } from '@/ai/assemble'
@@ -201,14 +202,14 @@ async function areaIndexOrNull(): Promise<AreaIndex | null> {
 }
 
 /**
- * 地図の表示範囲を LLM の文脈へ（2026-10-09 B3）：広さと中心に近い駅だけ（範囲の数は見せない——
+ * 地図の表示範囲 → LLM に伝える様子（2026-10-09 B3）：広さと中心に近い駅だけ（範囲の数は見せない——
  * 「このあたり」で絞るのはツールの inMapView で、範囲はサーバが持っている）。
- * 日本全体に近い広さなら索引を読まない（中心の駅は挙げない）。範囲が無ければ何も足さない。
+ * 日本全体に近い広さなら索引を読まない（中心の駅は挙げない）。範囲が無ければ null（地図の節を足さない）。
  */
-async function resolveMapView(viewport: Viewport | null): Promise<string> {
-  if (viewport === null) return ''
+async function resolveMapView(viewport: Viewport | null): Promise<MapView | null> {
+  if (viewport === null) return null
   const index = isTooWideForArea(viewport) ? null : await areaIndexOrNull()
-  return mapViewPrompt(describeMapView(viewport, index))
+  return describeMapView(viewport, index)
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -270,6 +271,9 @@ export async function POST(request: Request): Promise<Response> {
     resolveMapContext(parsed.data.selectedGrp, parsed.data.radiusM),
     resolveMapView(viewport),
   ])
+  const mapViewText = mapView === null ? '' : mapViewPrompt(mapView)
+  // 「この区」の問いの回は、地図の範囲で絞る選択肢を道具から外す（2026-11-12・261110 §3.4.1）。
+  const toolOptions = { hideMapView: hidesMapViewOption(lastUser.text, mapView) }
   // 失敗を記録するとき、提供元の説明に紛れた発話を伏せるために使う（ログには決して出さない）。
   const utterances = conversation.map((message) => message.text)
 
@@ -293,8 +297,8 @@ export async function POST(request: Request): Promise<Response> {
       // この `onError` が呼ばれるのはストリームの失敗（error パート）だけで、ツールの失敗では呼ばれない。
       const result = streamText({
         model: chatModel(),
-        system: buildSystemPrompt() + mapContext + mapView,
-        tools: createTools(collector, new URL(request.url).origin, viewport),
+        system: buildSystemPrompt() + mapContext + mapViewText,
+        tools: createTools(collector, new URL(request.url).origin, viewport, toolOptions),
         stopWhen: stepCountIs(MAX_TOOL_STEPS),
         temperature: CHAT_TEMPERATURE,
         // 対話は fail-fast 寄りに。既定 2 だと無料枠 429 の retry-after を待って長く固まる。

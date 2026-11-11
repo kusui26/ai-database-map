@@ -4,7 +4,9 @@ import { hazardVerdict, type VerdictItem } from '@/domain/hazard/verdict'
 import {
   certaintyOf,
   coverageAmountJa,
+  GROUP_STATE_LABELS_JA,
   noHazardHeadlineJa,
+  riverReasonsJa,
   valuePhraseJa,
   weakestCertainty,
 } from '@/domain/hazard/wording'
@@ -13,7 +15,11 @@ import {
   hazardRankOfDepth,
   hazardLayersWithPointAnswer,
 } from '@/domain/hazard/catalog'
-import { hazardPointResponseSchema } from '@/shared/api'
+import { hazardPointResponseSchema, type HazardPointResponse } from '@/shared/api'
+import { HAZARD_GROUP_LABELS_JA } from '@/shared/constants'
+import { getHazardLayer } from '@/shared/hazard'
+import { SUMMARY_HAZARD_GROUPS } from '@/shared/hazard-summary'
+import { HAZARD_GROUP_STATES, type HazardGroupState } from '@/shared/protocol'
 
 /**
  * 地点のハザード（Phase 2・`docs/260824_flood.md` §6.1〜§6.3・§8.3）。
@@ -38,6 +44,7 @@ function input(overrides: Partial<PointHazardInput> = {}): PointHazardInput {
     tile: [],
     tileNearby: [],
     uncoveredLayerKeys: [],
+    unreachedLayerKeys: [],
     rivers: [],
     elevationM: 0.2,
     onlineSourcesReached: true,
@@ -257,6 +264,280 @@ describe('hazard/point: 応答の骨格', () => {
     const rivers = [{ nameJa: '荒川', maxDepthM: 3.66, arriveMin: 162, continueMin: 5283 }]
     const result = pointHazard(input({ mesh, rivers }), ALL_LAYERS)
     expect(() => hazardPointResponseSchema.parse(result)).not.toThrow()
+  })
+})
+
+// --- 災害の種類ごとの状態（`docs/261110_fix_PLAN.md` §8.4・§10.2 PR-4） -----------
+
+/** 250m メッシュを持つレイヤ（洪水 5・内水）。カタログから引く。 */
+const MESH_LAYERS = ALL_LAYERS.filter((key) => getHazardLayer(key)?.mesh?.available === true)
+
+/** メッシュのどのレイヤも、そのセルも隣のセルも区域外。 */
+const QUIET_MESH = MESH_LAYERS.map((layerKey) => ({
+  layerKey,
+  sourceCode: 0,
+  coverage: 0,
+  neighbourSourceCode: 0,
+}))
+
+/** そのレイヤの凡例の色（公式タイルの画素として渡す）。手で書くと凡例の改訂で黙って外れる。 */
+function legendColor(layerKey: string): string {
+  const color = getHazardLayer(layerKey)?.ranks.find((rank) => rank.color !== null)?.color
+  if (color === undefined || color === null) throw new Error(`凡例に色がありません: ${layerKey}`)
+  return color
+}
+
+function painted(layerKeys: readonly string[]): PointHazardInput['tile'] {
+  return layerKeys.map((layerKey) => ({ layerKey, hex: legendColor(layerKey) }))
+}
+
+/** 種類 → 状態（5 つをまとめて見比べる）。 */
+function statesOf(result: HazardPointResponse): Readonly<Record<string, string>> {
+  return Object.fromEntries((result.groupStates ?? []).map((each) => [each.group, each.state]))
+}
+
+function groupOf(result: HazardPointResponse, group: string): HazardGroupState | undefined {
+  return result.groupStates?.find((each) => each.group === group)
+}
+
+/**
+ * 画面が「該当なし：内水・津波／想定区域図なし：土砂災害」と 1 行ずつ出すための材料。
+ * 固定するのは**言ってはいけない「該当なし」**——図が無いのに、確かめていないのに「該当なし」と言わない。
+ */
+describe('hazard/point: 災害の種類ごとの状態（261110 §8.4）', () => {
+  it('5 種類が必ずどれか 1 つの状態に入る（種類の順・どの経路でも）', () => {
+    const cases: readonly PointHazardInput[] = [
+      input(),
+      input({ tile: painted(['flood_l2']), uncoveredLayerKeys: ['jisuberi'] }),
+      input({ unreachedLayerKeys: ['hightide_l2'] }),
+      input({ onlineSourcesReached: false, mesh: QUIET_MESH }),
+      input({ onlineSourcesReached: false }),
+    ]
+    for (const each of cases) {
+      const groupStates = pointHazard(each, ALL_LAYERS).groupStates ?? []
+      expect(groupStates.map((group) => group.group)).toEqual([...SUMMARY_HAZARD_GROUPS])
+      for (const group of groupStates) {
+        expect(HAZARD_GROUP_STATES).toContain(group.state)
+        expect(group.stateJa).toBe(GROUP_STATE_LABELS_JA[group.state])
+        expect(group.labelJa).toBe(HAZARD_GROUP_LABELS_JA[group.group])
+      }
+    }
+  })
+
+  it('亀有の形（2026-11-11 の公式タイルの実測）：該当・該当なし・図なし', () => {
+    const result = pointHazard(
+      input({
+        tile: painted(['flood_l2', 'flood_l1', 'flood_duration', 'hightide_l2']),
+        uncoveredLayerKeys: ['dosekiryu', 'jisuberi'],
+      }),
+      ALL_LAYERS,
+    )
+    expect(statesOf(result)).toEqual({
+      flood: 'hit',
+      inland_flood: 'none',
+      storm_surge: 'hit',
+      tsunami: 'none',
+      landslide: 'uncovered',
+    })
+  })
+
+  it('立川の形：すぐ近く（隣の 250m メッシュ）・該当なし・図なし', () => {
+    const result = pointHazard(
+      input({
+        mesh: [{ layerKey: 'flood_l2', sourceCode: 0, coverage: 0, neighbourSourceCode: 3 }],
+        uncoveredLayerKeys: ['hightide_l2', 'tsunami_shinsui'],
+      }),
+      ALL_LAYERS,
+    )
+    expect(statesOf(result)).toEqual({
+      flood: 'nearby',
+      inland_flood: 'none',
+      storm_surge: 'uncovered',
+      tsunami: 'uncovered',
+      landslide: 'none',
+    })
+    expect(groupOf(result, 'flood')).toMatchObject({
+      stateJa: 'すぐ近くに区域',
+      proximityJa: '隣の 250m メッシュ',
+    })
+  })
+
+  /** 土砂災害の 3 レイヤ（土石流・急傾斜地・地すべり）に、状態の材料を重ねていく。 */
+  it('決める順は 該当 → すぐ近く → 図なし → 未確認 → 該当なし', () => {
+    const near = [{ layerKey: 'kyukeisha', hex: legendColor('kyukeisha') }]
+    const cases: readonly (readonly [string, Partial<PointHazardInput>])[] = [
+      ['hit', { tile: painted(['dosekiryu']), tileNearby: near, uncoveredLayerKeys: ['jisuberi'] }],
+      [
+        'nearby',
+        { tileNearby: near, uncoveredLayerKeys: ['jisuberi'], unreachedLayerKeys: ['dosekiryu'] },
+      ],
+      ['uncovered', { uncoveredLayerKeys: ['jisuberi'], unreachedLayerKeys: ['dosekiryu'] }],
+      ['unknown', { unreachedLayerKeys: ['dosekiryu'] }],
+      ['none', {}],
+    ]
+    for (const [expected, overrides] of cases) {
+      const result = pointHazard(input(overrides), ALL_LAYERS)
+      expect(groupOf(result, 'landslide')?.state, expected).toBe(expected)
+    }
+    // 該当は未確認にも勝つ（洪水：想定最大規模が塗られ、計画規模は届かなかった）。
+    const flood = pointHazard(
+      input({ tile: painted(['flood_l2']), unreachedLayerKeys: ['flood_l1'] }),
+      ALL_LAYERS,
+    )
+    expect(groupOf(flood, 'flood')?.state).toBe('hit')
+  })
+
+  it('図が無いのに「該当なし」と言わない（種類の中に 1 レイヤでも図が無ければ図なし）', () => {
+    // 鎌倉（実測）：土石流・急傾斜地の図はあるが、地すべりの図が無い。
+    const result = pointHazard(input({ uncoveredLayerKeys: ['jisuberi'] }), ALL_LAYERS)
+    expect(groupOf(result, 'landslide')).toMatchObject({
+      state: 'uncovered',
+      stateJa: '想定区域図なし',
+      proximityJa: null,
+    })
+  })
+
+  it('確かめていないのに「該当なし」と言わない（公式タイルに届かなかったレイヤは未確認）', () => {
+    const result = pointHazard(input({ unreachedLayerKeys: ['hightide_l2'] }), ALL_LAYERS)
+    expect(groupOf(result, 'storm_surge')).toMatchObject({ state: 'unknown', stateJa: '未確認' })
+    // 届いた種類は巻き込まない。
+    expect(groupOf(result, 'tsunami')?.state).toBe('none')
+  })
+
+  it('参照しなかった種類も「該当なし」と言わない（未確認）', () => {
+    const floodOnly = ALL_LAYERS.filter((key) => getHazardLayer(key)?.group === 'flood')
+    const result = pointHazard(input(), floodOnly)
+    expect(statesOf(result)).toEqual({
+      flood: 'none',
+      inland_flood: 'unknown',
+      storm_surge: 'unknown',
+      tsunami: 'unknown',
+      landslide: 'unknown',
+    })
+  })
+
+  it('公式タイルに届かなくても、250m メッシュで読めたレイヤは確かめたことにする', () => {
+    const flood = MESH_LAYERS.filter((key) => getHazardLayer(key)?.group === 'flood')
+    const unread = pointHazard(input({ unreachedLayerKeys: flood }), ALL_LAYERS)
+    expect(groupOf(unread, 'flood')?.state).toBe('unknown')
+    const onMesh = pointHazard(input({ unreachedLayerKeys: flood, mesh: QUIET_MESH }), ALL_LAYERS)
+    expect(groupOf(onMesh, 'flood')?.state).toBe('none')
+  })
+
+  it('すぐ近くの距離感は近い方（約 20m）を採り、ほかの状態では null', () => {
+    const result = pointHazard(
+      input({
+        tileNearby: [{ layerKey: 'flood_l1', hex: legendColor('flood_l1') }],
+        mesh: [{ layerKey: 'flood_l2', sourceCode: 0, coverage: 0, neighbourSourceCode: 3 }],
+      }),
+      ALL_LAYERS,
+    )
+    expect(groupOf(result, 'flood')).toMatchObject({ state: 'nearby', proximityJa: '約 20m 以内' })
+    const others = (result.groupStates ?? []).filter((each) => each.group !== 'flood')
+    expect(others.map((each) => each.proximityJa)).toEqual([null, null, null, null])
+  })
+})
+
+describe('hazard/point: 畳まずに見せる注意（keyNotesJa・261110 §8.4）', () => {
+  it('該当なし・図なし・未確認の種類があれば必ず 1 文で、出ている言い方だけを挙げる', () => {
+    const cases: readonly (readonly [Partial<PointHazardInput>, string])[] = [
+      [{}, '「該当なし」は、安全という意味ではありません。'],
+      [
+        { tile: painted(['flood_l2']), uncoveredLayerKeys: ['jisuberi'] },
+        '「該当なし」「想定区域図なし」は、安全という意味ではありません。',
+      ],
+      [
+        { uncoveredLayerKeys: ['jisuberi'], unreachedLayerKeys: ['hightide_l2'] },
+        '「該当なし」「想定区域図なし」「未確認」は、安全という意味ではありません。',
+      ],
+      [{ onlineSourcesReached: false }, '「未確認」は、安全という意味ではありません。'],
+    ]
+    for (const [overrides, expected] of cases) {
+      const notes = pointHazard(input(overrides), ALL_LAYERS).keyNotesJa ?? []
+      expect(notes).toEqual([expected])
+      expect(notes.join('')).not.toMatch(/安全です|問題ありません/)
+    }
+  })
+
+  it('5 種類とも該当かすぐ近くなら、注意の文は足さない（それ自体が注意として読める）', () => {
+    const result = pointHazard(
+      input({
+        tile: painted(['flood_l2', 'naisui', 'hightide_l2', 'dosekiryu']),
+        tileNearby: painted(['tsunami_shinsui']),
+      }),
+      ALL_LAYERS,
+    )
+    expect(statesOf(result)).toEqual({
+      flood: 'hit',
+      inland_flood: 'hit',
+      storm_surge: 'hit',
+      tsunami: 'nearby',
+      landslide: 'hit',
+    })
+    expect(result.keyNotesJa).toEqual([])
+  })
+})
+
+describe('hazard/point: その場所にしか無い事実（highlightsJa・261110 §8.4）', () => {
+  it('浸水ナビの到達・継続（いちばん早い川・いちばん長い川）で、根拠の末尾と同じ文', () => {
+    const rivers = [
+      { nameJa: '荒川', maxDepthM: 3.66, arriveMin: 162, continueMin: 5283 },
+      { nameJa: '中川', maxDepthM: 1.31, arriveMin: 30, continueMin: 5718 },
+      { nameJa: '利根川', maxDepthM: 0.8, arriveMin: 1434, continueMin: 14508 },
+    ]
+    const result = pointHazard(input({ rivers }), ALL_LAYERS)
+    expect(result.highlightsJa).toEqual(riverReasonsJa(rivers))
+    expect(result.highlightsJa).toHaveLength(2)
+    expect(result.verdict.reasonsJa.slice(-2)).toEqual(result.highlightsJa)
+  })
+
+  it('川の情報が無ければ空（その場所の事実が無いのに文を作らない）', () => {
+    expect(pointHazard(input(), ALL_LAYERS).highlightsJa).toEqual([])
+  })
+})
+
+/**
+ * オフライン（端末の 250m メッシュだけ）。入力は `useHazardPoint` の `meshOnlyHazard` と同じ形
+ * ——公式タイルは読みに行っていないので、タイル・近さ・図の有無・届かなかったレイヤはどれも空。
+ * サーバとブラウザが同じ関数を通るので、3 項目も同じ形で出る。
+ */
+describe('hazard/point: オフライン（メッシュだけ）でも同じ形', () => {
+  function offline(mesh: PointHazardInput['mesh']): PointHazardInput {
+    return input({ mesh, onlineSourcesReached: false })
+  }
+
+  it('メッシュで読めた洪水・内水は該当なし、メッシュの無い高潮・津波・土砂は未確認', () => {
+    const result = pointHazard(offline(QUIET_MESH), ALL_LAYERS)
+    expect(statesOf(result)).toEqual({
+      flood: 'none',
+      inland_flood: 'none',
+      storm_surge: 'unknown',
+      tsunami: 'unknown',
+      landslide: 'unknown',
+    })
+    expect(result.keyNotesJa).toEqual(['「該当なし」「未確認」は、安全という意味ではありません。'])
+    expect(result.highlightsJa).toEqual([])
+    expect(() => hazardPointResponseSchema.parse(result)).not.toThrow()
+  })
+
+  it('メッシュも読めなければ 5 種類とも未確認（「該当なし」と言わない）', () => {
+    const result = pointHazard(offline([]), ALL_LAYERS)
+    expect(new Set(Object.values(statesOf(result)))).toEqual(new Set(['unknown']))
+  })
+
+  it('メッシュで当たれば該当、隣のセルならすぐ近く（隣の 250m メッシュ）', () => {
+    const result = pointHazard(
+      offline([
+        { layerKey: 'flood_l2', sourceCode: 3, coverage: 1, neighbourSourceCode: 3 },
+        { layerKey: 'naisui', sourceCode: 0, coverage: 0, neighbourSourceCode: 1 },
+      ]),
+      ALL_LAYERS,
+    )
+    expect(groupOf(result, 'flood')?.state).toBe('hit')
+    expect(groupOf(result, 'inland_flood')).toMatchObject({
+      state: 'nearby',
+      proximityJa: '隣の 250m メッシュ',
+    })
   })
 })
 

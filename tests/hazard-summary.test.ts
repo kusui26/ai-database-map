@@ -8,8 +8,13 @@ import {
 import {
   HAZARD_DATASET_COLUMNS,
   hazardCsvCells,
+  STATION_HAZARD_VERSION,
   stationHazardSummarySchema,
+  SUMMARY_HAZARD_GROUPS,
 } from '@/shared/hazard-summary'
+import { hazardLayersWithPointAnswer } from '@/domain/hazard/catalog'
+import { pointHazard } from '@/domain/hazard/point'
+import { getHazardLayer } from '@/shared/hazard'
 
 /**
  * **駅別ハザードサマリの射影**（PR-6・`docs/260828_research_claude_auth.md` §5.3 ③）。
@@ -92,6 +97,53 @@ describe('stationHazardSummary（射影）', () => {
     expect(summary.groups.storm_surge.nearby).toBe(true)
     expect(summary.groups.inland_flood.uncovered).toBe(true)
     expect(summary.groups.inland_flood.worstJa).toBeNull()
+  })
+
+  /**
+   * 地点の応答の `groupStates` と駅別サマリは**同じ集計**（`domain/hazard/groups`）を通る
+   * （`docs/261110_fix_PLAN.md` §8.4）。地点のカードと駅の一覧で違うことを言わない。
+   * サマリの形（版 1）は変えない——DB を作り直さない。
+   */
+  it('地点の種類ごとの状態と食い違わない（サマリの版は 1 のまま）', () => {
+    const layers = hazardLayersWithPointAnswer()
+    // 高潮の凡例の色（カタログから引く。無ければ空文字で塗られず、下の 'hit' が落ちて気づく）。
+    const surge = getHazardLayer('hightide_l2')?.ranks.find((rank) => rank.color !== null)?.color
+    const assembled = pointHazard(
+      {
+        lon: 139.6,
+        lat: 35.4,
+        placeJa: 'テスト#2',
+        mesh: [{ layerKey: 'flood_l2', sourceCode: 0, coverage: 0, neighbourSourceCode: 3 }],
+        tile: [{ layerKey: 'hightide_l2', hex: surge ?? '' }],
+        tileNearby: [],
+        uncoveredLayerKeys: ['naisui', 'jisuberi'],
+        unreachedLayerKeys: ['tsunami_shinsui'],
+        rivers: [],
+        elevationM: 2,
+        onlineSourcesReached: true,
+        notesJa: [],
+      },
+      layers,
+    )
+    const projected = stationHazardSummary('テスト#2', assembled, ['naisui', 'jisuberi'])
+    expect(STATION_HAZARD_VERSION).toBe(1)
+    expect(stationHazardSummarySchema.parse(projected)).toEqual(projected)
+    for (const group of SUMMARY_HAZARD_GROUPS) {
+      const state = assembled.groupStates?.find((each) => each.group === group)?.state
+      const each = projected.groups[group]
+      expect(state === 'hit', group).toBe(each.worstJa !== null)
+      if (state === 'nearby') expect(each.nearby, group).toBe(true)
+      if (state === 'uncovered') expect(each.uncovered, group).toBe(true)
+      if (state === 'none' || state === 'unknown')
+        expect(each, group).toMatchObject({ level: 'none', nearby: false, uncovered: false })
+    }
+    expect(assembled.groupStates?.map((each) => each.state)).toEqual([
+      'nearby',
+      'uncovered',
+      'hit',
+      'unknown',
+      'uncovered',
+    ])
   })
 })
 

@@ -73,6 +73,7 @@ export function assembleHazardPoint(
       tile: tile.tile,
       tileNearby: tile.nearby,
       uncoveredLayerKeys: tile.uncoveredLayerKeys,
+      unreachedLayerKeys: tile.unreachedLayerKeys,
       rivers: navi.rivers,
       elevationM: mesh.elevationM,
       // ⚠ サーバは常にオンラインである。false になるのは**公式タイルに届かなかった**ときで、

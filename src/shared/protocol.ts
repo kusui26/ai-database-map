@@ -14,6 +14,7 @@ import {
   hazardLevelSchema,
   hazardSourceSchema,
 } from './hazard'
+import { summaryHazardGroupSchema } from './hazard-summary'
 import { areaCharacterSchema, profileHazardSchema, profileSectionSchema } from './profile'
 import {
   areaComparisonTableSchema,
@@ -157,6 +158,34 @@ export const hazardItemSchema = z.object({
   certainty: hazardCertaintySchema,
 })
 export type HazardItem = z.infer<typeof hazardItemSchema>
+
+/**
+ * 災害の種類ごとの状態（`docs/261110_fix_PLAN.md` §8.4）。**5 種類が必ずどれか 1 つに入る。**
+ * どれを先に採るかは `domain/hazard/groups.ts` が決める（上から順）。
+ *
+ * - `hit` … その種類のどれかのレイヤに該当がある（`items` / `hazards` に行がある。250m メッシュの
+ *   一部だけが区域のときも含む——その言い方は行の `valueJa` が持つ）
+ * - `nearby` … その点は区域外だが、すぐ近く（約 20m 以内／隣の 250m メッシュ）が区域
+ * - `uncovered` … その種類のレイヤのどれかに、この地域の想定区域図が無い（未整備の可能性）
+ * - `unknown` … 確かめられなかったレイヤがある（公式の地図に届かず、250m メッシュにも無い）
+ * - `none` … 確かめたどのレイヤでも区域外。**安全という意味ではない**（`260824` §7.5-1）
+ *
+ * 図が無いのに「該当なし」と言わない。確かめていないのに「該当なし」と言わない。
+ */
+export const HAZARD_GROUP_STATES = ['hit', 'nearby', 'uncovered', 'unknown', 'none'] as const
+export type HazardGroupStateKind = (typeof HAZARD_GROUP_STATES)[number]
+
+export const hazardGroupStateSchema = z.object({
+  group: summaryHazardGroupSchema,
+  /** 種類の名前（「洪水」「内水（雨水出水）」…）。 */
+  labelJa: z.string(),
+  state: z.enum(HAZARD_GROUP_STATES),
+  /** 状態の言い方（「該当」「すぐ近くに区域」「想定区域図なし」「未確認」「該当なし」）。 */
+  stateJa: z.string(),
+  /** `nearby` のときだけ、どれくらい近いか（「約 20m 以内」「隣の 250m メッシュ」）。ほかは null。 */
+  proximityJa: z.string().nullable(),
+})
+export type HazardGroupState = z.infer<typeof hazardGroupStateSchema>
 
 /**
  * 避難先の候補 1 件（`docs/260824_flood.md` §6.4・§8.5）。
@@ -365,6 +394,15 @@ export const panelSchema = z.discriminatedUnion('type', [
     reasonsJa: z.array(z.string()),
     /** 網羅性の注記（「白＝安全ではない」）。該当レイヤぶんを並べる。 */
     coverageNotesJa: z.array(z.string()),
+    /**
+     * 災害の種類ごとの状態（`docs/261110_fix_PLAN.md` §8.4）。下の 2 つと合わせて**省略できる**——
+     * 警報のカードは持たず、配備の切り替わりの間にキャッシュに残る古い応答にも無い。
+     */
+    groupStates: z.array(hazardGroupStateSchema).optional(),
+    /** 畳まずに見せる注意（サーバが決める 0〜2 文）。「該当なし」などを安全と読ませない 1 文。 */
+    keyNotesJa: z.array(z.string()).optional(),
+    /** その場所にしか無い具体的な事実（0〜2 文。浸水ナビの到達・継続の時間）。 */
+    highlightsJa: z.array(z.string()).optional(),
     sources: z.array(sourceRefSchema),
     /** 免責（カタログの 1 文）。**必ず表示する。** */
     disclaimerJa: z.string(),

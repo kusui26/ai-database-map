@@ -2,7 +2,8 @@
  * ドメイン：地点のハザード応答 → **駅別サマリへの射影**（純関数・PR-6）。
  *
  * ビルダー（`pipeline/build_station_hazard.ts`）と整合検証（§11）が同じこの射影を通る。
- * 形は `shared/hazard-summary`（DB・応答と共通）。ここはカタログ（グループ対応）だけを足す。
+ * 形は `shared/hazard-summary`（DB・応答と共通）。種類ごとの集計は、地点の応答の
+ * `groupStates` と同じ `./groups` を通る（二重に書かない・`docs/261110_fix_PLAN.md` §8.4）。
  *
  * ⚠ 事前計算は**浸水ナビ（河川別の実測 m）を含めない**（`docs/260828_research_claude_auth.md`
  * §10 PR-6 方針）。区分値（タイル・メッシュ）の階級は実測 m と同じ想定（想定最大規模）を
@@ -10,49 +11,10 @@
  */
 
 import { getHazardLayer } from '@/shared/hazard'
-import { hazardLevelWeight, type HazardLevel } from '@/shared/constants'
 import type { HazardPointResponse } from '@/shared/api'
-import {
-  SUMMARY_HAZARD_GROUPS,
-  type HazardGroupSummary,
-  type StationHazardSummary,
-  type SummaryHazardGroup,
-} from '@/shared/hazard-summary'
+import type { StationHazardSummary } from '@/shared/hazard-summary'
 import { hazardLayersWithPointAnswer } from './catalog'
-
-function isSummaryGroup(value: unknown): value is SummaryHazardGroup {
-  return SUMMARY_HAZARD_GROUPS.some((group) => group === value)
-}
-
-/** レイヤ key → サマリのグループ（対象外＝terrain/realtime/未知は null）。 */
-function summaryGroupOf(layerKey: string): SummaryHazardGroup | null {
-  const group = getHazardLayer(layerKey)?.group
-  return isSummaryGroup(group) ? group : null
-}
-
-/** 危険度の最重（`domain/hazard/catalog.heaviestHazardLevel` と同じ規則・重み比較）。 */
-function heaviest(levels: readonly HazardLevel[]): HazardLevel {
-  return levels.reduce<HazardLevel>(
-    (worst, level) => (hazardLevelWeight(level) > hazardLevelWeight(worst) ? level : worst),
-    'none',
-  )
-}
-
-function groupSummary(
-  group: SummaryHazardGroup,
-  point: HazardPointResponse,
-  uncoveredLayerKeys: readonly string[],
-): HazardGroupSummary {
-  // point.hazards は危険度の重い順（pointHazard が並べ済み）＝グループ内の先頭が最重。
-  const items = point.hazards.filter((item) => summaryGroupOf(item.layerKey) === group)
-  const worst = items[0]
-  return {
-    level: heaviest(items.map((item) => item.level)),
-    worstJa: worst === undefined ? null : `${worst.labelJa}：${worst.valueJa}`,
-    nearby: point.neighbours.some((each) => summaryGroupOf(each.layerKey) === group),
-    uncovered: uncoveredLayerKeys.some((key) => summaryGroupOf(key) === group),
-  }
-}
+import { hazardGroupSummary, isSummaryGroup } from './groups'
 
 /** 地点の応答 → 駅別サマリ（`uncoveredLayerKeys` は `HazardPointResult` が運ぶ）。 */
 export function stationHazardSummary(
@@ -68,11 +30,11 @@ export function stationHazardSummary(
     certainty: point.certainty,
     elevationM: point.terrain.elevMeanM,
     groups: {
-      flood: groupSummary('flood', point, uncoveredLayerKeys),
-      inland_flood: groupSummary('inland_flood', point, uncoveredLayerKeys),
-      storm_surge: groupSummary('storm_surge', point, uncoveredLayerKeys),
-      tsunami: groupSummary('tsunami', point, uncoveredLayerKeys),
-      landslide: groupSummary('landslide', point, uncoveredLayerKeys),
+      flood: hazardGroupSummary('flood', point, uncoveredLayerKeys),
+      inland_flood: hazardGroupSummary('inland_flood', point, uncoveredLayerKeys),
+      storm_surge: hazardGroupSummary('storm_surge', point, uncoveredLayerKeys),
+      tsunami: hazardGroupSummary('tsunami', point, uncoveredLayerKeys),
+      landslide: hazardGroupSummary('landslide', point, uncoveredLayerKeys),
     },
   }
 }

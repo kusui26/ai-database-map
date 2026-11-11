@@ -19,6 +19,7 @@
 import { HAZARD_CERTAINTY_LABELS_JA } from '@/shared/constants'
 import { COVERAGE_STEPS } from '@/shared/hazard-mesh'
 import type { HazardCertainty, HazardSource } from '@/shared/hazard'
+import type { HazardGroupStateKind } from '@/shared/protocol'
 
 /** 「ごく一部」と言う上限（1/15 ＝ 約 6.7%）。量子化の 1 段ぶん。 */
 const SLIGHT_COVERAGE = 1 / COVERAGE_STEPS
@@ -112,6 +113,31 @@ export function neighbourNoteJa(layerLabelJa: string, source: 'tile' | 'mesh'): 
 export const UNCOVERED_NOTE_JA =
   '**この地域には想定区域図がありません**（未整備の可能性があります）。' +
   '区域が無いという意味ではないので、市町村のハザードマップもご確認ください'
+
+// --- 災害の種類ごとの状態（`docs/261110_fix_PLAN.md` §8.4） -----------------
+
+/**
+ * 種類ごとの状態の言い方。
+ *
+ * ⚠ `none` を「安全」「問題なし」と言わない——言えるのは「区域図の上で区域外」だけ（§7.5-1）。
+ * `unknown` は警報のカードの「未確認」（発表を確かめられなかった）と同じ語にする——
+ * 同じ画面で「確かめられなかった」を別の語で言わない。
+ */
+export const GROUP_STATE_LABELS_JA: Readonly<Record<HazardGroupStateKind, string>> = {
+  hit: '該当',
+  nearby: 'すぐ近くに区域',
+  uncovered: '想定区域図なし',
+  unknown: '未確認',
+  none: '該当なし',
+}
+
+/**
+ * 「該当なし」などを安全と読ませない 1 文（`docs/261110_fix_PLAN.md` §2.2・§7.5-1）。
+ * **画面に出ている言い方だけ**を挙げる——出ていない「想定区域図なし」を挙げると、どこの話か分からない。
+ */
+export function notSafeNoteJa(stateLabelsJa: readonly string[]): string {
+  return `${stateLabelsJa.map((label) => `「${label}」`).join('')}は、安全という意味ではありません。`
+}
 
 /**
  * 該当は無いが**近くが区域**のときの見出し。

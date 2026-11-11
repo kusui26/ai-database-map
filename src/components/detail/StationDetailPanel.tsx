@@ -3,9 +3,12 @@
 /**
  * 駅詳細パネル（骨格＋乗降タブ）。デスクトップ＝右ドロワー／モバイル＝vaul ボトムシート。
  * ?grp 選択で開き、閉じると ?grp をクリア。カード＋タブは Protocol の Panel を PanelStack で描画する。
- * タブは**概要**（駅周辺のプロフィール・2026-10-09 B4）＋ 8 カテゴリ（乗降・人口・所得・売上・地価・バス・
- * 事業所・従業者）＋**災害**。
+ * タブは**概要**（駅周辺のプロフィール・2026-10-09 B4）・乗降・人口・地価・**災害**・所得・売上・バス・
+ * 事業所・従業者の 10 個（並びは `DETAIL_TABS`）。
  * 半径依存タブは集計半径セレクタを表示。
+ *
+ * ヘッダは駅カードだけにする。以前は災害のバッジ（「もし起きたら」の 1 行と限界の 1 文）を添え、災害タブへの
+ * 入口にしていたが、外した（2026-11-11・`docs/261110_fix_PLAN.md` §5）。災害は地価の右のタブで見る。
  *
  * 選んだタブは URL（`?tab`）とこの端末に覚え、**駅を替えても、閉じて開き直しても保つ**
  * （`useDetailTab.ts`・`docs/261001_fix_user_feedback_ui.md` §2）。
@@ -42,7 +45,6 @@ import { useStationDetail } from '@/components/detail/useStationDetail'
 import { useDetailTab } from '@/components/detail/useDetailTab'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { PanelRenderer, PanelStack } from '@/components/panels/PanelRenderer'
-import { StationHazardBadge } from '@/components/hazard/StationHazardBadge'
 import { StationHazardTab } from '@/components/hazard/StationHazardTab'
 import { StationOverviewTab } from '@/components/detail/StationOverviewTab'
 import { type HazardTarget } from '@/components/hazard/useHazardPoint'
@@ -51,8 +53,8 @@ import { cn } from '@/lib/utils'
 import { messageJaOf } from '@/lib/fetch-json'
 
 /**
- * 災害バッジとタブが見る地点。**1 か所で作る**——バッジ（ヘッダ）とタブ（本文）で
- * `useHazardPoint` の SWR キーが同じになり、**タブを開いても追加の通信が起きない**。
+ * 災害タブが見る地点（駅の代表点 1 点）。照会は**災害タブを開いたときだけ**起きる——
+ * 駅を選ぶたびには引かない（浸水ナビの分間の枠を、見ない駅のぶんまで使わない・261110 §5.2）。
  */
 function hazardTargetOf(detail: StationDetail): HazardTarget {
   return { lon: detail.station.lon, lat: detail.station.lat, placeJa: detail.station.label }
@@ -131,7 +133,8 @@ function CloseButton({ onClick }: { onClick: () => void }) {
 
 /**
  * 選んだタブを帯の中に出す。**選んだタブが見えないままだと壊れて見える**——
- * 災害タブは末尾にあり、既定では完全に隠れているので、バッジから飛んだときに必ず要る。
+ * 後ろのタブ（広い画面では売上から右、携帯では所得から右）は既定では帯の外かフェードの下にあるので、
+ * 覚えていたタブや AI の焦点（`?tab`）でそこが選ばれたときに要る。
  * 既に見えているときは動かさない（幾何と境界は `src/lib/tab-strip.ts`）。
  */
 function useRevealTab(
@@ -152,7 +155,7 @@ function DetailTabs({ value, onChange }: { value: DetailTab; onChange: (tab: Det
   const tabRefs = useRef(new Map<DetailTab, HTMLButtonElement>())
   const [atEnd, setAtEnd] = useState(false)
 
-  // 9 タブで帯は 572px になり、420px のパネルからはみ出して最後のタブが完全に隠れる。
+  // 10 タブで帯は 628px になり、420px のパネルからはみ出して後ろのタブが隠れる。
   // 右端にフェードを出して「まだ続く」ことを示し、**右端まで送ったら消す**（無い続きを示唆しない）。
   const syncFade = useCallback(() => {
     const strip = stripRef.current
@@ -239,13 +242,11 @@ function MetricTabContent({
 function TabContent({
   detail,
   tab,
-  onTab,
   radiusM,
   onRadius,
 }: {
   detail: StationDetail
   tab: DetailTab
-  onTab: (tab: DetailTab) => void
   radiusM: number
   onRadius: (radiusM: number) => void
 }) {
@@ -254,11 +255,7 @@ function TabContent({
     return (
       <div>
         <DrawerRadiusControl radiusM={radiusM} onChange={onRadius} />
-        <StationOverviewTab
-          grp={detail.station.grp}
-          radiusM={radiusM}
-          onOpenHazard={() => onTab('hazard')}
-        />
+        <StationOverviewTab grp={detail.station.grp} radiusM={radiusM} />
       </div>
     )
   }
@@ -291,13 +288,10 @@ function DetailBody({
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="flex items-start justify-between gap-2 border-b border-slate-100 px-4 pt-4 pb-3">
         <div className="min-w-0 flex-1">
+          {/* ⚠ ヘッダには伸びるもの・その場で開くものを置かない——スクロールしないので、伸ばすと下が切れる
+              （`tests/panel-layout.test.ts`）。 */}
           {detail !== undefined ? (
-            <>
-              <PanelRenderer panel={stationCardPanel(detail)} />
-              {/* 災害タブは末尾で既定では隠れるので、1 行のバッジを確実な入口にする（§7.2）。
-                  ⚠ ここで**開かない**——ヘッダはスクロールしないので、伸ばすと下が切れる。 */}
-              <StationHazardBadge target={hazardTargetOf(detail)} onOpen={() => onTab('hazard')} />
-            </>
+            <PanelRenderer panel={stationCardPanel(detail)} />
           ) : (
             <p className="py-2 text-sm text-slate-400">{isLoading ? '読み込み中…' : '駅を選択'}</p>
           )}
@@ -315,13 +309,7 @@ function DetailBody({
         ) : detail === undefined ? (
           <div className="grid h-40 place-items-center text-sm text-slate-400">読み込み中…</div>
         ) : (
-          <TabContent
-            detail={detail}
-            tab={tab}
-            onTab={onTab}
-            radiusM={radiusM}
-            onRadius={onRadius}
-          />
+          <TabContent detail={detail} tab={tab} radiusM={radiusM} onRadius={onRadius} />
         )}
       </div>
     </div>

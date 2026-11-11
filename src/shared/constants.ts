@@ -95,28 +95,30 @@ export type DetailTab = 'overview' | Exclude<Category, 'population_forecast'> | 
  * **概要は先頭**（2026-10-09 B4・`docs/261001_fix_user_feedback_ui.md` §12-7）。駅周辺のプロフィール（全カテゴリの要点と
  * 県内・市内での位置・性格の目安・見ていないこと）で、どのタブから見ればよいかを決める入口になる。
  *
- * 所得は「そこに住む人の稼ぎ」、売上は「そこで落ちるお金」なので、人口 → 所得 → 売上 と並べる
- * （`CATEGORIES` と同順）。**災害は末尾**（`docs/260828_fix_flood.md` §7 決定 2）。2 番目に置けば
- * 見つけやすいが、**乗降・人口を主に使う人の並びを乱す**——ヘッダのバッジという確実な入口があるので、
- * 並びを壊してまで前に出さない。
+ * **地価は人口の右、災害は地価の右**（2026-11-11・`docs/261110_fix_PLAN.md` §6・D-3）。災害は以前は末尾で、
+ * ヘッダのバッジを入口にしていた（`docs/260828_fix_flood.md` §7 決定 2）。バッジを外したので、開いたときから
+ * 見える 5 番目に置く。概要・乗降客数・人口・地価の並びは乱さない。
+ * 所得（そこに住む人の稼ぎ）と売上（そこで落ちるお金）は隣のまま。`CATEGORIES`（指標の語彙の並び・AI の
+ * カタログ要約もこれを読む）とは別の並びで、こちらを替えてもプロンプトは変わらない。
  *
  * ⚠ タブ帯は 7 タブで 460px、8 タブ（売上）で 516px、9 タブ（災害）で 572px、**10 タブ（概要）で 628px** になり、
  * パネル幅 420px を超えて横スライドが要る（パネルを広げると地図が狭くなるので広げない・
- * `docs/260805_research_add_dataset_economy.md` §16.3）。8 タブ以降は最後のタブが完全に隠れるため、
+ * `docs/260805_research_add_dataset_economy.md` §16.3）。後ろのタブ（広い画面では売上から右、携帯では所得から右）は
+ * 既定では帯の外かフェードの下にあるため、
  * 帯の右端にフェードを出し、**選んだタブは帯を送って見せる**（`StationDetailPanel.tsx`・
- * `docs/260816_sales.md` §7.4 案A・`docs/260828_fix_flood.md` §4.2・`tests/panel-layout.test.ts`）。
+ * `docs/260816_sales.md` §7.4 案A・`tests/panel-layout.test.ts`）。
  */
 export const DETAIL_TABS: readonly DetailTab[] = [
   'overview',
   'passenger',
   'population',
+  'land_price',
+  'hazard',
   'income',
   'sales',
-  'land_price',
   'bus',
   'establishment',
   'employee',
-  'hazard',
 ]
 
 /**

@@ -7,8 +7,9 @@
  * 画面で見たものと AI が説明するものが食い違わない（.claude/CLAUDE.md §2）。
  *
  * - 位置は半径で変わるので、指標のタブと同じ集計半径のセレクタを置く（`?r`）
- * - 災害はここに出さない。**ヘッダのバッジが同じ駅の災害を常に出している**——2 か所に書くと、事前計算（ここ）と
- *   地点の照会（バッジ）の言い回しの違いが食い違いに見える。代わりに「災害」タブへの入口を置く
+ * - 災害はここに出さない。**災害は地価の右の「災害」タブで見る**——2 か所に書くと、事前計算（ここ）と
+ *   地点の照会（タブ）の言い回しの違いが食い違いに見える。タブは開いたときから見えるので、案内の文も置かない
+ *   （2026-11-11・`docs/261110_fix_PLAN.md` §7.1 案 B。以前はヘッダのバッジを指す 1 行を置いていた）
  * - 駅を替えた直後は前の駅のプロフィールを出さない（SWR の keepPreviousData は半径の切り替えのためだけ）
  */
 
@@ -22,31 +23,7 @@ function Loading() {
   return <div className="grid h-40 place-items-center text-sm text-slate-400">読み込み中…</div>
 }
 
-function HazardPointer({ onOpen }: { onOpen: () => void }) {
-  return (
-    <p className="mt-3 text-xs text-slate-500">
-      災害リスクは上のバッジのとおりです。
-      <button
-        type="button"
-        onClick={onOpen}
-        className="ml-1 font-medium text-indigo-600 underline-offset-2 hover:underline"
-      >
-        「災害」タブで詳しく見る
-      </button>
-    </p>
-  )
-}
-
-export function StationOverviewTab({
-  grp,
-  radiusM,
-  onOpenHazard,
-}: {
-  grp: string
-  radiusM: number
-  /** 「災害」タブへ切り替える。 */
-  onOpenHazard: () => void
-}) {
+export function StationOverviewTab({ grp, radiusM }: { grp: string; radiusM: number }) {
   const { profile, error } = useStationProfile(grp, radiusM)
   if (error !== undefined) {
     return (
@@ -64,7 +41,6 @@ export function StationOverviewTab({
   return (
     <div className={cn('transition-opacity', stale && 'opacity-50')} aria-busy={stale}>
       <StationProfile panel={stationProfilePanel(profile)} showHazard={false} />
-      <HazardPointer onOpen={onOpenHazard} />
     </div>
   )
 }

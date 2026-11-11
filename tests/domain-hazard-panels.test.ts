@@ -3,7 +3,7 @@ import { hazardCardPanel } from '@/domain/hazard/panels'
 import { pointHazard } from '@/domain/hazard/point'
 import { durationPhraseJa, riverReasonsJa } from '@/domain/hazard/wording'
 import { hazardLayersToShow, hazardLayersWithPointAnswer } from '@/domain/hazard/catalog'
-import { hazardBadgeJa, STATION_HAZARD_CAVEAT_JA } from '@/domain/hazard/panels'
+import { STATION_HAZARD_CAVEAT_JA } from '@/domain/hazard/panels'
 import { panelSchema } from '@/shared/protocol'
 import { surroundingPrimaries } from '@/shared/mesh'
 
@@ -141,37 +141,7 @@ describe('hazard/catalog: 地図に出すレイヤ（AI が根拠の面を見せ
   })
 })
 
-describe('hazard/panels: 駅バッジの 1 行（§7.2）', () => {
-  it('いちばん重いものをグループ名＋階級で言う', () => {
-    const point = pointHazard(
-      { ...BASE, tile: [{ layerKey: 'flood_l2', hex: '#FFB7B7' }] },
-      ALL_LAYERS,
-    )
-    expect(hazardBadgeJa(point)).toBe('洪水 3〜5m 未満')
-  })
-
-  it('複数のグループに当たったら「ほか N 種」を添える', () => {
-    const point = pointHazard(
-      {
-        ...BASE,
-        tile: [
-          { layerKey: 'flood_l2', hex: '#FFB7B7' },
-          { layerKey: 'hightide_l2', hex: '#FFFFB3' },
-        ],
-        tileNearby: [],
-        uncoveredLayerKeys: [],
-      },
-      ALL_LAYERS,
-    )
-    expect(hazardBadgeJa(point)).toBe('洪水 3〜5m 未満・ほか 1 種')
-  })
-
-  it('該当が無くても「安全」とは言わない', () => {
-    const badge = hazardBadgeJa(pointHazard(BASE, ALL_LAYERS))
-    expect(badge).toBe('指定区域の該当なし')
-    expect(badge).not.toContain('安全')
-  })
-
+describe('hazard/panels: 駅の災害の限界（災害タブの末尾・261110 §5.1）', () => {
   it('駅の代表点 1 点であるという限界を必ず添える', () => {
     expect(STATION_HAZARD_CAVEAT_JA).toContain('代表点')
     expect(STATION_HAZARD_CAVEAT_JA).toContain('異なる')

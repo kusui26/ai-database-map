@@ -1,8 +1,8 @@
 /**
  * 地点のハザードは**別の地点の結果を返さない**（`useHazardPoint`・2026-10-10）。
  *
- * 駅を横浜から東京へ替えると、東京の名前の下に横浜の「⛔ 河岸侵食…」が数秒出ていた（ヘッダのバッジと「災害」タブの
- * 「もし起きたら」）。フックが新しい地点の結果が届くまで前の地点の結果を返していた（SWR の `keepPreviousData`）。
+ * 駅を横浜から東京へ替えると、東京の名前の下に横浜の「⛔ 河岸侵食…」が数秒出ていた（当時のヘッダのバッジと「災害」タブの
+ * 「もし起きたら」。バッジは 2026-11-11 に外した）。フックが新しい地点の結果が届くまで前の地点の結果を返していた（SWR の `keepPreviousData`）。
  *
  * フックは React と SWR の中で動くので、このリポジトリの単体（node）では描けない。振る舞いは実ブラウザ
  * （`tests/ui.hazard-station-switch.smoke.py`・新しい駅の応答を遅らせて読む）が見て、ここは
@@ -15,11 +15,8 @@ import { describe, expect, it } from 'vitest'
 
 const HOOK = 'src/components/hazard/useHazardPoint.ts'
 const CURRENT_POSITION = 'src/components/hazard/useCurrentPositionHazard.ts'
-/** 駅の災害を描くところ（ヘッダのバッジ・「災害」タブ）。 */
-const STATION_VIEWS = [
-  'src/components/hazard/StationHazardBadge.tsx',
-  'src/components/hazard/StationHazardTab.tsx',
-]
+/** 駅の災害を描くところ（「災害」タブ。ヘッダのバッジは 2026-11-11 に外した・261110 §5）。 */
+const STATION_VIEWS = ['src/components/hazard/StationHazardTab.tsx']
 
 const read = (path: string): string => readFileSync(path, 'utf-8')
 
@@ -42,7 +39,7 @@ describe('useHazardPoint は別の地点の結果を返さない', () => {
     expect(users).toEqual([CURRENT_POSITION])
   })
 
-  it('駅のバッジと「災害」タブは地点だけを渡す（前の駅の結果を持ち越さない）', () => {
+  it('駅の「災害」タブは地点だけを渡す（前の駅の結果を持ち越さない）', () => {
     for (const path of STATION_VIEWS) {
       const calls = [...read(path).matchAll(/useHazardPoint\(([^)]*)\)/g)].map((match) => match[1])
       expect(calls.length, path).toBeGreaterThan(0)

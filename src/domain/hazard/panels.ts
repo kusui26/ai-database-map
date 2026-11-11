@@ -22,7 +22,7 @@ import type {
   PanelSize,
   SourceRef,
 } from '@/shared/protocol'
-import { ALERT_LEVEL_LABELS_JA, HAZARD_GROUP_LABELS_JA, type HazardGroup } from '@/shared/constants'
+import { ALERT_LEVEL_LABELS_JA, type HazardGroup } from '@/shared/constants'
 import { evacuationDisasterLabelJa, type EvacuationDisasterKey } from '@/shared/evacuation'
 import { getHazardLayer } from '@/shared/hazard'
 import { type JmaWarningKind } from '@/shared/jma'
@@ -53,29 +53,8 @@ export function hazardCardPanel(point: HazardPointResponse, size?: PanelSize): H
 }
 
 /**
- * 駅カードに 1 行で添える災害バッジの文言（`docs/260824_flood.md` §7.2）。
- *
- * **駅詳細のタブは増やさない**（8 タブ 516px で既にパネル幅を超えている）ので、
- * 1 行に収まる長さにする。レイヤ名は長いので**グループ名**で言う
- * （「洪水浸水想定区域（想定最大規模）」→「洪水」）。
- *
- * 該当が無いときも**「安全」とは言わない**（§7.5）。言えるのは「該当なし」までである。
- */
-export function hazardBadgeJa(point: HazardPointResponse): string {
-  const worst = point.hazards[0]
-  if (worst === undefined) return '指定区域の該当なし'
-  const group = getHazardLayer(worst.layerKey)?.group
-  const groupJa = group === undefined ? '' : `${HAZARD_GROUP_LABELS_JA[group]} `
-  const others = new Set(
-    point.hazards.slice(1).map((item) => getHazardLayer(item.layerKey)?.group ?? item.layerKey),
-  )
-  others.delete(group ?? '')
-  const more = others.size === 0 ? '' : `・ほか ${others.size} 種`
-  return `${groupJa}${worst.valueJa}${more}`
-}
-
-/**
- * 駅バッジに必ず添える限界（§7.2）。
+ * 駅の災害の値（駅の代表点 1 点の照会）に必ず添える限界。駅詳細の災害タブの末尾と、会話の駅プロフィール
+ * （`domain/profile/hazard.ts`）が同じ定数を読む（以前はヘッダのバッジの下・2026-11-11 にバッジを外した）。
  * **駅の代表点 1 点の話**であって、駅前広場の反対側は違うことがある。
  */
 export const STATION_HAZARD_CAVEAT_JA =
@@ -90,7 +69,7 @@ export const STATION_HAZARD_CAVEAT_JA =
  * **5 段中 3 段で同じ語**なので、**いまの災害情報だと読まれた**（利用者からの報告・2026-08-28）。
  *
  * だから語を変えるのではなく、**時制の主語を先に置く**。
- * バッジもタブの見出しも**この定数を使う**——別々に書くと必ずずれる。
+ * 駅詳細の災害タブの見出しも、会話の駅プロフィールも**この定数を使う**——別々に書くと必ずずれる。
  */
 export const HAZARD_TENSE_NOW_JA = 'いま'
 export const HAZARD_TENSE_NOW_NOTE_JA = '気象庁がいま発表しているもの。'
@@ -122,7 +101,7 @@ const EVACUATION_DISASTER_BY_GROUP: Readonly<Record<HazardGroup, EvacuationDisas
 
 /**
  * その地点の「逃げる」で扱う災害種別。**いちばん重い静的ハザード**から決める
- * （`hazards` は重い順・`hazardBadgeJa` と同じ前提）。
+ * （`hazards` は重い順）。
  *
  * `null` ＝ 指定区域の該当が無い。**そのときは種別を勝手に選ばない**——
  * 根拠なく選んだ種別の避難場所を出すくらいなら、段ごと出さない方が誠実である。

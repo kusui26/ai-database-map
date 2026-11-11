@@ -3,12 +3,14 @@ import { describe, expect, it } from 'vitest'
 import { HAZARD_LEVEL_LABELS_JA } from '@/shared/constants'
 import { hazardLayers } from '@/shared/hazard'
 import {
+  ALERT_LIMITATION_SHORT_JA,
+  calmNowNoteJa,
   HAZARD_TENSE_ASSUMED_JA,
   HAZARD_TENSE_ASSUMED_NOTE_JA,
   HAZARD_TENSE_NOW_JA,
-  HAZARD_TENSE_NOW_NOTE_JA,
   STATION_HAZARD_CAVEAT_JA,
 } from '@/domain/hazard/panels'
+import { ALERT_LIMITATION_JA } from '@/domain/hazard/level'
 
 /**
  * **時制**（`docs/260828_fix_flood.md` §4.3・§4.4 決定 3）。
@@ -56,20 +58,60 @@ describe('語彙の衝突（なぜ前置きが要るのか）', () => {
 })
 
 describe('時制の前置き（260828）', () => {
-  it('2 つの時制は別の語で、注記が言い切っている', () => {
+  it('2 つの時制は別の語で、「もし起きたら」の注記が言い切っている', () => {
     expect(HAZARD_TENSE_NOW_JA).not.toBe(HAZARD_TENSE_ASSUMED_JA)
-    expect(HAZARD_TENSE_NOW_NOTE_JA).toContain('いま')
     // 「もし起きたら」側は、**いまの話ではない**と明示する（ここが半分の答え）。
     expect(HAZARD_TENSE_ASSUMED_NOTE_JA).toContain('いま起きていることではありません')
   })
 
-  it('タブは「いま」と「もし起きたら」を両方出す（並べて初めて伝わる）', () => {
-    expect(rendered(TAB_SOURCE)).toContain('HAZARD_TENSE_NOW_JA')
-    expect(rendered(TAB_SOURCE)).toContain('HAZARD_TENSE_ASSUMED_JA')
+  it('タブは「いま」と「もし起きたら」を両方出し、「もし起きたら」には注記を添える（並べて初めて伝わる）', () => {
+    expect(rendered(TAB_SOURCE)).toContain('titleJa={HAZARD_TENSE_NOW_JA}')
+    expect(rendered(TAB_SOURCE)).toContain(
+      'titleJa={HAZARD_TENSE_ASSUMED_JA} noteJa={HAZARD_TENSE_ASSUMED_NOTE_JA}',
+    )
   })
 
   it('タブは画面に「安全」とは書かない（§7.5-5）', () => {
     expect(rendered(TAB_SOURCE)).not.toContain('安全')
+  })
+})
+
+/**
+ * 平時の「いま」は 2 行（2026-11-11・`docs/261110_fix_PLAN.md` §8.3）。結論の文と、
+ * 「気象庁 ◯月◯日 ◯:◯ 発表 ／ 避難情報は市町村が出す」の 1 行。**限界は消さずに短くする。**
+ */
+describe('平時の「いま」の 2 行目', () => {
+  it('発表の時刻を日本時間で言い、限界の短い形を続ける', () => {
+    expect(calmNowNoteJa('2026-11-10T17:49:00Z')).toBe(
+      `気象庁 11月11日 02:49 発表 ／ ${ALERT_LIMITATION_SHORT_JA}`,
+    )
+  })
+
+  it('時刻が無くても（発表を確かめられなかった）、限界は言う', () => {
+    expect(calmNowNoteJa(null)).toBe(ALERT_LIMITATION_SHORT_JA)
+    expect(calmNowNoteJa('こわれた日時')).toBe(ALERT_LIMITATION_SHORT_JA)
+  })
+
+  it('短い形も、長い形（応答・AI）と同じことを言う：避難情報を出すのは市町村で、ここでは分からない', () => {
+    for (const text of [ALERT_LIMITATION_SHORT_JA, ALERT_LIMITATION_JA]) {
+      expect(text).toContain('避難指示')
+      expect(text).toContain('市町村')
+      expect(text).toMatch(/分かりません/)
+    }
+    expect(ALERT_LIMITATION_SHORT_JA.length).toBeLessThan(ALERT_LIMITATION_JA.length)
+  })
+
+  it('タブは平時の「いま」に、この 1 行を出す（対象の行の代わりに、結論の文が区域を言う）', () => {
+    expect(rendered(TAB_SOURCE)).toContain('calmNowNoteJa(alerts.reportedAt)')
+  })
+})
+
+/** 免責はタブの末尾で 1 回（中のパネル最大 4 枚が同じ 1 文を出していた・261110 §1.4・§8.3）。 */
+describe('免責（タブの末尾に 1 回）', () => {
+  it('タブは中のパネルに免責を出させず、末尾で 1 回だけ出す', () => {
+    const source = rendered(TAB_SOURCE)
+    expect(source).toContain('<HazardDisclaimerAtEndContext.Provider value={true}>')
+    expect(source.match(/HAZARD_DISCLAIMER_JA/g)).toHaveLength(1)
   })
 })
 

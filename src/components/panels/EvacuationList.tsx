@@ -9,12 +9,15 @@
  *  2. **限界を畳まない**（開設されているとは限らない・直線距離・指定避難所ではない）
  *  3. **番号を振る**——地図の印と一覧を突き合わせられるようにする（`highlightPoints` と同じ並び）
  *  4. **備考を捨てない**（「洪水での避難は◯◯川を対象とする」は、その場所が使える条件そのもの）
+ *
+ * 免責は `HazardDisclaimer` が出す（駅の災害タブの中ではタブの末尾で 1 回・`docs/261110_fix_PLAN.md` §8.3）。
  */
 
 import { type EvacuationItem, type EvacuationListPanel } from '@/shared/protocol'
 import { HAZARD_SOURCE_LABELS_JA } from '@/shared/constants'
 import { cn } from '@/lib/utils'
 import { Emphasis } from './Emphasis'
+import { HazardDisclaimer } from './HazardDisclaimer'
 import { SourceList } from './SourceList'
 
 /** 想定区域との重なりの見せ方（色 ＋ 記号 ＋ テキストの 3 重・§7.6）。 */
@@ -136,7 +139,7 @@ export function EvacuationList({ panel }: { panel: EvacuationListPanel }) {
 
       <SourceList sources={panel.sources} className="mt-3" />
 
-      <p className="mt-2 text-[11px] text-slate-500">ⓘ {panel.disclaimerJa}</p>
+      <HazardDisclaimer textJa={panel.disclaimerJa} />
     </section>
   )
 }

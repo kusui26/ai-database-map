@@ -1,13 +1,20 @@
 'use client'
 
 /**
- * 駅詳細の「災害」タブの中身（`docs/260828_fix_flood.md` §4.3）。
+ * 駅詳細の「災害」タブの中身（`docs/260828_fix_flood.md` §4.3・`docs/261110_fix_PLAN.md` §8）。
  *
  * **上から「いま」→「もし起きたら」→「逃げる」の 3 段**にする。
  * ①と②を並べて初めて時制の違いが伝わり（語彙側の答えは時制の前置き・同 §4.4 決定 3）、
  * ③は実装済みなのに駅カードから辿れなかった避難先・脱出方向への入口である（同 §3）。
- * 末尾に限界の 1 文（駅の代表点 1 点の値）を置く——以前はヘッダのバッジの下に出していた（2026-11-11 に
- * バッジを外した・`docs/261110_fix_PLAN.md` §5.1）。
+ * 末尾に限界の 1 文（駅の代表点 1 点の値）と免責を置く——限界は以前はヘッダのバッジの下に出していた
+ * （2026-11-11 にバッジを外した・`docs/261110_fix_PLAN.md` §5.1）。
+ *
+ * ## 同じことは 1 回だけ言う（2026-11-11・261110 §8.1・§8.3）
+ *
+ * - 平時の「いま」は 2 行（結論の文と「発表時刻 ／ 避難情報は市町村が出す」）。結論の文が区域の名前で始まるので
+ *   「対象」の行は出さない。限界は消さず、短い形で言う。警戒中はバナーと同じカードのまま
+ * - 免責は**タブの末尾で 1 回**。中のパネル（最大 4 枚・同じ 1 文）は出さない（`HazardDisclaimerAtEndContext`）
+ * - 「逃げる」は見出しとボタンだけ。**どの災害の話かはボタンが言う**
  *
  * 出すのは**現在地カード・警戒バナーと同じパネル**——同じ共通API・同じドメイン関数を通るので、
  * 地図をクリックしたときやチャットの答えと食い違わない（`.claude/CLAUDE.md` §2）。
@@ -25,26 +32,27 @@
 
 import { useEffect, useState } from 'react'
 import type { HazardAlertsResponse } from '@/shared/api'
+import { HAZARD_DISCLAIMER_JA } from '@/shared/hazard'
 import {
+  calmNowNoteJa,
   escapeDirectionPanel,
   evacuationDisasterForPoint,
   evacuationListPanel,
   evacuationUnavailableJa,
   hazardAlertCardPanel,
   hazardCardPanel,
-  hazardEscapeNoteJa,
-  reportedAtJa,
+  hazardEscapeOpenJa,
   HAZARD_ESCAPE_CLOSE_JA,
-  HAZARD_ESCAPE_OPEN_JA,
   HAZARD_ESCAPE_TITLE_JA,
   HAZARD_TENSE_ASSUMED_JA,
   HAZARD_TENSE_ASSUMED_NOTE_JA,
   HAZARD_TENSE_NOW_JA,
-  HAZARD_TENSE_NOW_NOTE_JA,
   STATION_HAZARD_CAVEAT_JA,
 } from '@/domain/hazard/panels'
 import { isWarningMode } from '@/domain/hazard/warning-mode'
+import { HazardDisclaimerAtEndContext } from '@/components/panels/HazardDisclaimer'
 import { PanelRenderer } from '@/components/panels/PanelRenderer'
+import { PHRASE_WRAP_CLASS } from '@/components/panels/phraseWrap'
 import { useIsOnline } from '@/hooks/useIsOnline'
 import { cn } from '@/lib/utils'
 import { useMapStore } from '@/stores/mapStore'
@@ -54,12 +62,12 @@ import { useHazardAlerts } from './useHazardAlerts'
 import { useHazardPoint, type HazardTarget } from './useHazardPoint'
 import { messageJaOf } from '@/lib/fetch-json'
 
-/** 段の見出し。**主語**（時制・どの災害の話か）を必ず添える（見出しだけでは伝わらない）。 */
-function SectionHeading({ titleJa, noteJa }: { titleJa: string; noteJa: string }) {
+/** 段の見出し。**主語**（時制）を添えるときは注記として並べる（「もし起きたら」は、いまの話ではないと言い切る）。 */
+function SectionHeading({ titleJa, noteJa }: { titleJa: string; noteJa?: string }) {
   return (
     <div className="mb-2 flex flex-wrap items-baseline gap-x-2">
       <h3 className="text-sm font-bold text-slate-900">{titleJa}</h3>
-      <p className="text-[11px] text-slate-500">{noteJa}</p>
+      {noteJa !== undefined && <p className="text-[11px] text-slate-500">{noteJa}</p>}
     </div>
   )
 }
@@ -85,31 +93,34 @@ function areaJa(alerts: HazardAlertsResponse): string {
 /**
  * 警戒レベル3相当に届いていないときの「いま」。
  *
- * **1 行で済ませる**（平時にここが大きいと、下の「もし起きたら」が押し出される）。
- * 文言は共通API の `headlineJa` をそのまま——**「安全です」とは書かない**（§7.5-5）。
- * 限界（避難情報は市町村が出す）は畳まずに必ず出す。
+ * **2 行で済ませる**（平時にここが大きいと、下の「もし起きたら」が押し出される・261110 §8.3）。
+ * 文言は共通API の `headlineJa` をそのまま——**「安全です」とは書かない**（§7.5-5）。区域の名前で始まるので、
+ * 主語（どの区域の発表か）はこの 1 文が言う。限界（避難情報は市町村が出す）は畳まずに、短い形で必ず出す。
  */
 function CalmNow({ alerts }: { alerts: HazardAlertsResponse }) {
-  const reported = reportedAtJa(alerts.reportedAt)
   return (
-    <div className="rounded-xl bg-slate-50 p-3">
+    <div className={PHRASE_WRAP_CLASS}>
       <p className="text-sm leading-snug text-slate-800">{alerts.headlineJa}</p>
-      {reported !== null && <p className="mt-1 text-[11px] text-slate-500">{reported}</p>}
-      {alerts.limitationsJa.map((limitation) => (
-        <p key={limitation} className="mt-1 text-[11px] leading-snug text-slate-600">
-          {limitation}
-        </p>
-      ))}
+      <p className="mt-0.5 text-[11px] leading-snug text-slate-500">
+        {calmNowNoteJa(alerts.reportedAt)}
+      </p>
     </div>
   )
 }
 
-/** 「いま」の本体。警戒中は**バナーと同じカード**をそのまま出す（言うことを割らない）。 */
+/**
+ * 「いま」の本体。警戒中は**バナーと同じカード**をそのまま出す（言うことを割らない）。
+ * 主語（どの区域の発表か）を先に出す——警戒中のカードは `placeJa` が「この地点」で、
+ * 書かないと「駅の 1 点にいま警報が出ている」と読める。
+ */
 function NowBody({ alerts }: { alerts: HazardAlertsResponse }) {
-  if (isWarningMode(alerts.alertLevel)) {
-    return <PanelRenderer panel={hazardAlertCardPanel(alerts, 'compact')} />
-  }
-  return <CalmNow alerts={alerts} />
+  if (!isWarningMode(alerts.alertLevel)) return <CalmNow alerts={alerts} />
+  return (
+    <>
+      <p className="mb-1 text-[11px] text-slate-500">{areaJa(alerts)}</p>
+      <PanelRenderer panel={hazardAlertCardPanel(alerts, 'compact')} />
+    </>
+  )
 }
 
 /** ①「いま」。オフラインでは**取りに行かない**——古い発表を「今」として出さないため。 */
@@ -127,16 +138,8 @@ function NowSection({ target }: { target: HazardTarget }) {
       : messageJaOf(error, 'いまの発表を取得できませんでした。')
   return (
     <section>
-      <SectionHeading titleJa={HAZARD_TENSE_NOW_JA} noteJa={HAZARD_TENSE_NOW_NOTE_JA} />
-      {alerts === undefined ? (
-        <Unavailable messageJa={messageJa} />
-      ) : (
-        <>
-          {/* 主語は**どちらの見え方でも**先に出す（警戒中のカードは `placeJa` が「この地点」）。 */}
-          <p className="mb-1 text-[11px] text-slate-500">{areaJa(alerts)}</p>
-          <NowBody alerts={alerts} />
-        </>
-      )}
+      <SectionHeading titleJa={HAZARD_TENSE_NOW_JA} />
+      {alerts === undefined ? <Unavailable messageJa={messageJa} /> : <NowBody alerts={alerts} />}
     </section>
   )
 }
@@ -215,15 +218,18 @@ function EscapeSection({ target }: { target: HazardTarget }) {
 
   return (
     <section className="border-t border-slate-100 pt-4">
-      <SectionHeading titleJa={HAZARD_ESCAPE_TITLE_JA} noteJa={hazardEscapeNoteJa(disaster)} />
-      <button
-        type="button"
-        onClick={() => setOpen((current) => !current)}
-        aria-expanded={open}
-        className="rounded-md bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700 transition-colors hover:bg-indigo-100"
-      >
-        {open ? HAZARD_ESCAPE_CLOSE_JA : HAZARD_ESCAPE_OPEN_JA}
-      </button>
+      {/* 見出しとボタンだけ。**どの災害の話かはボタンが言う**（種別を黙って選ばない・261110 §8.3）。 */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <h3 className="text-sm font-bold text-slate-900">{HAZARD_ESCAPE_TITLE_JA}</h3>
+        <button
+          type="button"
+          onClick={() => setOpen((current) => !current)}
+          aria-expanded={open}
+          className="rounded-md bg-indigo-50 px-2.5 py-1 text-left text-xs font-semibold text-indigo-700 transition-colors hover:bg-indigo-100"
+        >
+          {open ? HAZARD_ESCAPE_CLOSE_JA : hazardEscapeOpenJa(disaster)}
+        </button>
+      </div>
       {open && (
         <div className="mt-2 space-y-2">
           {/* 「どちらへ動けば区域を出られるか」を先に。**行き先が数 km 先のこともある**ので、
@@ -251,13 +257,19 @@ function EscapeSection({ target }: { target: HazardTarget }) {
 
 export function StationHazardTab({ target }: { target: HazardTarget }) {
   return (
-    <div className="space-y-4">
-      <NowSection target={target} />
-      <AssumedSection target={target} />
-      {/* 駅が替わったら「開いている・取得済み」を持ち越さない（押したときだけ取る、の「押した」は駅ごと）。 */}
-      <EscapeSection key={`${target.lon},${target.lat}`} target={target} />
-      {/* 限界は畳まずに出す（`docs/260824_flood.md` §7.5）。駅前の反対側では値が違うことがある。 */}
-      <p className="text-[11px] leading-snug text-slate-500">{STATION_HAZARD_CAVEAT_JA}</p>
-    </div>
+    // 中のパネルは免責を出さない——タブの末尾で 1 回だけ出す（261110 §8.3）。
+    <HazardDisclaimerAtEndContext.Provider value={true}>
+      <div className="space-y-4">
+        <NowSection target={target} />
+        <AssumedSection target={target} />
+        {/* 駅が替わったら「開いている・取得済み」を持ち越さない（押したときだけ取る、の「押した」は駅ごと）。 */}
+        <EscapeSection key={`${target.lon},${target.lat}`} target={target} />
+        {/* 限界と免責は畳まずに出す（`docs/260824_flood.md` §7.5）。駅前の反対側では値が違うことがある。 */}
+        <div className="space-y-1 text-[11px] leading-snug text-slate-500">
+          <p>{STATION_HAZARD_CAVEAT_JA}</p>
+          <p>ⓘ {HAZARD_DISCLAIMER_JA}</p>
+        </div>
+      </div>
+    </HazardDisclaimerAtEndContext.Provider>
   )
 }

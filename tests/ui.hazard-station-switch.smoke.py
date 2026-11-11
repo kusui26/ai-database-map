@@ -78,7 +78,7 @@ HAZARD_TAB_JS = """() => {
   const body = aside?.querySelector('.overflow-y-auto');
   if (!body) return { card: '', escape: false, text: '' };
   const card = body.querySelector('section h2')?.textContent?.trim() ?? '';
-  const escape = [...body.querySelectorAll('button')].some((b) => b.textContent.includes('避難先と向きを調べる'));
+  const escape = [...body.querySelectorAll('button[aria-expanded]')].some((b) => b.textContent.includes('の避難先'));
   return { card, escape, text: body.innerText };
 }"""
 

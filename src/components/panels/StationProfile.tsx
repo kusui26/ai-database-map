@@ -6,11 +6,14 @@
  * 描くだけ。値・順位・性格の目安・注記・見ていないことは、すべて共通 API（`src/domain/profile/`）が決めている。
  * ここで守る不変条件：
  *  1. **位置は目盛りと文字の両方で**（「上位 19%」と順位／駅数。目盛りだけ・色だけにしない）
- *  2. **見ていないことは常に出す**（畳まない・押さないと読めない注意は無いのと同じ）
+ *  2. **値と、その値の読み方を変える注記（値のすぐ下）を先に見せる。** 見ていないことと全体の注記（順位の読み方・円で集計・
+ *     性格の規則）は画面に出さない——応答（`notCoveredJa`・`notesJa`）と AI の本文には残る。出典は「出典（N）」の 1 行に
+ *     畳む（2026-11-11・`docs/261110_fix_PLAN.md` §2.2・§7。以前は「見ていないことは常に出す」だった）
  *  3. **災害は危険度の語を出さない**（「危険」はいまの危険度と読まれる・`docs/260828_fix_flood.md` §4.4 決定 3）——
  *     時制（もし起きたら）を先に置き、重さは色と記号で示す
  *
- * 駅詳細の「概要」タブは、災害を出さない（`showHazard={false}`）——ヘッダのバッジが同じ駅の災害を常に出している。
+ * 駅詳細の「概要」タブは、災害を出さない（`showHazard={false}`）——災害は地価の右の「災害」タブで見る
+ * （2026-11-11 にヘッダのバッジを外した・`docs/261110_fix_PLAN.md` §5）。会話の中のプロフィールは災害の要約を出す。
  */
 
 import { HAZARD_LEVEL_COLORS, HAZARD_LEVEL_ICONS, HAZARD_LEVEL_LABELS_JA } from '@/shared/constants'
@@ -170,31 +173,12 @@ function HazardBlock({ hazard }: { hazard: ProfileHazard | null }) {
   )
 }
 
-/** 見ていないこと（**常に出す**）。 */
-function NotCovered({ items }: { items: readonly string[] }) {
-  return (
-    <div className="rounded-lg bg-amber-50 px-3 py-2 ring-1 ring-amber-100">
-      <p className="text-xs font-semibold text-amber-800">このプロフィールで見ていないこと</p>
-      <ul className="mt-1.5 flex flex-wrap gap-1">
-        {items.map((item) => (
-          <li
-            key={item}
-            className="rounded-md bg-white px-1.5 py-0.5 text-[11px] text-amber-800 ring-1 ring-amber-200"
-          >
-            {item}
-          </li>
-        ))}
-      </ul>
-    </div>
-  )
-}
-
 export function StationProfile({
   panel,
   showHazard = true,
 }: {
   panel: StationProfilePanel
-  /** 災害の要約を出すか（駅詳細はヘッダのバッジが出しているので出さない）。 */
+  /** 災害の要約を出すか（駅詳細の概要タブは出さない＝災害は「災害」タブで見る）。 */
   showHazard?: boolean
 }) {
   const compact = panel.size === 'compact'
@@ -209,13 +193,7 @@ export function StationProfile({
         <SectionBlock key={section.id} section={section} />
       ))}
       {showHazard && <HazardBlock hazard={panel.hazard} />}
-      <NotCovered items={panel.notCoveredJa} />
-      <ul className="space-y-0.5 text-[11px] text-slate-400">
-        {panel.notesJa.map((note) => (
-          <li key={note}>・{note}</li>
-        ))}
-      </ul>
-      <SourceList sources={panel.sources} />
+      <SourceList sources={panel.sources} folded />
     </section>
   )
 }

@@ -6,11 +6,17 @@
  * 描くだけ。値・増減・作り方・当たり具合・分布・凡例・注記は、すべて共通 API（`src/domain/area-summary/`）が決めている。
  * ここで守る不変条件：
  *  1. **区域の値と駅の周りの値を分けて見せる**（見出しを分け、駅の周りは「駅の周り（1km 圏・137 駅）」と名乗る）。
- *     横浜市の人口は −0.7% だが、駅の周りの中央値は +2.5%——同じ欄に並べると、駅の値を市の値と読まれる
+ *     横浜市の人口は −0.7% だが、駅の周りの中央値は +2.5%——同じ欄に並べると、駅の値を市の値と読まれる。
+ *     駅の周りの分布は**いつも畳む**（エリア全体の値と混ざって読まれやすい）
  *  2. **区域の値は作り方を名乗る**（公表値・推計・メッシュの按分・駅の円の値）。年は見出しの文に入っている
- *  3. **無い値の理由・見ていないことは常に出す**（畳まない）。比較のときだけ、駅の周りの分布を畳む（表が主役）
+ *  3. **出せない値の理由は常に出す**（そのエリアに固有）。見ていないこと・全体の注記・区域の値の補足（推計の山・当たり具合）は
+ *     画面に出さない——応答と AI の本文には残る。比べるときの注記（図の読み方）は残す。出典は「出典（N）」の 1 行に畳む
+ *     （2026-11-11・`docs/261110_fix_PLAN.md` §2.2・§4。以前は「見ていないことは常に出す」だった）
+ *  4. **地図の色分けの凡例は、地図の右下の凡例が出す。** ここは色分けできなかった理由の 1 行だけ——ただし地図の凡例が
+ *     エリアの図の列に場所を取られて出ていないときは、ここに凡例を出す（色だけを残さない・`legendPlacement.ts`）
  */
 
+import { useContext } from 'react'
 import { radiusLabel } from '@/shared/constants'
 import {
   type AreaComparisonTable,
@@ -22,6 +28,7 @@ import {
 } from '@/shared/area-summary'
 import { type AreaSummaryPanel } from '@/shared/protocol'
 import { cn } from '@/lib/utils'
+import { MapLegendHiddenContext } from './mapLegendContext'
 import { SourceList } from './SourceList'
 
 /** 作り方の札（公表値は濃く、按分・推計は淡く）。 */
@@ -39,7 +46,10 @@ function MethodBadge({ total }: { total: AreaTotalLine }) {
   )
 }
 
-/** 区域の値 1 系統（名前・作り方 ／ 見出しの文 ／ 推計の山と当たり具合）。 */
+/**
+ * 区域の値 1 系統（名前・作り方 ／ 見出しの文）。推計の山と当たり具合は出さない——すぐ下の推移のグラフが、山と、
+ * 実績と推計の差を見せている（応答と AI には残る・261110 §4.1）。
+ */
 function TotalRow({ total }: { total: AreaTotalLine }) {
   return (
     <li className="border-b border-slate-100 py-2 last:border-b-0">
@@ -48,14 +58,6 @@ function TotalRow({ total }: { total: AreaTotalLine }) {
         <MethodBadge total={total} />
       </div>
       <p className="mt-0.5 text-sm font-semibold text-slate-900 tabular-nums">{total.headlineJa}</p>
-      {total.peak !== null && (
-        <p className="mt-0.5 text-[11px] text-slate-500 tabular-nums">
-          推計の山：{total.peak.year}年 {total.peak.valueJa}
-        </p>
-      )}
-      {total.accuracy !== null && (
-        <p className="mt-0.5 text-[11px] text-slate-500">{total.accuracy.textJa}</p>
-      )}
     </li>
   )
 }
@@ -152,11 +154,8 @@ function stationsHeading(stations: AreaStations): string {
   return `駅の周り（${radiusLabel(stations.radiusM)}圏・${stations.count} 駅）`
 }
 
-/** エリア 1 つ（1 つのときは全部、比較のときは名前・無い値・当たり具合と、畳んだ駅の周り）。 */
+/** エリア 1 つ（1 つのときは区域の値まで、比較のときは名前と無い値。駅の周りはどちらも畳む）。 */
 function AreaCard({ card, comparing }: { card: AreaSummaryCard; comparing: boolean }) {
-  const accuracies = card.totals.flatMap((total) =>
-    total.accuracy === null ? [] : [total.accuracy.textJa],
-  )
   const facts = [
     card.kindJa,
     `駅 ${card.stationCount}`,
@@ -168,39 +167,22 @@ function AreaCard({ card, comparing }: { card: AreaSummaryCard; comparing: boole
       <p className="text-[11px] text-slate-500">
         {facts.filter((fact) => fact !== null).join('・')}
       </p>
-      {comparing ? (
-        accuracies.map((text) => (
-          <p key={text} className="text-[11px] text-slate-500">
-            推計の当たり具合：{text}
-          </p>
-        ))
-      ) : (
-        <Totals totals={card.totals} />
-      )}
+      {!comparing && <Totals totals={card.totals} />}
       <Unavailable items={card.unavailableJa} />
-      {card.stations.stats.length > 0 && (
-        <StationsBlock stations={card.stations} collapsed={comparing} />
-      )}
+      {card.stations.stats.length > 0 && <StationsBlock stations={card.stations} />}
     </div>
   )
 }
 
-/** 駅の周り（比較のときは畳む）。 */
-function StationsBlock({ stations, collapsed }: { stations: AreaStations; collapsed: boolean }) {
-  const heading = stationsHeading(stations)
-  if (collapsed) {
-    return (
-      <details className="text-sm">
-        <summary className="cursor-pointer text-xs font-semibold text-slate-500">{heading}</summary>
-        <StationStats stations={stations} />
-      </details>
-    )
-  }
+/** 駅の周り（**いつも畳む**・押すと分布が開く）。 */
+function StationsBlock({ stations }: { stations: AreaStations }) {
   return (
-    <div>
-      <h4 className="text-xs font-semibold tracking-wide text-slate-500">{heading}</h4>
+    <details className="text-sm">
+      <summary className="cursor-pointer text-xs font-semibold text-slate-500">
+        {stationsHeading(stations)}
+      </summary>
       <StationStats stations={stations} />
-    </div>
+    </details>
   )
 }
 
@@ -255,16 +237,24 @@ function Swatch({ color }: { color: string }) {
   )
 }
 
-/** 色分けの凡例（段・色・駅の数・⚠・値なし・色の意味。色分けしなかったら理由）。 */
+/**
+ * 地図の色分け。色分けできなかったときは理由の 1 行だけ。凡例（段・色・駅の数・⚠・値なし・色の意味）は、地図の凡例が
+ * エリアの図の列に場所を取られて出ていないときだけ出す——ふだんは地図の右下の凡例と同じ中身になる（261110 §4.1）。
+ */
 function LegendBlock({ legend }: { legend: StationLegend }) {
+  const mapLegendHidden = useContext(MapLegendHiddenContext)
+  if (legend.reasonJa !== null) {
+    return (
+      <p className="text-[11px] text-slate-500">
+        地図の色分け：{legend.titleJa}。{legend.reasonJa}
+      </p>
+    )
+  }
+  if (!mapLegendHidden) return null
   return (
     <div className="rounded-lg px-3 py-2 ring-1 ring-slate-200">
       <p className="text-xs font-semibold text-slate-600">地図の色分け：{legend.titleJa}</p>
-      {legend.reasonJa !== null ? (
-        <p className="mt-1 text-[11px] text-slate-500">{legend.reasonJa}</p>
-      ) : (
-        <LegendClasses legend={legend} />
-      )}
+      <LegendClasses legend={legend} />
       <p className="mt-1 text-[11px] text-slate-400">出典：{legend.sourceJa}</p>
     </div>
   )
@@ -301,22 +291,15 @@ function LegendClasses({ legend }: { legend: StationLegend }) {
   )
 }
 
-/** 見ていないこと（**常に出す**）。 */
-function NotIncluded({ items }: { items: readonly string[] }) {
+/** 比べるときの注記（図の読み方：「推移は 2020年を 100 とした指数」など）。比べないときは何も出さない。 */
+function ComparisonNotes({ notes }: { notes: readonly string[] }) {
+  if (notes.length === 0) return null
   return (
-    <div className="rounded-lg bg-amber-50 px-3 py-2 ring-1 ring-amber-100">
-      <p className="text-xs font-semibold text-amber-800">この要約で見ていないこと</p>
-      <ul className="mt-1.5 flex flex-wrap gap-1">
-        {items.map((item) => (
-          <li
-            key={item}
-            className="rounded-md bg-white px-1.5 py-0.5 text-[11px] text-amber-800 ring-1 ring-amber-200"
-          >
-            {item}
-          </li>
-        ))}
-      </ul>
-    </div>
+    <ul className="space-y-0.5 text-[11px] text-slate-400">
+      {notes.map((note) => (
+        <li key={note}>・{note}</li>
+      ))}
+    </ul>
   )
 }
 
@@ -333,13 +316,8 @@ export function AreaSummary({ panel }: { panel: AreaSummaryPanel }) {
         <AreaCard key={card.ref} card={card} comparing={comparing} />
       ))}
       {panel.legend !== null && <LegendBlock legend={panel.legend} />}
-      <NotIncluded items={panel.notIncludedJa} />
-      <ul className="space-y-0.5 text-[11px] text-slate-400">
-        {[...panel.notesJa, ...(panel.comparison?.notesJa ?? [])].map((note) => (
-          <li key={note}>・{note}</li>
-        ))}
-      </ul>
-      <SourceList sources={panel.sources} />
+      <ComparisonNotes notes={panel.comparison?.notesJa ?? []} />
+      <SourceList sources={panel.sources} folded />
     </section>
   )
 }

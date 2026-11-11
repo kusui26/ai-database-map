@@ -30,6 +30,8 @@ import { useMapStore } from '@/stores/mapStore'
 import { messageJaOf } from '@/lib/fetch-json'
 import { cn } from '@/lib/utils'
 import { PanelStack } from '@/components/panels/PanelRenderer'
+import { MapLegendHiddenContext } from '@/components/panels/mapLegendContext'
+import { useMapLegendHiddenByColumn } from '@/components/coloring/legendPlacement'
 import { useColoringUrlState } from '@/components/map/useColoringUrlState'
 import { useMapUrlState } from '@/components/map/useMapUrlState'
 import { DEFAULT_AREA_RADIUS_M, type AreaFigure } from '@/components/figure/url'
@@ -118,10 +120,14 @@ function Notice({ children }: { children: string }) {
   )
 }
 
-/** 図の本文（要約・推移・内訳）。条件を替えた直後は、前の図を薄くして出したまま待つ。 */
+/**
+ * 図の本文（要約・推移・内訳）。条件を替えた直後は、前の図を薄くして出したまま待つ。
+ * 地図の凡例が列に場所を取られて出ていないときだけ、要約が凡例を出す（`legendPlacement.ts`）。
+ */
 function AreaContent({ state, initial }: { state: AreaSummaryState; initial: InitialArea }) {
   const { summary, latest, isLoading, error } = state
   const panels = useMemo(() => (latest === undefined ? [] : areaSummaryPanels(latest)), [latest])
+  const mapLegendHidden = useMapLegendHiddenByColumn()
   if (initial.error !== undefined) {
     return (
       <Notice>{`${messageJaOf(initial.error, '開いた直後のエリアを決められませんでした。')} エリアを選んでください。`}</Notice>
@@ -146,7 +152,9 @@ function AreaContent({ state, initial }: { state: AreaSummaryState; initial: Ini
   return (
     <div aria-busy={stale}>
       {stale && <p className="mb-2 text-xs text-slate-400">集計中…</p>}
-      <PanelStack panels={panels} className={cn('transition-opacity', stale && 'opacity-50')} />
+      <MapLegendHiddenContext value={mapLegendHidden}>
+        <PanelStack panels={panels} className={cn('transition-opacity', stale && 'opacity-50')} />
+      </MapLegendHiddenContext>
     </div>
   )
 }

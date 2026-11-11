@@ -357,7 +357,7 @@ function profileSectionNodes(section: ProfileSection): VNode[] {
   ]
 }
 
-/** 災害の要約。危険度の**語**は出さない（いまの危険度と読まれる・Web UI のバッジと同じ）——色と記号と文で。 */
+/** 災害の要約。危険度の**語**は出さない（いまの危険度と読まれる・`docs/260828_fix_flood.md` §4.4 決定 3）——色と記号と文で。 */
 function profileHazardNodes(panel: StationProfilePanel): VNode[] {
   const hazard = panel.hazard
   if (hazard === null) {

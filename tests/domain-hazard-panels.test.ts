@@ -5,6 +5,7 @@ import { durationPhraseJa, riverReasonsJa } from '@/domain/hazard/wording'
 import { hazardLayersToShow, hazardLayersWithPointAnswer } from '@/domain/hazard/catalog'
 import { STATION_HAZARD_CAVEAT_JA } from '@/domain/hazard/panels'
 import { panelSchema } from '@/shared/protocol'
+import { hazardPointResponseSchema } from '@/shared/api'
 import { surroundingPrimaries } from '@/shared/mesh'
 
 /**
@@ -23,6 +24,7 @@ const BASE = {
   tile: [],
   tileNearby: [],
   uncoveredLayerKeys: [],
+  unreachedLayerKeys: [],
   rivers: [],
   elevationM: 0.2,
   onlineSourcesReached: true,
@@ -61,6 +63,48 @@ describe('hazard/panels: 地点の応答 → hazardCard', () => {
     expect(panel.evacuation).toBe(point.verdict.evacuation)
     expect(panel.headlineJa).toBe(point.verdict.headlineJa)
     expect(panel.reasonsJa).toEqual(point.verdict.reasonsJa)
+  })
+
+  it('種類ごとの状態・畳まない注意・固有の事実を、応答のまま写す（261110 §8.4）', () => {
+    const rivers = [{ nameJa: '中川', maxDepthM: null, arriveMin: 30, continueMin: 5718 }]
+    const point = pointHazard(
+      { ...BASE, tile: [{ layerKey: 'flood_l2', hex: '#FFB7B7' }], rivers },
+      ALL_LAYERS,
+    )
+    const panel = hazardCardPanel(point, 'full')
+    expect(() => panelSchema.parse(panel)).not.toThrow()
+    expect(panel.groupStates).toHaveLength(5)
+    expect(panel.groupStates).toEqual(point.groupStates)
+    expect(panel.keyNotesJa).toEqual(point.keyNotesJa)
+    expect(panel.highlightsJa).toEqual(point.highlightsJa)
+    expect(panel.highlightsJa?.[0]).toContain('中川')
+  })
+
+  /**
+   * 配備の切り替わりの間、CDN・Service Worker に**3 項目の無い古い応答**が残る。
+   * 新しい画面がそれを受けても落ちず、カードは今の描き方のまま（3 項目が無い）になる。
+   */
+  it('古い応答（3 項目が無い）も共通API の契約に通り、カードは今のまま描ける', () => {
+    const point = pointHazard(
+      { ...BASE, tile: [{ layerKey: 'flood_l2', hex: '#FFB7B7' }] },
+      ALL_LAYERS,
+    )
+    const legacy: unknown = JSON.parse(
+      JSON.stringify({
+        ...point,
+        groupStates: undefined,
+        keyNotesJa: undefined,
+        highlightsJa: undefined,
+      }),
+    )
+    const parsed = hazardPointResponseSchema.parse(legacy)
+    expect(parsed.groupStates).toBeUndefined()
+    const panel = hazardCardPanel(parsed)
+    expect(() => panelSchema.parse(panel)).not.toThrow()
+    expect(panel.groupStates).toBeUndefined()
+    expect(panel.keyNotesJa).toBeUndefined()
+    expect(panel.highlightsJa).toBeUndefined()
+    expect(panel.items).toEqual(point.hazards)
   })
 })
 

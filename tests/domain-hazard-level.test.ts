@@ -286,6 +286,17 @@ describe('panels: いまの警戒状況 → hazardCard', () => {
     expect(panel.items[0]?.valueJa).toContain('警戒レベル3相当')
   })
 
+  /**
+   * 種類ごとの状態・畳まない注意・固有の事実は**地点のカードだけ**のもの（`docs/261110_fix_PLAN.md` §8.4）。
+   * 警報のカードは持たないので、描く側は今の描き方のまま——発表時刻と限界は畳まれない。
+   */
+  it('種類ごとの状態などの 3 項目を持たない（今の描き方のまま）', () => {
+    const panel = hazardAlertCardPanel(alerts([warning({ alertLevel: 3 })]))
+    expect(panel.groupStates).toBeUndefined()
+    expect(panel.keyNotesJa).toBeUndefined()
+    expect(panel.highlightsJa).toBeUndefined()
+  })
+
   /** 避難の要否を出すのは市町村。**アラートのカードでは必ず判定しない**（§7.4）。 */
   it('evacuation は必ず null', () => {
     for (const level of ALERT_LEVELS) {

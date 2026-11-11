@@ -72,6 +72,9 @@ async function meshOnlyHazard(
       // 公式タイルに届いていないので、近さも図の有無も測れない。
       tileNearby: [],
       uncoveredLayerKeys: [],
+      // 読みに行っていない（届かなかったことは onlineSourcesReached: false が言う）。
+      // メッシュにも無いレイヤ（高潮・津波・土砂など）は、ドメインが「未確認」と言う。
+      unreachedLayerKeys: [],
       rivers: [],
       elevationM: mesh.elevationM,
       onlineSourcesReached: false,

@@ -130,6 +130,11 @@ export type TileReadingsResult = {
   readonly nearby: readonly TileReading[]
   /** この地域にそもそも区域図が無いレイヤ（未整備の可能性・注記を地域固有にするため）。 */
   readonly uncoveredLayerKeys: readonly string[]
+  /**
+   * 読みに行って**届かなかった**レイヤ（通信の失敗・タイムアウト）。404 は「区画にデータが無い」で、
+   * ここには入らない。区域外とも図なしとも言えないレイヤを、ドメインが「未確認」と言うために返す。
+   */
+  readonly unreachedLayerKeys: readonly string[]
   readonly noteJa: string | null
   /** 1 レイヤでも公式タイルに届いたか（届いていなければ答えは `unknown`）。 */
   readonly reached: boolean
@@ -190,13 +195,18 @@ export async function tileReadings(lon: number, lat: number): Promise<TileReadin
   const keys = hazardLayersWithPointAnswer()
   const results = await Promise.allSettled(keys.map((key) => readPointLayer(key, lon, lat)))
   const settled = results.flatMap((result) => (result.status === 'fulfilled' ? [result.value] : []))
-  const failed = results.length - settled.length
+  // allSettled は入力と同じ順に返すので、添字でレイヤに戻せる。
+  const unreachedLayerKeys = keys.filter((_, index) => results[index]?.status === 'rejected')
+  const failed = unreachedLayerKeys.length
   return {
-    tile: settled.flatMap((each) => (each.hex === null ? [] : [{ layerKey: each.layerKey, hex: each.hex }])),
+    tile: settled.flatMap((each) =>
+      each.hex === null ? [] : [{ layerKey: each.layerKey, hex: each.hex }],
+    ),
     nearby: settled.flatMap((each) =>
       each.nearbyHex === null ? [] : [{ layerKey: each.layerKey, hex: each.nearbyHex }],
     ),
     uncoveredLayerKeys: settled.flatMap((each) => (each.covered ? [] : [each.layerKey])),
+    unreachedLayerKeys,
     reached: settled.length > 0,
     noteJa: failed === 0 ? null : `公式タイルを ${failed} レイヤぶん取得できませんでした`,
   }

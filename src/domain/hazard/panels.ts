@@ -46,6 +46,11 @@ export function hazardCardPanel(point: HazardPointResponse, size?: PanelSize): H
     // 取得できなかったものの説明も、網羅性の注記と同じ場所に出す——
     // 「河川情報が無い」ことを黙っていると、**無いのか、取れなかったのか**が分からない。
     coverageNotesJa: [...point.notesJa, ...point.coverageNotesJa],
+    // 種類ごとの状態・畳まない注意・固有の事実（261110 §8.4）。古い応答（キャッシュ）には無く、
+    // そのときは 3 つとも undefined のまま渡る——描く側は「無ければ今の描き方」にする。
+    groupStates: point.groupStates,
+    keyNotesJa: point.keyNotesJa,
+    highlightsJa: point.highlightsJa,
     sources: point.sources,
     disclaimerJa: point.disclaimerJa,
     size,

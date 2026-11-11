@@ -39,6 +39,7 @@ import {
   type HazardLevel,
 } from '@/shared/constants'
 import {
+  hazardLayersWithPointAnswer,
   hazardRankOfColor,
   hazardRankOfDepth,
   hazardRankOfSourceCode,
@@ -56,6 +57,7 @@ import {
 } from './wording'
 import { SUIBOU_NAVI_SOURCE } from './sources'
 import { hazardVerdict, type VerdictItem } from './verdict'
+import { hazardGroupStates, hazardKeyNotesJa, type GroupedFindings } from './groups'
 
 /** 自前メッシュから読んだ 1 レイヤぶん。 */
 export type MeshReading = {
@@ -91,6 +93,12 @@ export type PointHazardInput = {
    * 全国の一般論ではなく「ここには無い」と言うために使う（§7.5-2）。
    */
   readonly uncoveredLayerKeys: readonly string[]
+  /**
+   * 公式タイルを読みに行って**届かなかった**レイヤ（通信の失敗・タイムアウト）。
+   * 404（「その区画にデータが無い」）は届いた扱いで、ここには入らない。
+   * 区域外とも図なしとも言えないので、種類ごとの状態では「未確認」に数える（`docs/261110_fix_PLAN.md` §8.4）。
+   */
+  readonly unreachedLayerKeys: readonly string[]
   readonly rivers: readonly HazardRiver[]
   /** 平均標高（m・無ければ null）。 */
   readonly elevationM: number | null
@@ -316,6 +324,48 @@ function withRiverReasons(verdict: HazardVerdict, rivers: readonly HazardRiver[]
 }
 
 /**
+ * **確かめられなかった**レイヤ。参照しなかったもの（`layerKeys` に無い）と、
+ * 公式タイルで読めず（全体が届かなかった・そのレイヤだけ届かなかった）250m メッシュにも無いもの。
+ *
+ * メッシュで読めたレイヤは確かめたことにする——オフラインの答えはメッシュがすべてで、
+ * その弱さは `certainty`（unknown）と見出し（「250m メッシュだけで判断しています」）が別に言う。
+ * メッシュを持たない高潮・津波・土砂は、公式タイルに届かなければ必ずここに入る。
+ */
+function uncheckedLayerKeysOf(
+  input: PointHazardInput,
+  layerKeys: readonly string[],
+): readonly string[] {
+  const referenced = new Set(layerKeys)
+  const unreached = new Set(input.unreachedLayerKeys)
+  const onMesh = new Set(input.mesh.map((reading) => reading.layerKey))
+  const tileUnread = (key: string): boolean => !input.onlineSourcesReached || unreached.has(key)
+  return hazardLayersWithPointAnswer().filter(
+    (key) => !referenced.has(key) || (tileUnread(key) && !onMesh.has(key)),
+  )
+}
+
+/**
+ * 災害の種類ごとの状態と、畳まずに見せる注意・その場所にしか無い事実（`docs/261110_fix_PLAN.md` §8.4）。
+ * 画面が「固有の注意」と「一般論」を描き分けられるよう、**区別を応答に持たせる**
+ * ——`coverageNotesJa` の文字列の中身で見分けさせない（意味を UI に埋めない・.claude/CLAUDE.md §2）。
+ */
+function groupFieldsOf(
+  input: PointHazardInput,
+  layerKeys: readonly string[],
+  findings: GroupedFindings,
+): Pick<HazardPointResponse, 'groupStates' | 'keyNotesJa' | 'highlightsJa'> {
+  const unchecked = uncheckedLayerKeysOf(input, layerKeys)
+  const groupStates = hazardGroupStates(findings, input.uncoveredLayerKeys, unchecked)
+  return {
+    groupStates: [...groupStates],
+    keyNotesJa: [...hazardKeyNotesJa(groupStates)],
+    // 浸水ナビの「何分後に・何日続く」。根拠（verdict.reasonsJa）の末尾にも同じ文が入る
+    // ——AI に渡す要約はそちらを読むので、ここを足しても AI への入力は変わらない。
+    highlightsJa: [...riverReasonsJa(input.rivers)],
+  }
+}
+
+/**
  * 地点のハザードを組み立てる。**この関数だけが「何が危ないか」を決める。**
  *
  * @param layerKeys 参照したレイヤ（点の答えを持ちうるもの・網羅性の注記の対象にもなる）
@@ -357,6 +407,7 @@ export function pointHazard(
       ...coverageNotesOf(layerKeys, input.uncoveredLayerKeys),
       ...meshNotesOf(items, neighbours),
     ],
+    ...groupFieldsOf(input, layerKeys, { hazards: items, neighbours }),
     sources: [
       ...sourcesOf(
         items.map((item) => item.layerKey),

@@ -71,6 +71,9 @@ export function meshNoteJa(layerLabelJa: string, coverage: number): string {
   )
 }
 
+/** 250m メッシュの呼び方（見出しと確からしさの一言が同じ語で言う——重なりを見分けるのにも使う）。 */
+const MESH_250_JA = '250m メッシュ'
+
 /**
  * 区間でしか言えないときの見出し。**「この場所は…に入っています」と断定しない。**
  * 250m セルの 74% は区域と非区域の混在で、点がどちら側かはメッシュには分からない（§5.9）。
@@ -81,7 +84,7 @@ export function partialHeadlineJa(
   coverage: number,
 ): string {
   return (
-    `この場所を含む 250m メッシュの${coverageAmountJa(coverage)}が` +
+    `この場所を含む ${MESH_250_JA}の${coverageAmountJa(coverage)}が` +
     `${layerLabelJa}（${rankLabelJa}）です。正確な位置は地図でご確認ください。`
   )
 }
@@ -198,6 +201,18 @@ export function certaintyNoteJa(certainty: HazardCertainty): string | null {
   return certainty === 'partial'
     ? `${label}での判断です。この地点そのものの値は、地図の色でご確認ください。`
     : `${label}での判断です。時間をおいて、もう一度ご確認ください。`
+}
+
+/**
+ * 地点のカードに添える確からしさの一言。**結論が同じことを言っていれば出さない**（`docs/261110_fix_PLAN.md` §8.3）。
+ *
+ * 区間でしか言えない結論は「この場所を含む 250m メッシュの…」と既に言っている（`partialHeadlineJa`）——
+ * そこへ「250m メッシュの範囲での判断です」を重ねると、同じことを 2 回言う（横浜で「メッシュ」の語が 16 回出ていた）。
+ * `unknown`（メッシュのみ・照合できず）は「時間をおいて、もう一度」が新しいので、いつも出す。
+ */
+export function cardCertaintyNoteJa(certainty: HazardCertainty, headlineJa: string): string | null {
+  if (certainty === 'partial' && headlineJa.includes(MESH_250_JA)) return null
+  return certaintyNoteJa(certainty)
 }
 
 /**

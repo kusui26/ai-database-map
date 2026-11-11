@@ -26,10 +26,27 @@
  * 輪の番号ではなく**必ず実距離で比べる**。
  */
 
+import { EVACUATION_AREA_LAYERS, type EvacuationDisasterKey } from '@/shared/evacuation'
 import { distanceM } from '@/shared/geo'
+import { getHazardLayer } from '@/shared/hazard'
 import { meshCenterOfIndices, type LonLat, type MeshIndices } from '@/shared/mesh'
 import { bearingJa, distanceJa } from './evacuation'
 import { meshOnlyNoteJa, type MeshOnlyReason } from './wording'
+
+/** その災害の区域のうち、**自前メッシュで読めるもの**（洪水・内水だけ・決定 4）。 */
+export function escapeMeshLayerKeys(disaster: EvacuationDisasterKey): readonly string[] {
+  return EVACUATION_AREA_LAYERS[disaster].filter(
+    (key) => getHazardLayer(key)?.mesh?.available === true,
+  )
+}
+
+/**
+ * 「区域の外へ出る向き」を出せる災害か。メッシュを持たない災害（高潮・津波・土砂）では出せない——
+ * 押す前の言い方（「逃げる」のボタン）で、出せないものを約束しないために使う。
+ */
+export function escapeDirectionAvailable(disaster: EvacuationDisasterKey): boolean {
+  return escapeMeshLayerKeys(disaster).length > 0
+}
 
 /** 1 セルの読み取り結果。**「区域の外」と「分からない」を混ぜない**（§7.5-1）。 */
 export type EscapeCell =

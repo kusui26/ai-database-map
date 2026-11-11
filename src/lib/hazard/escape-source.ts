@@ -38,6 +38,7 @@ import type { HazardEscapeResponse } from '@/shared/api'
 import type { SourceRef } from '@/shared/protocol'
 import {
   escapeHeadlineJa,
+  escapeMeshLayerKeys,
   escapeMeshOnlyNoteJa,
   escapeUnavailableJa,
   nearestOutsideCell,
@@ -96,13 +97,6 @@ export type HazardEscapeRequest = {
    * 5xx やタイムアウトで落ちてきた場合の利用者は**繋がっている**。
    */
   readonly meshOnly?: MeshOnlyReason
-}
-
-/** その災害の区域のうち、**自前メッシュで読めるもの**（洪水・内水だけ・決定 4）。 */
-function meshLayerKeysFor(disaster: EvacuationDisasterKey): readonly string[] {
-  return EVACUATION_AREA_LAYERS[disaster].filter(
-    (key) => getHazardLayer(key)?.mesh?.available === true,
-  )
 }
 
 /** 載せたタイル（`レイヤ key + 1 次メッシュ` → バイト列）。 */
@@ -265,7 +259,7 @@ export async function escapeDirectionAt(
 ): Promise<HazardEscapeResponse> {
   const placeJa = request.placeJa ?? DEFAULT_PLACE_JA
   const areaLabelJa = `${evacuationDisasterLabelJa(request.disaster)}の想定区域`
-  const layerKeys = meshLayerKeysFor(request.disaster)
+  const layerKeys = escapeMeshLayerKeys(request.disaster)
   if (layerKeys.length === 0) {
     const reason = `${evacuationDisasterLabelJa(request.disaster)}は 250m メッシュを持っていません`
     return baseResponse(

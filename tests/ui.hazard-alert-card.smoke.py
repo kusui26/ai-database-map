@@ -15,7 +15,8 @@
    - どのカードにも、市町村の避難情報に従う旨（注意書き）と、警報の限界（避難情報は市町村が出す）が出る
    - ページも会話の欄も横にはみ出さない
 2. **駅の災害タブの「いま」**（警戒中・`/api/hazard/alerts` を警戒レベル3相当に差し替え）：画面が自分で組むカードの
-   バッジも「警戒レベル3相当」（以前は「警戒」で、警戒バナーと言い方が違った）
+   バッジも「警戒レベル3相当」（以前は「警戒」で、警戒バナーと言い方が違った）。時刻と限界は畳まない。
+   注意書きはタブの末尾で 1 回（2026-11-11・`docs/261110_fix_PLAN.md` §8.3）
 
 気象庁の発表はその日で変わる（平時は「発表なし」が多い）。1 は見出しとバッジが**同じカードの中で食い違わない**ことを見る。
 """
@@ -247,7 +248,18 @@ def scenario_station_tab(browser: Browser, name: str, viewport: dict) -> None:
     section.wait_for(state="visible", timeout=WAIT_MS)
     badge = badge_text(section)
     check(f"駅の災害タブ・{name}：警戒中のカードのバッジは「警戒レベル3相当」（バナーと同じ言い方）", badge.endswith("警戒レベル3相当"), badge)
-    check(f"駅の災害タブ・{name}：注意書きが出る", DISCLAIMER in section.inner_text())
+    # 警戒中のカードは今の描き方のまま——時刻と限界は畳まない（`docs/261110_fix_PLAN.md` §8.3）。
+    card_text = section.inner_text()
+    check(f"駅の災害タブ・{name}：警戒中のカードは時刻と限界を畳まない", "気象庁の発表時刻" in card_text and LIMITATION in card_text)
+    # 注意書き（免責）はタブの末尾で 1 回（中のカードは出さない・同 §8.3）。
+    tab_text = section.evaluate(
+        """(el) => {
+          let box = el.parentElement
+          while (box && !['auto', 'scroll'].includes(getComputedStyle(box).overflowY)) box = box.parentElement
+          return box ? box.innerText : ''
+        }"""
+    )
+    check(f"駅の災害タブ・{name}：注意書きはタブに 1 回", tab_text.count(DISCLAIMER) == 1, f"{tab_text.count(DISCLAIMER)} 回")
     check(f"駅の災害タブ・{name}：ページが横にはみ出さない", not page_overflows(page))
     check(f"駅の災害タブ・{name}：画面のエラーなし", errors == [], "; ".join(errors))
     section.scroll_into_view_if_needed()

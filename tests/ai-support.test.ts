@@ -4,6 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
+import { entries } from '@/shared/catalog'
 import { buildSystemPrompt, mapContextPrompt } from '@/ai/system-prompt'
 import { checkRateLimit, resetRateLimitStore } from '@/ai/rate-limit'
 import {
@@ -179,6 +180,30 @@ describe('システムプロンプト：合成スコアの推薦は作らない'
     const prompt = buildSystemPrompt()
     expect(prompt).toContain('子育て環境')
     expect(prompt).toContain('案内文に混ぜない')
+  })
+
+  it('代わりに何を重視するかを 1 つ聞く（「できません」で終わらせない・261110 §3.4）', () => {
+    expect(buildSystemPrompt()).toContain('何を重視するか')
+  })
+
+  it('聞くときの軸は、カタログにある指標（外したおすすめのプリセットの 6 軸・手書きなので実在を見る）', () => {
+    // 種類名（pop_gr）か正確な key（rate_covid）。カタログから消えたら、プロンプトの軸も直す。
+    const axes: readonly (readonly [string, string])[] = [
+      ['将来人口', 'pop_gr_pred'],
+      ['実績人口', 'pop_gr'],
+      ['地価トレンド', 'lp_gr'],
+      ['地価水準', 'lp_med'],
+      ['乗降回復', 'rate_covid'],
+      ['乗降水準', 'pax'],
+    ]
+    const prompt = buildSystemPrompt()
+    for (const [label, metric] of axes) {
+      expect(prompt, label).toContain(label)
+      expect(
+        entries.some((entry) => entry.baseMetric === metric || entry.key === metric),
+        metric,
+      ).toBe(true)
+    }
   })
 })
 

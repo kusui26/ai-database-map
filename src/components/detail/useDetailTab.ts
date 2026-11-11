@@ -26,7 +26,7 @@ import {
 const tabParser = parseAsStringLiteral(DETAIL_TABS).withOptions({ history: 'replace' })
 
 /**
- * タブを選ぶ（URL に書き、この端末にも覚える）。タブ帯・災害バッジ・チャットの焦点が使う。
+ * タブを選ぶ（URL に書き、この端末にも覚える）。タブ帯・チャットの焦点が使う。
  * 履歴は既定で replace。チャットの回答は「1 回の回答で 1 履歴」に合わせて渡す（`chat/answerHistory.ts`）。
  */
 export function useSelectDetailTab(): (tab: DetailTab, history?: HistoryOptions) => void {

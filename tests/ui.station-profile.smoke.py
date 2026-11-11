@@ -9,7 +9,8 @@
 
 ## 見ること
 
-1. 記憶の無い端末で駅を開くと「概要」タブ（先頭）。性格の目安・位置の凡例・11 指標・「見ていないこと」が出て、
+1. 記憶の無い端末で駅を開くと「概要」タブ（先頭）。性格の目安・位置の凡例・11 指標が出て、「見ていないこと」と全体の注記は
+   出さない（応答と AI の本文には残る・2026-11-11・`docs/261110_fix_PLAN.md` §7）。出典は「出典（N）」の 1 行に畳む。
    災害は出さない（災害は地価の右の「災害」タブで見る。2026-11-11 にヘッダのバッジと、それを指す案内の文を外した・
    `docs/261110_fix_PLAN.md` §5・§7.1）
 2. 位置（目盛り＋「県内 上位 19%」＋順位/駅数）は 1 行に収まり、文字が切れない（広い画面・携帯・会話の中の図とも）。
@@ -229,8 +230,10 @@ def scenario_overview(browser: Browser, viewport: dict, name: str) -> None:
     check("記憶が無ければ概要タブ（先頭）で開く", wait_for_tab(page, "概要"), f"タブ={active_tab(page)}")
     check("題「横浜の周辺（1km圏）」", wait_for_text(page, "横浜の周辺（1km圏）"))
     text = detail_text(page)
-    for needle in ["業務地型", "位置は 県内＝神奈川県、市内＝横浜市", "人口", "地価（中央値）", "乗降客数（この駅）", "このプロフィールで見ていないこと", "治安（犯罪の件数）"]:
+    for needle in ["業務地型", "位置は 県内＝神奈川県、市内＝横浜市", "人口", "地価（中央値）", "乗降客数（この駅）", "出典（"]:
         check(f"「{needle}」が出る", needle in text)
+    for needle in ["このプロフィールで見ていないこと", "治安（犯罪の件数）", "良し悪しでは", "円で集計"]:
+        check(f"「{needle}」は出さない（応答と AI の本文に残す・261110 §7）", needle not in text)
     check("市内では比べない所得には、その理由が出る", "市全体の平均が主" in text)
     check("概要タブは災害の要約を出さない（災害は「災害」タブで見る）", "区域図が無い災害" not in text)
     check("概要タブに災害タブへの案内の文を出さない（タブが見えている・261110 §7.1 案 B）", "上のバッジ" not in text and "「災害」タブで詳しく見る" not in text)
@@ -311,7 +314,8 @@ def scenario_chat_phone(browser: Browser, profile: dict) -> None:
     figure = page.get_by_text("横浜の周辺（1km圏）")
     figure.first.wait_for(state="visible", timeout=WAIT_MS)
     conversation = page.locator("main, body").first.inner_text()
-    check("会話の中に性格の目安と見ていないこと", "業務地型" in conversation and "このプロフィールで見ていないこと" in conversation)
+    check("会話の中に性格の目安（見ていないことは図に出さない）", "業務地型" in conversation and "このプロフィールで見ていないこと" not in conversation)
+    check("見ていないことは応答に残る（AI はそこから本文に書く・§9.2 原則 5）", len(profile["notCoveredJa"]) > 0)
     check("会話の中では災害の要約も出す（もし起きたら）", "もし起きたら" in conversation and "区域図が無い災害" in conversation)
     cut = truncated_positions(page)
     check("会話の中の図（約 320px）でも位置の文字が切れない", not cut, " / ".join(cut[:3]))

@@ -13,8 +13,9 @@ B5b では、パネルを出す道具（AI の `getAreaSummary`・B5d）と画�
 
 ## 見ること（広い画面・狭い画面・携帯の 3 つの幅）
 
-1. 横浜市：区域の値（2025 年 3,750,952 人・作り方の札・推計の山と当たり具合）、駅の周り（1km 圏・137 駅）、凡例、
-   見ていないこと。推移の図は人口の色。内訳は 18 区で、**0 を真ん中に**減った区（金沢区）は左・増えた区（西区）は右へ伸び、
+1. 横浜市：区域の値（2025 年 3,750,952 人・作り方の札）と、畳んだ駅の周り（1km 圏・137 駅）・畳んだ出典。開くと中身が出る。
+   推計の山と当たり具合・地図の凡例の写し・見ていないこと・全体の注記は**画面に出さない**（応答と AI の本文には残る・
+   2026-11-11・`docs/261110_fix_PLAN.md` §4）。推移の図は人口の色。内訳は 18 区で、**0 を真ん中に**減った区（金沢区）は左・増えた区（西区）は右へ伸び、
    区の名前（保土ケ谷区）が切れない。横にはみ出さない
 2. 横浜市と川崎市：比べる表（項目と値を折り返し、2 つなら携帯でも横に送らずに収まる）と、エリアごとの色（#0072b2・#e69f00）の
    推移。内訳は出さない
@@ -322,18 +323,23 @@ def scenario_single(browser: Browser, name: str, viewport: dict, response: dict)
         "エリア全体の値",
         "3,750,952 人（2025年）・2020→2025年で -0.7%（2015→2020年は +1.4%）",
         "公表値",
-        "推計の山：2025年 3,786,702 人",
-        "2025年の実績は推計より 0.9% 少ない",
         "駅の周り（1km圏・137 駅）",
-        "中央値",
-        "上位",
-        "⚠ 40 駅は参考値なので除いた",
-        "地図の色分け：人口増減率（2015→2020年・1km圏）",
-        "-5%未満",
-        "この要約で見ていないこと",
-        "増えた・減った理由",
+        "出典（",
     ]:
         check(f"要約に「{needle}」", needle in text)
+    for needle in ["推計の山", "実績は推計より", "地図の色分け：", "見ていないこと", "増えた・減った理由", "中央値", "参考値なので除いた"]:
+        check(f"要約に「{needle}」を出さない（畳んだ中身・応答だけに残すもの）", needle not in text)
+    check(
+        "応答には見ていないこと・注記・推計の山が残る（画面だけ出さない）",
+        len(response["notIncludedJa"]) > 0 and len(response["notesJa"]) > 0 and any(total["peak"] is not None for total in response["areas"][0]["totals"]),
+    )
+    stations = summary.locator("details", has_text="駅の周り（1km圏・137 駅）")
+    stations.locator("summary").click()
+    opened = stations.inner_text()
+    check("駅の周りを開くと、中央値・上位・⚠ の数が出る", all(needle in opened for needle in ["中央値", "上位", "⚠ 40 駅は参考値なので除いた"]))
+    sources = summary.locator("details", has_text="出典（")
+    sources.locator("summary").click()
+    check("出典を開くと、同じ一覧が出る（総務省 国勢調査ほか）", "総務省 国勢調査" in sources.inner_text())
     trend = section_of(page, "神奈川県横浜市の人口の推移（実績・将来推計）")
     trend.locator("canvas").wait_for(state="visible", timeout=WAIT_MS)
     page.wait_for_timeout(300)
@@ -369,12 +375,13 @@ def scenario_compare(browser: Browser, name: str, viewport: dict, response: dict
     context, page, errors = ask(browser, viewport, panels, "横浜市と川崎市の人口の伸びを比べて")
     summary = section_of(page, "横浜市・川崎市の比較")
     text = summary.inner_text()
-    for needle in ["神奈川県横浜市", "神奈川県川崎市", "人口の増減（2020→2025年）", "-0.7%", "+1.4%", "推計の当たり具合：2025年の実績は推計より 1.6% 多い", "推移は 2020年を 100 とした指数"]:
+    for needle in ["神奈川県横浜市", "神奈川県川崎市", "人口の増減（2020→2025年）", "-0.7%", "+1.4%", "推移は 2020年を 100 とした指数"]:
         check(f"比較に「{needle}」", needle in text)
+    check("比べるときも推計の当たり具合は出さない（比べるときの注記＝図の読み方は残す）", "当たり具合" not in text)
     fits = summary.locator("table").evaluate("(el) => el.scrollWidth <= el.parentElement.clientWidth + 1")
     check("2 つのエリアの比べる表は横に送らずに収まる（携帯でも両方の列が見える）", fits)
-    collapsed = summary.locator("details")
-    check("比較のときは駅の周りを畳む", collapsed.count() == 2 and not collapsed.first.evaluate("(el) => el.open"))
+    collapsed = summary.locator("details", has_text="駅の周り")
+    check("駅の周りは畳む（エリアごとに 1 つ）", collapsed.count() == 2 and not collapsed.first.evaluate("(el) => el.open"))
     trend = section_of(page, "人口の推移（2020年＝100）")
     trend.locator("canvas").wait_for(state="visible", timeout=WAIT_MS)
     page.wait_for_timeout(300)

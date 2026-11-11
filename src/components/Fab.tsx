@@ -1,7 +1,6 @@
 'use client'
 
-import { type ReactNode, useState } from 'react'
-import { parseAsBoolean, useQueryState } from 'nuqs'
+import { type ReactNode } from 'react'
 import { PANEL_GAP_PX, PANEL_WIDTH_PX } from '@/shared/constants'
 import { useChatStore } from '@/stores/chatStore'
 import { useGeoStore } from '@/stores/geoStore'
@@ -15,9 +14,7 @@ import { DEFAULT_AREA_FIGURE, DEFAULT_RANKING_FIGURE, DEFAULT_SCATTER_FIGURE } f
 import { useFigureUrl } from './figure/useFigureUrl'
 // 初期バンドルから外す：ダイアログ（散布は Chart.js を含む）は初回オープンまで読み込まない。
 // 遅延ロードの定義は共通モジュールに置く（Suspense 境界の付け忘れを 1 か所に閉じ込めるため）。
-import { DIALOG_LOADERS, RecommendDialog } from './lazyDialogs'
-// 名前だけを参照する（`url.ts` を import すると、おすすめ一式が初期バンドルに来る）。
-import { RECOMMEND_OPEN_PARAM } from './recommend/openParam'
+import { DIALOG_LOADERS } from './lazyDialogs'
 import { cn } from '@/lib/utils'
 
 /** FAB とチャットパネルのあいだの余白。 */
@@ -27,11 +24,12 @@ const FAB_LEFT_WITH_CHAT_PX = PANEL_GAP_PX + PANEL_WIDTH_PX + FAB_GAP_PX
 /** チャットを閉じているときの FAB の左端（`sm:left-4`）。 */
 const FAB_LEFT_PX = 16
 /**
- * ラベルつきの FAB の行の幅（5 つ・2026-10-15 実測 524px）。これが右の余白（駅詳細を開いていればその左）まで入らない幅では
+ * ラベルつきの FAB の行の幅（4 つ・2026-11-11 実測 412px。おすすめを外す前の 5 つは 524px）。
+ * これが右の余白（駅詳細を開いていればその左）まで入らない幅では
  * 記号だけにする——以前はボタンが縮んでラベルが縦に折れ（「ラ／ン／キ／ン／グ」）、エリアを足すと最後のボタンが画面の外に出た
  * （チャットを開いた 768px）。それでも入らない幅（チャットを開いた 640px 台）は折り返す。
  */
-const FAB_LABELED_ROW_PX = 524
+const FAB_LABELED_ROW_PX = 412
 /** 記号だけのボタン 1 つの幅（左右の余白 12 ＋記号 16 ＋ 12）。 */
 const FAB_ICON_PX = 40
 /**
@@ -90,19 +88,6 @@ function AreaIcon() {
   )
 }
 
-function StarIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden className="size-4">
-      <path
-        d="M12 3.5l2.6 5.3 5.9.85-4.25 4.15 1 5.85L12 16.9l-5.25 2.75 1-5.85L3.5 9.65l5.9-.85L12 3.5Z"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
-
 function LocationIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden className="size-4">
@@ -155,19 +140,12 @@ function FabButton({
   )
 }
 
-/** おすすめを開いているか。開く・閉じるは履歴に積む（戻るで閉じ、進むで開き直せる・2026-10-02）。 */
-const recommendOpenParser = parseAsBoolean.withDefault(false).withOptions({ history: 'push' })
-
 /**
- * 左下 FAB（現在地＝Phase 2／ランキング＝P6a／散布図＝P6b／エリア＝B5e／おすすめ＝W4）。
- * ランキング・散布・エリアは URL の図を開くだけ（入れ物が出す）。おすすめは初回オープンで初めてマウント（遅延ロード）。
+ * 左下 FAB（現在地＝Phase 2／ランキング＝P6a／散布図＝P6b／エリア＝B5e）。
+ * ランキング・散布・エリアは URL の図を開くだけ（入れ物が出す）。おすすめ（W4）は 2026-11 に外した（261110 §3）。
  */
 export function Fab() {
   const { openFigure } = useFigureUrl()
-  // おすすめも URL に載せる——条件ごと共有できるリンクにするため（§13.7 W5）。
-  const [recommendOpen, setRecommendOpen] = useQueryState(RECOMMEND_OPEN_PARAM, recommendOpenParser)
-  // 共有リンクを踏んだ（`?rec=true`）ときは、最初から開いた状態で始まる。
-  const [recommendSeen, setRecommendSeen] = useState(recommendOpen)
   // デスクトップでチャットを開くと FAB が左パネルに隠れるため右へ寄せる（位置はパネル幅から算出）。
   const chatOpen = useChatStore((state) => state.open)
   const isDesktop = useIsDesktop()
@@ -188,61 +166,43 @@ export function Fab() {
   const startGeo = useGeoStore((state) => state.start)
   const stopGeo = useGeoStore((state) => state.stop)
   return (
-    <>
-      <div
-        style={{
-          ...(shifted ? { left: FAB_LEFT_WITH_CHAT_PX } : {}),
-          ...(besideDetail ? { right: FAB_RIGHT_WITH_DETAIL_PX } : {}),
-        }}
-        // sm:bottom-9＝デスクトップは下端の出典の帯（MAP_ATTRIBUTION_STRIP_PX）に踏み込まない。
-        // モバイルは帯を作らない（出典側を FAB より上に置く・globals.css）ので bottom-4 のまま。
-        // 折り返したときに空いたところで地図の操作を止めないよう、行そのものは押せず、ボタンだけを押せる。
-        className="pointer-events-none absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 gap-2 transition-[left] duration-300 sm:bottom-9 sm:left-4 sm:translate-x-0 sm:flex-wrap"
-      >
-        <FabButton
-          showLabel={labelsFit}
-          icon={<LocationIcon />}
-          label="現在地"
-          title="現在地の災害リスクを見る"
-          active={geoActive}
-          onClick={geoActive ? stopGeo : startGeo}
-        />
-        <FabButton
-          showLabel={labelsFit}
-          icon={<TrophyIcon />}
-          label="ランキング"
-          onClick={() => openFigure(DEFAULT_RANKING_FIGURE)}
-        />
-        <FabButton
-          showLabel={labelsFit}
-          icon={<ScatterIcon />}
-          label="散布図"
-          onClick={() => openFigure(DEFAULT_SCATTER_FIGURE)}
-        />
-        <FabButton
-          showLabel={labelsFit}
-          icon={<AreaIcon />}
-          label="エリア"
-          title="市区町村・沿線の人口の要約と、駅の色分け"
-          onClick={() => openFigure(DEFAULT_AREA_FIGURE)}
-        />
-        <FabButton
-          showLabel={labelsFit}
-          icon={<StarIcon />}
-          label="おすすめ"
-          title="エリアの中でおすすめの駅を出す"
-          onClick={() => {
-            setRecommendSeen(true)
-            void setRecommendOpen(true)
-          }}
-        />
-      </div>
-      {recommendSeen && (
-        <RecommendDialog
-          open={recommendOpen}
-          onOpenChange={(open) => void setRecommendOpen(open)}
-        />
-      )}
-    </>
+    <div
+      style={{
+        ...(shifted ? { left: FAB_LEFT_WITH_CHAT_PX } : {}),
+        ...(besideDetail ? { right: FAB_RIGHT_WITH_DETAIL_PX } : {}),
+      }}
+      // sm:bottom-9＝デスクトップは下端の出典の帯（MAP_ATTRIBUTION_STRIP_PX）に踏み込まない。
+      // モバイルは帯を作らない（出典側を FAB より上に置く・globals.css）ので bottom-4 のまま。
+      // 折り返したときに空いたところで地図の操作を止めないよう、行そのものは押せず、ボタンだけを押せる。
+      className="pointer-events-none absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 gap-2 transition-[left] duration-300 sm:bottom-9 sm:left-4 sm:translate-x-0 sm:flex-wrap"
+    >
+      <FabButton
+        showLabel={labelsFit}
+        icon={<LocationIcon />}
+        label="現在地"
+        title="現在地の災害リスクを見る"
+        active={geoActive}
+        onClick={geoActive ? stopGeo : startGeo}
+      />
+      <FabButton
+        showLabel={labelsFit}
+        icon={<TrophyIcon />}
+        label="ランキング"
+        onClick={() => openFigure(DEFAULT_RANKING_FIGURE)}
+      />
+      <FabButton
+        showLabel={labelsFit}
+        icon={<ScatterIcon />}
+        label="散布図"
+        onClick={() => openFigure(DEFAULT_SCATTER_FIGURE)}
+      />
+      <FabButton
+        showLabel={labelsFit}
+        icon={<AreaIcon />}
+        label="エリア"
+        title="市区町村・沿線の人口の要約と、駅の色分け"
+        onClick={() => openFigure(DEFAULT_AREA_FIGURE)}
+      />
+    </div>
   )
 }

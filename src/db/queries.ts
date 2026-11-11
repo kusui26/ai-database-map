@@ -146,8 +146,7 @@ const listRowSchema = z.object({
  * ⚠ **1 回の応答は 1,000 行で打ち切られる**（PostgREST の行上限。SQL 側の `lim` は 2,000 まで
  * 受けるが、それより先に PostgREST が切る・2026-09-16 実測）。`limit` に 1,000 超を渡しても
  * **1,000 件しか返らず、切られたことは応答から分からない**——多く来る条件で使うときは、
- * 呼び出し側で「1,000 に達したか」を見るか、上限を 1,000 未満に置いて超過を検出する
- * （`src/domain/recommend/request.ts` の `MAX_CANDIDATE_STATIONS` はそうしている）。
+ * 呼び出し側で「1,000 に達したか」を見るか、上限を 1,000 未満に置いて超過を検出する。
  */
 export async function listStations(filter: ListStationsFilter): Promise<StationListItem[]> {
   const rows = await rpcRows(

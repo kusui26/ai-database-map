@@ -17,9 +17,8 @@
 4. 都道府県が 2 つのときの市区町村（チャットの条件）は、選択の部品が出ないのでチップで見せ、✕ で外せる
 5. 選択肢に無い市区町村（手で書き換えた URL）は「（駅なし）」として選択に出る（「全域」と見せたまま絞らない）
 6. 散布：市区町村を選ぶと `/api/growth?municipality=`・題に出る
-7. おすすめ：同じ部品の市区町村で `/api/recommend?municipality=`・URL の recMuni
-8. 狭いパソコン 1024px（モーダル）：市区町村を選ぶと題に出て、横にはみ出さない
-9. 携帯 390px（モーダル）：起点・市区町村の条件つきの図で、チップとセレクタが画面に収まり、横にスクロールしない
+7. 狭いパソコン 1024px（モーダル）：市区町村を選ぶと題に出て、横にはみ出さない
+8. 携帯 390px（モーダル）：起点・市区町村の条件つきの図で、チップとセレクタが画面に収まり、横にスクロールしない
 """
 
 import json
@@ -280,32 +279,6 @@ def scenario_scatter_municipality(browser: Browser) -> None:
     session.close()
 
 
-def scenario_recommend(browser: Browser) -> None:
-    print("[おすすめ：同じ部品の市区町村で取りに行き、URL に残る]")
-    session = Session(browser, WIDE)
-    page = session.page
-    session.open()
-    page.get_by_role("button", name="おすすめ").click()
-    dialog = page.get_by_role("dialog", name="おすすめ駅")
-    dialog.wait_for(state="visible")
-    page.wait_for_timeout(SETTLE_MS)
-    choose_prefectures(dialog, ["神奈川県"])
-    wait_options(dialog, "横浜市")
-    municipality_select(dialog).select_option("横浜市")
-    page.wait_for_timeout(3000)
-    recommend = session.last("recommend")
-    check("municipality=横浜市 で取りに行く", recommend.get("municipality") == "横浜市", json.dumps(recommend, ensure_ascii=False))
-    check("URL に recMuni=横浜市", session.params().get("recMuni") == "横浜市", json.dumps(session.params(), ensure_ascii=False))
-    url = page.url
-    page.goto(url, wait_until="networkidle")
-    page.wait_for_timeout(SETTLE_MS)
-    dialog = page.get_by_role("dialog", name="おすすめ駅")
-    wait_options(dialog, "横浜市")
-    check("開き直しても市区町村が残る", municipality_select(dialog).input_value() == "横浜市", municipality_select(dialog).input_value())
-    page.screenshot(path=f"{OUT}/area-recommend.png")
-    session.close()
-
-
 def scenario_narrow(browser: Browser) -> None:
     print("[狭いパソコン 1024px（モーダル）：市区町村を選ぶと題に出て、横にはみ出さない]")
     session = Session(browser, NARROW)
@@ -365,7 +338,6 @@ with sync_playwright() as playwright:
     scenario_municipality_chip(browser)
     scenario_unknown_municipality(browser)
     scenario_scatter_municipality(browser)
-    scenario_recommend(browser)
     scenario_narrow(browser)
     scenario_phone(browser)
     browser.close()

@@ -9,7 +9,6 @@
  * - 対応は路線の一覧から作る（線路の持ち主＝会社の無い路線は数えない・路線の無い会社は S12 の名前のまま）
  * - `/api/operators` は `name`（鍵）と `label`（表示名）を返す
  * - ランキング・散布の応答は `operators`（鍵）と `operatorLabels`（表示名）を返し、題は表示名
- * - おすすめの対象の言い方も表示名
  * - 対応は 1 時間持ち、読めなかったときは持たない（次の呼び出しで読み直す）
  */
 
@@ -43,7 +42,6 @@ const { buildRanking } = await import('@/domain/ranking/presenter')
 const { buildGrowth } = await import('@/domain/growth/presenter')
 const { rankingPanel } = await import('@/domain/ranking/panel')
 const { scatterPanel } = await import('@/domain/growth/panel')
-const { areaLabelJa } = await import('@/domain/recommend/labels')
 const { GET: getOperators } = await import('@/app/api/operators/route')
 const { GET: getRanking } = await import('@/app/api/ranking/route')
 const { GET: getGrowth } = await import('@/app/api/growth/route')
@@ -237,12 +235,6 @@ describe('図の題：会社は表示名', () => {
       operatorLabels: ['東京メトロ'],
     })
     expect(scatterPanel(labelled).title).toContain('東京メトロ')
-  })
-
-  it('おすすめの対象の言い方も表示名（「東京都（東京都交通局）」）', () => {
-    expect(
-      areaLabelJa({ prefectures: ['東京都'], operators: ['東京都'] }, [], ['東京都交通局']),
-    ).toBe('東京都（東京都交通局）')
   })
 
   it('古い応答（operatorLabels 無し）は空配列として読め、題は S12 の名前で出る', () => {

@@ -1,5 +1,5 @@
 /**
- * 絞り込みの値 → 共通 API のクエリ（ランキング・散布・おすすめで同じ・2026-10-08 B2 でまとめた）。
+ * 絞り込みの値 → 共通 API のクエリ（ランキング・散布で同じ・2026-10-08 B2 でまとめた）。
  *
  * 以前は 3 つの取得がそれぞれ同じ項目を書いていた。場所の条件（市区町村・範囲・起点）を足すにあたり 1 か所にした。
  * 絞っていない軸は載せない（URL が短くなり、同じ条件の取得がキャッシュに当たる）。
@@ -8,7 +8,7 @@
 import { type Viewport } from '@/shared/viewport'
 import { type NearFilter } from './filterLink'
 
-/** クエリにする値（`StationFilterValues` が構造的に満たす。おすすめは範囲・起点を持たない）。 */
+/** クエリにする値（`StationFilterValues` が構造的に満たす）。 */
 export type FilterQueryValues = {
   readonly prefectures: readonly string[]
   readonly municipality: string

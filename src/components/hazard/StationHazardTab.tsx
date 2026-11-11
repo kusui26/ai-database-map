@@ -4,15 +4,18 @@
  * 駅詳細の「災害」タブの中身（`docs/260828_fix_flood.md` §4.3）。
  *
  * **上から「いま」→「もし起きたら」→「逃げる」の 3 段**にする。
- * ①と②を並べて初めて時制の違いが伝わり（語彙側の答えはバッジの前置き・同 §4.4 決定 3）、
+ * ①と②を並べて初めて時制の違いが伝わり（語彙側の答えは時制の前置き・同 §4.4 決定 3）、
  * ③は実装済みなのに駅カードから辿れなかった避難先・脱出方向への入口である（同 §3）。
+ * 末尾に限界の 1 文（駅の代表点 1 点の値）を置く——以前はヘッダのバッジの下に出していた（2026-11-11 に
+ * バッジを外した・`docs/261110_fix_PLAN.md` §5.1）。
  *
  * 出すのは**現在地カード・警戒バナーと同じパネル**——同じ共通API・同じドメイン関数を通るので、
  * 地図をクリックしたときやチャットの答えと食い違わない（`.claude/CLAUDE.md` §2）。
  *
  * ## 取りに行く回数
  *
- * - 「もし起きたら」は**バッジと同じ SWR キー**なので、タブを開いても増えない
+ * - 「もし起きたら」は**このタブを開いたときに 1 回**取る（駅を選ぶたびには引かない・261110 §5.2）。
+ *   「逃げる」の種別も同じ SWR キーで読むので、それ以上は増えない
  * - 「いま」は**このタブを開いたときだけ**取る（平時はほぼ毎回「発表なし」で、
  *   駅を選ぶたびに気象庁を叩く価値が無い・同 §4.5）。警戒バナーと同じキーなので、
  *   同じ座標を既に引いていれば重複しない
@@ -38,6 +41,7 @@ import {
   HAZARD_TENSE_ASSUMED_NOTE_JA,
   HAZARD_TENSE_NOW_JA,
   HAZARD_TENSE_NOW_NOTE_JA,
+  STATION_HAZARD_CAVEAT_JA,
 } from '@/domain/hazard/panels'
 import { isWarningMode } from '@/domain/hazard/warning-mode'
 import { PanelRenderer } from '@/components/panels/PanelRenderer'
@@ -137,7 +141,7 @@ function NowSection({ target }: { target: HazardTarget }) {
   )
 }
 
-/** ②「もし起きたら」。バッジと同じ地点・同じキーなので、追加の通信は起きない。 */
+/** ②「もし起きたら」。タブを開いたときに 1 回取る（③の種別も同じキーを読む）。 */
 function AssumedSection({ target }: { target: HazardTarget }) {
   const { point, isLoading, error } = useHazardPoint(target)
   return (
@@ -252,6 +256,8 @@ export function StationHazardTab({ target }: { target: HazardTarget }) {
       <AssumedSection target={target} />
       {/* 駅が替わったら「開いている・取得済み」を持ち越さない（押したときだけ取る、の「押した」は駅ごと）。 */}
       <EscapeSection key={`${target.lon},${target.lat}`} target={target} />
+      {/* 限界は畳まずに出す（`docs/260824_flood.md` §7.5）。駅前の反対側では値が違うことがある。 */}
+      <p className="text-[11px] leading-snug text-slate-500">{STATION_HAZARD_CAVEAT_JA}</p>
     </div>
   )
 }

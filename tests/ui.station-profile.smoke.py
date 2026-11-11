@@ -10,7 +10,8 @@
 ## 見ること
 
 1. 記憶の無い端末で駅を開くと「概要」タブ（先頭）。性格の目安・位置の凡例・11 指標・「見ていないこと」が出て、
-   災害は出さない（ヘッダのバッジが出している）。「災害」タブへの入口がある
+   災害は出さない（災害は地価の右の「災害」タブで見る。2026-11-11 にヘッダのバッジと、それを指す案内の文を外した・
+   `docs/261110_fix_PLAN.md` §5・§7.1）
 2. 位置（目盛り＋「県内 上位 19%」＋順位/駅数）は 1 行に収まり、文字が切れない（広い画面・携帯・会話の中の図とも）。
    横にはみ出さない
 3. 集計半径を替えると、その半径のプロフィールを取り直す（題が「（2km圏）」に）
@@ -231,15 +232,14 @@ def scenario_overview(browser: Browser, viewport: dict, name: str) -> None:
     for needle in ["業務地型", "位置は 県内＝神奈川県、市内＝横浜市", "人口", "地価（中央値）", "乗降客数（この駅）", "このプロフィールで見ていないこと", "治安（犯罪の件数）"]:
         check(f"「{needle}」が出る", needle in text)
     check("市内では比べない所得には、その理由が出る", "市全体の平均が主" in text)
-    check("概要タブは災害の要約を出さない（ヘッダのバッジが出している）", "区域図が無い災害" not in text)
+    check("概要タブは災害の要約を出さない（災害は「災害」タブで見る）", "区域図が無い災害" not in text)
+    check("概要タブに災害タブへの案内の文を出さない（タブが見えている・261110 §7.1 案 B）", "上のバッジ" not in text and "「災害」タブで詳しく見る" not in text)
     heights = position_heights(page)
     check(f"位置は {len(heights)} 個・どれも 1 行（{ONE_LINE_PX}px 以下）", len(heights) >= 15 and max(heights, default=99) <= ONE_LINE_PX, f"最大 {max(heights, default=0):.1f}px")
     check("横にはみ出さない", not overflows_horizontally(page))
     cut = truncated_positions(page)
     check("位置の文字が切れない（順位/駅数まで読める）", not cut, " / ".join(cut[:3]))
     page.screenshot(path=f"{OUT}/profile-overview-{name}.png")
-    page.get_by_role("button", name="「災害」タブで詳しく見る").click()
-    check("「災害」タブへの入口が効く", wait_for_tab(page, "災害"), f"タブ={active_tab(page)}")
     check("画面のエラーなし", not errors, "; ".join(errors))
     context.close()
 

@@ -7,6 +7,7 @@ import {
   HAZARD_TENSE_ASSUMED_NOTE_JA,
   HAZARD_TENSE_NOW_JA,
   HAZARD_TENSE_NOW_NOTE_JA,
+  STATION_HAZARD_CAVEAT_JA,
 } from '@/domain/hazard/panels'
 
 /**
@@ -18,9 +19,10 @@ import {
  *
  * 直し方は「語を変える」ではなく「**時制の主語を先に置く**」。
  * ここで固定するのは、その前置きが**消えないこと**と、**衝突が実在すること**である。
+ * 駅のヘッダのバッジ（前置きつきの 1 行）は 2026-11-11 に外した（`docs/261110_fix_PLAN.md` §5）。
+ * 駅の災害は、時制の見出しを持つ災害タブだけで出す。
  */
 
-const BADGE_SOURCE = readFileSync('src/components/hazard/StationHazardBadge.tsx', 'utf-8')
 const TAB_SOURCE = readFileSync('src/components/hazard/StationHazardTab.tsx', 'utf-8')
 
 /**
@@ -61,25 +63,20 @@ describe('時制の前置き（260828）', () => {
     expect(HAZARD_TENSE_ASSUMED_NOTE_JA).toContain('いま起きていることではありません')
   })
 
-  it('バッジは時制を前置きする（定数を共有する＝ずれない）', () => {
-    expect(rendered(BADGE_SOURCE)).toContain('HAZARD_TENSE_ASSUMED_JA')
-  })
-
-  it('バッジは危険度の語を**画面に出さない**（読み上げにだけ残す）', () => {
-    const lines = BADGE_SOURCE.split('\n').filter((line) =>
-      line.includes('HAZARD_LEVEL_LABELS_JA['),
-    )
-    expect(lines.length).toBe(1)
-    expect(lines[0]).toContain('sr-only')
-  })
-
   it('タブは「いま」と「もし起きたら」を両方出す（並べて初めて伝わる）', () => {
     expect(rendered(TAB_SOURCE)).toContain('HAZARD_TENSE_NOW_JA')
     expect(rendered(TAB_SOURCE)).toContain('HAZARD_TENSE_ASSUMED_JA')
   })
 
-  it('どちらも画面に「安全」とは書かない（§7.5-5）', () => {
-    expect(rendered(BADGE_SOURCE)).not.toContain('安全')
+  it('タブは画面に「安全」とは書かない（§7.5-5）', () => {
     expect(rendered(TAB_SOURCE)).not.toContain('安全')
+  })
+})
+
+describe('駅の代表点の限界（2026-11-11・261110 §5.1）', () => {
+  it('災害タブが限界の 1 文を画面に出す（ヘッダのバッジと一緒に消さない）', () => {
+    // 以前はバッジの下に常に出していた。バッジを外しても、駅の代表点 1 点の値であることは言う。
+    expect(rendered(TAB_SOURCE)).toContain('STATION_HAZARD_CAVEAT_JA')
+    expect(STATION_HAZARD_CAVEAT_JA).toContain('代表点 1 点')
   })
 })

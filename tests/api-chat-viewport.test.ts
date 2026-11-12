@@ -331,3 +331,113 @@ describe('/api/chat：「このあたり」——地図の表示範囲（2026-10
     expect(prompt.indexOf('# 地図の表示範囲')).toBeGreaterThan(prompt.indexOf('# 現在の地図の状態'))
   })
 })
+
+/** JSON Schema のオブジェクトか（真偽値の schema・配列を除く）。 */
+function isSchemaObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/** その schema の properties の名前。 */
+function propertyNames(schema: unknown): readonly string[] {
+  if (!isSchemaObject(schema) || !isSchemaObject(schema.properties)) return []
+  return Object.keys(schema.properties)
+}
+
+/** モデルに見せた道具の入力の型（1 回目の呼び出し）。 */
+function shownSchema(toolName: string): unknown {
+  const tools = current.model?.doStreamCalls[0]?.tools ?? []
+  return tools.flatMap((each) =>
+    each.type === 'function' && each.name === toolName ? [each.inputSchema] : [],
+  )[0]
+}
+
+/** `getAreaSummary` に見せた「エリア 1 つ」の型（`areas` の items）。 */
+function shownAreaSchema(): unknown {
+  const schema = shownSchema('getAreaSummary')
+  if (!isSchemaObject(schema) || !isSchemaObject(schema.properties)) return undefined
+  const areas = schema.properties.areas
+  return isSchemaObject(areas) ? areas.items : undefined
+}
+
+/** 道具ごとに、見せた型に地図の範囲（inMapView）があるか。`getAreaSummary` はエリア 1 つの中を見る。 */
+function mapViewShown(): Readonly<Record<string, boolean>> {
+  const has = (schema: unknown): boolean => propertyNames(schema).includes('inMapView')
+  return {
+    rankStations: has(shownSchema('rankStations')),
+    compareGrowth: has(shownSchema('compareGrowth')),
+    listStations: has(shownSchema('listStations')),
+    getAreaSummary: has(shownAreaSchema()),
+  }
+}
+
+/**
+ * 「この区」——地図の範囲で絞る選択肢を、**その回の道具から外す**（2026-11-12・`docs/261110_fix_PLAN.md` §3.4.1）。
+ *
+ * プロンプトと `inMapView` の説明に「地図の範囲ではない」と言い切っても、関係の無い段落を書き換えるだけで、
+ * モデルが `inMapView:true` で絞る回が出た（B4・B5d・PR-1）。外すのはモデルに見せる型だけで、プロンプトは変えない。
+ */
+describe('/api/chat：「この区」の回は、道具から地図の範囲を外す（2026-11-12）', () => {
+  /** 竹橋の周り（約 7km 四方・区が主役になるほど寄っている）。中心の駅の市区町村は千代田区。 */
+  const TAKEBASHI_TUPLE = [139.72, 35.66, 139.8, 35.72]
+  const JAPAN_TUPLE = [122.9, 24.0, 153.9, 45.6]
+  const WARD = 'この区で人口が増えている駅は？'
+  const ALL_SHOWN = {
+    rankStations: true,
+    compareGrowth: true,
+    listStations: true,
+    getAreaSummary: true,
+  }
+
+  it('地図が区を決められる回：4 つの道具の見せる型に inMapView が無い（プロンプトの規則は今のまま）', async () => {
+    const { status } = await ask(
+      WARD,
+      { metric: 'pop_gr', municipality: '千代田区' },
+      { bbox: TAKEBASHI_TUPLE },
+    )
+    expect(status).toBe(200)
+    expect(mapViewShown()).toEqual({
+      rankStations: false,
+      compareGrowth: false,
+      listStations: false,
+      getAreaSummary: false,
+    })
+    // 地図の範囲そのものの話（「このあたり」）の規則と、「この区」の規則は、どちらも今までどおり言う。
+    expect(systemPrompt()).toContain('inMapView:true')
+    expect(systemPrompt()).toContain('中心の駅の市区町村（千代田区）の全体')
+    // 外したのは inMapView だけ（ほかの引数は見せる）。
+    expect(propertyNames(shownSchema('rankStations'))).toEqual(
+      expect.arrayContaining(['metric', 'municipality', 'prefectures', 'near']),
+    )
+  })
+
+  it('「このあたり」の回は今までどおり inMapView を見せる', async () => {
+    await ask(
+      'このあたりで人口が増えている駅は？',
+      { metric: 'pop_gr', inMapView: true },
+      { bbox: TAKEBASHI_TUPLE },
+    )
+    expect(mapViewShown()).toEqual(ALL_SHOWN)
+  })
+
+  it('地図が日本全体に近い（区を決められない）回は外さない——プロンプトにも「この区」の規則が無い', async () => {
+    await ask(WARD, { metric: 'pop_gr' }, { bbox: JAPAN_TUPLE })
+    expect(mapViewShown()).toEqual(ALL_SHOWN)
+    expect(systemPrompt()).not.toContain('中心の駅の市区町村')
+  })
+
+  it('範囲を送らない回も外さない', async () => {
+    await ask(WARD, { metric: 'pop_gr' }, {})
+    expect(mapViewShown()).toEqual(ALL_SHOWN)
+  })
+
+  it('外した回にモデルが inMapView を送っても、見せた型どおりに落ちて、地図の範囲では絞らない', async () => {
+    const { status } = await ask(
+      WARD,
+      { metric: 'pop_gr', inMapView: true },
+      { bbox: TAKEBASHI_TUPLE },
+    )
+    expect(status).toBe(200)
+    expect(db.rankByColumn).toHaveBeenCalled()
+    expect(db.rankByColumn.mock.calls[0]?.[1]?.bbox).toBeUndefined()
+  })
+})

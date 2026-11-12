@@ -25,22 +25,35 @@ import { TAB_FADE_WIDTH_PX, tabStripScrollLeft } from '@/lib/tab-strip'
  *           バッジから飛んだときに見えないままだと壊れて見える（docs/260828_fix_flood.md §4.2）。
  *  10 タブ: 概要（駅周辺のプロフィール・B4）を**先頭**に足して 628px。条件は 9 タブと同じ
  *           （`docs/261001_fix_user_feedback_ui.md` §12-7——ヘッダに要約を置く案はヘッダが伸びるので採らない）。
+ *  並べ替え（2026-11-11・`docs/261110_fix_PLAN.md` §6・D-3）: 地価を人口の右、災害を地価の右（5 番目）へ。
+ *           ヘッダのバッジ（災害タブへの入口）を外したので、災害タブを**帯を送らずに見える位置**に置く。
+ *           幅は変わらず 628px。隠れるのは後ろのタブ（広い画面では売上から右）で、条件は同じ。
  */
 const TAB_WIDTHS_PX: Readonly<Record<string, number>> = {
   概要: 52,
   乗降客数: 80,
   人口: 52,
+  地価: 52,
+  災害: 52,
   所得: 52,
   売上: 52,
-  地価: 52,
   バス: 52,
   事業所: 66,
   従業者: 66,
-  災害: 52,
 }
 const TAB_GAP_PX = 4
 const STRIP_PADDING_PX = 16
 const TAB_STRIP_WIDTH_PX = 628
+/** 携帯（390px）の帯の可視幅（実測の clientWidth）。 */
+const PHONE_STRIP_WIDTH_PX = 390
+
+/** ラベルのタブの左端（帯の左パディング＋前のタブの幅と間）。実測の offsetLeft と同じ算出。 */
+function tabLeftPx(label: string): number {
+  const labels = Object.keys(TAB_WIDTHS_PX)
+  const before = labels.slice(0, labels.indexOf(label))
+  const widths = before.map((name) => TAB_WIDTHS_PX[name] ?? 0)
+  return STRIP_PADDING_PX / 2 + widths.reduce((sum, w) => sum + w, 0) + TAB_GAP_PX * before.length
+}
 
 /**
  * statTable の行幅（1440px・Chromium 実測 2026-08-16／docs/260816_stat_table_layout.md）。
@@ -87,12 +100,20 @@ describe('併設パネルの幅（260804・所得タブ追加 260813）', () => 
     expect(TAB_FADE_WIDTH_PX).toBeGreaterThan(0)
   })
 
-  it('タブのラベルと並びが実測時から変わっていない（概要が先頭・災害は末尾）', () => {
+  it('タブのラベルと並びが実測時から変わっていない（概要が先頭・地価は人口の右・災害は地価の右）', () => {
     // ラベルが伸びる／タブが増えると帯が広がり、上の不変条件が崩れる。変えたときは実測し直す。
     const labels = DETAIL_TABS.map((tab) => DETAIL_TAB_LABELS_JA[tab])
     expect(labels).toEqual(Object.keys(TAB_WIDTHS_PX))
     expect(labels[0]).toBe('概要') // 261001 §12-7：先頭
-    expect(labels[labels.length - 1]).toBe('災害') // §7 決定 2：末尾
+    expect(labels.indexOf('地価')).toBe(labels.indexOf('人口') + 1) // 261110 §6：依頼
+    expect(labels.indexOf('災害')).toBe(labels.indexOf('地価') + 1) // 261110 §6・D-3
+  })
+
+  it('災害タブは帯を送らずに見える（右端のフェードにもかからない・広い画面も携帯も）', () => {
+    // ヘッダのバッジ（入口）を外したので、タブそのものが入口になる（261110 §5.3・§6.2）。
+    const right = tabLeftPx('災害') + (TAB_WIDTHS_PX['災害'] ?? 0)
+    expect(right).toBeLessThanOrEqual(PANEL_WIDTH_PX - TAB_FADE_WIDTH_PX)
+    expect(right).toBeLessThanOrEqual(PHONE_STRIP_WIDTH_PX - TAB_FADE_WIDTH_PX)
   })
 
   it('statTable は「半分に収まる行」を 2 列に詰め、収まらない行だけ 1 行を占める（260816）', () => {
@@ -124,20 +145,22 @@ describe('併設パネルの幅（260804・所得タブ追加 260813）', () => 
 /**
  * 帯を送って「選んだタブ」を見せる（`src/lib/tab-strip.ts`・実測 2026-08-28）。
  *
- * 数字はすべて 1440px の Chromium で測ったもの——災害タブは `offsetLeft=568`・幅 52px、
- * 帯の可視幅は 420px（PC）／390px（モバイル）、`scrollWidth` は 628px（概要を足した 2026-10-09 に測り直した）。
- * バッジから飛んだのにタブ帯が動かないと、**押しても何も起きていないように見える**。
+ * 数字はすべて 1440px の Chromium で測ったもの——末尾の従業者タブは `offsetLeft=554`・幅 66px
+ * （並べ替えた 2026-11-11 に測り直した。以前の末尾は災害タブで 568・52px）、帯の可視幅は 420px（PC）／390px（モバイル）、
+ * `scrollWidth` は 628px。覚えていたタブや AI の焦点（`?tab`）で後ろのタブが選ばれたのに帯が動かないと、
+ * **選んだタブが見えず、壊れて見える**。
  */
 describe('タブ帯のスクロール位置（260828）', () => {
-  const HAZARD_TAB = { offsetLeft: 568, offsetWidth: 52 }
+  const LAST_TAB = { offsetLeft: 554, offsetWidth: 66 }
   const FIRST_TAB = { offsetLeft: STRIP_PADDING_PX / 2, offsetWidth: 80 }
   const VISIBLE_WIDTH_PX = PANEL_WIDTH_PX // 帯はパネル幅いっぱいに広がる
 
-  it('末尾の災害タブを選ぶと、右端まで送って見せる', () => {
-    const left = tabStripScrollLeft({ scrollLeft: 0, clientWidth: VISIBLE_WIDTH_PX }, HAZARD_TAB)
+  it('末尾のタブ（従業者）を選ぶと、右端まで送って見せる', () => {
+    expect(LAST_TAB.offsetLeft).toBe(tabLeftPx('従業者')) // 幅の表と実測が合っている
+    const left = tabStripScrollLeft({ scrollLeft: 0, clientWidth: VISIBLE_WIDTH_PX }, LAST_TAB)
     // 右端が見える位置＋フェードに隠れない余白。ブラウザ側で最大値（628−420＝208）に丸まる。
     expect(left).toBe(
-      HAZARD_TAB.offsetLeft + HAZARD_TAB.offsetWidth + TAB_FADE_WIDTH_PX - VISIBLE_WIDTH_PX,
+      LAST_TAB.offsetLeft + LAST_TAB.offsetWidth + TAB_FADE_WIDTH_PX - VISIBLE_WIDTH_PX,
     )
     expect(left).toBeGreaterThan(TAB_STRIP_WIDTH_PX - VISIBLE_WIDTH_PX) // ＝右端まで送られる
   })
@@ -156,8 +179,8 @@ describe('タブ帯のスクロール位置（260828）', () => {
   })
 
   it('送った先で、選んだタブが右端のフェードに隠れない', () => {
-    const left = tabStripScrollLeft({ scrollLeft: 0, clientWidth: VISIBLE_WIDTH_PX }, HAZARD_TAB)
-    const tabRight = HAZARD_TAB.offsetLeft + HAZARD_TAB.offsetWidth - left
+    const left = tabStripScrollLeft({ scrollLeft: 0, clientWidth: VISIBLE_WIDTH_PX }, LAST_TAB)
+    const tabRight = LAST_TAB.offsetLeft + LAST_TAB.offsetWidth - left
     expect(tabRight).toBeLessThanOrEqual(VISIBLE_WIDTH_PX - TAB_FADE_WIDTH_PX)
   })
 })
@@ -174,7 +197,6 @@ describe('タブ帯のスクロール位置（260828）', () => {
  */
 describe('駅詳細ヘッダの不変条件（260828）', () => {
   const PANEL_SOURCE = readFileSync('src/components/detail/StationDetailPanel.tsx', 'utf-8')
-  const BADGE_SOURCE = readFileSync('src/components/hazard/StationHazardBadge.tsx', 'utf-8')
   const header = PANEL_SOURCE.slice(
     PANEL_SOURCE.indexOf('<header'),
     PANEL_SOURCE.indexOf('</header>'),
@@ -199,8 +221,8 @@ describe('駅詳細ヘッダの不変条件（260828）', () => {
     expect(header).not.toContain('useStationProfile')
   })
 
-  it('災害バッジはパネルを描かない（1 行の入口に徹する）', () => {
-    expect(BADGE_SOURCE).not.toContain('PanelRenderer')
-    expect(BADGE_SOURCE).not.toContain('PanelStack')
+  it('ヘッダに災害の照会を置かない（駅を選ぶたびに /api/hazard/point を引かない・261110 §5）', () => {
+    // 以前はバッジがここで照会し、見るつもりの無い駅でも浸水ナビの分間の枠を使っていた。災害は「災害」タブで見る。
+    expect(header).not.toContain('Hazard')
   })
 })

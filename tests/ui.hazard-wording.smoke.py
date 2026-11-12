@@ -53,6 +53,13 @@ def open_station(page: Page) -> None:
     hazard_tab(page).wait_for(timeout=30000)
 
 
+def opened_body(page: Page) -> str:
+    """「根拠と注意（N）」を開いてから読む。理由の 1 文（取れなかったもの）は、2026-11-11 から畳んだ中にある
+    （`docs/261110_fix_PLAN.md` §8.3）。見える所には、理由を名乗らない確からしさの一言が出る。"""
+    page.evaluate("() => document.querySelectorAll('details').forEach((details) => { details.open = true })")
+    return page.inner_text("body")
+
+
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch()
 
@@ -70,7 +77,9 @@ with sync_playwright() as playwright:
     open_station(page)
     hazard_tab(page).click()
     page.wait_for_timeout(SETTLE_MS)
-    body = page.inner_text("body")
+    shown = page.inner_text("body")
+    check("押さなくても、照合できていないことと「安全という意味ではありません」が見える", "照合できず" in shown and "安全という意味ではありません" in shown)
+    body = opened_body(page)
     page.screenshot(path=f"{OUT}/wording-unreachable.png")
     check("こちらの不調として書く", "最新のデータを取得できなかったため" in body)
     check("「オフラインのため」とは言わない", "オフラインのため" not in body)
@@ -85,9 +94,11 @@ with sync_playwright() as playwright:
     context.set_offline(True)
     hazard_tab(page).click()
     page.wait_for_timeout(SETTLE_MS)
-    body = page.inner_text("body")
+    shown = page.inner_text("body")
+    check("押さなくても、確かめられない種類は「未確認」と見える", "未確認：" in shown)
+    body = opened_body(page)
     page.screenshot(path=f"{OUT}/wording-offline.png")
-    check("端末がそう言っているので、そう書く", "オフラインのため" in body)
+    check("端末がそう言っているので、そう書く", "オフラインのため、端末に保存した" in body)
     check("こちらの不調とは言わない", "最新のデータを取得できなかったため" not in body)
     context.close()
 

@@ -16,9 +16,10 @@
 
 新しい駅（東京）の `/api/hazard/point` を遅らせ、その間の画面を何度も読む。どの時点でも
 
-1. ヘッダが東京なら、災害バッジは横浜の結果ではない（「確認しています…」か、東京の結果）
-2. 「災害」タブが東京なら、「もし起きたら」に横浜のカードが無く、「逃げる」は東京の結果が届くまで出ない
-3. 現在地は**同じ「現在地」の移動**なので、新しい位置の結果が届くまで前の結果を出し続ける（ちらつかせない・従来どおり）
+1. 「災害」タブが東京なら、「もし起きたら」に横浜のカードが無く、「逃げる」は東京の結果が届くまで出ない
+2. 現在地は**同じ「現在地」の移動**なので、新しい位置の結果が届くまで前の結果を出し続ける（ちらつかせない・従来どおり）
+
+ヘッダの災害バッジ（以前の 1 番）は 2026-11-11 に外した（`docs/261110_fix_PLAN.md` §5）。駅の災害は「災害」タブだけに出る。
 """
 
 import json
@@ -36,7 +37,6 @@ SLOW_MS = 5_000
 #: 画面を読む間隔。
 SAMPLE_MS = 150
 WAIT_MS = 30_000
-SKELETON_JA = "災害リスクを確認しています…"
 WIDE = {"width": 1440, "height": 900}
 #: 東京駅の近く（現在地の場面）。動かす量は約 110m（丸めの 11m より大きく、別のキーになる）。
 TOKYO_POINT = {"latitude": 35.6812, "longitude": 139.7671, "accuracy": 20}
@@ -64,13 +64,12 @@ def delay_point(page: Page, place_ja: str) -> None:
     page.route("**/api/hazard/point*", handler)
 
 
-#: ヘッダの駅名と、災害バッジの文（駅カードの見出しと、バッジの本文の span）。
+#: ヘッダの駅名（駅カードの見出し）。
 HEADER_JS = """() => {
   const header = document.querySelector('aside header');
-  if (!header) return { name: '', badge: '', text: '' };
+  if (!header) return { name: '', text: '' };
   const name = header.querySelector('h2')?.textContent?.trim() ?? '';
-  const badge = [...header.querySelectorAll('span')].find((s) => s.className.includes('break-words'))?.textContent?.trim() ?? '';
-  return { name, badge, text: header.innerText };
+  return { name, text: header.innerText };
 }"""
 
 #: 「災害」タブの本文：「もし起きたら」のカードの見出し（地点名）と、「逃げる」のボタンの有無。
@@ -79,7 +78,7 @@ HAZARD_TAB_JS = """() => {
   const body = aside?.querySelector('.overflow-y-auto');
   if (!body) return { card: '', escape: false, text: '' };
   const card = body.querySelector('section h2')?.textContent?.trim() ?? '';
-  const escape = [...body.querySelectorAll('button')].some((b) => b.textContent.includes('避難先と向きを調べる'));
+  const escape = [...body.querySelectorAll('button[aria-expanded]')].some((b) => b.textContent.includes('の避難先'));
   return { card, escape, text: body.innerText };
 }"""
 
@@ -124,31 +123,6 @@ def wait_until(page: Page, read, predicate, timeout_ms: int = WAIT_MS) -> dict:
         page.wait_for_timeout(SAMPLE_MS)
         value = read(page)
     return value
-
-
-def scenario_badge(browser: Browser) -> None:
-    print("[ヘッダの災害バッジ：東京の名前の下に横浜の結果を出さない]")
-    context = browser.new_context(viewport=WIDE)
-    page = context.new_page()
-    errors: list[str] = []
-    page.on("pageerror", lambda error: errors.append(str(error)))
-    page.goto(f"{BASE}/?grp={quote(YOKOHAMA)}", wait_until="networkidle")
-    first = wait_until(page, header, lambda h: h["name"] == "横浜" and h["badge"] != "")
-    yokohama_badge = first["badge"]
-    check("横浜の災害バッジが出る", yokohama_badge != "", yokohama_badge)
-    delay_point(page, "東京")
-    switch_station(page, "東京")
-    seen = sample(page, header, SLOW_MS - 1_000)
-    under_tokyo = [h for h in seen if h["name"] == "東京"]
-    wrong = [h for h in under_tokyo if h["badge"] == yokohama_badge]
-    check("遅らせているあいだにヘッダが東京になる（確かめる時間がある）", len(under_tokyo) > 0, f"{len(under_tokyo)}/{len(seen)} 回")
-    check("東京の名前の下に、横浜の結果を一度も出さない", not wrong, f"{len(wrong)} 回: {yokohama_badge}")
-    check("その間は「確認しています…」", any(SKELETON_JA in h["text"] for h in under_tokyo), "")
-    done = wait_until(page, header, lambda h: h["name"] == "東京" and h["badge"] not in ("", yokohama_badge))
-    check("東京の結果が届けば、東京の結果を出す", done["badge"] not in ("", yokohama_badge), done["badge"])
-    page.screenshot(path=f"{OUT}/station-switch-badge.png")
-    check("画面のエラーなし", not errors, "; ".join(errors))
-    close(page)
 
 
 def scenario_hazard_tab(browser: Browser) -> None:
@@ -220,7 +194,6 @@ def scenario_current_position(browser: Browser) -> None:
 
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch()
-    scenario_badge(browser)
     scenario_hazard_tab(browser)
     scenario_current_position(browser)
     browser.close()

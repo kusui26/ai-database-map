@@ -49,12 +49,25 @@ type TotalSpec = {
   readonly labelJa: string
 }
 
+/** 区域の値の名前（指標の種類ごと・漏れは型で落ちる）。About の出典の札も同じ言葉を使う（`sources.ts`）。 */
+const TOTAL_LABELS_JA: Readonly<Record<AreaMetric['baseMetric'], string>> = {
+  pop: '人口',
+  pop_pred: '将来推計人口',
+  estab_n: '事業所（民営）',
+  emp_n: '従業者（民営）',
+}
+
 const TOTAL_SPECS: readonly TotalSpec[] = [
-  { id: 'population', baseMetric: 'pop', labelJa: '人口' },
-  { id: 'populationFuture', baseMetric: 'pop_pred', labelJa: '将来推計人口' },
-  { id: 'establishments', baseMetric: 'estab_n', labelJa: '事業所（民営）' },
-  { id: 'employees', baseMetric: 'emp_n', labelJa: '従業者（民営）' },
+  { id: 'population', baseMetric: 'pop', labelJa: TOTAL_LABELS_JA.pop },
+  { id: 'populationFuture', baseMetric: 'pop_pred', labelJa: TOTAL_LABELS_JA.pop_pred },
+  { id: 'establishments', baseMetric: 'estab_n', labelJa: TOTAL_LABELS_JA.estab_n },
+  { id: 'employees', baseMetric: 'emp_n', labelJa: TOTAL_LABELS_JA.emp_n },
 ]
+
+/** 区域の値の名前（「人口」「将来推計人口」「事業所（民営）」「従業者（民営）」）。 */
+export function totalLabelJa(baseMetric: AreaMetric['baseMetric']): string {
+  return TOTAL_LABELS_JA[baseMetric]
+}
 
 /** 値のある年の点（年の古い順）と、使った指標。 */
 function pointsOf(

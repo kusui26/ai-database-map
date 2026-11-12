@@ -8,11 +8,14 @@
  *  1. **矢印は方角だけ**——道順ではない。八方位の文字を必ず添える（記号だけにしない・§7.6）
  *  2. **限界を畳まない**（直線距離である／移動が安全とは限らない／250m の目安）
  *  3. **「そちらへ移動してください」と書かない**——文言はサーバの `headlineJa` をそのまま出す
+ *
+ * 免責は `HazardDisclaimer` が出す（駅の災害タブの中ではタブの末尾で 1 回・`docs/261110_fix_PLAN.md` §8.3）。
  */
 
 import { type EscapeDirectionPanel } from '@/shared/protocol'
 import { cn } from '@/lib/utils'
 import { Emphasis } from './Emphasis'
+import { HazardDisclaimer } from './HazardDisclaimer'
 import { SourceList } from './SourceList'
 
 /** 八方位 → 矢印の回転角（北が 0 度・時計回り）。 */
@@ -94,7 +97,7 @@ export function EscapeDirection({ panel }: { panel: EscapeDirectionPanel }) {
 
       <SourceList sources={panel.sources} className="mt-2" />
 
-      <p className="mt-2 text-[11px] text-slate-500">ⓘ {panel.disclaimerJa}</p>
+      <HazardDisclaimer textJa={panel.disclaimerJa} />
     </section>
   )
 }

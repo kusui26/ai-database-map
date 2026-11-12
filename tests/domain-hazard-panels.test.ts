@@ -1,10 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { hazardCardPanel } from '@/domain/hazard/panels'
+import {
+  groupStateLines,
+  hazardCardPanel,
+  hazardDetailsSummaryJa,
+  reasonsBesideHighlightsJa,
+} from '@/domain/hazard/panels'
 import { pointHazard } from '@/domain/hazard/point'
-import { durationPhraseJa, riverReasonsJa } from '@/domain/hazard/wording'
+import { durationPhraseJa, GROUP_STATE_LABELS_JA, riverReasonsJa } from '@/domain/hazard/wording'
+import type { HazardGroupState } from '@/shared/protocol'
 import { hazardLayersToShow, hazardLayersWithPointAnswer } from '@/domain/hazard/catalog'
-import { hazardBadgeJa, STATION_HAZARD_CAVEAT_JA } from '@/domain/hazard/panels'
+import { STATION_HAZARD_CAVEAT_JA } from '@/domain/hazard/panels'
 import { panelSchema } from '@/shared/protocol'
+import { hazardPointResponseSchema } from '@/shared/api'
 import { surroundingPrimaries } from '@/shared/mesh'
 
 /**
@@ -23,6 +30,7 @@ const BASE = {
   tile: [],
   tileNearby: [],
   uncoveredLayerKeys: [],
+  unreachedLayerKeys: [],
   rivers: [],
   elevationM: 0.2,
   onlineSourcesReached: true,
@@ -61,6 +69,48 @@ describe('hazard/panels: 地点の応答 → hazardCard', () => {
     expect(panel.evacuation).toBe(point.verdict.evacuation)
     expect(panel.headlineJa).toBe(point.verdict.headlineJa)
     expect(panel.reasonsJa).toEqual(point.verdict.reasonsJa)
+  })
+
+  it('種類ごとの状態・畳まない注意・固有の事実を、応答のまま写す（261110 §8.4）', () => {
+    const rivers = [{ nameJa: '中川', maxDepthM: null, arriveMin: 30, continueMin: 5718 }]
+    const point = pointHazard(
+      { ...BASE, tile: [{ layerKey: 'flood_l2', hex: '#FFB7B7' }], rivers },
+      ALL_LAYERS,
+    )
+    const panel = hazardCardPanel(point, 'full')
+    expect(() => panelSchema.parse(panel)).not.toThrow()
+    expect(panel.groupStates).toHaveLength(5)
+    expect(panel.groupStates).toEqual(point.groupStates)
+    expect(panel.keyNotesJa).toEqual(point.keyNotesJa)
+    expect(panel.highlightsJa).toEqual(point.highlightsJa)
+    expect(panel.highlightsJa?.[0]).toContain('中川')
+  })
+
+  /**
+   * 配備の切り替わりの間、CDN・Service Worker に**3 項目の無い古い応答**が残る。
+   * 新しい画面がそれを受けても落ちず、カードは今の描き方のまま（3 項目が無い）になる。
+   */
+  it('古い応答（3 項目が無い）も共通API の契約に通り、カードは今のまま描ける', () => {
+    const point = pointHazard(
+      { ...BASE, tile: [{ layerKey: 'flood_l2', hex: '#FFB7B7' }] },
+      ALL_LAYERS,
+    )
+    const legacy: unknown = JSON.parse(
+      JSON.stringify({
+        ...point,
+        groupStates: undefined,
+        keyNotesJa: undefined,
+        highlightsJa: undefined,
+      }),
+    )
+    const parsed = hazardPointResponseSchema.parse(legacy)
+    expect(parsed.groupStates).toBeUndefined()
+    const panel = hazardCardPanel(parsed)
+    expect(() => panelSchema.parse(panel)).not.toThrow()
+    expect(panel.groupStates).toBeUndefined()
+    expect(panel.keyNotesJa).toBeUndefined()
+    expect(panel.highlightsJa).toBeUndefined()
+    expect(panel.items).toEqual(point.hazards)
   })
 })
 
@@ -141,37 +191,73 @@ describe('hazard/catalog: 地図に出すレイヤ（AI が根拠の面を見せ
   })
 })
 
-describe('hazard/panels: 駅バッジの 1 行（§7.2）', () => {
-  it('いちばん重いものをグループ名＋階級で言う', () => {
-    const point = pointHazard(
-      { ...BASE, tile: [{ layerKey: 'flood_l2', hex: '#FFB7B7' }] },
-      ALL_LAYERS,
-    )
-    expect(hazardBadgeJa(point)).toBe('洪水 3〜5m 未満')
+/**
+ * 地点のカードの並べ方（2026-11-11・`docs/261110_fix_PLAN.md` §8.3）。言い方はサーバの文字列をつなぐだけで、
+ * ここが決めるのは**順と、2 回言わないこと**である。
+ */
+describe('hazard/panels: 種類ごとの状態の行', () => {
+  const state = (
+    group: HazardGroupState['group'],
+    labelJa: string,
+    kind: HazardGroupState['state'],
+    proximityJa: string | null = null,
+  ): HazardGroupState => ({
+    group,
+    labelJa,
+    state: kind,
+    stateJa: GROUP_STATE_LABELS_JA[kind],
+    proximityJa,
   })
 
-  it('複数のグループに当たったら「ほか N 種」を添える', () => {
-    const point = pointHazard(
-      {
-        ...BASE,
-        tile: [
-          { layerKey: 'flood_l2', hex: '#FFB7B7' },
-          { layerKey: 'hightide_l2', hex: '#FFFFB3' },
-        ],
-        tileNearby: [],
-        uncoveredLayerKeys: [],
-      },
-      ALL_LAYERS,
-    )
-    expect(hazardBadgeJa(point)).toBe('洪水 3〜5m 未満・ほか 1 種')
+  it('すぐ近く → 該当なし → 図なし → 未確認 の順で、該当の種類は行にしない', () => {
+    const lines = groupStateLines([
+      state('flood', '洪水', 'hit'),
+      state('inland_flood', '内水（雨水出水）', 'none'),
+      state('storm_surge', '高潮', 'uncovered'),
+      state('tsunami', '津波', 'nearby', '約 20m 以内'),
+      state('landslide', '土砂災害', 'unknown'),
+    ])
+    expect(lines.map((line) => `${line.stateJa}：${line.groupsJa}`)).toEqual([
+      'すぐ近くに区域：津波（約 20m 以内）',
+      '該当なし：内水（雨水出水）',
+      '想定区域図なし：高潮',
+      '未確認：土砂災害',
+    ])
   })
 
-  it('該当が無くても「安全」とは言わない', () => {
-    const badge = hazardBadgeJa(pointHazard(BASE, ALL_LAYERS))
-    expect(badge).toBe('指定区域の該当なし')
-    expect(badge).not.toContain('安全')
+  it('同じ状態の種類は 1 行に「・」でつなぐ（種類の順のまま）', () => {
+    const lines = groupStateLines([
+      state('inland_flood', '内水（雨水出水）', 'none'),
+      state('tsunami', '津波', 'none'),
+    ])
+    expect(lines).toEqual([
+      { state: 'none', stateJa: '該当なし', groupsJa: '内水（雨水出水）・津波' },
+    ])
   })
 
+  it('5 種類とも該当なら行は無い（該当の行が値つきで言う）', () => {
+    expect(groupStateLines([state('flood', '洪水', 'hit')])).toEqual([])
+  })
+})
+
+describe('hazard/panels: 畳む根拠（川の到達・継続は外に出したので 2 回言わない）', () => {
+  it('川の文だけを外し、ほかの根拠は順のまま残す', () => {
+    const reasons = ['規則の根拠 1', '中川の氾濫では約 50 分で浸水が始まる想定です', '規則の根拠 2']
+    expect(
+      reasonsBesideHighlightsJa(reasons, ['中川の氾濫では約 50 分で浸水が始まる想定です']),
+    ).toEqual(['規則の根拠 1', '規則の根拠 2'])
+  })
+
+  it('外に出した事実が無ければ、根拠はそのまま', () => {
+    expect(reasonsBesideHighlightsJa(['規則の根拠 1'], [])).toEqual(['規則の根拠 1'])
+  })
+
+  it('見出しは数つき（「根拠と注意（N）」）', () => {
+    expect(hazardDetailsSummaryJa(10)).toBe('根拠と注意（10）')
+  })
+})
+
+describe('hazard/panels: 駅の災害の限界（災害タブの末尾・261110 §5.1）', () => {
   it('駅の代表点 1 点であるという限界を必ず添える', () => {
     expect(STATION_HAZARD_CAVEAT_JA).toContain('代表点')
     expect(STATION_HAZARD_CAVEAT_JA).toContain('異なる')

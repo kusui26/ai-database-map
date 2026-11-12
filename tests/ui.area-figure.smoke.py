@@ -18,7 +18,8 @@
 6. 履歴：閉じる（色分けは残る）→ 戻るで同じ条件の図 → もう一度戻ると開く前（色分けも無い）→ 進む
 7. 深いリンク（比較・500m）はそのまま開き、URL を書き換え続けない。壊れたリンク（知らないエリア）は理由を出し、札は文字列のまま
 8. チャットの回答：エリアの答えは会話の中（compact・自動では図を開かない）に「拡大」付きで出て、押すと同じ条件の図が開く
-9. 駅を選んだ広い画面（1440px）では、地図の凡例が列の右に入らないので出さない（列の要約が同じ凡例を出す）。駅詳細を閉じれば出る
+9. 駅を選んだ広い画面（1440px）では、地図の凡例が列の右に入らないので出さない（そのときだけ列の要約が同じ凡例を出す）。
+   駅詳細を閉じれば地図に出て、列の要約からは消える（同じ中身を 2 か所に出さない・2026-11-11・`docs/261110_fix_PLAN.md` §4.1）
 10. 横にはみ出さない・画面のエラーが無い・地図が「収まらない」と言わない
 """
 
@@ -451,9 +452,11 @@ def scenario_station(browser: Browser, name: str, viewport: dict) -> None:
     check("手がかりを添える", figure(page).get_by_text("選択中の駅（新横浜）の市区町村を開きました").first.is_visible())
     if is_wide(page):
         check("駅詳細も開いた 1440px では地図の凡例を出さない（列の下に隠さない）", legend(page).count() == 0)
+        check("そのときは列の要約が凡例を出す（色だけを残さない）", figure(page).get_by_text("地図の色分け：").count() >= 1)
         page.locator("aside").filter(has_text="最新乗降客数").get_by_role("button", name="閉じる", exact=True).click()
         page.wait_for_timeout(SETTLE_MS)
         check("駅詳細を閉じると地図の凡例が出る", legend(page).is_visible(), str(params(page)))
+        check("地図に凡例が出たら、列の要約からは消える（2 か所に出さない）", figure(page).get_by_text("地図の色分け：").count() == 0)
     page.screenshot(path=f"{OUT}/area-figure-station-{name}.png")
     check("画面のエラーなし", not errors, "; ".join(errors))
     context.close()

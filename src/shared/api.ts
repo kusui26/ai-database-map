@@ -27,7 +27,13 @@ import {
   NEAR_MIN_RADIUS_M,
   RADII_M,
 } from './constants'
-import { hazardItemSchema, rankingRowSchema, scatterPointSchema, sourceRefSchema } from './protocol'
+import {
+  hazardGroupStateSchema,
+  hazardItemSchema,
+  rankingRowSchema,
+  scatterPointSchema,
+  sourceRefSchema,
+} from './protocol'
 import { evacuationDisasterKeySchema } from './evacuation'
 
 // --- エラー封筒 ---------------------------------------------------------
@@ -479,6 +485,16 @@ export const hazardPointResponseSchema = z.object({
   certainty: hazardCertaintySchema,
   /** 網羅性の注記（「白＝安全」と読ませない・§7.5-2）。 */
   coverageNotesJa: z.array(z.string()),
+  /**
+   * 災害の種類ごとの状態（5 種類・`docs/261110_fix_PLAN.md` §8.4）。`pointHazard` は必ず埋める。
+   * 下の 2 つと合わせて**省略できる**のは、配備の切り替わりの間にキャッシュに残る古い応答
+   * （3 つが無い）も、新しい画面がそのまま受けられるようにするため。
+   */
+  groupStates: z.array(hazardGroupStateSchema).optional(),
+  /** 畳まずに見せる注意（0〜2 文）。「該当なし」などを安全と読ませない 1 文。 */
+  keyNotesJa: z.array(z.string()).optional(),
+  /** その場所にしか無い具体的な事実（0〜2 文。浸水ナビの到達・継続の時間）。 */
+  highlightsJa: z.array(z.string()).optional(),
   sources: z.array(sourceRefSchema),
   /** 取得できなかったものの説明。**部分応答であることを隠さない**（§6.3）。 */
   notesJa: z.array(z.string()),

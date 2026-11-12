@@ -1,6 +1,6 @@
 /**
  * 寄せるときの余白（`src/components/map/padding.ts`）と、エリアの図の列の横に地図の凡例を置けるか
- * （`ColoringHost.tsx` の `minWidthForLegendBesideColumn`）——2026-10-15 B5e。
+ * （`legendPlacement.ts` の `minWidthForLegendBesideColumn`・地図と列の要約が同じ判定を読む）——2026-10-15 B5e。
  *
  * 広い画面でエリアの図を開くと、チャットの右に列（420px）が並ぶ。色分けしたエリアの駅が列の裏に入らないように、寄せる余白は
  * 列も避ける。ただし列も避けると見える幅が残らないとき（駅詳細も開いた 1128〜1400px）は列を避けない——MapLibre は余白の和が
@@ -13,7 +13,7 @@ import { PANEL_GAP_PX, PANEL_WIDTH_PX } from '@/shared/constants'
 import { AREA_COLUMN_WIDTH_PX } from '@/hooks/useIsWide'
 import { BASE_PAD_PX, flyPadding, type OpenPanels } from '@/components/map/padding'
 import { MIN_VISIBLE_WIDTH_PX } from '@/components/map/visibleBounds'
-import { minWidthForLegendBesideColumn } from '@/components/coloring/ColoringHost'
+import { minWidthForLegendBesideColumn } from '@/components/coloring/legendPlacement'
 
 const CLOSED: OpenPanels = {
   isDesktop: true,

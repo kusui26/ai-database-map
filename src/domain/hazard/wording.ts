@@ -19,6 +19,7 @@
 import { HAZARD_CERTAINTY_LABELS_JA } from '@/shared/constants'
 import { COVERAGE_STEPS } from '@/shared/hazard-mesh'
 import type { HazardCertainty, HazardSource } from '@/shared/hazard'
+import type { HazardGroupStateKind } from '@/shared/protocol'
 
 /** 「ごく一部」と言う上限（1/15 ＝ 約 6.7%）。量子化の 1 段ぶん。 */
 const SLIGHT_COVERAGE = 1 / COVERAGE_STEPS
@@ -70,6 +71,9 @@ export function meshNoteJa(layerLabelJa: string, coverage: number): string {
   )
 }
 
+/** 250m メッシュの呼び方（見出しと確からしさの一言が同じ語で言う——重なりを見分けるのにも使う）。 */
+const MESH_250_JA = '250m メッシュ'
+
 /**
  * 区間でしか言えないときの見出し。**「この場所は…に入っています」と断定しない。**
  * 250m セルの 74% は区域と非区域の混在で、点がどちら側かはメッシュには分からない（§5.9）。
@@ -80,7 +84,7 @@ export function partialHeadlineJa(
   coverage: number,
 ): string {
   return (
-    `この場所を含む 250m メッシュの${coverageAmountJa(coverage)}が` +
+    `この場所を含む ${MESH_250_JA}の${coverageAmountJa(coverage)}が` +
     `${layerLabelJa}（${rankLabelJa}）です。正確な位置は地図でご確認ください。`
   )
 }
@@ -112,6 +116,31 @@ export function neighbourNoteJa(layerLabelJa: string, source: 'tile' | 'mesh'): 
 export const UNCOVERED_NOTE_JA =
   '**この地域には想定区域図がありません**（未整備の可能性があります）。' +
   '区域が無いという意味ではないので、市町村のハザードマップもご確認ください'
+
+// --- 災害の種類ごとの状態（`docs/261110_fix_PLAN.md` §8.4） -----------------
+
+/**
+ * 種類ごとの状態の言い方。
+ *
+ * ⚠ `none` を「安全」「問題なし」と言わない——言えるのは「区域図の上で区域外」だけ（§7.5-1）。
+ * `unknown` は警報のカードの「未確認」（発表を確かめられなかった）と同じ語にする——
+ * 同じ画面で「確かめられなかった」を別の語で言わない。
+ */
+export const GROUP_STATE_LABELS_JA: Readonly<Record<HazardGroupStateKind, string>> = {
+  hit: '該当',
+  nearby: 'すぐ近くに区域',
+  uncovered: '想定区域図なし',
+  unknown: '未確認',
+  none: '該当なし',
+}
+
+/**
+ * 「該当なし」などを安全と読ませない 1 文（`docs/261110_fix_PLAN.md` §2.2・§7.5-1）。
+ * **画面に出ている言い方だけ**を挙げる——出ていない「想定区域図なし」を挙げると、どこの話か分からない。
+ */
+export function notSafeNoteJa(stateLabelsJa: readonly string[]): string {
+  return `${stateLabelsJa.map((label) => `「${label}」`).join('')}は、安全という意味ではありません。`
+}
 
 /**
  * 該当は無いが**近くが区域**のときの見出し。
@@ -172,6 +201,18 @@ export function certaintyNoteJa(certainty: HazardCertainty): string | null {
   return certainty === 'partial'
     ? `${label}での判断です。この地点そのものの値は、地図の色でご確認ください。`
     : `${label}での判断です。時間をおいて、もう一度ご確認ください。`
+}
+
+/**
+ * 地点のカードに添える確からしさの一言。**結論が同じことを言っていれば出さない**（`docs/261110_fix_PLAN.md` §8.3）。
+ *
+ * 区間でしか言えない結論は「この場所を含む 250m メッシュの…」と既に言っている（`partialHeadlineJa`）——
+ * そこへ「250m メッシュの範囲での判断です」を重ねると、同じことを 2 回言う（横浜で「メッシュ」の語が 16 回出ていた）。
+ * `unknown`（メッシュのみ・照合できず）は「時間をおいて、もう一度」が新しいので、いつも出す。
+ */
+export function cardCertaintyNoteJa(certainty: HazardCertainty, headlineJa: string): string | null {
+  if (certainty === 'partial' && headlineJa.includes(MESH_250_JA)) return null
+  return certaintyNoteJa(certainty)
 }
 
 /**

@@ -2,14 +2,16 @@
 
 /**
  * About / データ出典ダイアログ（P7a）。アプリ説明＋出典表（catalog の source/license から
- * `dataSources()` で自動生成）＋**災害データの出典**＋地図クレジット。⚠ は商用制限のある出典。
+ * `dataSources()` で自動生成）＋**エリアの値の出典**＋**災害データの出典**＋地図クレジット。⚠ は商用制限のある出典。
  *
- * 災害データ（`hazardDataSources()`）も**手で書かない**——レイヤや API を足したら自動で増える。
- * 出典の表示は利用条件なので、増えないと「使っているのに出典が無い」状態が生まれる。
+ * 災害データ（`hazardDataSources()`）とエリアの値（`areaDataSources()`・2026-11-11）も**手で書かない**——レイヤや
+ * API・区域の指標を足したら自動で増える。出典の表示は利用条件なので、増えないと「使っているのに出典が無い」状態が生まれる。
+ * 駅周辺のプロフィールとエリアの要約は、画面では出典を 1 行に畳む（`docs/261110_fix_PLAN.md` §2.3）——全件はここにある。
  */
 
 import * as Dialog from '@radix-ui/react-dialog'
 import { dataSources } from '@/domain/sources'
+import { areaDataSources } from '@/domain/area-summary/sources'
 import { hazardDataSources } from '@/domain/hazard/sources'
 import { LINE_SOURCE } from '@/shared/constants'
 import { cn } from '@/lib/utils'
@@ -22,6 +24,7 @@ export function AboutDialog({
   onOpenChange: (open: boolean) => void
 }) {
   const sources = dataSources()
+  const areaSources = areaDataSources()
   const hazardSources = hazardDataSources()
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -126,6 +129,34 @@ export function AboutDialog({
                     >
                       {s.license}
                     </p>
+                  </li>
+                ))}
+              </ul>
+            </section>
+
+            <section className="space-y-2">
+              <h3 className="font-semibold text-slate-900">エリア（市区町村・沿線）の値の出典</h3>
+              <p className="text-xs text-slate-500">
+                エリアの要約の「エリア全体の値」に使う出典です。区域の指標のカタログから自動生成しています。駅の周りの値の出典は、上の表にあります。
+              </p>
+              <ul className="space-y-2">
+                {areaSources.map((s) => (
+                  <li
+                    key={`${s.source}-${s.license}`}
+                    className="rounded-xl border border-slate-200 bg-slate-50/60 p-3"
+                  >
+                    <span className="font-medium text-slate-900">{s.source}</span>
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {[...s.scopesJa, ...s.usedForJa].map((label) => (
+                        <span
+                          key={label}
+                          className="rounded-full bg-white px-2 py-0.5 text-xs text-slate-600 ring-1 ring-slate-200"
+                        >
+                          {label}
+                        </span>
+                      ))}
+                    </div>
+                    <p className="mt-1.5 text-xs text-slate-500">{s.license}</p>
                   </li>
                 ))}
               </ul>

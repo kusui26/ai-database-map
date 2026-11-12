@@ -3,13 +3,13 @@ import { describe, expect, it } from 'vitest'
 import {
   evacuationDisasterForPoint,
   evacuationUnavailableJa,
-  hazardEscapeNoteJa,
+  hazardEscapeOpenJa,
   HAZARD_ESCAPE_CLOSE_JA,
-  HAZARD_ESCAPE_OPEN_JA,
   HAZARD_ESCAPE_TITLE_JA,
 } from '@/domain/hazard/panels'
+import { escapeDirectionAvailable, escapeMeshLayerKeys } from '@/domain/hazard/escape'
 import { hazardLayersWithPointAnswer } from '@/domain/hazard/catalog'
-import { evacuationDisasterLabelJa } from '@/shared/evacuation'
+import { evacuationDisasterLabelJa, type EvacuationDisasterKey } from '@/shared/evacuation'
 
 /**
  * **駅タブの③「逃げる」**（`docs/260828_fix_flood.md` §4.3・PR-3）。
@@ -64,17 +64,42 @@ describe('種別の導出（グループ → 指定緊急避難場所の災害�
   })
 })
 
+/** 地点のカードから「逃げる」に渡りうる種別（静的ハザードの 5 グループ）。 */
+const POINT_DISASTERS: readonly EvacuationDisasterKey[] = [
+  'flood',
+  'inland_flood',
+  'storm_surge',
+  'tsunami',
+  'landslide',
+]
+
 describe('文言（§7.5-5）', () => {
   it('ボタンと見出しに「安全」と書かない', () => {
     // 指定緊急避難場所は「指定されている」だけで、開設も安全も言えない。
-    for (const text of [HAZARD_ESCAPE_TITLE_JA, HAZARD_ESCAPE_OPEN_JA, HAZARD_ESCAPE_CLOSE_JA]) {
+    const buttons = POINT_DISASTERS.map(hazardEscapeOpenJa)
+    for (const text of [HAZARD_ESCAPE_TITLE_JA, HAZARD_ESCAPE_CLOSE_JA, ...buttons]) {
       expect(text).not.toContain('安全')
     }
   })
 
-  it('注記はどの災害の話かを主語として言う', () => {
-    expect(hazardEscapeNoteJa('flood')).toContain(evacuationDisasterLabelJa('flood'))
-    expect(hazardEscapeNoteJa('landslide')).toContain(evacuationDisasterLabelJa('landslide'))
+  it('ボタンはどの災害の話かを主語として言う（種別を黙って選ばない・261110 §8.3）', () => {
+    for (const disaster of POINT_DISASTERS) {
+      expect(hazardEscapeOpenJa(disaster)).toMatch(
+        new RegExp(`^${evacuationDisasterLabelJa(disaster)}の避難先`),
+      )
+    }
+  })
+
+  it('区域の外へ出る向きは、出せる災害（メッシュを持つ洪水・内水）のボタンだけが約束する', () => {
+    expect(hazardEscapeOpenJa('flood')).toBe('洪水の避難先と、区域の外へ出る向きを調べる')
+    expect(hazardEscapeOpenJa('inland_flood')).toContain('区域の外へ出る向き')
+    for (const disaster of ['storm_surge', 'tsunami', 'landslide'] as const) {
+      expect(hazardEscapeOpenJa(disaster)).not.toContain('向き')
+    }
+    // 判定は向きを探す側と同じ関数（メッシュのレイヤ）から導く——2 か所に書かない。
+    for (const disaster of POINT_DISASTERS) {
+      expect(escapeDirectionAvailable(disaster)).toBe(escapeMeshLayerKeys(disaster).length > 0)
+    }
   })
 
   it('オフラインの言い方は、なぜ出ないか・代わりに何が見られるかを言う', () => {
@@ -87,6 +112,8 @@ describe('文言（§7.5-5）', () => {
 describe('駅タブの③（画面側の不変条件）', () => {
   it('タブは「逃げる」の段を出す（定数を共有する＝ずれない）', () => {
     expect(rendered(TAB_SOURCE)).toContain('HAZARD_ESCAPE_TITLE_JA')
+    // ボタンの文はドメインの関数（どの災害の話か・向きを出せるか）。画面で組み立てない。
+    expect(rendered(TAB_SOURCE)).toContain('hazardEscapeOpenJa(disaster)')
   })
 
   it('避難先を出せないときの文言は、タブとバナーで同じ関数を使う', () => {

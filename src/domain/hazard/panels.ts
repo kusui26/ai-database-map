@@ -18,15 +18,18 @@ import type {
   EscapeDirectionPanel,
   EvacuationListPanel,
   HazardCardPanel,
+  HazardGroupState,
+  HazardGroupStateKind,
   HazardItem,
   PanelSize,
   SourceRef,
 } from '@/shared/protocol'
-import { ALERT_LEVEL_LABELS_JA, HAZARD_GROUP_LABELS_JA, type HazardGroup } from '@/shared/constants'
+import { ALERT_LEVEL_LABELS_JA, type HazardGroup } from '@/shared/constants'
 import { evacuationDisasterLabelJa, type EvacuationDisasterKey } from '@/shared/evacuation'
 import { getHazardLayer } from '@/shared/hazard'
 import { type JmaWarningKind } from '@/shared/jma'
 import { jstDateTimeJa, parseIso } from '@/shared/time'
+import { escapeDirectionAvailable } from './escape'
 import { hazardLevelOfAlert } from './level'
 
 /**
@@ -46,36 +49,74 @@ export function hazardCardPanel(point: HazardPointResponse, size?: PanelSize): H
     // 取得できなかったものの説明も、網羅性の注記と同じ場所に出す——
     // 「河川情報が無い」ことを黙っていると、**無いのか、取れなかったのか**が分からない。
     coverageNotesJa: [...point.notesJa, ...point.coverageNotesJa],
+    // 種類ごとの状態・畳まない注意・固有の事実（261110 §8.4）。古い応答（キャッシュ）には無く、
+    // そのときは 3 つとも undefined のまま渡る——描く側は「無ければ今の描き方」にする。
+    groupStates: point.groupStates,
+    keyNotesJa: point.keyNotesJa,
+    highlightsJa: point.highlightsJa,
     sources: point.sources,
     disclaimerJa: point.disclaimerJa,
     size,
   }
 }
 
-/**
- * 駅カードに 1 行で添える災害バッジの文言（`docs/260824_flood.md` §7.2）。
- *
- * **駅詳細のタブは増やさない**（8 タブ 516px で既にパネル幅を超えている）ので、
- * 1 行に収まる長さにする。レイヤ名は長いので**グループ名**で言う
- * （「洪水浸水想定区域（想定最大規模）」→「洪水」）。
- *
- * 該当が無いときも**「安全」とは言わない**（§7.5）。言えるのは「該当なし」までである。
- */
-export function hazardBadgeJa(point: HazardPointResponse): string {
-  const worst = point.hazards[0]
-  if (worst === undefined) return '指定区域の該当なし'
-  const group = getHazardLayer(worst.layerKey)?.group
-  const groupJa = group === undefined ? '' : `${HAZARD_GROUP_LABELS_JA[group]} `
-  const others = new Set(
-    point.hazards.slice(1).map((item) => getHazardLayer(item.layerKey)?.group ?? item.layerKey),
-  )
-  others.delete(group ?? '')
-  const more = others.size === 0 ? '' : `・ほか ${others.size} 種`
-  return `${groupJa}${worst.valueJa}${more}`
+// --- 地点のカード：固有の注意を見せ、一般論は畳む（`docs/261110_fix_PLAN.md` §8.3） ---------
+
+/** 該当しなかった種類の 1 行（「該当なし：内水（雨水出水）・津波」）。 */
+export type GroupStateLine = {
+  readonly state: HazardGroupStateKind
+  readonly stateJa: string
+  /** 種類の名前を「・」でつないだもの。すぐ近くのときは距離感を括弧で添える（「洪水（隣の 250m メッシュ）」）。 */
+  readonly groupsJa: string
 }
 
 /**
- * 駅バッジに必ず添える限界（§7.2）。
+ * 行にする順（すぐ近く → 該当なし → 図なし → 未確認）。**該当の種類は行にしない**——該当の行（`items`）が
+ * 値つきで言っている。5 種類はどれも、該当の行かここの行のどちらかに必ず出る。
+ */
+const GROUP_LINE_ORDER: readonly HazardGroupStateKind[] = ['nearby', 'none', 'uncovered', 'unknown']
+
+function groupNameJa(state: HazardGroupState): string {
+  return state.proximityJa === null ? state.labelJa : `${state.labelJa}（${state.proximityJa}）`
+}
+
+/** 種類ごとの状態 → 状態ごとの 1 行（言い方はサーバの `stateJa`・`labelJa`・`proximityJa` をつなぐだけ）。 */
+export function groupStateLines(states: readonly HazardGroupState[]): readonly GroupStateLine[] {
+  return GROUP_LINE_ORDER.flatMap((kind) => {
+    const members = states.filter((each) => each.state === kind)
+    const [first] = members
+    if (first === undefined) return []
+    return [{ state: kind, stateJa: first.stateJa, groupsJa: members.map(groupNameJa).join('・') }]
+  })
+}
+
+/**
+ * 畳む中身の見出し。押すと、規則ごとの根拠と、レイヤごとの一般論・メッシュの注記・取れなかったものが開く
+ * （`docs/260824_flood.md` §7.5-2 の 2026-11-11 追記）。**1 行も捨てない**——数も見出しに出す。
+ */
+export const HAZARD_DETAILS_TITLE_JA = '根拠と注意'
+export const HAZARD_REASONS_TITLE_JA = '根拠'
+export const HAZARD_NOTES_TITLE_JA = '注意'
+
+export function hazardDetailsSummaryJa(count: number): string {
+  return `${HAZARD_DETAILS_TITLE_JA}（${count}）`
+}
+
+/**
+ * 畳む根拠。川の到達・継続（`highlightsJa`）は該当の行のすぐ下に見せるので、ここからは外す——同じ文を 2 回言わない。
+ * `highlightsJa` は根拠の末尾と**同じ文**として作っている（`domain/hazard/point.ts` の `groupFieldsOf`）。
+ */
+export function reasonsBesideHighlightsJa(
+  reasonsJa: readonly string[],
+  highlightsJa: readonly string[],
+): readonly string[] {
+  const shown = new Set(highlightsJa)
+  return reasonsJa.filter((reason) => !shown.has(reason))
+}
+
+/**
+ * 駅の災害の値（駅の代表点 1 点の照会）に必ず添える限界。駅詳細の災害タブの末尾と、会話の駅プロフィール
+ * （`domain/profile/hazard.ts`）が同じ定数を読む（以前はヘッダのバッジの下・2026-11-11 にバッジを外した）。
  * **駅の代表点 1 点の話**であって、駅前広場の反対側は違うことがある。
  */
 export const STATION_HAZARD_CAVEAT_JA =
@@ -90,13 +131,36 @@ export const STATION_HAZARD_CAVEAT_JA =
  * **5 段中 3 段で同じ語**なので、**いまの災害情報だと読まれた**（利用者からの報告・2026-08-28）。
  *
  * だから語を変えるのではなく、**時制の主語を先に置く**。
- * バッジもタブの見出しも**この定数を使う**——別々に書くと必ずずれる。
+ * 駅詳細の災害タブの見出しも、会話の駅プロフィールも**この定数を使う**——別々に書くと必ずずれる。
+ *
+ * 「いま」の段には注記を付けない（2026-11-11・`docs/261110_fix_PLAN.md` §8.2）——すぐ下の 1 行が
+ * 「気象庁 ◯月◯日 ◯:◯ 発表」と言うので、「気象庁がいま発表しているもの」は同じことの 2 回目になる。
  */
 export const HAZARD_TENSE_NOW_JA = 'いま'
-export const HAZARD_TENSE_NOW_NOTE_JA = '気象庁がいま発表しているもの。'
 export const HAZARD_TENSE_ASSUMED_JA = 'もし起きたら'
 export const HAZARD_TENSE_ASSUMED_NOTE_JA =
   '想定される最大級の被害。いま起きていることではありません。'
+
+/**
+ * 平時の「いま」の限界の短い形（`docs/261110_fix_PLAN.md` §8.3 の注）。
+ * 応答の `limitationsJa`（`ALERT_LIMITATION_JA`・AI にも渡る長い文）は変えない——画面の 1 行に収めるための言い方で、
+ * 言うことは同じ（避難情報を出すのは市町村で、ここでは分からない）。**消さずに短くする。**
+ */
+export const ALERT_LIMITATION_SHORT_JA =
+  '避難情報（避難指示など）は市町村が出します。ここでは分かりません。'
+
+/**
+ * 平時の「いま」の 2 行目（発表の時刻と、限界の短い形）。
+ * 時刻が無い（気象庁の発表を確かめられなかった）ときも、限界は言う。**10 分前の情報を「今」と言わない**ため、
+ * 時刻は日本時間で必ず出す（`reportedAtJa` と同じ規則）。
+ */
+export function calmNowNoteJa(reportedAt: string | null): string {
+  const epochMs = reportedAt === null ? null : parseIso(reportedAt)
+  const reported = epochMs === null ? null : `気象庁 ${jstDateTimeJa(epochMs)} 発表`
+  return [reported, ALERT_LIMITATION_SHORT_JA]
+    .filter((part): part is string => part !== null)
+    .join(' ／ ')
+}
 
 // --- 逃げる（駅タブの③・260828 PR-3） -------------------------------------
 
@@ -122,7 +186,7 @@ const EVACUATION_DISASTER_BY_GROUP: Readonly<Record<HazardGroup, EvacuationDisas
 
 /**
  * その地点の「逃げる」で扱う災害種別。**いちばん重い静的ハザード**から決める
- * （`hazards` は重い順・`hazardBadgeJa` と同じ前提）。
+ * （`hazards` は重い順）。
  *
  * `null` ＝ 指定区域の該当が無い。**そのときは種別を勝手に選ばない**——
  * 根拠なく選んだ種別の避難場所を出すくらいなら、段ごと出さない方が誠実である。
@@ -145,12 +209,18 @@ export function evacuationDisasterForPoint(point: {
  * 警戒バナーの CTA（警戒中の文脈がある）とは、あえて言い方を変えている。
  */
 export const HAZARD_ESCAPE_TITLE_JA = '逃げる'
-export const HAZARD_ESCAPE_OPEN_JA = '避難先と向きを調べる'
 export const HAZARD_ESCAPE_CLOSE_JA = '閉じる'
 
-/** 段の注記。**どの災害の話か**を主語として必ず言う（種別を黙って選ばない）。 */
-export function hazardEscapeNoteJa(disaster: EvacuationDisasterKey): string {
-  return `いちばん重い想定（${evacuationDisasterLabelJa(disaster)}）に対応した避難先と、区域の外へ出る向き。押したときだけ調べます。`
+/**
+ * 「逃げる」のボタン。**どの災害の話かをボタンに書く**（種別を黙って選ばない・`docs/261110_fix_PLAN.md` §8.3）
+ * ——以前は段の注記（「いちばん重い想定（洪水）に対応した…押したときだけ調べます。」）が言っていた。
+ * 区域の外へ出る向きはメッシュを持つ災害（洪水・内水）でしか出せないので、**出せないものは約束しない**。
+ */
+export function hazardEscapeOpenJa(disaster: EvacuationDisasterKey): string {
+  const labelJa = evacuationDisasterLabelJa(disaster)
+  return escapeDirectionAvailable(disaster)
+    ? `${labelJa}の避難先と、区域の外へ出る向きを調べる`
+    : `${labelJa}の避難先を調べる`
 }
 
 /**

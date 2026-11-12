@@ -117,7 +117,7 @@ export type ProfileSource = z.infer<typeof profileSourceSchema>
 
 /** 災害の要約（事前計算・駅の代表点 1 点・想定最大規模の「もし起きたら」）。 */
 export const profileHazardSchema = z.object({
-  /** 最も重い危険度（順序尺度）。画面は語ではなく色・記号で示す（`StationHazardBadge` と同じ規約）。 */
+  /** 最も重い危険度（順序尺度）。画面は語ではなく色・記号で示す（`docs/260828_fix_flood.md` §4.4 決定 3）。 */
   level: hazardLevelSchema,
   /** 1 文の結論（サーバが作った文・「安全」と言わない）。 */
   headlineJa: z.string(),

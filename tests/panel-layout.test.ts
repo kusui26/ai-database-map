@@ -28,24 +28,24 @@ import { TAB_FADE_WIDTH_PX, tabStripScrollLeft } from '@/lib/tab-strip'
  *  並べ替え（2026-11-11・`docs/261110_fix_PLAN.md` §6・D-3）: 地価を人口の右、災害を地価の右（5 番目）へ。
  *           ヘッダのバッジ（災害タブへの入口）を外したので、災害タブを**帯を送らずに見える位置**に置く。
  *           幅は変わらず 628px。隠れるのは後ろのタブ（広い画面では売上から右）で、条件は同じ。
+ *  災害を末尾へ（2026-11-13・依頼・261110 §6 の追記）: 概要・乗降客数・人口・地価・所得・売上・バス・事業所・
+ *           従業者・災害。幅は変わらず 628px。災害は既定では帯の外に戻り、選ばれたら帯を送って見せる（9 タブと同じ）。
  */
 const TAB_WIDTHS_PX: Readonly<Record<string, number>> = {
   概要: 52,
   乗降客数: 80,
   人口: 52,
   地価: 52,
-  災害: 52,
   所得: 52,
   売上: 52,
   バス: 52,
   事業所: 66,
   従業者: 66,
+  災害: 52,
 }
 const TAB_GAP_PX = 4
 const STRIP_PADDING_PX = 16
 const TAB_STRIP_WIDTH_PX = 628
-/** 携帯（390px）の帯の可視幅（実測の clientWidth）。 */
-const PHONE_STRIP_WIDTH_PX = 390
 
 /** ラベルのタブの左端（帯の左パディング＋前のタブの幅と間）。実測の offsetLeft と同じ算出。 */
 function tabLeftPx(label: string): number {
@@ -100,20 +100,13 @@ describe('併設パネルの幅（260804・所得タブ追加 260813）', () => 
     expect(TAB_FADE_WIDTH_PX).toBeGreaterThan(0)
   })
 
-  it('タブのラベルと並びが実測時から変わっていない（概要が先頭・地価は人口の右・災害は地価の右）', () => {
+  it('タブのラベルと並びが実測時から変わっていない（概要が先頭・地価は人口の右・災害は末尾）', () => {
     // ラベルが伸びる／タブが増えると帯が広がり、上の不変条件が崩れる。変えたときは実測し直す。
     const labels = DETAIL_TABS.map((tab) => DETAIL_TAB_LABELS_JA[tab])
     expect(labels).toEqual(Object.keys(TAB_WIDTHS_PX))
     expect(labels[0]).toBe('概要') // 261001 §12-7：先頭
     expect(labels.indexOf('地価')).toBe(labels.indexOf('人口') + 1) // 261110 §6：依頼
-    expect(labels.indexOf('災害')).toBe(labels.indexOf('地価') + 1) // 261110 §6・D-3
-  })
-
-  it('災害タブは帯を送らずに見える（右端のフェードにもかからない・広い画面も携帯も）', () => {
-    // ヘッダのバッジ（入口）を外したので、タブそのものが入口になる（261110 §5.3・§6.2）。
-    const right = tabLeftPx('災害') + (TAB_WIDTHS_PX['災害'] ?? 0)
-    expect(right).toBeLessThanOrEqual(PANEL_WIDTH_PX - TAB_FADE_WIDTH_PX)
-    expect(right).toBeLessThanOrEqual(PHONE_STRIP_WIDTH_PX - TAB_FADE_WIDTH_PX)
+    expect(labels.at(-1)).toBe('災害') // 2026-11-13：末尾（依頼・261110 §6 の追記）
   })
 
   it('statTable は「半分に収まる行」を 2 列に詰め、収まらない行だけ 1 行を占める（260816）', () => {
@@ -145,18 +138,18 @@ describe('併設パネルの幅（260804・所得タブ追加 260813）', () => 
 /**
  * 帯を送って「選んだタブ」を見せる（`src/lib/tab-strip.ts`・実測 2026-08-28）。
  *
- * 数字はすべて 1440px の Chromium で測ったもの——末尾の従業者タブは `offsetLeft=554`・幅 66px
- * （並べ替えた 2026-11-11 に測り直した。以前の末尾は災害タブで 568・52px）、帯の可視幅は 420px（PC）／390px（モバイル）、
- * `scrollWidth` は 628px。覚えていたタブや AI の焦点（`?tab`）で後ろのタブが選ばれたのに帯が動かないと、
+ * 数字はすべて 1440px の Chromium で測ったもの——末尾の災害タブは `offsetLeft=568`・幅 52px
+ * （災害を末尾へ移した 2026-11-13 に測り直した。11-11〜13 の末尾は従業者タブで 554・66px）、帯の可視幅は 420px（PC）／
+ * 390px（モバイル）、`scrollWidth` は 628px。覚えていたタブや AI の焦点（`?tab`）で後ろのタブが選ばれたのに帯が動かないと、
  * **選んだタブが見えず、壊れて見える**。
  */
 describe('タブ帯のスクロール位置（260828）', () => {
-  const LAST_TAB = { offsetLeft: 554, offsetWidth: 66 }
+  const LAST_TAB = { offsetLeft: 568, offsetWidth: 52 }
   const FIRST_TAB = { offsetLeft: STRIP_PADDING_PX / 2, offsetWidth: 80 }
   const VISIBLE_WIDTH_PX = PANEL_WIDTH_PX // 帯はパネル幅いっぱいに広がる
 
-  it('末尾のタブ（従業者）を選ぶと、右端まで送って見せる', () => {
-    expect(LAST_TAB.offsetLeft).toBe(tabLeftPx('従業者')) // 幅の表と実測が合っている
+  it('末尾のタブ（災害）を選ぶと、右端まで送って見せる', () => {
+    expect(LAST_TAB.offsetLeft).toBe(tabLeftPx('災害')) // 幅の表と実測が合っている
     const left = tabStripScrollLeft({ scrollLeft: 0, clientWidth: VISIBLE_WIDTH_PX }, LAST_TAB)
     // 右端が見える位置＋フェードに隠れない余白。ブラウザ側で最大値（628−420＝208）に丸まる。
     expect(left).toBe(

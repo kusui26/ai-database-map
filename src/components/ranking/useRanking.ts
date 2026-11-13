@@ -27,7 +27,7 @@ export type RankingState = {
   readonly error: Error | undefined
 }
 
-/** ランキングの条件（そのままクエリ文字列になる・空＝絞らない）。絞り込みは散布・おすすめと同じ形。 */
+/** ランキングの条件（そのままクエリ文字列になる・空＝絞らない）。絞り込みは散布と同じ形。 */
 export type RankingQuery = FilterQueryValues & {
   readonly metric: string
   readonly order: Order

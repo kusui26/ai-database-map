@@ -126,7 +126,7 @@ export const DEFAULT_AREA_FIGURE: AreaFigure = {
   colorBy: null,
 }
 
-/** URL のパラメータ。接頭辞 `fig` は、地図（`grp` `r` `tab`）やおすすめ（`rec*`）と衝突させないため。 */
+/** URL のパラメータ。接頭辞 `fig` は、地図（`grp` `r` `tab`）と衝突させないため。 */
 export const FIGURE_PARSERS = {
   fig: parseAsStringLiteral(FIGURE_KINDS),
   figM: parseAsString,

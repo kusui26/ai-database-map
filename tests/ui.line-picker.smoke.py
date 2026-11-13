@@ -18,9 +18,8 @@
 6. 詳しい条件：開くと法令上の路線（指定なし）。新幹線を押すと routeTypes=1。閉じても「詳しい条件（1）」
 7. 以前の URL（figRoutes=山手線）で開くと、詳しい条件が開いていて「山手線」が見え、routes=山手線 で取りに行く
 8. 散布：路線を選ぶと `/api/growth?lines=`
-9. おすすめ：路線だけで候補になる（`/api/recommend?lines=`・URL の recLines）。開き直しても残る
-10. 狭いパソコン 1024px（モーダル）：同じセレクタで選べて、題に路線が出る（3 つの幅：1280 キャンバス・1024・390 モーダル）
-11. 携帯 390px（モーダル）：絞り込みの 4 つのポップオーバーが画面からはみ出さない
+9. 狭いパソコン 1024px（モーダル）：同じセレクタで選べて、題に路線が出る（3 つの幅：1280 キャンバス・1024・390 モーダル）
+10. 携帯 390px（モーダル）：絞り込みの 4 つのポップオーバーが画面からはみ出さない
 """
 
 import json
@@ -272,33 +271,6 @@ def scenario_scatter(browser: Browser) -> None:
     session.close()
 
 
-def scenario_recommend(browser: Browser) -> None:
-    print("[おすすめ：路線だけで候補になり、URL に残る]")
-    session = Session(browser, WIDE)
-    session.open()
-    session.page.get_by_role("button", name="おすすめ").click()
-    dialog = session.page.get_by_role("dialog", name="おすすめ駅")
-    dialog.wait_for(state="visible")
-    session.page.wait_for_timeout(SETTLE_MS)
-    lines = open_picker(dialog, "路線")
-    lines.get_by_label("路線を検索").fill("山手")
-    session.page.wait_for_timeout(300)
-    lines.locator("label", has_text="JR山手線").locator("input").check()
-    close_picker(dialog, "路線")
-    session.page.wait_for_timeout(2500)
-    recommend = session.last("recommend")
-    check("lines=11302 だけで取りに行く", recommend.get("lines") == str(YAMANOTE) and "prefecture" not in recommend, json.dumps(recommend, ensure_ascii=False))
-    check("URL に recLines=11302", session.params().get("recLines") == str(YAMANOTE), json.dumps(session.params(), ensure_ascii=False))
-    check("対象は「全国（JR山手線）」", dialog.get_by_text("全国（JR山手線）").count() >= 1)
-    session.page.screenshot(path=f"{OUT}/line-picker-recommend.png")
-    url = session.page.url
-    session.page.goto(url, wait_until="networkidle")
-    session.page.wait_for_timeout(SETTLE_MS)
-    dialog = session.page.get_by_role("dialog", name="おすすめ駅")
-    check("開き直しても路線が残る（ボタンは JR山手線）", dialog.is_visible() and button_text(dialog, "路線") == "JR山手線", button_text(dialog, "路線") if dialog.is_visible() else "閉じている")
-    session.close()
-
-
 def scenario_narrow(browser: Browser) -> None:
     print("[狭いパソコン 1024px（モーダル）：路線を選ぶと題に出る]")
     session = Session(browser, NARROW)
@@ -361,7 +333,6 @@ with sync_playwright() as playwright:
     scenario_ranking(browser)
     scenario_old_url(browser)
     scenario_scatter(browser)
-    scenario_recommend(browser)
     scenario_narrow(browser)
     scenario_phone(browser)
     browser.close()

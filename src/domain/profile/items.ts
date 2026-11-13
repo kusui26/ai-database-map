@@ -6,7 +6,7 @@
  *
  * ## 年はカタログから決める
  *
- * 指標はファミリ名（`pop_gr`）と期間（5 年・20 年）で書き、key は `familyCandidates`（おすすめと同じ規則）で決める。
+ * 指標はファミリ名（`pop_gr`）と期間（5 年・20 年）で書き、key は `familyCandidates`（`metrics/family.ts` の規則）で決める。
  * データの年が進んでも、ここを直さずに最新の年を指す。
  *
  * ## 半径が無い指標は、近い半径に替えて言う
@@ -27,7 +27,7 @@ export type ProfileItemSpec = {
   readonly family: string
   /** 短い名前（年と半径は別の欄に出すので含めない）。 */
   readonly labelJa: string
-  /** 増減率を何年ぶんの変化で見るか（`recommend/presets.ts` の住まい探しの軸と同じ・5 年／20 年先）。 */
+  /** 増減率を何年ぶんの変化で見るか（5 年／20 年先）。 */
   readonly spanYears?: number
 }
 

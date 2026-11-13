@@ -22,7 +22,6 @@ import dynamic from 'next/dynamic'
 const loadRankingDialog = () => import('./ranking/RankingDialog')
 const loadScatterDialog = () => import('./scatter/ScatterDialog')
 const loadAreaDialog = () => import('./area/AreaDialog')
-const loadRecommendDialog = () => import('./recommend/RecommendDialog')
 
 export const RankingDialog = dynamic(() => loadRankingDialog().then((m) => m.RankingDialog), {
   loading: () => null,
@@ -37,10 +36,6 @@ export const AreaDialog = dynamic(() => loadAreaDialog().then((m) => m.AreaDialo
   loading: () => null,
 })
 
-export const RecommendDialog = dynamic(() => loadRecommendDialog().then((m) => m.RecommendDialog), {
-  loading: () => null,
-})
-
 /**
  * 先読みの対象。クリック前にアイドル中で取得しておくと、クリック後の待ちから
  * チャンク取得（6 本 166KB・4G 相当で 1,342ms／3G 相当で 9,193ms）が消える。
@@ -50,5 +45,4 @@ export const DIALOG_LOADERS: readonly (() => Promise<unknown>)[] = [
   loadRankingDialog,
   loadScatterDialog,
   loadAreaDialog,
-  loadRecommendDialog,
 ]

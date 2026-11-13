@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { RECOMMEND_PRESETS } from '@/domain/recommend/presets'
+import { entries } from '@/shared/catalog'
 import { buildSystemPrompt, mapContextPrompt } from '@/ai/system-prompt'
 import { checkRateLimit, resetRateLimitStore } from '@/ai/rate-limit'
 import {
@@ -119,7 +119,7 @@ describe('システムプロンプト：駅周辺のプロフィール（2026-10
     expect(prompt).not.toContain('character.type の語のまま')
   })
 
-  it('1 つの駅の「住むならどう？」はおすすめの引き渡しと区別する', () => {
+  it('1 つの駅の「住むならどう？」は、駅を並べて選ぶ推薦と区別する', () => {
     expect(buildSystemPrompt()).toContain('駅を並べて選ぶ推薦ではない')
   })
 
@@ -151,11 +151,11 @@ describe('システムプロンプト：エリアの要約（2026-10-11 B5d）',
   })
 })
 
-describe('システムプロンプト：合成スコアの推薦は画面へ引き渡す', () => {
+describe('システムプロンプト：合成スコアの推薦は作らない', () => {
   /**
    * チャットが持つのは `rankStations`（**単一指標**）だけ。それで並べたものを「おすすめ」と
-   * 呼ぶと、正規化も重みも災害の扱いも敏感度も無いまま順位が独り歩きし、画面側が W1〜W5 で
-   * 守ってきた規範（260912 §13.4）を同じアプリの別の口が破ることになる。
+   * 呼ぶと、正規化も重みも災害の扱いも敏感度も無いまま順位が独り歩きする（260912 §13.4）。
+   * 以前は画面のおすすめへ引き渡していたが、2026-11 に画面ごと外した（261110 §3.4）。
    *
    * 実際の応答は `tests/chat-eval.test.ts` の `refuse-composite-recommend` が見る。
    * ここで固定するのは**指示が消えていないこと**——プロンプトは足し引きが多く、静かに落ちる。
@@ -164,8 +164,10 @@ describe('システムプロンプト：合成スコアの推薦は画面へ引�
     expect(buildSystemPrompt()).toContain('自分で順位を作らない')
   })
 
-  it('引き渡し先を名指しする（「できません」で終わらせない）', () => {
-    expect(buildSystemPrompt()).toContain('「おすすめ」ボタン')
+  it('外したおすすめのボタンへ案内しない（ボタンが無いのに案内すると行き止まりになる）', () => {
+    const prompt = buildSystemPrompt()
+    expect(prompt).not.toContain('「おすすめ」ボタン')
+    expect(prompt).not.toContain('画面下')
   })
 
   it('単一指標の順位までは禁じない（規則が広がりすぎていない）', () => {
@@ -173,14 +175,35 @@ describe('システムプロンプト：合成スコアの推薦は画面へ引�
     expect(buildSystemPrompt()).toContain('単一指標の問い')
   })
 
-  it('案内できる軸をプリセットから名指しする（無い指標を案内させない）', () => {
-    // 実測：軸を書かないと「子育て環境」のような**収録していない指標**を案内文に混ぜた。
+  it('収録していない軸を答えに混ぜない', () => {
+    // 実測：書かないと「子育て環境」のような**収録していない指標**を案内文に混ぜた。
     const prompt = buildSystemPrompt()
-    for (const metric of RECOMMEND_PRESETS.family.metrics) {
-      expect(prompt, metric.metric).toContain(metric.labelJa)
-    }
     expect(prompt).toContain('子育て環境')
     expect(prompt).toContain('案内文に混ぜない')
+  })
+
+  it('代わりに何を重視するかを 1 つ聞く（「できません」で終わらせない・261110 §3.4）', () => {
+    expect(buildSystemPrompt()).toContain('何を重視するか')
+  })
+
+  it('聞くときの軸は、カタログにある指標（外したおすすめのプリセットの 6 軸・手書きなので実在を見る）', () => {
+    // 種類名（pop_gr）か正確な key（rate_covid）。カタログから消えたら、プロンプトの軸も直す。
+    const axes: readonly (readonly [string, string])[] = [
+      ['将来人口', 'pop_gr_pred'],
+      ['実績人口', 'pop_gr'],
+      ['地価トレンド', 'lp_gr'],
+      ['地価水準', 'lp_med'],
+      ['乗降回復', 'rate_covid'],
+      ['乗降水準', 'pax'],
+    ]
+    const prompt = buildSystemPrompt()
+    for (const [label, metric] of axes) {
+      expect(prompt, label).toContain(label)
+      expect(
+        entries.some((entry) => entry.baseMetric === metric || entry.key === metric),
+        metric,
+      ).toBe(true)
+    }
   })
 })
 

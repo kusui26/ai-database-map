@@ -16,7 +16,7 @@ function fetchGrowth(url: string): Promise<GrowthResponse> {
   })
 }
 
-/** 散布の条件（そのままクエリ文字列になる・空＝絞らない）。絞り込みはランキング・おすすめと同じ形。 */
+/** 散布の条件（そのままクエリ文字列になる・空＝絞らない）。絞り込みはランキングと同じ形。 */
 export type GrowthQuery = FilterQueryValues & {
   readonly x: string
   readonly y: string

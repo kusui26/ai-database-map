@@ -3,7 +3,7 @@
  *
  * - 路線コードの解決：知らないコードは**黙って捨てずに**理由を返す（捨てると別の駅の集合で答えてしまう）
  * - 一覧の応答：表示名（路線区分）と出典をサーバが付ける（UI と AI が同じ言葉を使う）
- * - 題・おすすめの対象の言い方：路線は**名前で**出る（コードを人に見せない）
+ * - 題：路線は**名前で**出る（コードを人に見せない）
  * - 入口の検証：数でないコード・多すぎる指定は 400
  */
 
@@ -13,7 +13,6 @@ import {
   lineCdsQuerySchema,
   linesResponseSchema,
   rankingQuerySchema,
-  recommendQuerySchema,
   type LineRef,
 } from '@/shared/api'
 import { LINE_SOURCE, MAX_LINES_PER_QUERY, lineTypeLabel } from '@/shared/constants'
@@ -23,8 +22,6 @@ import { buildRanking } from '@/domain/ranking/presenter'
 import { rankingPanel } from '@/domain/ranking/panel'
 import { buildGrowth } from '@/domain/growth/presenter'
 import { scatterPanel } from '@/domain/growth/panel'
-import { buildRecommendInput } from '@/domain/recommend/request'
-import { areaLabelJa } from '@/domain/recommend/labels'
 import { datasetSelectorSchema } from '@/ai/dataset/token'
 
 const YAMANOTE: LineRef = { lineCd: 11302, name: 'JR山手線' }
@@ -137,28 +134,6 @@ describe('題（scopeLabel）：路線は名前で、法令上の路線より先
 
   it('路線を指定しなければ応答は空配列（以前の応答と同じ形）', () => {
     expect(buildRanking('pop_2020_1km', [], 'desc', [], 0, 0).lines).toEqual([])
-  })
-})
-
-describe('おすすめ：路線だけでも「絞り込み」になり、対象の言い方に名前で出る', () => {
-  it('路線だけの指定でも通り、候補の条件に路線コードが入る', () => {
-    const built = buildRecommendInput(recommendQuerySchema.parse({ lines: [11302] }), [YAMANOTE])
-    expect(built.ok).toBe(true)
-    if (!built.ok) return
-    expect(built.input.filter.lines).toEqual([11302])
-    expect(built.input.lines).toEqual([YAMANOTE])
-  })
-
-  it('対象の言い方：「全国（JR山手線）」「横浜市（東京メトロ副都心線・東横線）」', () => {
-    expect(areaLabelJa({ lines: [11302] }, [YAMANOTE])).toBe('全国（JR山手線）')
-    expect(
-      areaLabelJa({ municipality: '横浜市', routes: ['東横線'], lines: [28010] }, [FUKUTOSHIN]),
-    ).toBe('横浜市（東京メトロ副都心線・東横線）')
-  })
-
-  it('路線を指定しなければ filter に lines は付かない（以前と同じ条件）', () => {
-    const built = buildRecommendInput(recommendQuerySchema.parse({ municipality: '横浜市' }))
-    expect(built.ok && 'lines' in built.input.filter).toBe(false)
   })
 })
 

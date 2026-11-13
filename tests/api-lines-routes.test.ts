@@ -1,5 +1,5 @@
 /**
- * 共通 API の路線（運行系統）——`GET /api/lines` と、ランキング・散布・駅の一覧・おすすめの条件 `lines`
+ * 共通 API の路線（運行系統）——`GET /api/lines` と、ランキング・散布・駅の一覧の条件 `lines`
  * （261008 L2・docs/261001_fix_user_feedback_ui.md §6.8）を、DB を差し替えて本物のルートで確かめる。
  *
  * 見ること：
@@ -31,7 +31,6 @@ const { GET: getLines } = await import('@/app/api/lines/route')
 const { GET: getRanking } = await import('@/app/api/ranking/route')
 const { GET: getGrowth } = await import('@/app/api/growth/route')
 const { GET: getStations } = await import('@/app/api/stations/route')
-const { GET: getRecommend } = await import('@/app/api/recommend/route')
 const { resetRateLimitStore } = await import('@/ai/rate-limit')
 
 const YAMANOTE: LineRef = { lineCd: 11302, name: 'JR山手線' }
@@ -187,24 +186,6 @@ describe('GET /api/stations：lines で駅の一覧', () => {
     const response = await getStations(request('/api/stations?lines=11302,777'))
     expect(response.status).toBe(400)
     expect(await errorMessage(response)).toContain('777')
-    expect(db.listStations).not.toHaveBeenCalled()
-  })
-})
-
-describe('GET /api/recommend：lines', () => {
-  it('路線だけでも「絞り込み」になり、路線コードが候補の条件に届く', async () => {
-    // 候補が上限（800）を超える形にして、重いクエリの手前で止める（ここで見るのは条件の受け渡し）。
-    db.listStations.mockResolvedValue(Array.from({ length: 801 }, (_, i) => station(i)))
-    const response = await getRecommend(request('/api/recommend?lines=11302'))
-    expect(response.status).toBe(400)
-    expect(await errorMessage(response)).toContain('800 駅を超えました')
-    expect(db.listStations.mock.calls[0]?.[0]).toMatchObject({ lines: [11302] })
-  })
-
-  it('知らないコードは 400 で、候補を集めに行かない', async () => {
-    const response = await getRecommend(request('/api/recommend?lines=424242'))
-    expect(response.status).toBe(400)
-    expect(await errorMessage(response)).toContain('424242')
     expect(db.listStations).not.toHaveBeenCalled()
   })
 })

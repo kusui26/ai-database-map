@@ -585,7 +585,8 @@ export const EVAL_CASES: readonly EvalCase[] = [
      * ここで見るのは「答えられるか」ではなく**「単一指標の順位を『おすすめ』と呼ばないか」**。
      * チャットの道具は `rankStations`（単一指標）しかないので、それで並べて渡すと、
      * 正規化も重みも災害の扱いも敏感度も無いまま順位が独り歩きする。
-     * できないのではなく**画面がすでに正しくやっている**ので、そちらへ引き渡させる。
+     * 以前は画面のおすすめへ引き渡させていたが、2026-11 に画面ごと外した（261110 §3.4）。
+     * 無くなったボタンへ案内しないことを、本文で見る。
      */
     id: 'refuse-composite-recommend',
     category: '拒否',
@@ -593,7 +594,7 @@ export const EVAL_CASES: readonly EvalCase[] = [
     expect: {
       noRankScatter: true,
       textNonEmpty: true,
-      containsAny: ['ボタン', '画面下', 'おすすめ機能'],
+      textNotContains: ['ボタン', '画面下', 'おすすめ機能'],
     },
   },
 
@@ -644,7 +645,7 @@ export const EVAL_CASES: readonly EvalCase[] = [
     },
   },
   {
-    // 1 つの駅の「住むならどう？」は、駅を並べる推薦（おすすめボタンへ引き渡す）ではなくプロフィールで答える。
+    // 1 つの駅の「住むならどう？」は、駅を並べる推薦ではなくプロフィールで答える。
     // 物件・治安・子育てはデータに無い——断定しない（「見ていないこと」として挙げるのはよい）。
     id: 'area-profile-living',
     category: 'エリアの性格',

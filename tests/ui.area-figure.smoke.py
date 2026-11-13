@@ -8,7 +8,7 @@
 
 ## 見ること（広い画面・狭い画面・携帯の 3 つの幅）
 
-1. FAB：5 つのボタンがどれも画面の中で重ならない（チャットを開いた狭い幅でも外に押し出さない）
+1. FAB：4 つのボタンがどれも画面の中で重ならない（チャットを開いた狭い幅でも外に押し出さない）
 2. 開いた直後のエリア：選択中の駅が無ければ地図の中心に近い駅の都道府県（初期表示は広いので都道府県）、駅があればその市区町村。
    決めた手がかりを添える。地図の色分け（`?color&colorIn`）が図のエリアと同じ
 3. 入れ物：広い画面はチャットの右の列（420px・FAB の行の上で止まり、FAB は列の下に見える）、狭い画面・携帯はモーダル。
@@ -57,7 +57,7 @@ POPULATION_COLOR = "#2563eb"
 #: 増減の段の色のうち、地図の地色に無い 4 色（真ん中の灰色は数えない）。
 DIVERGING_SATURATED = ["#0571b0", "#92c5de", "#f4a582", "#ca0020"]
 COLOR_TOLERANCE = 6
-FAB_LABELS = ["現在地", "ランキング", "散布図", "エリア", "おすすめ"]
+FAB_LABELS = ["現在地", "ランキング", "散布図", "エリア"]
 SHIN_YOKOHAMA = "新横浜#0"
 
 failures: list[str] = []
@@ -256,7 +256,7 @@ def rgb(hex_color: str) -> tuple[int, int, int]:
 HIDE_OVERLAYS = """(hidden) => {
   const targets = [
     ...document.querySelectorAll('aside, header, section[aria-label="色分けの凡例"], nextjs-portal'),
-    ...[...document.querySelectorAll('button')].filter((b) => ['現在地','ランキング','散布図','エリア','おすすめ'].includes(b.getAttribute('aria-label') ?? '')),
+    ...[...document.querySelectorAll('button')].filter((b) => ['現在地','ランキング','散布図','エリア'].includes(b.getAttribute('aria-label') ?? '')),
   ]
   for (const el of targets) el.style.visibility = hidden ? 'hidden' : ''
 }"""
@@ -290,7 +290,7 @@ def scenario_fab_default(browser: Browser, name: str, viewport: dict) -> None:
     goto(page)
     boxes = fab_boxes(page)
     inside = all(b is not None and b["x"] >= 0 and b["x"] + b["width"] <= viewport["width"] and b["y"] + b["height"] <= viewport["height"] for b in boxes)
-    check("FAB の 5 つが画面の中に出る", inside, str([None if b is None else (round(b["x"]), round(b["x"] + b["width"])) for b in boxes]))
+    check(f"FAB の {len(FAB_LABELS)} つが画面の中に出る", inside, str([None if b is None else (round(b["x"]), round(b["x"] + b["width"])) for b in boxes]))
     present = [b for b in boxes if b is not None]
     check("FAB どうしが重ならない", not any(overlaps(a, b) for i, a in enumerate(present) for b in present[i + 1 :]))
     open_area_fab(page)
@@ -308,7 +308,7 @@ def scenario_fab_default(browser: Browser, name: str, viewport: dict) -> None:
         check("広い画面は列（420px）", column is not None and abs(column["width"] - AREA_COLUMN_WIDTH_PX) <= 1, str(column))
         fabs = [b for b in fab_boxes(page) if b is not None]
         below = column is not None and all(b["y"] >= column["y"] + column["height"] for b in fabs)
-        check("列は FAB の行の上で止まり、FAB が見える", below and len(fabs) == 5)
+        check("列は FAB の行の上で止まり、FAB が見える", below and len(fabs) == len(FAB_LABELS))
         on_top = page.evaluate(
             """() => ['ランキング','散布図','エリア'].every((label) => {
               const b = document.querySelector(`button[aria-label="${label}"]`); const r = b.getBoundingClientRect()

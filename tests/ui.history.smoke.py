@@ -14,8 +14,8 @@
 
 ## 約束（§5.3）
 
-- 出る・消える・移る（駅を選ぶ・閉じる・図やおすすめを開く・閉じる）は push
-- 中での調整（半径・タブ・図やおすすめの中の条件・ハザードのレイヤ）は replace
+- 出る・消える・移る（駅を選ぶ・閉じる・図を開く・閉じる）は push
+- 中での調整（半径・タブ・図の中の条件・ハザードのレイヤ）は replace
 - **1 回の回答で積む履歴は 1 つ**。回答の途中で戻る／進むを押されたら、その回答はもう URL を書かない
 - 戻る／進むでページを読み直さない（RSC の再取得もしない）
 - 選んでいる駅をもう一度選んでも（チップ・検索）、同じ URL の履歴を積まない（戻るが空振りしない・A4 で追加）
@@ -526,21 +526,18 @@ def scenario_inline_expand(browser: Browser) -> None:
     session.finish("inline-expand")
 
 
-def scenario_recommend(browser: Browser) -> None:
-    print("[おすすめ：開く → 戻るで閉じる → 進むで開き直す]")
+def scenario_old_recommend_link(browser: Browser) -> None:
+    """おすすめ（2026-11 に外した・docs/261110_fix_PLAN.md §3）の古い共有リンクは、知らない条件として無視され、地図が開く。"""
+    print("[外したおすすめの古い共有リンク（?rec=true&recMuni=横浜市）：地図がそのまま開く]")
     session = Session(browser, WIDE)
-    session.open()
-    start = session.length()
-    session.page.get_by_role("button", name="おすすめ").click()
-    dialog = modal(session.page, "おすすめ駅")
-    dialog.wait_for(state="visible")
-    check("開いたら履歴が 1 つ増える", session.length() == start + 1 and session.params().get("rec") == "true", f"{start} → {session.length()}")
-    session.back()
-    check("戻る＝閉じる", not modal(session.page, "おすすめ駅").is_visible() and "rec" not in session.params(), str(session.params()))
-    session.forward()
-    modal(session.page, "おすすめ駅").wait_for(state="visible")
-    check("進む＝開き直す", modal(session.page, "おすすめ駅").is_visible())
-    session.finish("recommend")
+    session.open("?rec=true&recMuni=%E6%A8%AA%E6%B5%9C%E5%B8%82&recPreset=family")
+    map_canvas = session.page.locator("canvas.maplibregl-canvas").first
+    map_canvas.wait_for(state="visible", timeout=30_000)
+    session.page.wait_for_timeout(SETTLE_MS)
+    check("地図が出る", map_canvas.is_visible())
+    check("おすすめのダイアログは出ない", modal(session.page, "おすすめ駅").count() == 0)
+    check("おすすめのボタンは無い", session.page.get_by_role("button", name="おすすめ", exact=True).count() == 0)
+    session.finish("old-recommend-link")
 
 
 def scenario_shared_link(browser: Browser) -> None:
@@ -666,7 +663,7 @@ SCENARIOS: list[Callable[[Browser], None]] = [
     scenario_reselect,
     scenario_back_mid_answer,
     scenario_inline_expand,
-    scenario_recommend,
+    scenario_old_recommend_link,
     scenario_shared_link,
     scenario_phone,
     scenario_answer_over_figure,

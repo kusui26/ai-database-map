@@ -10,14 +10,16 @@
  * ここでは「ファミリ（baseMetric）＋半径＋年」から**サーバ側で決定的にキーを確定**する。
  * 曖昧さは既定値で埋め、埋めた事実は `note` で必ず可視化する（同 §8 の決定事項）。
  * 単一の真実はあくまでカタログで、ここは**カタログ内の候補を絞るだけ**（新しい意味を作らない）。
+ * 将来推計の既定の年だけは、エリアの要約が先に言う年（`FUTURE_LEAD_YEAR`）にそろえる（同 §10.8）。
  */
 
 import { getEntry, isRankableKey, rankableEntries, type CatalogEntry } from '@/shared/catalog'
 import { RADII_M, radiusLabel } from '@/shared/constants'
+import { FUTURE_LEAD_YEAR } from '@/domain/area-summary/totals'
 
 /** 半径未指定時の既定（アプリ UI の既定と一致）。 */
 const DEFAULT_RADIUS_M = 1000
-/** 増減率の既定スパン（年）。終点は最新年、スパンはこれに最も近いものを選ぶ。 */
+/** 増減率の既定スパン（年）。終点は最新年、スパンはこれに最も近いものを選ぶ（将来推計は除く）。 */
 const PREFERRED_SPAN_YEARS = 5
 /** ヒントに載せる候補の最大数。 */
 const MAX_HINTS = 8
@@ -172,13 +174,15 @@ function pickRadius(entries: readonly CatalogEntry[], requested: number | null):
 /**
  * 年の既定を決める。
  * 増減率（年ペアあり）＝**スパンが 5 年に最も近いもの**（同点なら終点が新しい方）。
- * 水準（年ペアなし）＝**最新年**。docs/260728_chat_scatter_plot_timeout_mitigation.md §8 の決定。
+ * ただし将来推計の増減率は**終点が 2050 年のもの**（`projectionLead`）。
+ * 水準（年ペアなし）＝**最新年**。docs/260728_chat_scatter_plot_timeout_mitigation.md §8 の決定（§10.8 で推計だけ変更）。
  */
 function pickYearPair(entries: readonly CatalogEntry[]): Narrowed {
   const spans = entries.filter((entry) => entry.year !== null && entry.yearBase !== null)
   const head = spans[0]
   if (head !== undefined) {
-    const best = spans.reduce((left, right) => preferredSpan(left, right), head)
+    const best =
+      projectionLead(spans) ?? spans.reduce((left, right) => preferredSpan(left, right), head)
     const note = entries.length > 1 ? `${best.yearBase}→${best.year}年（既定）` : null
     return { entries: [best], note }
   }
@@ -187,6 +191,18 @@ function pickYearPair(entries: readonly CatalogEntry[]): Narrowed {
   const newest = Math.max(...years)
   const latest = entries.filter((entry) => entry.year === newest)
   return { entries: latest, note: latest.length === entries.length ? null : `${newest}年（既定）` }
+}
+
+/**
+ * 将来推計（推計時点を持つ）の増減率の既定＝終点がエリアの要約と同じ 2050 年のもの。推計でない・2050 年が無いときは
+ * undefined（5 年の規則に倒す）。年を指定されたら、その年の候補しか来ないので指定が勝つ（2040 年なら 2040 年）。
+ *
+ * 5 年の規則を推計にも当てると 2020→2025 年——推計の起点のすぐ先（もう過ぎた年）で、「将来も人口が増える駅」の
+ * 答えにならない。モデルは「将来」「2050年に向けて」と聞かれても年を付けないことが多い（2026-11-14 のデモの下見で、
+ * 本番が将来推計で並べた 7 回のうち 5 回が 2020→2025 年。入力を記録すると 16 回中 14 回が year なし）。
+ */
+function projectionLead(spans: readonly CatalogEntry[]): CatalogEntry | undefined {
+  return spans.find((entry) => entry.vintage !== null && entry.year === FUTURE_LEAD_YEAR)
 }
 
 /** 年ペアの優先度比較（5 年に近い方／同点なら終点が新しい方）。 */

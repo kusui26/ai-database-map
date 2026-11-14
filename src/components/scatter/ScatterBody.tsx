@@ -10,16 +10,21 @@
  *
  * 条件は**開いた図**（URL の `?fig`・`figure/url.ts`）から始め、変えたら `onConditions` で知らせる
  * （入れ物が URL へ書き戻す＝戻る・進む・リロードで同じ条件の散布が出る・2026-10-02）。
+ * 各軸の半径は地図の半径に合わせる（FAB で開いたら地図の半径で始め、地図の半径が替われば合わせる・`useMetricChoice`）。
+ * 以前は既定の X 軸が 2km に決め打ちで、地図の半径（既定 1km）と食い違っていた（2026-11-14）。
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { type Category } from '@/shared/constants'
 import { getEntry } from '@/shared/catalog'
-import { DEFAULT_SCATTER_X, DEFAULT_SCATTER_Y, rankableGroups } from '@/domain/metrics'
+import { DEFAULT_SCATTER_X, DEFAULT_SCATTER_Y } from '@/domain/metrics'
+import { openingMetricKey } from '@/domain/metrics/at-radius'
 import { scatterPanel } from '@/domain/growth/panel'
 import { ScatterChart, SCATTER_HEIGHT } from '@/components/panels/ScatterChart'
+import { useMapUrlState } from '@/components/map/useMapUrlState'
 import { MetricSelect } from '@/components/metrics/MetricSelect'
 import { StationFilterControls } from '@/components/metrics/StationFilterControls'
+import { useMetricChoice } from '@/components/metrics/useMetricChoice'
 import { useStationFilters } from '@/components/metrics/useStationFilters'
 import { type ScatterFigure } from '@/components/figure/url'
 import { useGrowth } from './useGrowth'
@@ -27,15 +32,6 @@ import { messageJaOf } from '@/lib/fetch-json'
 
 const X_CATEGORY: Category = getEntry(DEFAULT_SCATTER_X)?.category ?? 'population'
 const Y_CATEGORY: Category = getEntry(DEFAULT_SCATTER_Y)?.category ?? 'passenger'
-
-function firstKeyOf(category: Category): string | undefined {
-  return rankableGroups(category)[0]?.entries[0]?.key
-}
-
-/** 開いた図の指標。無い・カタログに無い（手で書き換えた URL など）なら既定の指標。 */
-function knownKeyOr(key: string | null, fallback: string): string {
-  return key !== null && getEntry(key) !== undefined ? key : fallback
-}
 
 export function ScatterBody({
   initial,
@@ -51,12 +47,19 @@ export function ScatterBody({
   /** 条件が変わったら呼ぶ（開いた直後の既定の補完を含む）。入れ物が URL へ書き戻す。 */
   onConditions?: (figure: ScatterFigure) => void
 }) {
-  const initialX = knownKeyOr(initial.xKey, DEFAULT_SCATTER_X)
-  const initialY = knownKeyOr(initial.yKey, DEFAULT_SCATTER_Y)
-  const [xCategory, setXCategory] = useState<Category>(getEntry(initialX)?.category ?? X_CATEGORY)
-  const [xKey, setXKey] = useState<string>(initialX)
-  const [yCategory, setYCategory] = useState<Category>(getEntry(initialY)?.category ?? Y_CATEGORY)
-  const [yKey, setYKey] = useState<string>(initialY)
+  const { radiusM: mapRadiusM } = useMapUrlState()
+  const x = useMetricChoice(
+    openingMetricKey(initial.xKey, DEFAULT_SCATTER_X, mapRadiusM),
+    X_CATEGORY,
+    mapRadiusM,
+  )
+  const y = useMetricChoice(
+    openingMetricKey(initial.yKey, DEFAULT_SCATTER_Y, mapRadiusM),
+    Y_CATEGORY,
+    mapRadiusM,
+  )
+  const xKey = x.metricKey
+  const yKey = y.metricKey
   // 絞り込み（都道府県・会社・路線・種別）と連動は散布とランキングで共有する（260801）。
   const filters = useStationFilters(active, initial)
   // 既定で信頼性の低い値（⚠）を除外する：母数が小さい駅の増減率・中央値は外れ値に
@@ -73,17 +76,6 @@ export function ScatterBody({
     { x: xKey, y: yKey, ...filters.values, excludeLowN },
     active,
   )
-
-  const onXCategory = useCallback((next: Category) => {
-    setXCategory(next)
-    const k = firstKeyOf(next)
-    if (k !== undefined) setXKey(k)
-  }, [])
-  const onYCategory = useCallback((next: Category) => {
-    setYCategory(next)
-    const k = firstKeyOf(next)
-    if (k !== undefined) setYKey(k)
-  }, [])
 
   return (
     <>
@@ -104,10 +96,11 @@ export function ScatterBody({
           <span className="w-7 shrink-0 text-xs font-medium text-slate-400">X軸</span>
           <MetricSelect
             ariaPrefix="X軸 "
-            category={xCategory}
+            category={x.category}
             metricKey={xKey}
-            onCategory={onXCategory}
-            onMetric={setXKey}
+            mapRadiusM={mapRadiusM}
+            onCategory={x.onCategory}
+            onMetric={x.onMetric}
             className="flex-1"
           />
         </div>
@@ -115,10 +108,11 @@ export function ScatterBody({
           <span className="w-7 shrink-0 text-xs font-medium text-slate-400">Y軸</span>
           <MetricSelect
             ariaPrefix="Y軸 "
-            category={yCategory}
+            category={y.category}
             metricKey={yKey}
-            onCategory={onYCategory}
-            onMetric={setYKey}
+            mapRadiusM={mapRadiusM}
+            onCategory={y.onCategory}
+            onMetric={y.onMetric}
             className="flex-1"
           />
         </div>

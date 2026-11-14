@@ -9,15 +9,19 @@
  *
  * 条件は**開いた図**（URL の `?fig`・`figure/url.ts`）から始め、変えたら `onConditions` で知らせる
  * （入れ物が URL へ書き戻す＝戻る・進む・リロードで同じ条件の表が出る・2026-10-02）。
+ * 指標の半径は地図の半径に合わせる（FAB で開いたら地図の半径で始め、地図の半径が替われば合わせる・`useMetricChoice`）。
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { type Order } from '@/shared/api'
 import { type Category } from '@/shared/constants'
 import { getEntry } from '@/shared/catalog'
-import { DEFAULT_RANKING_KEY, rankableGroups } from '@/domain/metrics'
+import { DEFAULT_RANKING_KEY } from '@/domain/metrics'
+import { openingMetricKey } from '@/domain/metrics/at-radius'
 import { rankingPanel } from '@/domain/ranking/panel'
 import { RankingTable } from '@/components/panels/RankingTable'
+import { useMapUrlState } from '@/components/map/useMapUrlState'
+import { useMetricChoice } from '@/components/metrics/useMetricChoice'
 import { useStationFilters } from '@/components/metrics/useStationFilters'
 import { type RankingFigure } from '@/components/figure/url'
 import { MetricPicker } from './MetricPicker'
@@ -25,12 +29,6 @@ import { useRanking } from './useRanking'
 import { messageJaOf } from '@/lib/fetch-json'
 
 const DEFAULT_CATEGORY: Category = getEntry(DEFAULT_RANKING_KEY)?.category ?? 'population'
-
-/** 開いた図の指標。無い・カタログに無い（手で書き換えた URL など）なら既定の指標。 */
-function initialMetricKey(figure: RankingFigure): string {
-  const key = figure.metricKey
-  return key !== null && getEntry(key) !== undefined ? key : DEFAULT_RANKING_KEY
-}
 
 export function RankingBody({
   initial,
@@ -46,11 +44,12 @@ export function RankingBody({
   /** 条件が変わったら呼ぶ（開いた直後の既定の補完を含む）。入れ物が URL へ書き戻す。 */
   onConditions?: (figure: RankingFigure) => void
 }) {
-  const initialKey = initialMetricKey(initial)
-  const [category, setCategory] = useState<Category>(
-    getEntry(initialKey)?.category ?? DEFAULT_CATEGORY,
+  const { radiusM: mapRadiusM } = useMapUrlState()
+  const { category, metricKey, onCategory, onMetric } = useMetricChoice(
+    openingMetricKey(initial.metricKey, DEFAULT_RANKING_KEY, mapRadiusM),
+    DEFAULT_CATEGORY,
+    mapRadiusM,
   )
-  const [metricKey, setMetricKey] = useState<string>(initialKey)
   // 絞り込みと連動は散布と共有する（260801）。
   const filters = useStationFilters(active, initial)
   const [order, setOrder] = useState<Order>(initial.order)
@@ -68,24 +67,19 @@ export function RankingBody({
     active,
   )
 
-  const onCategory = useCallback((next: Category) => {
-    setCategory(next)
-    const firstKey = rankableGroups(next)[0]?.entries[0]?.key
-    if (firstKey !== undefined) setMetricKey(firstKey)
-  }, [])
-
   return (
     <>
       <div className="border-b border-slate-100 px-4 py-3">
         <MetricPicker
           category={category}
           metricKey={metricKey}
+          mapRadiusM={mapRadiusM}
           filters={filters}
           originLabel={ranking?.near?.label ?? null}
           order={order}
           excludeLowN={excludeLowN}
           onCategory={onCategory}
-          onMetric={setMetricKey}
+          onMetric={onMetric}
           onOrder={setOrder}
           onExcludeLowN={setExcludeLowN}
         />

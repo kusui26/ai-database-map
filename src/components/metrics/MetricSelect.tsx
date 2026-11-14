@@ -5,10 +5,19 @@
  * `useMetricParts`＝metricKey を (変種, 半径) に分解し、変種/半径の変更で metricKey を再解決する
  * 単一のコントローラ（親の状態は据え置き）。leaf（CategorySelect/VariantSelect/RadiusSegment）を
  * ランキングは2段に、散布は各軸インラインに、それぞれ好きな配置で組める。
+ *
+ * 指標（変種）を替えたときの半径は、いまの半径（半径の無い指標から替えるなら地図の半径）に最も近い利用可能な半径
+ * （2026-11-14・`domain/metrics/at-radius.ts`）。以前は先頭の利用可能な半径（多くは 500m）に飛んでいた。
  */
 
 import { useMemo } from 'react'
-import { CATEGORIES, CATEGORY_LABELS_JA, type Category, radiusLabel } from '@/shared/constants'
+import {
+  CATEGORIES,
+  CATEGORY_LABELS_JA,
+  type Category,
+  type RadiusM,
+  radiusLabel,
+} from '@/shared/constants'
 import { getEntry } from '@/shared/catalog'
 import {
   type MetricVariant,
@@ -17,6 +26,7 @@ import {
   rankableVariantGroups,
   variantTokenOf,
 } from '@/domain/metrics'
+import { preferredRadius, variantKeyNear } from '@/domain/metrics/at-radius'
 import { cn } from '@/lib/utils'
 
 export const METRIC_SELECT_CLASS =
@@ -40,6 +50,8 @@ export function useMetricParts(
   metricKey: string,
   onCategory: (category: Category) => void,
   onMetric: (key: string) => void,
+  /** 地図の半径（半径の無い指標から、半径のある指標へ替えるときに使う）。 */
+  mapRadiusM: RadiusM,
   ariaPrefix = '',
 ): MetricParts {
   const groups = useMemo(() => rankableVariantGroups(category), [category])
@@ -61,9 +73,8 @@ export function useMetricParts(
   const selectVariant = (token: string) => {
     const variant = variantByToken.get(token)
     if (variant === undefined) return
-    // 現在の半径を維持、無ければ先頭の利用可能半径（or 半径なし）へフォールバック。
-    const radius = variant.byRadius.has(currentRadius) ? currentRadius : (radiiOf(variant)[0] ?? null)
-    const key = variant.byRadius.get(radius)
+    // いまの半径を保つ。無ければ最も近い利用可能な半径（半径の無い指標から替えるなら地図の半径に近い半径）。
+    const key = variantKeyNear(variant, preferredRadius(metricKey, mapRadiusM))
     if (key !== undefined) onMetric(key)
   }
   const selectRadius = (radius: number) => {
@@ -159,6 +170,7 @@ export function MetricSelect({
   ariaPrefix = '',
   category,
   metricKey,
+  mapRadiusM,
   onCategory,
   onMetric,
   className,
@@ -166,11 +178,13 @@ export function MetricSelect({
   ariaPrefix?: string
   category: Category
   metricKey: string
+  /** 地図の半径（`useMetricParts`）。 */
+  mapRadiusM: RadiusM
   onCategory: (category: Category) => void
   onMetric: (key: string) => void
   className?: string
 }) {
-  const parts = useMetricParts(category, metricKey, onCategory, onMetric, ariaPrefix)
+  const parts = useMetricParts(category, metricKey, onCategory, onMetric, mapRadiusM, ariaPrefix)
   return (
     <div className={cn('flex min-w-0 flex-wrap items-center gap-1.5', className)}>
       <CategorySelect parts={parts} />

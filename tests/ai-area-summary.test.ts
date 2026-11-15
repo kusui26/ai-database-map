@@ -332,6 +332,32 @@ describe('理由を返して集計しない', () => {
   })
 })
 
+/**
+ * エリアの候補は、色分けの指標の誤りより先に返す（2026-11-15）。
+ *
+ * 順位・散布の「名前の候補は、指標・年の誤りより先に返す」（`ai-tool-names.test.ts`・2026-11-13）と同じ決まり。
+ * 以前は、本番で「東西線の沿線」と知らない指標を一緒に渡すと指標の誤りだけが返り、色分けをやめると候補が 6 本返った。
+ */
+describe('エリアの候補は、色分けの指標の誤りより先に返す', () => {
+  const UNKNOWN_METRIC = '未知の指標です'
+
+  it('同じ名前（「中区」）と知らない色分けの指標 → 指標の誤りでなく候補', async () => {
+    const { effects, forLlm } = await run({ areas: [{ municipality: '中区' }], colorBy: 'nope' })
+    expect(effects).toEqual([])
+    expect(llmOf(forLlm)).toMatchObject({ problems: [{ input: '中区' }] })
+    expect(JSON.stringify(forLlm)).toContain('横浜市中区')
+    expect(JSON.stringify(forLlm)).not.toContain(UNKNOWN_METRIC)
+    expect(db.areaRows).not.toHaveBeenCalled()
+  })
+
+  it('名前が決まれば、知らない色分けの指標は今までどおり断る（集計もしない）', async () => {
+    const { effects, forLlm } = await run({ areas: [{ municipality: '横浜市' }], colorBy: 'nope' })
+    expect(effects).toEqual([])
+    expect(JSON.stringify(forLlm)).toContain(UNKNOWN_METRIC)
+    expect(db.areaRows).not.toHaveBeenCalled()
+  })
+})
+
 describe('地図の範囲（アプリのチャットだけ）', () => {
   it('このあたり（inMapView）は送信時の地図の範囲で、範囲の駅の分布と色分け（区域の値は出さない）', async () => {
     const { effects } = await run(

@@ -346,3 +346,67 @@ describe('一覧のキャッシュ', () => {
     expect(db.lineNames).toHaveBeenCalledTimes(2)
   })
 })
+
+/**
+ * 名前の候補は、指標・年の誤りより先に返す（2026-11-13）。
+ *
+ * 評価の「東西線の駅で人口が増えているのはどこ？」で、モデルが最初の呼び出しにデータの無い年（2025）を付けると、
+ * 以前は年の誤りだけが返り、年を外した 2 回目でやっと候補が返った。2 回続けて断られたモデルは、候補の 1 本目を
+ * 推測で選んで順位を出した（19 回中 4 回・main でも同じ）。1 回目に候補が返った回は 15 回とも聞き返した。
+ */
+describe('名前の候補は、指標・年の誤りより先に返す', () => {
+  const YEAR_ERROR = '指定した年の指標がありません'
+
+  it('rankStations：無い年（2025）と同じ名前の路線（東西線）→ 年の誤りでなく候補', async () => {
+    const result = await TOOL_SPECS.rankStations.run(
+      { metric: 'pop_gr', year: 2025, routes: ['東西線'] },
+      CTX,
+    )
+    expect(result.effects).toEqual([])
+    expect(db.rankByColumn).not.toHaveBeenCalled()
+    expect(result.forLlm).toMatchObject({ problems: [{ input: '東西線' }] })
+    expect(JSON.stringify(result.forLlm)).toContain('東京メトロ東西線')
+    expect(JSON.stringify(result.forLlm)).not.toContain(YEAR_ERROR)
+  })
+
+  it('rankStations：名前が決まれば、無い年は今までどおり断る（集計もしない）', async () => {
+    const result = await TOOL_SPECS.rankStations.run(
+      { metric: 'pop_gr', year: 2025, routes: ['東急東横線'] },
+      CTX,
+    )
+    expect(result.effects).toEqual([])
+    expect(db.rankByColumn).not.toHaveBeenCalled()
+    expect(JSON.stringify(result.forLlm)).toContain(YEAR_ERROR)
+  })
+
+  it('compareGrowth：未知の指標と同じ名前の路線 → 候補', async () => {
+    const result = await TOOL_SPECS.compareGrowth.run(
+      { x: 'pop_gr', y: 'no_such_metric', routes: ['東西線'] },
+      CTX,
+    )
+    expect(result.effects).toEqual([])
+    expect(db.scatterPoints).not.toHaveBeenCalled()
+    expect(result.forLlm).toMatchObject({ problems: [{ input: '東西線' }] })
+  })
+
+  it('buildDataset：無い年とセレクタの同じ名前の路線 → 候補', async () => {
+    const result = await TOOL_SPECS.buildDataset.run(
+      { stations: { routes: ['東西線'] }, metrics: ['pop_gr'], years: [2025] },
+      CTX,
+    )
+    expect(result.effects).toEqual([])
+    expect(db.listStations).not.toHaveBeenCalled()
+    expect(result.forLlm).toMatchObject({ problems: [{ input: '東西線' }] })
+    expect(JSON.stringify(result.forLlm)).not.toContain(YEAR_ERROR)
+  })
+
+  it('buildDataset：grps で選んだときは、無い年を今までどおり断る', async () => {
+    const result = await TOOL_SPECS.buildDataset.run(
+      { grps: ['渋谷#0'], metrics: ['pop_gr'], years: [2025] },
+      CTX,
+    )
+    expect(result.effects).toEqual([])
+    expect(db.listStations).not.toHaveBeenCalled()
+    expect(JSON.stringify(result.forLlm)).toContain(YEAR_ERROR)
+  })
+})

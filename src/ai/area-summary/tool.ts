@@ -204,19 +204,25 @@ async function summarize(
   }
 }
 
-/** 道具の実行（名前を決めてから、共通 API と同じ組み立てで要約する）。 */
+/**
+ * 道具の実行（名前を決めてから、共通 API と同じ組み立てで要約する）。
+ *
+ * **エリアの名前は、色分けの指標より先に解く**（2026-11-15・順位と散布の `resolveFigureFilters` の注記と同じ理由）。
+ * 名前が決まらずに候補が返るときは、利用者に聞くしかない。指標の誤り（モデルが自分で直せる）を先に返すと、
+ * 「東西線の沿線」と知らない指標を一緒に渡したモデルは、指標を直した 2 回目でやっと候補を受け取る。
+ */
 export async function runAreaSummary(
   input: AreaSummaryToolInput,
   ctx: ToolRunContext,
 ): Promise<AreaSummaryRun> {
-  const { radius, note: radiusNote } = radiusOf(input.radiusM)
-  const color = colorChoiceOf(input.colorBy, radius)
-  if (!color.ok) return { effects: [], forLlm: color.error }
   const areas = await resolveSummaryAreas(input.areas, ctx.viewport ?? null, summaryAreasDeps())
   if (!areas.ok) {
     const { error, hint, problems } = areas
     return { effects: [], forLlm: { error, hint, problems } }
   }
+  const { radius, note: radiusNote } = radiusOf(input.radiusM)
+  const color = colorChoiceOf(input.colorBy, radius)
+  if (!color.ok) return { effects: [], forLlm: color.error }
   const notes = [...areas.notes, ...(radiusNote === null ? [] : [radiusNote])]
   return summarize(areas.areas, radius, color, notes)
 }

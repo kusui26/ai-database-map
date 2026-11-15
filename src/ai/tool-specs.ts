@@ -478,6 +478,10 @@ type FigureInput = AreaInput & {
  * （2 つのツールで同じ）。エリアを先に決める——決めた市区町村の都道府県が、同じ名前の路線を決める手がかりになる。
  * 地図の表示範囲（`viewport`）は、同じ名前を決めるのと、頼まれたとき（「このあたり」の `inMapView`・B3）に駅を絞るのに使う
  * （数の範囲で絞るのは `bbox`）。
+ *
+ * **呼ぶ側は、指標・年より先にこれを解く**（2026-11-13）。名前が決まらずに候補が返るときは、利用者に聞くしかない。
+ * 指標・年の誤り（モデルが自分で直せる）を先に返すと、モデルは年を直した 2 回目でやっと候補を受け取り、
+ * 2 回続けて断られたあとに候補の 1 本目を推測で選んだ（「東西線の駅で人口が増えているのは？」で 19 回中 4 回）。
  */
 async function resolveFigureFilters(
   input: FigureInput,
@@ -1266,6 +1270,12 @@ export const TOOL_SPECS = {
           hint: 'stations（セレクタ）か grps（駅 ID の配列）のどちらか一方だけを指定してください。',
         })
       }
+      // 名前を先に解く（resolveFigureFilters の注記と同じ理由）。grps で選んだときは解く名前が無い。
+      const resolvedSelector =
+        selector === undefined
+          ? null
+          : await resolveSelector(selector, DATASET_DEFAULT_STATION_LIMIT, ctx.viewport ?? null)
+      if (resolvedSelector !== null && !resolvedSelector.ok) return pure(resolvedSelector.error)
       const resolvedColumns = resolveDatasetColumns(metrics, radiusM, years)
       if (!resolvedColumns.ok) return pure(columnsError(resolvedColumns))
       const resolvedShape: DatasetShape = shape ?? 'wide'
@@ -1274,8 +1284,8 @@ export const TOOL_SPECS = {
       let listed: StationListItem[]
       let truncated = false
       let tokenQuery: DatasetQuery
-      if (grps !== undefined) {
-        const unique = [...new Set(nonEmptyNames(grps))]
+      if (resolvedSelector === null) {
+        const unique = [...new Set(nonEmptyNames(grps ?? []))]
         if (unique.length === 0) {
           return pure({
             error: '対象駅が指定されていません',
@@ -1302,12 +1312,6 @@ export const TOOL_SPECS = {
           shape: resolvedShape,
         }
       } else {
-        const resolvedSelector = await resolveSelector(
-          selector ?? {},
-          DATASET_DEFAULT_STATION_LIMIT,
-          ctx.viewport ?? null,
-        )
-        if (!resolvedSelector.ok) return pure(resolvedSelector.error)
         extraNotes.push(...resolvedSelector.nameNotes)
         listed = await listStations(resolvedSelector.filter)
         if (listed.length === 0) {
@@ -1643,10 +1647,11 @@ export const TOOL_SPECS = {
       >
     > => {
       const { metric, radiusM, year, yearBase, order, limit, excludeLowN } = input
-      const resolved = resolveMetricKey({ metric, radiusM, year, yearBase })
-      if (!resolved.ok) return pure(metricError(resolved))
+      // 名前を先に解く（resolveFigureFilters の注記）。
       const filters = await resolveFigureFilters(input, ctx.viewport ?? null)
       if (!filters.ok) return pure(filters.forLlm)
+      const resolved = resolveMetricKey({ metric, radiusM, year, yearBase })
+      if (!resolved.ok) return pure(metricError(resolved))
       const dir = order ?? 'desc'
       const lim = Math.min(Math.max(limit ?? DEFAULT_RANK_LIMIT, 1), MAX_RANK_LIMIT)
       const exclude = excludeLowN ?? false
@@ -1716,12 +1721,13 @@ export const TOOL_SPECS = {
       >
     > => {
       const { x, y, radiusM, excludeLowN } = input
+      // 名前を先に解く（resolveFigureFilters の注記）。
+      const filters = await resolveFigureFilters(input, ctx.viewport ?? null)
+      if (!filters.ok) return pure(filters.forLlm)
       const xResolved = resolveMetricKey({ metric: x, radiusM })
       if (!xResolved.ok) return pure(metricError(xResolved))
       const yResolved = resolveMetricKey({ metric: y, radiusM })
       if (!yResolved.ok) return pure(metricError(yResolved))
-      const filters = await resolveFigureFilters(input, ctx.viewport ?? null)
-      if (!filters.ok) return pure(filters.forLlm)
       const exclude = excludeLowN ?? false
       // 信頼性フラグは除外するときだけ引く（引かなければ DB 側の集計も軽い）。
       const flags = exclude

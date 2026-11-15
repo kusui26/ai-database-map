@@ -7,6 +7,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { getEntry, isRankableKey } from '@/shared/catalog'
+import { FUTURE_LEAD_YEAR } from '@/domain/area-summary/totals'
 import { defaultKeyForBaseMetric, resolveMetricKey } from '@/ai/metric-resolver'
 
 /** 成功を前提にキーだけ取り出す（失敗ならテストを落とす）。 */
@@ -88,10 +89,6 @@ describe('resolveMetricKey：ファミリ名からの解決（往復削減の本
     expect(defaultKeyForBaseMetric('emp_gr')).toBe('emp_gr_2021_2016_1km')
   })
 
-  it('将来人口の増減率も 5 年スパン（2020→2025）を既定にする', () => {
-    expect(defaultKeyForBaseMetric('pop_gr_pred')).toBe('pop_gr_pred_2024_2025_1km')
-  })
-
   it('水準指標は最新年を既定にする（人口＝2020年）', () => {
     expect(defaultKeyForBaseMetric('pop')).toBe('pop_2020_1km')
   })
@@ -101,6 +98,57 @@ describe('resolveMetricKey：ファミリ名からの解決（往復削減の本
     expect(key).not.toBeNull()
     if (key === null) return
     expect(getEntry(key)?.vintage).toBe(2024)
+  })
+})
+
+describe('resolveMetricKey：将来推計の増減率は 2050 年を既定にする（260728 §10.8）', () => {
+  it('年を付けないファミリ名は 2020→2050 年（5 年の規則だと、もう過ぎた 2020→2025 年になる）', () => {
+    expect(resolveMetricKey({ metric: 'pop_gr_pred' })).toEqual({
+      ok: true,
+      key: 'pop_gr_pred_2024_2050_1km',
+      note: '半径1km（既定）・2020→2050年（既定）',
+    })
+  })
+
+  it('既定の終点はエリアの要約が先に言う年と同じ（同じ「将来」が道具ごとに別の年を指さない）', () => {
+    const key = defaultKeyForBaseMetric('pop_gr_pred')
+    expect(key === null ? null : getEntry(key)?.year).toBe(FUTURE_LEAD_YEAR)
+  })
+
+  it('半径を指定しても終点は 2050 年', () => {
+    expect(resolvedKey({ metric: 'pop_gr_pred', radiusM: 500 })).toBe('pop_gr_pred_2024_2050_500m')
+    expect(resolvedKey({ metric: 'pop_gr_pred', radiusM: 2000 })).toBe('pop_gr_pred_2024_2050_2km')
+  })
+
+  it('年を指定すればその年（既定で上書きしない・2040 年なら年の注記も付けない）', () => {
+    expect(resolveMetricKey({ metric: 'pop_gr_pred', year: 2040 })).toEqual({
+      ok: true,
+      key: 'pop_gr_pred_2024_2040_1km',
+      note: '半径1km（既定）',
+    })
+    expect(resolvedKey({ metric: 'pop_gr_pred', year: 2025 })).toBe('pop_gr_pred_2024_2025_1km')
+    expect(resolvedKey({ metric: 'pop_gr_pred', year: 2070 })).toBe('pop_gr_pred_2024_2070_1km')
+  })
+
+  it('基準年（2020）だけなら、終点は既定の 2050 年', () => {
+    expect(resolvedKey({ metric: 'pop_gr_pred', yearBase: 2020 })).toBe('pop_gr_pred_2024_2050_1km')
+  })
+
+  it('キーの形で渡しても同じ（年だけ書けばその年・年が無ければ 2050 年）', () => {
+    expect(resolvedKey({ metric: 'pop_gr_pred_2040' })).toBe('pop_gr_pred_2024_2040_1km')
+    expect(resolvedKey({ metric: 'pop_gr_pred_2km' })).toBe('pop_gr_pred_2024_2050_2km')
+  })
+
+  it('推計時点（2024）を年として渡すと、今までどおりエラーで 2050 年も候補に挙げる', () => {
+    const resolution = resolveMetricKey({ metric: 'pop_gr_pred', year: 2024 })
+    expect(resolution.ok).toBe(false)
+    if (resolution.ok) return
+    expect(resolution.hint).toContain('2020→2050')
+  })
+
+  it('実績の増減率は今までどおり 5 年（例外は将来推計だけ・所得は同じ 2020→2025 年のまま）', () => {
+    expect(defaultKeyForBaseMetric('pop_gr')).toBe('pop_gr_2020_2015_1km')
+    expect(defaultKeyForBaseMetric('inc_gr')).toBe('inc_gr_2025_2020_1km')
   })
 })
 

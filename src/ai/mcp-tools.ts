@@ -195,7 +195,7 @@ export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
     mcpName: 'build_dataset',
     titleJa: 'データセット生成（駅×指標の CSV）',
     descriptionEn:
-      'Build a stations × metrics CSV in one call. Returns short-lived URLs (csv + meta) with schema, preview and caveats only — analyse locally with pandas.',
+      'Build a stations × metrics CSV in one call. Returns short-lived URLs (csv + meta) with schema, preview and caveats only — analyse locally with pandas. Families without years resolve as in rank_stations (projected population change: 2020→2050).',
     maxResultSizeChars: 25_000,
     // CSV 生成は 1 回で重いクエリ＋短命 URL の発行なので、検索系より絞る（§4.4）。
     perMinute: 10,
@@ -248,7 +248,7 @@ export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
     mcpName: 'rank_stations',
     titleJa: '駅ランキング',
     descriptionEn:
-      'Rank stations by a catalog metric, filtered by prefecture / municipality (横浜市, 港北区) / within N m of a station (near: {station, withinM} — not radiusM, which is the per-station aggregation radius; rows then carry the distance from the station) / bbox / operator / route. Operator, route, municipality and station names may be colloquial (resolved server-side; routes are lines as passengers call them, e.g. 山手線 = the 30-station loop); names shared by several places (東西線, 中区, 府中) return candidates and no chart unless prefectures settle them.',
+      'Rank stations by a catalog metric, filtered by prefecture / municipality (横浜市, 港北区) / within N m of a station (near: {station, withinM} — not radiusM, which is the per-station aggregation radius; rows then carry the distance from the station) / bbox / operator / route. Operator, route, municipality and station names may be colloquial (resolved server-side; routes are lines as passengers call them, e.g. 山手線 = the 30-station loop); names shared by several places (東西線, 中区, 府中) return candidates and no chart unless prefectures settle them. Without a year, a change metric defaults to the latest 5-year span, except projected population change (pop_gr_pred), which defaults to 2020→2050; resolvedMetric and note say which.',
     maxResultSizeChars: 60_000,
     perMinute: 30,
     chartable: true, // rankingTable
@@ -257,7 +257,7 @@ export const MCP_TOOL_CONFIGS: Readonly<Record<SpecKey, McpToolConfig>> = {
     mcpName: 'compare_growth',
     titleJa: '2 指標の散布',
     descriptionEn:
-      'Scatter stations on two metrics with deterministic clustering. Filters are the same as rank_stations (prefecture, municipality, near a station, bbox, operator, route). Names may be colloquial (resolved server-side); names shared by several places return candidates and no chart unless prefectures settle them.',
+      'Scatter stations on two metrics with deterministic clustering. Filters are the same as rank_stations (prefecture, municipality, near a station, bbox, operator, route). Names may be colloquial (resolved server-side); names shared by several places return candidates and no chart unless prefectures settle them. Families resolve as in rank_stations (projected population change: 2020→2050).',
     maxResultSizeChars: 60_000,
     perMinute: 30,
     chartable: true, // scatter

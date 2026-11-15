@@ -12,7 +12,7 @@
  */
 
 import { type Order } from '@/shared/api'
-import { type Category } from '@/shared/constants'
+import { type Category, type RadiusM } from '@/shared/constants'
 import { cn } from '@/lib/utils'
 import {
   CategorySelect,
@@ -26,6 +26,7 @@ import { type StationFiltersState } from '@/components/metrics/useStationFilters
 export function MetricPicker({
   category,
   metricKey,
+  mapRadiusM,
   filters,
   originLabel,
   order,
@@ -37,6 +38,8 @@ export function MetricPicker({
 }: {
   category: Category
   metricKey: string
+  /** 地図の半径（半径の無い指標から替えるときの半径・`useMetricParts`）。 */
+  mapRadiusM: RadiusM
   filters: StationFiltersState
   /** 起点の駅の表示名（図の応答の `near.label`・場所のチップに出す・2026-10-08 B2）。 */
   originLabel: string | null
@@ -47,7 +50,7 @@ export function MetricPicker({
   onOrder: (order: Order) => void
   onExcludeLowN: (exclude: boolean) => void
 }) {
-  const parts = useMetricParts(category, metricKey, onCategory, onMetric)
+  const parts = useMetricParts(category, metricKey, onCategory, onMetric, mapRadiusM)
 
   return (
     <div className="space-y-2">

@@ -181,8 +181,11 @@ export function radiiOf(variant: MetricVariant): readonly number[] {
     .sort((a, b) => a - b)
 }
 
-/** 既定のランキング指標（人口増減率 2015→2020・1km圏）。plan_fable P6a。 */
+/**
+ * 既定のランキング指標（人口増減率 2015→2020・1km圏）。plan_fable P6a。
+ * 図は、この指標を**地図の半径で**開く（`at-radius.ts` の `openingMetricKey`・2026-11-14）。散布の既定も同じ。
+ */
 export const DEFAULT_RANKING_KEY = 'pop_gr_2020_2015_1km'
-/** 既定の散布 x/y（人口増減率 × 乗降客コロナ前後比）。plan_fable P6b。 */
+/** 既定の散布 x/y（人口増減率 × 乗降客コロナ前後比）。plan_fable P6b。x の半径は地図の半径に替える。 */
 export const DEFAULT_SCATTER_X = 'pop_gr_2020_2015_2km'
 export const DEFAULT_SCATTER_Y = 'rate_covid'

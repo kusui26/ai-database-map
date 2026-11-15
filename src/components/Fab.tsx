@@ -152,7 +152,8 @@ export function Fab() {
   const shifted = isDesktop && chatOpen
   const left = shifted ? FAB_LEFT_WITH_CHAT_PX : FAB_LEFT_PX
   // 駅詳細を開いていれば、その左で折り返す（記号 1 つも入らないほど狭ければ、以前のまま）。
-  const { grp } = useMapUrlState()
+  // エリアの図は地図の半径で開く（ランキング・散布は、中身が既定の指標を地図の半径で決める・2026-11-14）。
+  const { grp, radiusM } = useMapUrlState()
   const roomBesideDetail = useIsDesktop(left + FAB_ICON_PX + FAB_RIGHT_WITH_DETAIL_PX)
   const besideDetail = isDesktop && grp !== null && roomBesideDetail
   const right = besideDetail ? FAB_RIGHT_WITH_DETAIL_PX : PANEL_GAP_PX
@@ -201,7 +202,7 @@ export function Fab() {
         icon={<AreaIcon />}
         label="エリア"
         title="市区町村・沿線の人口の要約と、駅の色分け"
-        onClick={() => openFigure(DEFAULT_AREA_FIGURE)}
+        onClick={() => openFigure({ ...DEFAULT_AREA_FIGURE, radiusM })}
       />
     </div>
   )

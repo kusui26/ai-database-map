@@ -11,8 +11,8 @@
 1. 駅を替えるたびに乗降客数タブへ戻った（「同じ項目を見たいので、ブラウザに覚えておいてほしい」）
 2. 「東京駅の人口推移を教えて」に、ドロワーが乗降客数タブで開いた（人口のグラフはチップを押すまで出ない）
 3. 将来推計人口に焦点を当てた駅詳細を ⤢ で開くと、どのタブも選ばれず「データがありません」と出た
-4. ヘッダの災害バッジ（災害タブへの入口）を外し、災害タブを地価の右へ動かした（2026-11-11・`docs/261110_fix_PLAN.md` §5・§6）。
-   タブそのものが入口なので、開いたときから見えること
+4. ヘッダの災害バッジ（災害タブへの入口）を外した（2026-11-11・`docs/261110_fix_PLAN.md` §5）。災害タブは末尾
+   （2026-11-13・依頼・同 §6 の追記）で既定では帯の外にあるので、押したとき・リンクで開いたときに帯を送って見せること
 
 ## やり方
 
@@ -41,10 +41,8 @@ STREAM_HEADERS = {
 }
 WIDE = {"width": 1280, "height": 900}
 PHONE = {"width": 390, "height": 844}
-#: タブの並び（`DETAIL_TABS`・2026-11-11 に地価を人口の右、災害を地価の右へ）。
-EXPECTED_TABS = ["概要", "乗降客数", "人口", "地価", "災害", "所得", "売上", "バス", "事業所", "従業者"]
-#: 帯の右端のフェードの幅（`src/lib/tab-strip.ts` の TAB_FADE_WIDTH_PX）。
-FADE_PX = 32
+#: タブの並び（`DETAIL_TABS`・2026-11-11 に地価を人口の右へ、2026-11-13 に災害を末尾へ）。
+EXPECTED_TABS = ["概要", "乗降客数", "人口", "地価", "所得", "売上", "バス", "事業所", "従業者", "災害"]
 WAIT_MS = 15_000
 STAGE_DELAY_MS = 3_000
 
@@ -177,20 +175,17 @@ def click_tab(page: Page, label: str) -> None:
     page.locator("button.border-b-2", has_text=label).first.click()
 
 
-def tab_visible_in_strip(page: Page, label: str, fade_px: int = 0) -> bool:
-    """選んだタブが帯の見えている範囲に収まっているか（後ろのタブ＝売上から右は既定で隠れている）。
-
-    fade_px を渡すと、右端のフェードにもかかっていないかを見る。
-    """
+def tab_visible_in_strip(page: Page, label: str) -> bool:
+    """選んだタブが帯の見えている範囲に収まっているか（後ろのタブ＝広い画面ではバスから右は既定で隠れている）。"""
     return page.evaluate(
-        """([label, fade]) => {
+        """(label) => {
           const tab = [...document.querySelectorAll('button.border-b-2')].find((b) => b.textContent.trim() === label && b.getBoundingClientRect().width > 0);
           if (!tab) return false;
           const strip = tab.parentElement.getBoundingClientRect();
           const box = tab.getBoundingClientRect();
-          return box.left >= strip.left - 1 && box.right <= strip.right - fade + 1;
+          return box.left >= strip.left - 1 && box.right <= strip.right + 1;
         }""",
-        [label, fade_px],
+        label,
     )
 
 
@@ -198,6 +193,16 @@ def visible_tab_labels(page: Page) -> list[str]:
     """帯のタブの並び（見えている駅詳細のもの）。"""
     return page.evaluate(
         "() => [...document.querySelectorAll('button.border-b-2')].filter((b) => b.getBoundingClientRect().width > 0).map((b) => b.textContent.trim())"
+    )
+
+
+def fade_shown(page: Page) -> bool:
+    """帯の右端のフェード（「まだ続く」）が出ているか。右端まで送ると消える（`StationDetailPanel.tsx` の syncFade）。"""
+    return page.evaluate(
+        """() => {
+          const tab = [...document.querySelectorAll('button.border-b-2')].find((b) => b.getBoundingClientRect().width > 0);
+          return tab?.parentElement?.nextElementSibling?.getAttribute('aria-hidden') === 'true';
+        }"""
     )
 
 
@@ -279,16 +284,16 @@ def scenario_remembered(browser: Browser) -> None:
 
 
 def scenario_link(browser: Browser) -> None:
-    print("[共有リンクの ?tab が記憶より優先・末尾の従業者タブは帯を送って見せる]")
+    print("[共有リンクの ?tab が記憶より優先・末尾の災害タブは帯を送って見せる]")
     context, page, errors = open_page(browser, WIDE, remembered="income")
-    goto(page, "?grp=%E6%9D%B1%E4%BA%AC%230&tab=employee")
-    check("リンクの従業者タブで開く（記憶の所得より優先）", wait_for_tab(page, "従業者"), f"タブ={active_tab(page)}")
+    goto(page, "?grp=%E6%9D%B1%E4%BA%AC%230&tab=hazard")
+    check("リンクの災害タブで開く（記憶の所得より優先）", wait_for_tab(page, "災害"), f"タブ={active_tab(page)}")
     page.wait_for_timeout(800)  # 帯を送るのはなめらかなスクロール
-    check("従業者タブ（末尾・既定では隠れている）が帯の見える範囲にある", tab_visible_in_strip(page, "従業者"))
+    check("災害タブ（末尾・既定では隠れている）が帯の見える範囲にある", tab_visible_in_strip(page, "災害"))
     stored = page.evaluate(f"() => localStorage.getItem({json.dumps(STORAGE_KEY)})")
     check("リンクを開いただけでは記憶を書き換えない", stored == "income", f"localStorage={stored}")
     check("画面のエラーなし", not errors, "; ".join(errors))
-    page.screenshot(path=f"{OUT}/detail-tab-link-employee.png")
+    page.screenshot(path=f"{OUT}/detail-tab-link-hazard.png")
     context.close()
 
 
@@ -371,19 +376,21 @@ def scenario_streaming(browser: Browser) -> None:
 
 
 def scenario_hazard_tab(browser: Browser, viewport: dict, name: str) -> None:
-    print(f"[災害タブは地価の右で、開いたときから見える → 押すと災害タブ → 駅を替えても災害タブ・{name}]")
+    print(f"[災害タブは末尾で既定では帯の外 → 押すと災害タブで、帯を右端まで送る → 駅を替えても災害タブ・{name}]")
     context, page, errors = open_page(browser, viewport)
     goto(page, "?grp=%E4%BA%80%E6%9C%89%230")  # 亀有（浸水の想定がある駅）
     check("記憶が無ければ概要で開く", wait_for_tab(page, "概要"), f"タブ={active_tab(page)}")
     labels = visible_tab_labels(page)
-    check("並びは 概要・乗降客数・人口・地価・災害・所得・売上・バス・事業所・従業者", labels == EXPECTED_TABS, "・".join(labels))
-    check("災害タブは帯を送らずに見える（右端のフェードにもかからない・261110 §6）", tab_visible_in_strip(page, "災害", FADE_PX))
+    check("並びは 概要・乗降客数・人口・地価・所得・売上・バス・事業所・従業者・災害", labels == EXPECTED_TABS, "・".join(labels))
+    check("災害タブは既定では帯の外で、右端のフェードが続きを示す", not tab_visible_in_strip(page, "災害") and fade_shown(page))
     check("ヘッダに災害のバッジが無い（「詳しく見る」も無い・261110 §5）", page.get_by_role("button", name="詳しく見る").count() == 0)
-    click_tab(page, "災害")
+    click_tab(page, "災害")  # Playwright は押す前に帯を送る（利用者が帯を送って押すのと同じ）
     check("押すと災害タブ", wait_for_tab(page, "災害"), f"タブ={active_tab(page)}")
+    page.wait_for_timeout(800)  # 帯を送るのはなめらかなスクロール
+    check("災害タブが帯の見える範囲にあり、右端まで送ったのでフェードは消える", tab_visible_in_strip(page, "災害") and not fade_shown(page))
     if viewport["width"] >= 640:
         search_and_select(page, "新宿")
-        check("駅を替えても災害タブ", wait_for_tab(page, "災害"), f"タブ={active_tab(page)}")
+        check("駅を替えても災害タブ（帯の見える範囲のまま）", wait_for_tab(page, "災害") and tab_visible_in_strip(page, "災害"), f"タブ={active_tab(page)}")
     check("画面のエラーなし", not errors, "; ".join(errors))
     page.screenshot(path=f"{OUT}/detail-tab-hazard-{name}.png")
     context.close()

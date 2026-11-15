@@ -54,14 +54,15 @@ const throwingStorage: TabStorage = {
 }
 
 describe('タブの値（DETAIL_TABS・DetailTab）', () => {
-  it('10 タブ・重複なし・概要が先頭・乗降客数が 2 番目・地価は人口の右・災害は地価の右', () => {
+  it('10 タブ・重複なし・概要が先頭・乗降客数が 2 番目・地価は人口の右・災害は末尾', () => {
     expect(DETAIL_TABS).toHaveLength(10)
     expect(new Set(DETAIL_TABS).size).toBe(DETAIL_TABS.length)
     expect(DETAIL_TABS[0]).toBe('overview')
     expect(DETAIL_TABS[1]).toBe('passenger')
-    // 2026-11-11（261110 §6）：地価は人口の右（依頼）、災害は地価の右（D-3・開いたときから見える 5 番目）。
+    // 2026-11-11（261110 §6）：地価は人口の右（依頼）。
     expect(DETAIL_TABS.indexOf('land_price')).toBe(DETAIL_TABS.indexOf('population') + 1)
-    expect(DETAIL_TABS.indexOf('hazard')).toBe(DETAIL_TABS.indexOf('land_price') + 1)
+    // 2026-11-13：災害は末尾（依頼。11-11〜13 は地価の右だった・261110 §6 の追記）。
+    expect(DETAIL_TABS.at(-1)).toBe('hazard')
     // 所得（そこに住む人の稼ぎ）と売上（そこで落ちるお金）は隣のまま。
     expect(DETAIL_TABS.indexOf('sales')).toBe(DETAIL_TABS.indexOf('income') + 1)
   })

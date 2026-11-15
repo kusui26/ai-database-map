@@ -35,6 +35,7 @@ import { useMapLegendHiddenByColumn } from '@/components/coloring/legendPlacemen
 import { useColoringUrlState } from '@/components/map/useColoringUrlState'
 import { useMapUrlState } from '@/components/map/useMapUrlState'
 import { DEFAULT_AREA_RADIUS_M, type AreaFigure } from '@/components/figure/url'
+import { useOnChange } from '@/hooks/useOnChange'
 import { AreaColorControls } from './AreaColorControls'
 import { AreaPicker } from './AreaPicker'
 import { AreaSlots } from './AreaSlots'
@@ -56,8 +57,12 @@ type AreaConditions = {
   readonly setColorBy: (colorBy: string | null) => void
 }
 
-/** 図の条件（エリア・半径・色分け）。半径を替えたら、色分けの指標もその半径で引き直す。 */
-function useAreaConditions(initial: AreaFigure): AreaConditions {
+/**
+ * 図の条件（エリア・半径・色分け）。半径を替えたら、色分けの指標もその半径で引き直す。
+ * 開いたあとに地図の半径が替わったら、図の半径も合わせる（開いた時点の半径では替えない＝開いた図の条件を
+ * 上書きしない・2026-11-14）。FAB は地図の半径で開く（`Fab.tsx`）。
+ */
+function useAreaConditions(initial: AreaFigure, mapRadiusM: RadiusM): AreaConditions {
   const [areas, setAreas] = useState<readonly string[]>(initial.areas)
   const [radiusM, setRadiusM] = useState<RadiusM>(() => radiusOf(initial.radiusM))
   const [colorBy, setColorBy] = useState<string | null>(() =>
@@ -67,6 +72,7 @@ function useAreaConditions(initial: AreaFigure): AreaConditions {
     setRadiusM(next)
     setColorBy((current) => colorByAtRadius(current, next))
   }, [])
+  useOnChange(mapRadiusM, changeRadius)
   return { areas, setAreas, radiusM, changeRadius, colorBy, setColorBy }
 }
 
@@ -266,7 +272,8 @@ export function AreaBody({
   /** 条件が変わったら呼ぶ（開いた直後の既定の補完を含む）。入れ物が URL へ書き戻す。 */
   onConditions?: (figure: AreaFigure) => void
 }) {
-  const conditions = useAreaConditions(initial)
+  const { radiusM: mapRadiusM } = useMapUrlState()
+  const conditions = useAreaConditions(initial, mapRadiusM)
   const { areas, radiusM, colorBy } = conditions
   useEffect(() => {
     onConditions?.({ kind: 'area', areas, radiusM, colorBy })

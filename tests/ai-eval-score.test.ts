@@ -248,9 +248,9 @@ describe('scoreCase: 付けてはいけない引数（forbidInputs・2026-10-09 
 })
 
 describe('EVAL_CASES', () => {
-  it('62 問・id 一意・全問に期待あり', () => {
-    expect(EVAL_CASES.length).toBe(62)
-    expect(new Set(EVAL_CASES.map((c) => c.id)).size).toBe(62)
+  it('63 問・id 一意・全問に期待あり', () => {
+    expect(EVAL_CASES.length).toBe(63)
+    expect(new Set(EVAL_CASES.map((c) => c.id)).size).toBe(63)
     for (const testCase of EVAL_CASES) {
       expect(testCase.query.length).toBeGreaterThan(0)
       expect(Object.keys(testCase.expect).length).toBeGreaterThan(0)
@@ -264,6 +264,7 @@ describe('EVAL_CASES', () => {
       'rank-line-osaka-chuo',
       'rank-line-shinjuku',
       'rank-municipality',
+      'rank-future-2050',
       'rank-near-suburb',
       'rank-near-screenshot',
       'context-followup-landprice',

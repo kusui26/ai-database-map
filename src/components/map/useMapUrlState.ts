@@ -29,10 +29,10 @@ import {
   useQueryState,
   type Options,
 } from 'nuqs'
-import { RADII_M } from '@/shared/constants'
+import { isRadiusM, type RadiusM } from '@/shared/constants'
 import { selectionWrite, type Selection } from './selection'
 
-const DEFAULT_RADIUS_M = 1000
+const DEFAULT_RADIUS_M: RadiusM = 1000
 const SHEET_STATES = ['closed'] as const
 
 const grpParser = parseAsString.withOptions({ history: 'push' })
@@ -43,8 +43,8 @@ export function useMapUrlState() {
   const [grp, setRawGrp] = useQueryState('grp', grpParser)
   const [sheet, setSheet] = useQueryState('sheet', sheetParser)
   const [r, setRadiusM] = useQueryState('r', radiusParser)
-  // 不正な r（6段以外）は既定に丸める
-  const radiusM = RADII_M.some((valid) => valid === r) ? r : DEFAULT_RADIUS_M
+  // 不正な r（6段以外）は既定に丸める（図はこの半径で開き、替われば合わせる・`metrics/useMetricChoice.ts`）
+  const radiusM: RadiusM = isRadiusM(r) ? r : DEFAULT_RADIUS_M
   const sheetClosed = sheet === 'closed'
   // 最後に書いた選択。同じ tick に 2 回選ぶ（2 駅を比べる回答など）とき、描画前の古い値で比べないため。
   const latest = useRef<Selection>({ grp, sheetClosed })

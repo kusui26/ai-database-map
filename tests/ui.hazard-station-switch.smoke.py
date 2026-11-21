@@ -14,16 +14,27 @@
 
 ## やり方
 
-新しい駅（東京）の `/api/hazard/point` を遅らせ、その間の画面を何度も読む。どの時点でも
+新しい駅（東京）の `/api/hazard/point` を遅らせ、その間の画面を見張る。どの時点でも
 
 1. 「災害」タブが東京なら、「もし起きたら」に横浜のカードが無く、「逃げる」は東京の結果が届くまで出ない
 2. 現在地は**同じ「現在地」の移動**なので、新しい位置の結果が届くまで前の結果を出し続ける（ちらつかせない・従来どおり）
 
 ヘッダの災害バッジ（以前の 1 番）は 2026-11-11 に外した（`docs/261110_fix_PLAN.md` §5）。駅の災害は「災害」タブだけに出る。
+
+## 1 の読み方：ヘッダとタブを 1 回で読み、DOM が替わるたびに残す（2026-11-21）
+
+ヘッダの駅名と「災害」タブは、同じ駅の詳細から **1 回の描画で**替わる。以前は 150ms ごとに「タブ → ヘッダ」の順で
+**別々に**読んでいたので、その 2 回の間に駅が替わると、替わる前のタブと替わったあとのヘッダを 1 つの結果として数え、
+画面に一度も出ていない食い違いで落ちていた（main で 12 回中 8 回。DOM の変化を同時に記録すると、12 回とも
+「横浜・横浜のカード」から「東京・カードなし」へ一度に替わっていた）。いまは画面の中に見張り（`MutationObserver`）を置き、
+DOM が替わるたびにヘッダとタブを 1 回で読んで、違う状態になったときだけ残す。読む間に替わることが無く、
+150ms ごとに読むと見落とす短い食い違いも拾える（タブだけ 1 回遅れて替わる不具合をわざと入れたビルドでは、食い違いは
+50〜90ms で、150ms ごとに 1 回で読んでも 3 回とも見落とし、見張りは 3 回とも拾った）。
 """
 
 import json
 import sys
+from itertools import takewhile
 from urllib.parse import quote
 
 from playwright.sync_api import Browser, Page, Route, sync_playwright
@@ -64,31 +75,31 @@ def delay_point(page: Page, place_ja: str) -> None:
     page.route("**/api/hazard/point*", handler)
 
 
-#: ヘッダの駅名（駅カードの見出し）。
-HEADER_JS = """() => {
-  const header = document.querySelector('aside header');
-  if (!header) return { name: '', text: '' };
-  const name = header.querySelector('h2')?.textContent?.trim() ?? '';
-  return { name, text: header.innerText };
-}"""
-
-#: 「災害」タブの本文：「もし起きたら」のカードの見出し（地点名）と、「逃げる」のボタンの有無。
-HAZARD_TAB_JS = """() => {
-  const aside = document.querySelector('aside');
-  const body = aside?.querySelector('.overflow-y-auto');
-  if (!body) return { card: '', escape: false, text: '' };
+#: ヘッダの駅名（駅カードの見出し）と、「災害」タブの「もし起きたら」のカードの見出し（地点名）・「逃げる」のボタンの有無。
+#: **1 回で読む**——別々に読むと、その間に駅が替わった回だけ、画面に無い組み合わせになる（冒頭の「1 の読み方」）。
+SNAPSHOT_JS = """() => {
+  const name = document.querySelector('aside header')?.querySelector('h2')?.textContent?.trim() ?? '';
+  const body = document.querySelector('aside')?.querySelector('.overflow-y-auto');
+  if (!body) return { name, card: '', escape: false };
   const card = body.querySelector('section h2')?.textContent?.trim() ?? '';
   const escape = [...body.querySelectorAll('button[aria-expanded]')].some((b) => b.textContent.includes('の避難先'));
-  return { card, escape, text: body.innerText };
+  return { name, card, escape };
 }"""
 
+#: 駅を替えるあいだの見張り：DOM が替わるたびに SNAPSHOT_JS を読み、違う状態になったときだけ `window.__switchStates` に残す。
+WATCH_JS = f"""() => {{
+  const snapshot = {SNAPSHOT_JS};
+  const states = (window.__switchStates = [snapshot()]);
+  new MutationObserver(() => {{
+    const now = snapshot();
+    const last = states[states.length - 1];
+    if (now.name !== last.name || now.card !== last.card || now.escape !== last.escape) states.push(now);
+  }}).observe(document.body, {{ subtree: true, childList: true, characterData: true }});
+}}"""
 
-def header(page: Page) -> dict:
-    return page.evaluate(HEADER_JS)
 
-
-def hazard_tab(page: Page) -> dict:
-    return page.evaluate(HAZARD_TAB_JS)
+def snapshot(page: Page) -> dict:
+    return page.evaluate(SNAPSHOT_JS)
 
 
 def close(page: Page) -> None:
@@ -132,24 +143,29 @@ def scenario_hazard_tab(browser: Browser) -> None:
     errors: list[str] = []
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.goto(f"{BASE}/?grp={quote(YOKOHAMA)}&tab=hazard", wait_until="networkidle")
-    first = wait_until(page, hazard_tab, lambda t: t["card"] == "横浜")
+    first = wait_until(page, snapshot, lambda s: s["card"] == "横浜")
     check("横浜の「もし起きたら」のカード", first["card"] == "横浜", first["card"])
     check("横浜は「逃げる」が出る（該当がある駅）", first["escape"], "")
     delay_point(page, "東京")
+    page.evaluate(WATCH_JS)
     switch_station(page, "東京")
-    seen = []
-    for _ in range((SLOW_MS - 1_000) // SAMPLE_MS):
-        seen.append({**hazard_tab(page), "name": header(page)["name"]})
-        page.wait_for_timeout(SAMPLE_MS)
-    under_tokyo = [t for t in seen if t["name"] == "東京"]
-    check("遅らせているあいだにヘッダが東京になる", len(under_tokyo) > 0, f"{len(under_tokyo)}/{len(seen)} 回")
-    check("東京の画面に、横浜の「もし起きたら」を一度も出さない", not [t for t in under_tokyo if t["card"] == "横浜"], "")
+    page.wait_for_timeout(SLOW_MS - 1_000)
+    states = page.evaluate("() => window.__switchStates")
+    # 東京の結果が届く前まで（届いたあとは、東京のカードと「逃げる」が出てよい）。
+    before_tokyo = list(takewhile(lambda s: s["card"] != "東京", states))
+    under_tokyo = [s for s in before_tokyo if s["name"] == "東京"]
+    check(
+        "遅らせているあいだにヘッダが東京になる",
+        len(under_tokyo) > 0,
+        f"画面の状態 {len(states)} つ・うち東京のヘッダ {len(under_tokyo)} つ",
+    )
+    check("東京の画面に、横浜の「もし起きたら」を一度も出さない", not [s for s in states if s["name"] == "東京" and s["card"] == "横浜"], "")
     check(
         "東京の結果が届くまで「逃げる」を出さない（横浜の災害の種別で探させない）",
-        not [t for t in under_tokyo if t["escape"]],
-        f"{sum(1 for t in under_tokyo if t['escape'])} 回",
+        not [s for s in under_tokyo if s["escape"]],
+        f"{sum(1 for s in under_tokyo if s['escape'])} 回",
     )
-    done = wait_until(page, hazard_tab, lambda t: t["card"] == "東京")
+    done = wait_until(page, snapshot, lambda s: s["card"] == "東京")
     check("東京の結果が届けば、東京のカード", done["card"] == "東京", done["card"])
     page.screenshot(path=f"{OUT}/station-switch-hazard-tab.png")
     check("画面のエラーなし", not errors, "; ".join(errors))

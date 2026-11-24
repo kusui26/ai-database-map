@@ -8,3 +8,4 @@ geopandas>=1.1      # 原典（シェープファイル）の読み取り（buil
 rasterio>=1.4      # ポリゴン → 250m 格子のラスタ化（build_hazard_mesh）
 pillow>=11.0       # 公式タイルの画素照合（validate_hazard_mesh --tiles）
 pyarrow>=15        # 将来推計人口メッシュ（R6）の属性のキャッシュ（area_mesh.py・parquet）
+scipy>=1.11        # 駅 × 半径の面積按分のセルの KD 木（station_radii.py・ノートブック（４）と同じ）

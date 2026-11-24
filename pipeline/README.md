@@ -279,6 +279,50 @@ python3 pipeline/estat_api_test.py --live                  # 本物の e-Stat �
 | `estat_api.py` | e-Stat の呼び方の 1 か所：appId の読み方（`.env`）・appId を足して呼ぶ・STATUS を見る・再試行・失敗の文は型・HTTP の状態・STATUS と ERROR_MSG だけ（念のため appId を伏せる） |
 | `estat_api_test.py` | 失敗の言い方（HTTP の誤り・接続の失敗・時間切れ・e-Stat の誤り・ほかの例外に紛れた appId）・appId はここで足す・取得スクリプトは appId を自分で扱わない・`--live` で本物にも |
 
+## 人口の年齢 — 生産年齢人口・高齢化率・年齢別の将来推計（PR-1・261124）
+
+駅 × 半径の年齢 4 区分（0〜14・15〜64・65〜74・75 歳以上）を、国勢調査 250m メッシュ（2015・2020）と将来推計人口メッシュ R6
+（2025〜2050）から作る。設計は `docs/261122_PLAN_population_improvement.md`、データの説明は `docs/population_mesh.md` §12。
+**PR-1 は `data/derived/` に作るところまで**（カタログと DB は PR-2、グラフ用の表の DB は PR-3）。
+
+```bash
+python3 pipeline/fetch_age_mesh.py            # 国勢調査 250m の年齢（統計 GIS・151 区画 × 2 年・約 8 分・appId 不要）
+python3 pipeline/fetch_area_stats.py          # 市区町村の年齢の表 4 つ（2015・2020 × 原数値・不詳補完値）もここで取る
+python3 pipeline/build_station_age.py         # セルの年齢 → 駅 × 半径（約 10 分）。区分の和 ＝ 既存の総数を全駅で照合してから書く
+python3 pipeline/validate_station_age.py      # 別の道で確かめる（全 PASS で exit 0）
+python3 pipeline/station_radii_test.py --all  # 按分がノートブックと同じ（既存の人口の列 14 組を全駅で再現・約 5 分）
+python3 pipeline/station_age_test.py          # 部品の作り例（数秒）
+python3 pipeline/station_age_fault_test.py    # わざと壊すと落ちる（本物のデータ・121 駅・約 10 分）
+```
+
+| ファイル | 役割 |
+|---|---|
+| `age_rules.py` | **手で編集するのはここだけ**：年・区分・統計 GIS の表と列（2015 年と 2020 年で番号が違う）・市区町村の表と年齢のコード・コードの読み替え・しきい値・出力の列 |
+| `fetch_age_mesh.py` | 統計 GIS から取る。区画ごとに見出し・既存の API のファイルとの 1 人単位の一致・セルの決まりを確かめ、崩れたら保存しない |
+| `age_muni.py` | 年齢不詳の割り振り比（方式 B：補完値 − 原数値）と、セルの市区町村（中心を N03 に空間結合・控えは `data/area_raw/mesh250_n03.parquet`） |
+| `age_cells.py` | セルの年齢：国勢調査は秘匿したセルの組を戻して不詳を割り振る、R6 は真の総数 × 年齢構成（`*` は合算先の構成） |
+| `station_radii.py` | 駅 × 半径の面積按分。ノートブック（４）を**足し算の順番まで**同じに移した（年齢の和を既存の総数に 1 人単位で合わせるため） |
+| `age_integers.py` | 整数にする：区分の和 ＝ 総数・0 以上・半径を広げて減らない |
+| `build_station_age.py` | 組み立て・照合・書き出し |
+| `validate_station_age.py` | 別の道で確かめる：形・和・区分・第 2 段からの作り直し・割合・セル・全国・市区町村・既知の駅 |
+
+**罠**
+
+- **国勢調査のメッシュの秘匿**：人口の少ないセルの年齢は合算先のセルに足し上げてあり、総数だけがセルごとの値。e-Stat の API には
+  合算先が無いので、統計 GIS のファイル（`HTKSAKI`）を使う。セルごとに 不詳 ＝ 総数 − 0〜14 − 15 歳以上 とすると、
+  駅の 500m 圏で最大 24% ずれる（`docs/261122_PLAN_population_improvement.md` §2.8）
+- **2015 年と 2020 年で項目の番号が違う**（2020 年は「18 歳以上」が入り、65 歳以上が 16 列目 → 19 列目）。取得と読み込みのたびに
+  2 行目の見出しで確かめる
+- **R6 の年齢の列（`PT00` 以下）は秘匿を当てた値**で、総数は `PTN`。年齢構成は 4 区分の和で割る（`PT00` は最大 0.0001 人ずれ、
+  セルの和が `PTN` からずれる）
+- 統計 GIS の zip は `…_mesh250/gis/` に置く（ノートブックが拾う `mesh*.csv`・所得の重みの `age1564_*.csv` と混ざらない）
+- 読み込みの控え（`data/area_raw/census_age_gis_{年}.parquet`・`r6_age.parquet`・`mesh250_n03.parquet`）は消しても作り直せる。
+  N03 を新しい年版にしたら、`mesh250_n03.parquet` は自動で作り直す
+
+**生成物**（`data/derived/`・gitignore）：`station_age.csv`（9,273 駅 × 第 1 段 66 列・フラグ 12 列）・`station_age_profiles.csv`
+（445,104 行＝駅 × 6 半径 × 8 年の 4 区分と、実績の年の補う前の年齢不詳）・`age_cells_census.parquet`・`age_cells_r6.parquet`
+（セルの値。エリアの要約の沿線（PR-5）でも使う）。
+
 ## 独立検証（260812）
 
 `data/derived/` の生成は**すべてノートブック 1 回で完結する**（`script/create_dataset_for_AI_Database_Map.ipynb`）。

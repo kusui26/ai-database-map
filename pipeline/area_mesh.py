@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import glob
 import io
+import re
 import tempfile
 import zipfile
 from pathlib import Path
@@ -44,6 +45,8 @@ ECON_2021_COLUMNS = ("T001162002", "T001162023")
 R6_ZIP = DATA_DIR / "250mメッシュ別将来推計人口データ（R6国政局推計）" / "250m_mesh_2024_SHP.zip"
 R6_CACHE = RAW_DIR / "r6_ptn.parquet"
 R6_COLUMNS = tuple(f"PTN_{y}" for y in PRED_YEARS)
+#: 県別 zip の名前（`250m_mesh_2024_13_SHP.zip`）の県のコード。
+R6_PREF_IN_NAME = re.compile(r"_(\d{2})_SHP\.zip$")
 
 _TO_ALBERS = Transformer.from_crs("EPSG:6668", ALBERS_PROJ, always_xy=True)
 
@@ -103,8 +106,11 @@ def read_econ_mesh(year: int) -> pd.DataFrame:
     return mesh
 
 
-def _read_r6_from_zip() -> pd.DataFrame:
-    """R6 の入れ子 zip（外 zip → 県別 zip → shp）から、属性だけを読む（ジオメトリはコードから作る）。"""
+def read_r6_attributes(columns: list[str]) -> pd.DataFrame:
+    """R6 の入れ子 zip（外 zip → 県別 zip → shp）から、属性だけを読む（ジオメトリはコードから作る）。
+
+    `pref` に県のコード（県別 zip の名前の 2 桁）を足す。県をまたぐセルは県ごとの行のまま（同じ MESH_ID が 2 行）。
+    """
     import pyogrio
 
     if not R6_ZIP.exists():
@@ -118,15 +124,22 @@ def _read_r6_from_zip() -> pd.DataFrame:
                 shp = [n for n in zf.namelist() if n.endswith(".shp")]
             if len(shp) != 1:
                 raise SystemExit(f"{name} の中に shp が 1 つではない: {shp}")
-            frame = pyogrio.read_dataframe(
-                f"zip://{inner}!{shp[0]}", columns=["MESH_ID", "SHICODE", *R6_COLUMNS], read_geometry=False
-            )
-            frames.append(frame)
+            pref = R6_PREF_IN_NAME.search(name)
+            if pref is None:
+                raise SystemExit(f"{name}: 県のコードを名前から読めない")
+            frame = pyogrio.read_dataframe(f"zip://{inner}!{shp[0]}", columns=columns, read_geometry=False)
+            frames.append(frame.assign(pref=pref.group(1)))
             inner.unlink()
     table = pd.concat(frames, ignore_index=True)
     table["MESH_ID"] = table["MESH_ID"].map(_code_text)
-    table["SHICODE"] = table["SHICODE"].map(_code_text).str.zfill(5)
+    if "SHICODE" in table.columns:
+        table["SHICODE"] = table["SHICODE"].map(_code_text).str.zfill(5)
     return table
+
+
+def _read_r6_from_zip() -> pd.DataFrame:
+    """R6 の総数（MESH_ID, SHICODE, PTN_2020 … PTN_2070）。"""
+    return read_r6_attributes(["MESH_ID", "SHICODE", *R6_COLUMNS]).drop(columns="pref")
 
 
 def _code_text(value: object) -> str:

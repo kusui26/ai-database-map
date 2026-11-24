@@ -4,6 +4,9 @@
 取る表は `area_rules.ESTAT_TABLES`（国勢調査 1995〜2025・経済センサス 2012/2016/2021・面積）。あわせて、推計の照合に
 使う社人研の結果表（xlsx）も落とす（照合だけに使い、配信しない）。
 
+2026-11-24（人口の年齢 PR-1）：市区町村の年齢の表 4 つ（2015・2020 年 × 原数値・不詳補完値・`age_rules.MUNI_AGE_TABLES`）も
+ここで取る。駅の年齢の年齢不詳を割り振る比の元（`age_muni.py`）で、エリアの要約（PR-5）でも使う。
+
     python3 pipeline/fetch_area_stats.py           # 未取得の表だけ取る
     python3 pipeline/fetch_area_stats.py --force   # すべて取り直す
 
@@ -23,6 +26,7 @@ from pathlib import Path
 import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from age_rules import MUNI_AGE_TABLES, MuniAgeTable  # noqa: E402
 from area_common import ESTAT_DIR, IPSS_XLSX, ROOT, numeric  # noqa: E402
 from area_rules import (  # noqa: E402
     ANCHORS,
@@ -41,6 +45,12 @@ API_LIMIT = 100_000
 TIMEOUT_S = 180
 #: 再試行の間隔（試行の回数 × この秒数・大きい表なので共通の既定より長め）。
 RETRY_WAIT_S = 3.0
+#: 市区町村の年齢の表（名前 → 規則）。取得はエリアの表と同じ作法で行う。
+AGE_TABLES: dict[str, MuniAgeTable] = {table.name: table for table in MUNI_AGE_TABLES}
+#: 取る表：エリアの公表値と、市区町村の年齢。
+TABLES: tuple[EstatTable, ...] = ESTAT_TABLES + tuple(
+    EstatTable(table.name, table.stats_data_id, table.params, table.titleJa) for table in MUNI_AGE_TABLES
+)
 
 
 def get_json(params: dict[str, str | int], context: str) -> dict[str, object]:
@@ -97,9 +107,23 @@ def _national(payload: dict[str, object], **where: str) -> float | None:
     return None
 
 
+def check_age_national(table: MuniAgeTable, payload: dict[str, object]) -> list[str]:
+    """市区町村の年齢の表：全国の総数が公表値と、5 歳階級（と年齢「不詳」）の和が総数と一致する。"""
+    codes = [code for band_codes in table.codes.values() for code in band_codes] + ([table.unknown] if table.unknown else [])
+    total = _national(payload, **{table.age_class: table.total_code})
+    parts = [_national(payload, **{table.age_class: code}) for code in codes]
+    want = ANCHORS[("jp", f"pop_{table.year}")]
+    summed = sum(part or 0.0 for part in parts)
+    ok = total is not None and round(total) == want and None not in parts and round(summed) == round(total)
+    print(f"    {'OK  ' if ok else 'FAIL'} 全国の総数 {total} / 公表値 {want:,}・年齢の和 {summed:,.0f}")
+    return [] if ok else [f"{table.name}: 全国の総数 {total}・年齢の和 {summed:,.0f}（公表値 {want:,}）"]
+
+
 def check_national(table: EstatTable, payload: dict[str, object]) -> list[str]:
     """取得した表の全国の値を、既知の公表値（area_rules.ANCHORS）と照合する。"""
     checks: list[tuple[str, float | None, int]] = []
+    if table.name in AGE_TABLES:
+        return check_age_national(AGE_TABLES[table.name], payload)
     if table.name == "ssds_pref_pop":
         for year in (1995, 2000, 2005, 2010, 2015, 2020):
             checks.append((f"人口 {year}", _national(payload, cat01=SSDS_POP_ITEM, time=f"{year}100000"),
@@ -150,7 +174,7 @@ def main() -> int:
 
     ESTAT_DIR.mkdir(parents=True, exist_ok=True)
     failures: list[str] = []
-    for table in ESTAT_TABLES:
+    for table in TABLES:
         path = ESTAT_DIR / f"{table.name}.json"
         if path.exists() and not args.force:
             print(f"  skip {table.name}（取得済み）")
@@ -166,7 +190,7 @@ def main() -> int:
     if failures:
         print("\n".join(["照合が崩れた（保存していない）:", *failures]))
         return 1
-    print(f"OK {ESTAT_DIR.relative_to(ROOT)}/ に {len(ESTAT_TABLES)} 表")
+    print(f"OK {ESTAT_DIR.relative_to(ROOT)}/ に {len(TABLES)} 表")
     return 0
 
 

@@ -5,8 +5,8 @@ CSV（`data/derived/`・gitignore）からアプリの契約物を生成する P
 
 ## メトリクス・カタログ（P1）
 
-`data/derived/station_dataset.csv`（499列）→ `src/shared/catalog/catalog.json`
-（488 値列エントリ ＋ 11 駅属性）を生成する。**カタログはコード（契約）としてコミットする**
+`data/derived/station_dataset.csv` の右に `station_age.csv` を駅で連結した表（884 列・`station_columns.py`）→
+`src/shared/catalog/catalog.json`（874 値列エントリ ＋ 10 駅属性）を生成する。**カタログはコード（契約）としてコミットする**
 （`docs/plan_fable.md` §2.2-③「コードが正・DB はミラー」）。UI 選択肢・API 検証・AI ツール記述は
 すべてこの 1 ファイルから派生する。
 
@@ -18,7 +18,8 @@ python3 pipeline/validate_catalog.py   # CSV・dataset.md §2 と全数照合（
 | ファイル | 役割 |
 |---|---|
 | `catalog_rules.py` | 列名（`docs/dataset.md` §2 命名規約）→ `CatalogEntry` の変換ルール（ラベル・単位・出典の単一定義元） |
-| `build_catalog.py` | CSV ヘッダを読み、カタログ JSON と日本語ラベル一覧を出力 |
+| `station_columns.py` | 値の表の読み方：`station_dataset.csv`（ノートブック）の右に `station_age.csv`（`build_station_age.py`）を `grp` で連結する。カタログ・投入・照合が同じ表を読む（261124） |
+| `build_catalog.py` | 連結した表の見出しを読み、カタログ JSON と日本語ラベル一覧を出力 |
 | `validate_catalog.py` | 生成物を CSV ヘッダ・`dataset.md` §2 のカテゴリ別件数に**独立照合**（生成ロジックのバグも検出） |
 
 データ更新やデータセット拡張（`dataset.md` §3 の定石）でCSV列が増減したら、`build` → `validate`
@@ -283,7 +284,7 @@ python3 pipeline/estat_api_test.py --live                  # 本物の e-Stat �
 
 駅 × 半径の年齢 4 区分（0〜14・15〜64・65〜74・75 歳以上）を、国勢調査 250m メッシュ（2015・2020）と将来推計人口メッシュ R6
 （2025〜2050）から作る。設計は `docs/261122_PLAN_population_improvement.md`、データの説明は `docs/population_mesh.md` §12。
-**PR-1 は `data/derived/` に作るところまで**（カタログと DB は PR-2、グラフ用の表の DB は PR-3）。
+PR-1 で `data/derived/` に作り、PR-2 でカタログと DB に入れた（第 1 段の 78 列）。グラフ用の表（第 2 段）の DB は PR-3。
 
 ```bash
 python3 pipeline/fetch_age_mesh.py            # 国勢調査 250m の年齢（統計 GIS・151 区画 × 2 年・約 8 分・appId 不要）
@@ -293,6 +294,13 @@ python3 pipeline/validate_station_age.py      # 別の道で確かめる（全 P
 python3 pipeline/station_radii_test.py --all  # 按分がノートブックと同じ（既存の人口の列 14 組を全駅で再現・約 5 分）
 python3 pipeline/station_age_test.py          # 部品の作り例（数秒）
 python3 pipeline/station_age_fault_test.py    # わざと壊すと落ちる（本物のデータ・121 駅・約 10 分）
+
+# PR-2：カタログと DB（年齢の列は末尾に足すので、既存の id と値は動かない）
+python3 pipeline/build_catalog.py && python3 pipeline/validate_catalog.py
+python3 pipeline/load_to_supabase.py --append  # 年齢の 78 列だけを足す（612,683 行・フラグの 0 は入れない）
+python3 pipeline/validate_load.py              # 全 PASS（(e) の基準は Pro の 2,048MB）
+python3 pipeline/golden_station_age_test.py    # 年齢の 78 列の全セルを CSV と照合（float4 の値どうし・約 10 秒）
+python3 pipeline/golden_rpc_test.py            # 9d：年齢の束・順位（低母数の除外）・フラグ・散布
 ```
 
 | ファイル | 役割 |
@@ -305,6 +313,7 @@ python3 pipeline/station_age_fault_test.py    # わざと壊すと落ちる（�
 | `age_integers.py` | 整数にする：区分の和 ＝ 総数・0 以上・半径を広げて減らない |
 | `build_station_age.py` | 組み立て・照合・書き出し |
 | `validate_station_age.py` | 別の道で確かめる：形・和・区分・第 2 段からの作り直し・割合・セル・全国・市区町村・既知の駅 |
+| `golden_station_age_test.py` | 投入後（PR-2）：`metric_columns` がカタログと id・key・meta で一致・年齢の列は末尾（797〜874）・全セルが CSV と一致・フラグは 1 の行だけ・カタログに無い列の行が無い |
 
 **罠**
 
@@ -318,6 +327,9 @@ python3 pipeline/station_age_fault_test.py    # わざと壊すと落ちる（�
 - 統計 GIS の zip は `…_mesh250/gis/` に置く（ノートブックが拾う `mesh*.csv`・所得の重みの `age1564_*.csv` と混ざらない）
 - 読み込みの控え（`data/area_raw/census_age_gis_{年}.parquet`・`r6_age.parquet`・`mesh250_n03.parquet`）は消しても作り直せる。
   N03 を新しい年版にしたら、`mesh250_n03.parquet` は自動で作り直す
+- **`station_age.csv` が無い・駅が合わないと、カタログ・投入・照合は止まる**（連結して読むため）。ノートブックで
+  `station_dataset.csv` を作り直したら、`build_station_age.py` も流し直す
+- 年齢のキーは `pop_` で始めない（AI の解決器の前方一致で総数の `pop` に解ける）。新しい列は CSV の末尾に足す（カタログの id は列の並び）
 
 **生成物**（`data/derived/`・gitignore）：`station_age.csv`（9,273 駅 × 第 1 段 66 列・フラグ 12 列）・`station_age_profiles.csv`
 （445,104 行＝駅 × 6 半径 × 8 年の 4 区分と、実績の年の補う前の年齢不詳）・`age_cells_census.parquet`・`age_cells_r6.parquet`

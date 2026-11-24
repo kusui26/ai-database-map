@@ -6,7 +6,7 @@ Step1 の中核資産である駅×半径データセットの**全体像・全�
 
 ## 1. 概要
 
-- **生成物**：`script/create_dataset_for_AI_Database_Map.ipynb` → **`data/derived/station_dataset.csv`（9,273 駅グループ × 806 列）**。あわせて監査明細 `station_operator_detail.csv`（1群×1社）、地価パネル `station_landprice_yearly.csv`（ロング形式）、路線 `station_routes.csv`（1群×1社×1路線・10,424 行）を出力。利用者が呼ぶ路線（運行系統）は別の原典（駅データ.jp）から `pipeline/build_lines.py` が `lines.csv`・`line_stations.csv` を作る（261008 L1・`pipeline/README.md`）。駅ではなく**エリア**（行政区域・沿線）を単位とした人口・事業所・従業者は、`pipeline/build_area_values.py`（行政区域の公表値）と `build_line_corridors.py`（沿線のメッシュ按分）が作る（261010 B5a・[`area_values.md`](./area_values.md)）。**駅の値を足してエリアの値にしない**（円が重なる）。
+- **生成物**：`script/create_dataset_for_AI_Database_Map.ipynb` → **`data/derived/station_dataset.csv`（9,273 駅グループ × 806 列）**。あわせて監査明細 `station_operator_detail.csv`（1群×1社）、地価パネル `station_landprice_yearly.csv`（ロング形式）、路線 `station_routes.csv`（1群×1社×1路線・10,424 行）を出力。年齢の 78 列は `pipeline/build_station_age.py` が `station_age.csv` に作り、カタログと投入では駅で連結して読む（§2.14）。利用者が呼ぶ路線（運行系統）は別の原典（駅データ.jp）から `pipeline/build_lines.py` が `lines.csv`・`line_stations.csv` を作る（261008 L1・`pipeline/README.md`）。駅ではなく**エリア**（行政区域・沿線）を単位とした人口・事業所・従業者は、`pipeline/build_area_values.py`（行政区域の公表値）と `build_line_corridors.py`（沿線のメッシュ按分）が作る（261010 B5a・[`area_values.md`](./area_values.md)）。**駅の値を足してエリアの値にしない**（円が重なる）。
   - **P5d（2026-07-09）**：`station_dataset.csv` を「すべてを含む単一ベース」に統一。地価中央値を**年次系列 `lp_med_{年}_{R}`（2007–2026・単年 `lp_med_{R}` を置換）**にし、運営会社名を `operators`（1群×1社を pax 規模降順で `・` 連結した単一文字列）として畳み込む。監査 CSV（yearly / operator_detail）は温存。UI/API/AI はカタログ再生成＋再ロードで自動追従。
 - **単位＝駅グループ（`grp`）**：同名・近接駅を 1km クラスタで統合した駅単位（`docs/passenger_aggregation.md`）。1 行 1 駅グループ。
 - **半径**：**500m / 1km / 2km / 5km / 10km / 20km**（過去プロジェクトの 1/2/5/10km を刷新・統一。※地価のみ後述の理由で 500m–10km）。
@@ -28,9 +28,12 @@ Step1 の中核資産である駅×半径データセットの**全体像・全�
 
 ---
 
-## 2. 全カラム一覧（806列）
+## 2. 全カラム一覧（884列）
 
 半径サフィックス `{R}` ∈ `{500m, 1km, 2km, 5km, 10km, 20km}`。増減率（`*_gr_*`）は分母年の値が 0 の駅で NaN。カウント・水準は 0 を有意値として保持（NaN にしない）。
+
+値の表は `station_dataset.csv`（§2.1〜2.13・806 列・ノートブックが作る）の右に、`station_age.csv`（§2.14・78 列・
+`pipeline/build_station_age.py` が作る）を駅（`grp`）で連結したもの（`pipeline/station_columns.py`・2026-11-24）。
 
 ### 2.1 識別・駅属性（10列）
 | 列 | 型 | 説明 |
@@ -166,7 +169,22 @@ N03 2026 年版・政令市は市名＋区名、最近傍フォールバック�
 > 2021年調査＝**2020年＝コロナ 1 年目**）。小売は卸売を含まず、娯楽は本社の一括計上を除く。
 > カタログ上は売上 66 が `sales`、産業別従業者 60 が `employee` カテゴリ（実測なので）。
 
-> **合計**：10＋**19**＋42＋54＋36＋114＋60＋6＋153＋36＋66＋72＋**138** ＝ **806 列**（識別 10・乗降 19〔flag_yoy/flag_covid を信頼性フラグ＝乗降指標へ再分類・260727、flag_covid_lown を追加・260731〕。P5d：地価 58→153〔lp_med 年次 100〕。260812：所得 72 を追加。260816：売上 126 を追加。260817：娯楽の集計定義フラグ 12 を追加）。
+### 2.14 人口の年齢（国勢調査 250m・R6・年齢不詳を補って面積按分・78列・`station_age.csv`）→ `docs/population_mesh.md` §12
+| 列パターン | 数 | 型 | 説明 |
+|---|---|---|---|
+| `pop15_64_2020_{R}` | 6 | int | 生産年齢人口（15〜64 歳・年齢不詳を市区町村の不詳補完値に合わせて割り振った値）|
+| `pop{15_64,65,75,0_14}_share_2020_{R}` | 24 | float% | 15〜64 歳・65 歳以上（高齢化率）・75 歳以上・0〜14 歳の割合（0〜100）|
+| `pop15_64_gr_2020_2015_{R}` | 6 | float% | 15〜64 歳の増減率（除外は `pop_lowbase_2015_{R}`）|
+| `pop15_64_gr_pred_2024_{Y}_{R}` | 18 | float% | 15〜64 歳の将来増減率（2020 → R6 の `Y` ∈ {2030,2040,2050}・分母は 2020 年の補った値）|
+| `pop65_gr_pred_2024_2050_{R}` | 6 | float% | 65 歳以上の将来増減率 2020→2050（除外は `pop65_lowbase_2020_{R}`）|
+| `pop65_share_pred_2024_2050_{R}` | 6 | float% | 将来の高齢化率（2050 年・R6）|
+| `pop65_lowbase_2020_{R}` | 6 | int8 | 2020 年の 65 歳以上 **< 50 人**（65 歳以上の将来増減率の**除外用**）|
+| `pop_ageunk_2020_{R}` | 6 | int8 | 2020 年の年齢不詳（補う前）**≥ 10%**（年齢の指標の**注意用**・除外しない）|
+
+> 割合と 15〜64 歳の将来増減率の除外は既存の `pop_lowbase_2020_{R}`。キーは `pop_` で始めない（AI の解決器の前方一致で
+> 総数の `pop` にならない）。カタログ上は実績の 48 列が `population`、将来の 30 列が `population_forecast`。
+
+> **合計**：10＋**19**＋42＋54＋36＋114＋60＋6＋153＋36＋66＋72＋**138**＋**78** ＝ **884 列**（識別 10・乗降 19〔flag_yoy/flag_covid を信頼性フラグ＝乗降指標へ再分類・260727、flag_covid_lown を追加・260731〕。P5d：地価 58→153〔lp_med 年次 100〕。260812：所得 72 を追加。260816：売上 126 を追加。260817：娯楽の集計定義フラグ 12 を追加。261124：人口の年齢 78 を追加〔`station_age.csv`〕）。
 
 ---
 
@@ -199,7 +217,7 @@ N03 2026 年版・政令市は市名＋区名、最近傍フォールバック�
 
 ## 5. スキーマ設計への含意（Step1→Step2）
 
-- 現状 CSV は 806 列の**ワイド表**だが、DB では **正規化（`station_metrics(station_id, metric, radius_m, year, value)` 等）＋メトリクス・カタログ表**へ落とす前提（`.claude/CLAUDE.md` §3）。上記の命名規約 `{接頭辞}_{年}_{半径}` がそのまま `(metric, year, radius)` の 3 軸に対応する。
+- 現状 CSV は 884 列（`station_dataset.csv` 806 ＋ `station_age.csv` 78）の**ワイド表**だが、DB では **正規化（`station_metrics(station_id, metric, radius_m, year, value)` 等）＋メトリクス・カタログ表**へ落とす前提（`.claude/CLAUDE.md` §3）。上記の命名規約 `{接頭辞}_{年}_{半径}` がそのまま `(metric, year, radius)` の 3 軸に対応する。
 - **メトリクス・カタログ**（指標・単位・ラベル・半径・年・信頼性フラグの定義）は、UI と Gemini が同一の意味で消費するための単一の真実。本カラム一覧がその原型。
 - **`station_values` の格納規約（260816）**：信頼性フラグ（`kind='flag'`）の **値 0 は行として格納しない**（**行が無い＝0**）。フラグの 8 割超は 0 で、1 行あたり 74.5 バイト（本体＋索引）を無情報のまま消費するため。消費側は 3 つとも「行が無い」を 0 と同義に扱う：ランキング RPC は `fv.value is distinct from 1`（left join の NULL）、散布 RPC は `max(value) filter (...)` の NULL、駅詳細は `values.get(key) === 1`。**新しいフラグ列は実質ゼロコストで足せる**（`pipeline/load_to_supabase.py` の `drop_flag_zeros`・`validate_load.py` (f) が不変条件を検証）。
 

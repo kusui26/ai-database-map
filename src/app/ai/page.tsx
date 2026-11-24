@@ -87,7 +87,7 @@ const TOOLS: readonly { name: string; desc: string }[] = [
     name: 'find_evacuation_sites / find_escape_direction',
     desc: '指定緊急避難場所・区域外への向き',
   },
-  { name: 'get_metrics_catalog', desc: '自己記述カタログ（806 列の正確なキー・単位・年次）' },
+  { name: 'get_metrics_catalog', desc: '自己記述カタログ（884 列の正確なキー・単位・年次）' },
 ]
 
 /** 冒頭に置く実例。**実際の受け入れテストの応答から抜粋**した値で、作文ではない

@@ -77,6 +77,17 @@ SRC: dict[str, tuple[str, str]] = {
         "国土数値情報 将来推計人口メッシュ（国土交通省 国土政策局・R6/H30推計）",
         "CC BY 4.0 相当（国土数値情報 利用約款）",
     ),
+    # 人口の年齢（2026-11-24・docs/population_mesh.md §12）。年齢不詳を補った値なので、補い方を出典に書く。
+    "population_age": (
+        "総務省 国勢調査 地域メッシュ統計（e-Stat 統計GIS・2015/2020年）"
+        "※年齢不詳は市区町村の不詳補完値に合わせて割り振った",
+        "CC BY 4.0（政府統計・出典明記で商用可）",
+    ),
+    "population_age_forecast": (
+        "国土数値情報 将来推計人口メッシュ（R6推計）＋ 総務省 国勢調査 地域メッシュ統計（2020年・増減率の分母）"
+        "※年齢不詳は市区町村の不詳補完値に合わせて割り振った",
+        "CC BY 4.0 相当（国土数値情報 利用約款）／CC BY 4.0（政府統計）",
+    ),
     "land_price": (
         "国土数値情報「地価公示」(L01・国土交通省 土地鑑定委員会)",
         "CC BY 4.0 相当（国土数値情報 利用約款・出典明記で商用可）",
@@ -145,6 +156,15 @@ SALES_INDUSTRY: dict[str, str] = {
     "life": "生活関連・娯楽",
 }
 
+# --- 人口の年齢の語彙（2026-11-24・docs/261122_PLAN_population_improvement.md §3） -----------
+#: 年齢の割合のファミリ → (指標名, 括弧の中の年齢の言い方)。統計の言葉とふだんの言葉の両方を書く（§3.3）。
+AGE_SHARES: dict[str, tuple[str, str]] = {
+    "pop15_64_share": ("生産年齢人口の割合", "15〜64歳・"),
+    "pop65_share": ("高齢化率", "65歳以上の割合・"),
+    "pop75_share": ("75歳以上の割合", ""),
+    "pop0_14_share": ("年少人口の割合", "0〜14歳・"),
+}
+
 
 @dataclass(frozen=True)
 class CatalogEntry:
@@ -209,6 +229,67 @@ def _make(
     )
 
 
+def _age_entry(col: str) -> CatalogEntry | None:
+    """人口の年齢の実績（2015・2020 年）と、そのフラグ。該当しなければ None。"""
+    m = re.fullmatch(rf"pop15_64_(\d{{4}})_({RT})", col)
+    if m:
+        y, r = int(m[1]), m[2]
+        return _make(col, "pop15_64", "level", "population", f"生産年齢人口（15〜64歳・{y}年・{r}圏）", "人", "int",
+                     radiusM=RADIUS_M[r], year=y, notice=f"pop_ageunk_{y}_{r}", srckey="population_age")
+    m = re.fullmatch(rf"({'|'.join(AGE_SHARES)})_(\d{{4}})_({RT})", col)
+    if m:
+        base, y, r = m[1], int(m[2]), m[3]
+        name, ages = AGE_SHARES[base]
+        return _make(col, base, "ratio", "population", f"{name}（{ages}{y}年・{r}圏）", "%", "percent1",
+                     radiusM=RADIUS_M[r], year=y, flag=f"pop_lowbase_{y}_{r}", notice=f"pop_ageunk_{y}_{r}",
+                     srckey="population_age")
+    m = re.fullmatch(rf"pop15_64_gr_(\d{{4}})_(\d{{4}})_({RT})", col)
+    if m:
+        new, old, r = int(m[1]), int(m[2]), m[3]
+        return _make(col, "pop15_64_gr", "growth", "population",
+                     f"生産年齢人口増減率（15〜64歳・{old}→{new}年・{r}圏）", "%", "percent1",
+                     radiusM=RADIUS_M[r], year=new, yearBase=old, flag=f"pop_lowbase_{old}_{r}",
+                     notice=f"pop_ageunk_{new}_{r}", srckey="population_age")
+    m = re.fullmatch(rf"pop65_lowbase_(\d{{4}})_({RT})", col)
+    if m:
+        y, r = int(m[1]), m[2]
+        return _make(col, "pop65_lowbase", "flag", "population",
+                     f"65歳以上人口 低基準フラグ（{y}年・{r}圏／65歳以上<50人）", None, None,
+                     radiusM=RADIUS_M[r], year=y, rankable=False, srckey="population_age")
+    m = re.fullmatch(rf"pop_ageunk_(\d{{4}})_({RT})", col)
+    if m:
+        y, r = int(m[1]), m[2]
+        return _make(col, "pop_ageunk", "flag", "population",
+                     f"年齢不詳 注意フラグ（{y}年・{r}圏／補う前の年齢不詳≥10%）", None, None,
+                     radiusM=RADIUS_M[r], year=y, rankable=False, srckey="population_age")
+    return None
+
+
+def _age_forecast_entry(col: str) -> CatalogEntry | None:
+    """人口の年齢の将来（R6・2020 → 各年）。該当しなければ None。2050 年の高齢化率は R6 だけで作るので注意は付けない。"""
+    m = re.fullmatch(rf"pop15_64_gr_pred_2024_(\d{{4}})_({RT})", col)
+    if m:
+        y, r = int(m[1]), m[2]
+        return _make(col, "pop15_64_gr_pred", "growth", "population_forecast",
+                     f"生産年齢人口の将来増減率（15〜64歳・2020→{y}年・R6推計・{r}圏）", "%", "percent1",
+                     radiusM=RADIUS_M[r], year=y, yearBase=2020, vintage=2024, flag=f"pop_lowbase_2020_{r}",
+                     notice=f"pop_ageunk_2020_{r}", srckey="population_age_forecast")
+    m = re.fullmatch(rf"pop65_gr_pred_2024_(\d{{4}})_({RT})", col)
+    if m:
+        y, r = int(m[1]), m[2]
+        return _make(col, "pop65_gr_pred", "growth", "population_forecast",
+                     f"65歳以上人口の将来増減率（2020→{y}年・R6推計・{r}圏）", "%", "percent1",
+                     radiusM=RADIUS_M[r], year=y, yearBase=2020, vintage=2024, flag=f"pop65_lowbase_2020_{r}",
+                     notice=f"pop_ageunk_2020_{r}", srckey="population_age_forecast")
+    m = re.fullmatch(rf"pop65_share_pred_2024_(\d{{4}})_({RT})", col)
+    if m:
+        y, r = int(m[1]), m[2]
+        return _make(col, "pop65_share_pred", "ratio", "population_forecast",
+                     f"将来の高齢化率（65歳以上の割合・{y}年・R6推計・{r}圏）", "%", "percent1",
+                     radiusM=RADIUS_M[r], year=y, vintage=2024, flag=f"pop_lowbase_2020_{r}")
+    return None
+
+
 def build_entry(col: str) -> CatalogEntry:
     """1 つの値列名から CatalogEntry を構築する（識別列は build 側で除外済み）。"""
     # --- 乗降客数（passenger） ---
@@ -265,6 +346,15 @@ def build_entry(col: str) -> CatalogEntry:
         return _make(col, "pop_lowbase", "flag", "population",
                      f"人口 低基準フラグ（{y}年・{r}圏／基準人口<50人）", None, None,
                      radiusM=RADIUS_M[r], year=y, rankable=False)
+
+    # --- 人口の年齢（population・2026-11-24・計画書 docs/261122_PLAN_population_improvement.md §3） ---
+    # 国勢調査 250m の年齢（2015・2020）を、年齢不詳を市区町村の不詳補完値に合わせて割り振ってから駅 × 半径へ
+    # 集計した値（pipeline/build_station_age.py）。キーは `pop_` で始めない（AI の解決器の前方一致で総数の `pop` に
+    # ならない・§3.6）。除外は母数のフラグ（割合＝その年の総数・増減率＝分母の年の総数）。注意は年齢不詳のフラグ
+    # （補う前の不詳が 10% 以上の駅は、補い方で値が動く）——除外と注意が食い違うのは flag_covid と同じ作り（§3.4）。
+    entry = _age_entry(col)
+    if entry is not None:
+        return entry
 
     # --- 所得（income・docs/income.md §5-§6） ---
     # 年は**課税年度**（値は前年の所得）。ラベルに「年度」と書いて実績年と区別する。
@@ -375,6 +465,10 @@ def build_entry(col: str) -> CatalogEntry:
         return _make(col, "pop_err", "error", "population_forecast",
                      f"人口予測誤差率（H30推計2020 vs 実績2020・{r}圏）", "%", "percent1",
                      radiusM=RADIUS_M[r], year=2020, vintage=2018, flag=f"pop_lowbase_2020_{r}")
+    # 人口の年齢の将来（2026-11-24）。分母は国勢調査 2020 年の補った値（既存の pop_gr_pred と同じ起点・§2.4）。
+    entry = _age_forecast_entry(col)
+    if entry is not None:
+        return entry
 
     # --- 地価（land_price） ---
     if col == "lp_near_price":

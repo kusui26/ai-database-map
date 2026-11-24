@@ -5,7 +5,7 @@ CSV を独立に読み、DB（Supabase）の投入結果と照合する：
   (b) 列ごとの件数一致（列数は CSV から導出）
   (c) 無作為 300 セルの値一致
   (d) 全国計（sum）一致：代表列
-  (e) DB サイズ実測（無料枠 500MB に対する残余ゲート）
+  (e) DB サイズ実測（Supabase Pro のディスク 8GB に対する基準・2026-11-24 に無料枠の 475MB から上げた）
   (f) フラグ列に値 0 の行が無い（「行が無い＝0」の規約・260816 の容量対策）
   ＋ stations/metric_columns 件数・lp_near_use・pax_latest の健全性
 
@@ -27,8 +27,8 @@ import pandas as pd
 import psycopg
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from station_columns import read_dataset_frame  # noqa: E402  （station_dataset.csv ＋ 年齢の列・2026-11-24）
 from load_to_supabase import (  # noqa: E402
-    CSV_PATH,
     PAX_DESC,
     db_params,
     round_to_stored,
@@ -40,8 +40,11 @@ REPORT = ROOT / "docs" / "p2b_load_report.md"
 CATALOG_PATH = ROOT / "src" / "shared" / "catalog" / "catalog.json"
 SAMPLE_N = 300
 SEED = 42
-#: Supabase 無料枠の DB 容量（MB）。ゲートはこの 95% に置く。
-FREE_TIER_LIMIT_MB = 500
+#: DB の大きさの基準（MB）。本番は Supabase Pro（ディスク 8GB・Spend Cap がオンだと 8GB より広がらず、ディスクの 95% で
+#: 読み取り専用になる）。フルロード（truncate → COPY を 1 つのトランザクションで）はコミットまで旧と新の値の表が同時にあり、
+#: WAL も 1GB 前後使うので、DB が 2GB でもピークは約 4.8GB——読み取り専用の線まで余裕がある大きさの、ディスクの 4 分の 1。
+#: 以前は無料枠の 500MB の 95%（475MB）だった（計画書 docs/261122_PLAN_population_improvement.md §4.3）。
+DB_SIZE_GATE_MB = 2048
 #: 指標ではない駅属性（`docs/dataset.md` §2.1）。値列数はここから導出するので、
 #: データセットに列が増えても検証値を書き換えなくてよい（かつて 488 で固定していて陳腐化した）。
 IDENTITY_COLUMNS = {
@@ -62,7 +65,7 @@ def flag_keys() -> set[str]:
 
 
 def main() -> int:
-    df = pd.read_csv(CSV_PATH, low_memory=False)
+    df = read_dataset_frame(low_memory=False)
     n = len(df)
     checks: list[tuple[bool, str, str]] = []
     facts: dict[str, str] = {}
@@ -194,13 +197,12 @@ def main() -> int:
         db_mb = db_bytes / 1024 / 1024
         facts["db_size"] = f"{db_mb:.0f} MB"
         facts["tables_size"] = f"{tables_bytes / 1024 / 1024:.0f} MB"
-        # Supabase 無料枠の DB 容量は 500MB。ゲートはその 95%（＝475MB）に置く。
-        # 400MB だった当初のしきい値は「当時の実測 348MB ＋ 余裕」で、仕様ではなく目安。
-        # 260816：売上 126 列（+約 111 万行）を足すと対策なしでは 514MB で**超過**した。
-        # フラグ列の 0 を格納しない対策（`drop_flag_zeros`・約 87 万行 ≒ 62MB）で収める
-        # （docs/260816_sales.md §12.4・docs/sales.md §10）。
-        check(db_mb < FREE_TIER_LIMIT_MB * 0.95, f"(e) DB サイズ < {FREE_TIER_LIMIT_MB * 0.95:.0f}MB"
-              f"（無料枠 {FREE_TIER_LIMIT_MB}MB の 95%）", f"{db_mb:.0f} MB")
+        # 基準は DB_SIZE_GATE_MB（Pro のディスク 8GB の 4 分の 1）。経緯：当初は 400MB（当時の実測 348MB ＋ 余裕）、
+        # 無料枠の時期は 500MB の 95%（475MB）。260816：売上 126 列（+約 111 万行）を足すと対策なしでは 514MB で**超過**し、
+        # フラグ列の 0 を格納しない対策（`drop_flag_zeros`・約 87 万行 ≒ 62MB）で収めた（docs/260816_sales.md §12.4）。
+        # 2026-11-24：人口の年齢 78 列（約 40MB）で約 480MB になり、無料枠の基準を越えるので Pro の基準に上げた。
+        check(db_mb < DB_SIZE_GATE_MB, f"(e) DB サイズ < {DB_SIZE_GATE_MB:,}MB（Pro のディスク 8GB の 4 分の 1）",
+              f"{db_mb:.0f} MB")
 
         # (f) フラグ列に値 0 の行が無い（対策 A が効いていること・意味は「行が無い＝0」）
         cur.execute(

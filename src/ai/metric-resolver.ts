@@ -16,6 +16,7 @@
 import { getEntry, isRankableKey, rankableEntries, type CatalogEntry } from '@/shared/catalog'
 import { RADII_M, radiusLabel } from '@/shared/constants'
 import { FUTURE_LEAD_YEAR } from '@/domain/area-summary/totals'
+import { baseMetricLabel } from '@/domain/metrics'
 
 /** 半径未指定時の既定（アプリ UI の既定と一致）。 */
 const DEFAULT_RADIUS_M = 1000
@@ -23,6 +24,25 @@ const DEFAULT_RADIUS_M = 1000
 const PREFERRED_SPAN_YEARS = 5
 /** ヒントに載せる候補の最大数。 */
 const MAX_HINTS = 8
+/**
+ * ファミリ名のあとに続いてよい語（年・半径・推計の時点・空）。これ以外が続く指定は**別の指標の書き間違い**で、
+ * 黙って前方のファミリに解かない（`pop_15_64_2020_1km` を総数の `pop_2020_1km` にしない・計画書 261122 §7.2）。
+ */
+const PERIOD_TOKEN = /^(?:(?:19|20)\d{2}(?:年度?)?|\d+(?:km|m)|r6|h30)?$/
+/**
+ * 日本語（ひらがな・カタカナ・漢字）の指定。ファミリの日本語名で解く（同 §7.2）。英字を含む指定（`pop_2020年`）は
+ * キーの書き方として今までどおり解く。
+ */
+const JAPANESE = /[぀-ヿ㐀-鿿]/
+const LATIN_LETTER = /[a-z]/i
+/** ふだんの言葉 → ファミリ（日本語名に無い言い方）。候補を返すだけで、解決はしない（あいまいなので）。 */
+const EVERYDAY_WORDS: Readonly<Record<string, readonly string[]>> = {
+  高齢者: ['pop65_share', 'pop65_gr_pred', 'pop65_share_pred', 'pop75_share'],
+  働く世代: ['pop15_64', 'pop15_64_share', 'pop15_64_gr', 'pop15_64_gr_pred'],
+  現役世代: ['pop15_64', 'pop15_64_share', 'pop15_64_gr', 'pop15_64_gr_pred'],
+  子ども: ['pop0_14_share'],
+  子供: ['pop0_14_share'],
+}
 
 /** 指標の指定（正確なキー／ファミリ名のどちらでもよい）。 */
 export type MetricSpec = {
@@ -70,6 +90,115 @@ export function suggestMetricKeys(bad: string): string[] {
     .filter((entry) => entry.baseMetric.toLowerCase().startsWith(prefix))
     .map((entry) => entry.key)
     .slice(0, MAX_HINTS)
+}
+
+/** ファミリ名のあとが年・半径・推計の時点だけか（`pop_15_64_2020_1km` は `pop` のあとに「15」「64」が続く）。 */
+function onlyPeriodAfter(lowered: string, base: string): boolean {
+  if (lowered === base) return true
+  return lowered
+    .slice(base.length + 1)
+    .split('_')
+    .every((token) => PERIOD_TOKEN.test(token))
+}
+
+/** 書き間違いに近いファミリ（下線を除いて前方が一致するもの・長い順＝`pop_15_64…` なら pop15_64 が先）。 */
+function familiesLike(lowered: string): string[] {
+  const compact = (text: string): string => text.replace(/_/g, '')
+  return knownBases().filter((base) => compact(lowered).startsWith(compact(base)))
+}
+
+/** 同じカテゴリのファミリ（カタログの並び）。`pop_young` の候補に、総数のほか年齢のファミリも並べるため。 */
+function familiesInCategoryOf(base: string): string[] {
+  const category = rankableEntries.find((entry) => entry.baseMetric === base)?.category
+  const inCategory = rankableEntries.filter((entry) => entry.category === category)
+  return [...new Set(inCategory.map((entry) => entry.baseMetric))]
+}
+
+/** 候補の見せ方（`pop65_share（高齢化率（65歳以上の割合））`）。 */
+function withLabels(bases: readonly string[]): string {
+  return bases.map((base) => `${base}（${baseMetricLabel(base)}）`).join('、')
+}
+
+/** ファミリ名のあとに年・半径でない語が続く指定（`pop_young`）：解かずに、前方の一致と同じカテゴリのファミリを返す。 */
+function unknownAfterFamily(raw: string, base: string): MetricResolution {
+  const near = [...new Set([...familiesLike(raw.toLowerCase()), ...familiesInCategoryOf(base)])]
+  return failure(
+    `未知の指標です: ${raw}（${base} のあとに年・半径でない語があります）`,
+    `近い指標ファミリ: ${withLabels(near.slice(0, MAX_HINTS))}。` +
+      'metric にはファミリ名かカタログのキーを指定してください。',
+    near,
+  )
+}
+
+/** 日本語の名前を比べやすい形に（全角と半角・空白・波ダッシュの字形をそろえる）。 */
+function normalizeName(text: string): string {
+  return text.normalize('NFKC').replace(/\s/g, '').replace(/〜/g, '~')
+}
+
+/** ファミリの日本語名の全体と、括弧の前（`高齢化率（65歳以上の割合）` → `高齢化率`）。 */
+function nameForms(base: string): { readonly whole: string; readonly head: string } {
+  const whole = normalizeName(baseMetricLabel(base))
+  return { whole, head: whole.split('(')[0] ?? whole }
+}
+
+/** 日本語名（全体 → 括弧の前の順）が同じファミリ。1 つに決まらなければ null。 */
+function familyNamed(text: string): string | null {
+  const wanted = normalizeName(text)
+  for (const form of ['whole', 'head'] as const) {
+    const hits = knownBases().filter((base) => nameForms(base)[form] === wanted)
+    if (hits.length === 1) return hits[0] ?? null
+    if (hits.length > 1) return null
+  }
+  return null
+}
+
+/** 語の字が、名前の中に同じ順で現れるか（「将来人口」は「将来推計人口」に現れる）。 */
+function appearsInOrder(word: string, name: string): boolean {
+  const rest = [...word].reduce<string | null>((remaining, char) => {
+    if (remaining === null) return null
+    const at = remaining.indexOf(char)
+    return at < 0 ? null : remaining.slice(at + char.length)
+  }, name)
+  return rest !== null
+}
+
+/**
+ * 日本語の名前に近いファミリ。近い順に：ふだんの言葉 → 日本語名がその語を含む → 語の字が日本語名に同じ順で現れる →
+ * 語が日本語名（括弧の前）を含む（長い名前から＝「2050年の生産年齢人口」なら生産年齢人口が人口より先）。
+ */
+function familiesNamedLike(text: string): string[] {
+  const wanted = normalizeName(text)
+  const bases = [...new Set(rankableEntries.map((entry) => entry.baseMetric))]
+  const byWord = Object.entries(EVERYDAY_WORDS).flatMap(([word, list]) =>
+    wanted.includes(normalizeName(word)) ? list : [],
+  )
+  const containing = bases.filter((base) => nameForms(base).whole.includes(wanted))
+  const inOrder = bases.filter((base) => appearsInOrder(wanted, nameForms(base).whole))
+  const contained = bases
+    .filter((base) => wanted.includes(nameForms(base).head))
+    .sort((a, b) => nameForms(b).head.length - nameForms(a).head.length)
+  return [...new Set([...byWord, ...containing, ...inOrder, ...contained])]
+}
+
+/** 日本語の指定（「高齢化率」）：日本語名が 1 つに決まればそのファミリで解き、決まらなければ近いファミリを候補に返す。 */
+function resolveJapanese(raw: string, spec: MetricSpec): MetricResolution {
+  const family = familyNamed(raw)
+  if (family !== null) {
+    const resolution = resolveMetricKey({ ...spec, metric: family })
+    if (!resolution.ok) return resolution
+    const named = `「${raw}」＝${family}`
+    return {
+      ok: true,
+      key: resolution.key,
+      note: resolution.note === null ? named : `${named}・${resolution.note}`,
+    }
+  }
+  const candidates = familiesNamedLike(raw)
+  const hint =
+    candidates.length > 0
+      ? `日本語名の近い指標ファミリ: ${withLabels(candidates.slice(0, MAX_HINTS))}。metric にはファミリ名を指定してください。`
+      : 'getMetricsCatalog で category / baseMetric を確認してください。'
+  return failure(`未知の指標です: ${raw}`, hint, candidates)
 }
 
 /** 末尾の半径トークン（`_2km` / `_500m`）を m に直す。 */
@@ -236,8 +365,10 @@ function yearHints(entries: readonly CatalogEntry[]): string {
  *
  * ①完全一致キーはそのまま採用（明示指定と食い違う場合はキーを優先し注記）。
  * ②ファミリ名・表記ゆれ・年ペアの順序違いは正規化して解決し、埋めた既定は note に残す。
+ *   日本語の名前（「高齢化率」）は、ファミリの日本語名と同じなら、そのファミリとして解く（2026-11-24）。
  * ③ファミリ不明・ランキング不可・存在しない年の明示・絞り切れない場合は**確定させず**
- *   エラー＋候補を返す（誤った指標を黙って出さない）。
+ *   エラー＋候補を返す（誤った指標を黙って出さない）。ファミリ名のあとに年・半径でない語が続く指定
+ *   （`pop_15_64_2020_1km`）も、前方のファミリ（総数の `pop`）に黙って解かない（2026-11-24）。
  */
 export function resolveMetricKey(spec: MetricSpec): MetricResolution {
   const raw = spec.metric.trim()
@@ -256,6 +387,7 @@ export function resolveMetricKey(spec: MetricSpec): MetricResolution {
       suggestMetricKeys(existing.baseMetric),
     )
   }
+  if (JAPANESE.test(raw) && !LATIN_LETTER.test(raw)) return resolveJapanese(raw, spec)
   const parsed = parseMetricToken(raw)
   if (parsed.baseMetric === null) {
     return failure(
@@ -263,6 +395,9 @@ export function resolveMetricKey(spec: MetricSpec): MetricResolution {
       'getMetricsCatalog で category / baseMetric を確認してください。',
       suggestMetricKeys(raw),
     )
+  }
+  if (!onlyPeriodAfter(raw.toLowerCase(), parsed.baseMetric)) {
+    return unknownAfterFamily(raw, parsed.baseMetric)
   }
   const family = rankableEntries.filter((entry) => entry.baseMetric === parsed.baseMetric)
   const years =

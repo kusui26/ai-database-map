@@ -1,17 +1,17 @@
 """P1 — メトリクス・カタログ生成。
 
-`data/derived/station_dataset.csv`（794列）のヘッダを読み、値列（784）を CatalogEntry へ、
-識別列（10）を駅属性へ振り分けて `src/shared/catalog/catalog.json` を出力する。
+値の表（`station_dataset.csv` の右に `station_age.csv` を駅で連結した 884 列・`station_columns.py`）のヘッダを読み、
+値列（874）を CatalogEntry へ、識別列（10）を駅属性へ振り分けて `src/shared/catalog/catalog.json` を出力する。
 あわせて目視レビュー用の日本語ラベル一覧 `docs/catalog_labels.md` を出力する。
 
     python3 pipeline/build_catalog.py
 
 カタログは「コードが正・DB はミラー」（plan_fable §2.2-③）の契約物としてコミットする。
+id は列の並びで振るので、列を足すときは末尾に足す（年齢の列は station_dataset.csv の右・2026-11-24）。
 """
 
 from __future__ import annotations
 
-import csv
 import json
 import sys
 from collections import Counter, defaultdict
@@ -25,16 +25,15 @@ from catalog_rules import (  # noqa: E402
     build_entry,
     entry_to_dict,
 )
+from station_columns import GENERATED_FROM, dataset_header  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-CSV_PATH = ROOT / "data" / "derived" / "station_dataset.csv"
 OUT_JSON = ROOT / "src" / "shared" / "catalog" / "catalog.json"
 OUT_LABELS = ROOT / "docs" / "catalog_labels.md"
 
 
 def read_header() -> list[str]:
-    with open(CSV_PATH, newline="", encoding="utf-8") as f:
-        return next(csv.reader(f))
+    return dataset_header()
 
 
 def render_labels(entries: list, header_len: int) -> str:
@@ -45,7 +44,7 @@ def render_labels(entries: list, header_len: int) -> str:
     lines: list[str] = [
         "# メトリクス・カタログ ラベル一覧（自動生成）",
         "",
-        f"`pipeline/build_catalog.py` が `station_dataset.csv`（{header_len}列）から生成。"
+        f"`pipeline/build_catalog.py` が値の表（`station_dataset.csv` ＋ `station_age.csv`・{header_len}列）から生成。"
         f" 値列 {len(entries)} エントリ ＋ 駅属性 {len(IDENTITY_COLUMNS)}。",
         "",
         "凡例: `key` — ラベル 〔単位・format・rankable・⚠→信頼性フラグ〕",
@@ -83,7 +82,7 @@ def main() -> int:
 
     catalog = {
         "version": 1,
-        "generatedFrom": "data/derived/station_dataset.csv",
+        "generatedFrom": GENERATED_FROM,
         "columnCount": len(header),
         "stationAttributeCount": len(IDENTITY_COLUMNS),
         "entryCount": len(entries),

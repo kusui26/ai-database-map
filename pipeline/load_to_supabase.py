@@ -46,9 +46,9 @@ from line_common import LINE_STATIONS_CSV, LINES_CSV
 from load_lines import copy_lines
 from load_station_routes import ROUTES_CSV, copy_station_routes
 from load_municipality import MUNI_CSV, apply_municipality
+from station_columns import read_dataset_frame
 
 ROOT = Path(__file__).resolve().parents[1]
-CSV_PATH = ROOT / "data" / "derived" / "station_dataset.csv"
 CATALOG_PATH = ROOT / "src" / "shared" / "catalog" / "catalog.json"
 PAX_DESC = [f"pax_{y}" for y in range(2024, 2010, -1)]  # 2024..2011（新しい順）
 COPY_CHUNK = 500_000
@@ -142,8 +142,10 @@ def read_dataset() -> tuple[pd.DataFrame, list[dict[str, object]], dict[str, int
     bool の値列（flag_covid/flag_yoy 等）を正規化するのは、station_values が float8 列で
     bool のままだと COPY に失敗するから。2 列の特別扱いではなく「bool の値列は一律 0/1」
     という汎用ルールにしてある（将来 bool フラグが増えても自動追従する）。
+
+    表は station_dataset.csv の右に station_age.csv（年齢の列）を駅で連結したもの（`station_columns.py`・2026-11-24）。
     """
-    df = pd.read_csv(CSV_PATH, low_memory=False)
+    df = read_dataset_frame(low_memory=False)
     df["__sid"] = range(1, len(df) + 1)
     df["pax_latest"] = df[PAX_DESC].bfill(axis=1).iloc[:, 0]
     entries = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))["entries"]

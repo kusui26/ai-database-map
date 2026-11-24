@@ -33,7 +33,7 @@ from load_to_supabase import ROOT, db_params  # noqa: E402
 
 MIGRATION = ROOT / "supabase" / "migrations" / "20261010200000_area_values.sql"
 TABLES = ("area_metrics", "areas", "area_values")
-#: 3 つの表の大きさの上限（見積もり 6〜9MB・無料枠 500MB の残りを食いつぶさない）。
+#: 3 つの表の大きさの上限（見積もり 6〜9MB。見積もりから大きく外れたら、作り方が崩れている）。
 MAX_TABLES_MB = 12
 #: 大きさの単位（Supabase のダッシュボード・pg_size_pretty と同じ 1024 × 1024 バイト）。
 MB = 1024 * 1024

@@ -1,5 +1,5 @@
 /**
- * 評価：ゴールデン 63 問（駅詳細・ランキング・会社と路線の名前・場所（市区町村・起点から N km）・散布・比較・曖昧駅名・カタログ探索・データ外拒否・**災害**・地図文脈（選択駅・「このあたり」）・エリアの性格（駅周辺のプロフィール）・エリアの全体（区域の値・比較・地図の色分け））。
+ * 評価：ゴールデン 66 問（駅詳細・ランキング・会社と路線の名前・場所（市区町村・起点から N km）・散布・人口の年齢・比較・曖昧駅名・カタログ探索・データ外拒否・**災害**・地図文脈（選択駅・「このあたり」）・エリアの性格（駅周辺のプロフィール）・エリアの全体（区域の値・比較・地図の色分け））。
  * 各問は自然言語クエリと、機械判定できる期待（score.ts）を持つ。代表性を重視して分野を網羅する。
  *
  * **災害の 6 問だけは性格が違う**（`docs/260824_flood.md` §6.5・§10.4）。
@@ -43,6 +43,11 @@ const KOHOKU_VIEW = [139.58, 35.49, 139.68, 35.57] as const
 const JAPAN_VIEW = [122.9, 24.0, 153.9, 45.6] as const
 /** 横浜の中心（横浜駅・関内・みなとみらいの周り・約 11km 四方）。「このあたりの駅を色分けして」の問（B5d）。 */
 const YOKOHAMA_CENTER_VIEW = [139.58, 35.4, 139.7, 35.5] as const
+/**
+ * 総数の人口のファミリ（2026-11-24）。人口の年齢（生産年齢人口・高齢化率…）を足したので、「人口が増えた駅」の問が
+ * 年齢の指標（生産年齢人口の増減率など）に流れていないかを、人口でランキング・散布をする問で見る（計画書 261122 §7.3）。
+ */
+const TOTAL_POPULATION = ['pop', 'pop_gr', 'pop_pred', 'pop_gr_pred'] as const
 
 export const EVAL_CASES: readonly EvalCase[] = [
   // --- 駅詳細（カテゴリの選択・半径・選択） ---
@@ -122,6 +127,7 @@ export const EVAL_CASES: readonly EvalCase[] = [
     expect: {
       toolCalls: [{ name: 'rankStations' }],
       panels: ['rankingTable'],
+      metricFamilies: { rankStations: TOTAL_POPULATION },
     },
   },
   {
@@ -140,6 +146,7 @@ export const EVAL_CASES: readonly EvalCase[] = [
     expect: {
       toolCalls: [{ name: 'rankStations', inputIncludes: { prefectures: ['東京都'] } }],
       panels: ['rankingTable'],
+      metricFamilies: { rankStations: TOTAL_POPULATION },
     },
   },
 
@@ -226,6 +233,7 @@ export const EVAL_CASES: readonly EvalCase[] = [
     query: '副都心線の駅で人口が増えているのは？',
     expect: {
       toolCalls: [{ name: 'rankStations' }],
+      metricFamilies: { rankStations: TOTAL_POPULATION },
       contains: ['東京メトロ副都心線'],
       containsAny: ['和光市', '地下鉄成増', '地下鉄赤塚', '平和台', '氷川台'],
       noEmptyFigures: true,
@@ -271,6 +279,7 @@ export const EVAL_CASES: readonly EvalCase[] = [
     expect: {
       toolCalls: [{ name: 'rankStations', inputIncludes: { municipality: '横浜市' } }],
       panels: ['rankingTable'],
+      metricFamilies: { rankStations: TOTAL_POPULATION },
       contains: ['横浜市・上位'],
       noEmptyFigures: true,
       maxCalls: { rankStations: 1 },
@@ -287,6 +296,7 @@ export const EVAL_CASES: readonly EvalCase[] = [
     expect: {
       toolCalls: [{ name: 'rankStations', inputIncludes: { municipality: '横浜市' } }],
       panels: ['rankingTable'],
+      metricFamilies: { rankStations: TOTAL_POPULATION },
       contains: ['2020→2050年'],
       noEmptyFigures: true,
     },
@@ -330,6 +340,7 @@ export const EVAL_CASES: readonly EvalCase[] = [
     expect: {
       toolCalls: [{ name: 'compareGrowth' }],
       panels: ['scatter'],
+      metricFamilies: { compareGrowth: [...TOTAL_POPULATION, 'pax_rate'] },
     },
   },
   {
@@ -339,6 +350,7 @@ export const EVAL_CASES: readonly EvalCase[] = [
     expect: {
       toolCalls: [{ name: 'compareGrowth', inputIncludes: { prefectures: ['千葉県'] } }],
       panels: ['scatter'],
+      metricFamilies: { compareGrowth: [...TOTAL_POPULATION, 'lp_gr'] },
     },
   },
   {
@@ -349,6 +361,45 @@ export const EVAL_CASES: readonly EvalCase[] = [
     expect: {
       toolCalls: [{ name: 'compareGrowth', inputIncludes: { routeTypes: [1] } }],
       panels: ['scatter'],
+      metricFamilies: { compareGrowth: [...TOTAL_POPULATION, 'pax_rate'] },
+    },
+  },
+
+  // --- 人口の年齢（2026-11-24・計画書 261122 §7.5）：年齢の指標を、ランキングと散布で選べるか ---
+  // 駅 1 つの年齢（「武蔵小杉駅の周りの生産年齢人口は？」）は、人口タブに年齢の図が入る PR-3 で足す。
+  {
+    id: 'rank-aging-kanagawa',
+    category: '人口の年齢',
+    query: '神奈川県で高齢化率が高い駅は？',
+    expect: {
+      toolCalls: [{ name: 'rankStations', inputIncludes: { prefectures: ['神奈川県'] } }],
+      panels: ['rankingTable'],
+      metricFamilies: { rankStations: ['pop65_share'] },
+      noEmptyFigures: true,
+    },
+  },
+  {
+    // 鉄道のダイヤを作る人の問い（計画書 §1.1）：2050 年に働く世代が大きく減る駅＝減る順（asc）。
+    id: 'rank-working-age-line',
+    category: '人口の年齢',
+    query: '東急田園都市線で、2050年に生産年齢人口が大きく減る駅は？',
+    expect: {
+      toolCalls: [{ name: 'rankStations', inputIncludes: { order: 'asc' } }],
+      panels: ['rankingTable'],
+      metricFamilies: { rankStations: ['pop15_64_gr_pred'] },
+      contains: ['田園都市線', '2020→2050年'],
+      noEmptyFigures: true,
+    },
+  },
+  {
+    // 左上（働く世代が減り、高齢者が増える）が、ピークを縮めて日中を保つ候補（計画書 §6.7）。
+    id: 'scatter-age-future',
+    category: '人口の年齢',
+    query: '生産年齢人口の将来と、65歳以上の将来の関係を散布図で見せて',
+    expect: {
+      toolCalls: [{ name: 'compareGrowth' }],
+      panels: ['scatter'],
+      metricFamilies: { compareGrowth: ['pop15_64_gr_pred', 'pop65_gr_pred'] },
     },
   },
 
@@ -797,6 +848,7 @@ export const EVAL_CASES: readonly EvalCase[] = [
     expect: {
       toolCalls: [{ name: 'rankStations' }],
       panels: ['rankingTable'],
+      metricFamilies: { rankStations: TOTAL_POPULATION },
       contains: ['横浜市港北区'],
       noEmptyFigures: true,
       forbidInputs: { rankStations: ['inMapView', 'bbox'] },
@@ -834,6 +886,7 @@ export const EVAL_CASES: readonly EvalCase[] = [
     expect: {
       toolCalls: [{ name: 'rankStations' }],
       panels: ['rankingTable'],
+      metricFamilies: { rankStations: TOTAL_POPULATION },
       contains: ['全国'],
       forbidInputs: { rankStations: ['inMapView', 'bbox'] },
     },

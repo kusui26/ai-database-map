@@ -1,5 +1,5 @@
 /**
- * 評価 runner：ゴールデン 63 問を実 /api/chat（SSE）に投げ、score.ts で採点する。
+ * 評価 runner：ゴールデン 66 問を実 /api/chat（SSE）に投げ、score.ts で採点する。
  *
  * 通常の `pnpm test` では **スキップ**（LLM/DB/課金に依存）。実行は：
  *   1) 別端末で dev サーバ起動：`pnpm dev`（.env に GEMINI_API_KEY・SUPABASE_* が必要）
@@ -55,8 +55,9 @@ const BASE_URL = process.env.CHAT_BASE_URL ?? 'http://localhost:3000'
  * 2026-10-11：エリアの全体（区域の値・比較・地図の色分け）の 6 問を足して 62 問（B5d）。同じ理由で 60 へ上げる。
  *
  * 2026-11-14：将来推計の既定の年（2050 年）の 1 問を足して 63 問。同じ理由で 61 へ上げる。
+ * 2026-11-24：人口の年齢の 3 問を足して 66 問（計画書 261122 PR-2）。同じ理由で 64 へ上げる。
  */
-const PASS_THRESHOLD = Number(process.env.EVAL_PASS ?? '61')
+const PASS_THRESHOLD = Number(process.env.EVAL_PASS ?? '64')
 
 /**
  * **1 問でも落としてはいけない分野。**

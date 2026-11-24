@@ -15,17 +15,17 @@ import math
 import sys
 from pathlib import Path
 
-import pandas as pd
+import numpy as np
 import psycopg
 from psycopg.rows import dict_row, tuple_row
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from load_to_supabase import (  # noqa: E402
-    CSV_PATH,
     db_params,
     round_to_stored,
     value_column_type,
 )
+from station_columns import read_dataset_frame  # noqa: E402  （station_dataset.csv ＋ 年齢の列・2026-11-24）
 
 
 def close(a: object, b: object) -> bool:
@@ -34,8 +34,18 @@ def close(a: object, b: object) -> bool:
     return math.isclose(float(a), float(b), rel_tol=1e-9, abs_tol=1e-6)
 
 
+def same_float4(a: object, b: object) -> bool:
+    """jsonb で返る値（散布）と比べる：jsonb は float4 を最短の 10 進（121.3）で返すので、float4 にそろえて同じか。
+
+    `close` で比べると、float4 を float64 に広げた期待値（121.30000305…）と 3e-6 ずれて落ちる（整数の指標では出ない）。
+    """
+    if a is None or b is None:
+        return False
+    return float(np.float32(float(a))) == float(np.float32(float(b)))
+
+
 def main() -> int:
-    df = pd.read_csv(CSV_PATH, low_memory=False)
+    df = read_dataset_frame(low_memory=False)
     checks: list[tuple[bool, str, str]] = []
 
     def check(cond: object, name: str, detail: str = "") -> None:
@@ -169,6 +179,33 @@ def main() -> int:
               and res[0]["total"] == len(df) - len(lown),
               "rank sales（低分母を除外）＝ 上位は不変・件数はフラグ駅ぶん減る",
               f"db_total={res[0]['total'] if res else None} csv={len(df) - len(lown)}")
+
+        # 9d) 人口の年齢（261124 追加・station_age.csv）：駅の値・県の順位（母数の小さい駅を除外）・
+        #     除外フラグの同梱（65 歳以上の将来増減率は 65 歳以上の低基準フラグ）が、連結した表と一致する。
+        check(close(bundle.get("pop65_share_2020_1km"), tokyo["pop65_share_2020_1km"]),
+              "station_bundle(東京) の pop65_share_2020_1km = CSV値",
+              f"db={bundle.get('pop65_share_2020_1km')} csv={tokyo['pop65_share_2020_1km']}")
+        kanagawa = df[(df["prefecture"] == "神奈川県") & (df["pop_lowbase_2020_1km"] != 1)]
+        expage = kanagawa.loc[kanagawa["pop65_share_2020_1km"].idxmax()]
+        res = call("select * from public.rank_by_column(%s,%s,%s,%s,%s,%s)",
+                   ("pop65_share_2020_1km", ["神奈川県"], "desc", 1, 0, True))
+        check(res and res[0]["grp"] == expage["grp"] and close(res[0]["value"], expage["pop65_share_2020_1km"])
+              and res[0]["total"] == int(kanagawa["pop65_share_2020_1km"].notna().sum()),
+              "rank 神奈川県 pop65_share_2020_1km（低基準を除外）Top1・件数 = CSV",
+              f"db={res[0]['grp'] if res else None}/{res[0]['value'] if res else None}/{res[0]['total'] if res else None}"
+              f" csv={expage['grp']}/{expage['pop65_share_2020_1km']}")
+        n_rows, n_flagged, n_bad = flag_join("pop65_gr_pred_2024_2050_1km", "pop65_lowbase_2020_1km")
+        check(n_rows > 0 and n_flagged > 0 and n_bad == 0,
+              f"rank(pop65_gr_pred_2024_2050_1km) の flag_value（pop65_lowbase）が CSV と全数一致"
+              f"（{n_rows}駅中フラグ{n_flagged}件）", f"不一致 {n_bad} 件")
+        res = call("select * from public.scatter_points(%s,%s,%s,%s,%s)",
+                   ("pop15_64_gr_pred_2024_2050_2km", "pop65_gr_pred_2024_2050_2km", None, None, ["千葉県"]))
+        agepoints = {r["grp"]: r for r in res[0]["scatter_points"]}
+        c1 = chiba[chiba["pop15_64_gr_pred_2024_2050_2km"].notna()].iloc[0]
+        check(same_float4(agepoints.get(c1["grp"], {}).get("x"), c1["pop15_64_gr_pred_2024_2050_2km"])
+              and same_float4(agepoints.get(c1["grp"], {}).get("y"), c1["pop65_gr_pred_2024_2050_2km"]),
+              "scatter_points(千葉県) の 15〜64 歳と 65 歳以上の将来増減率が CSV と一致",
+              f"db={agepoints.get(c1['grp'])} csv={c1['pop15_64_gr_pred_2024_2050_2km']}/{c1['pop65_gr_pred_2024_2050_2km']}")
 
         # 10) 散布（千葉県）の値が CSV と一致（260804：values_for_columns → scatter_points）
         res = call("select * from public.scatter_points(%s,%s,%s,%s,%s)",

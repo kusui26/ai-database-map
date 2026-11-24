@@ -5,8 +5,17 @@
  * 駅選択／データ外の拒否／要点文字列／**禁止応答**）を機械判定する。全チェック通過で 1 問合格。
  */
 
+import { resolveMetricKey } from '@/ai/metric-resolver'
+import { getEntry } from '@/shared/catalog'
+
 /** 観測されたツール呼び出し（名前＋入力）。 */
 export type ToolCallObserved = { readonly name: string; readonly input: Record<string, unknown> }
+
+/** ツールの指標の引数（`metricFamilies` が見るもの）。 */
+const METRIC_ARGS: Readonly<Record<string, readonly string[]>> = {
+  rankStations: ['metric'],
+  compareGrowth: ['x', 'y'],
+}
 
 /** 1 問の観測結果（runner が SSE から組み立てる）。 */
 export type EvalObserved = {
@@ -54,6 +63,12 @@ export type EvalExpectation = {
    * 値が無い・null・false は「付けていない」とみなす。
    */
   readonly forbidInputs?: Readonly<Record<string, readonly string[]>>
+  /**
+   * ツールごとに、指標の引数（rankStations の metric・compareGrowth の x と y）が解けてよいファミリ（2026-11-24）。
+   * 「人口が増えた駅」が「生産年齢人口の増減率」へ流れていないか（人口の年齢を足したとき・計画書 261122 §7.3）。
+   * metric はキーでもファミリでも来るので、解決器でファミリに直して見る。そのツールを 1 回も呼ばなければ落とす。
+   */
+  readonly metricFamilies?: Readonly<Record<string, readonly string[]>>
   /**
    * これらの地図の操作が**すべて**出る（例 `colorStations`＝エリアの駅を色分けした・2026-10-11 B5d）。
    * 「色分けして」に、色分けしないまま「色分けしました」と答えるのを機械で落とす（§6.12.1）。
@@ -136,6 +151,33 @@ function inputMatches(
   return Object.entries(expected).every(([key, value]) => valueMatches(observed[key], value))
 }
 
+/** 呼び出しの指標の引数を、解決器でファミリに直す（解けない引数は数えない）。 */
+function metricFamiliesOf(call: ToolCallObserved): string[] {
+  const radiusM = typeof call.input.radiusM === 'number' ? call.input.radiusM : undefined
+  const year = typeof call.input.year === 'number' ? call.input.year : undefined
+  return (METRIC_ARGS[call.name] ?? []).flatMap((arg) => {
+    const value = call.input[arg]
+    if (typeof value !== 'string') return []
+    const resolution = resolveMetricKey({ metric: value, radiusM, year })
+    const family = resolution.ok ? getEntry(resolution.key)?.baseMetric : undefined
+    return family === undefined ? [] : [family]
+  })
+}
+
+/** 指標のファミリ（`metricFamilies`）：そのツールの指標がすべて許されたファミリに解ける。 */
+function metricFamilyChecks(expectation: EvalExpectation, observed: EvalObserved): CheckResult[] {
+  return Object.entries(expectation.metricFamilies ?? {}).map(([name, allowed]) => {
+    const families = observed.toolCalls
+      .filter((call) => call.name === name)
+      .flatMap((call) => metricFamiliesOf(call))
+    const seen = [...new Set(families)].join('・') || 'なし'
+    return {
+      name: `${name} の指標が ${allowed.join('・')} のどれか（${seen}）`,
+      ok: families.length > 0 && families.every((family) => allowed.includes(family)),
+    }
+  })
+}
+
 /** 地図の操作が出たか（`mapActions`）。 */
 function mapActionChecks(expectation: EvalExpectation, observed: EvalObserved): CheckResult[] {
   return (expectation.mapActions ?? []).map((type) => ({
@@ -209,6 +251,7 @@ export function scoreCase(expectation: EvalExpectation, observed: EvalObserved):
     const ok = calls.every((call) => keys.every((key) => !isSet(call.input[key])))
     checks.push({ name: `${name} に ${keys.join('・')} を付けない`, ok })
   }
+  checks.push(...metricFamilyChecks(expectation, observed))
   checks.push(...mapActionChecks(expectation, observed))
   for (const needle of expectation.contains ?? []) {
     checks.push({ name: `「${needle}」を含む`, ok: observed.haystack.includes(needle) })

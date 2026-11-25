@@ -122,7 +122,7 @@
 | 行政区域 | `pipeline/build_area_values.py` | → `data/derived/area_units.csv`・`area_values.csv`・`src/shared/catalog/area-catalog.json` |
 | 沿線 | `pipeline/build_line_corridors.py` | → `data/derived/line_corridors.csv`・`line_corridor_values.csv`（601 × 3 幅・約 2 分） |
 | 検証 | `pipeline/validate_area_values.py` | 独立の検証（推計＝社人研・年齢＝社人研・固定値・沿線の不変条件〔年齢は駅の年齢の表と〕・形・年齢の和・`--mesh`） |
-| 投入 | `pipeline/load_area_values.py` | → DB の `area_metrics`・`areas`・`area_values`（単一トランザクション・投入後の確認が崩れたらロールバック） |
+| 投入 | `pipeline/load_area_values.py` | → DB の `area_metrics`・`areas`・`area_values`（単一トランザクション・一時の表へ送ってからサーバの中で入れ替える＝排他ロックは数秒・投入後の確認が崩れたらロールバック） |
 | DB の検証 | `pipeline/golden_area_values_test.py` | 本物の DB と PostgREST（anon）で 20 項目 |
 | 読む側（B5b） | `supabase/migrations/*_area_summary.sql`・`src/domain/area-summary/` | 共通 API `GET /api/areas`・`/api/areas/summary`（区域の値の作り方・無い値の理由はこの表のまま名乗る）。検証は `pipeline/golden_area_summary_test.py` |
 
@@ -171,4 +171,10 @@ python3 pipeline/build_area_values.py --check # カタログ JSON が規則と�
 - 投入：手元の一時の PostgreSQL 14 で migration・投入・投入後の確認を試した（全 PASS・値 201,066・年齢の指標の id は 25〜56）
 - わざと壊す：パイプライン 6 通り（15〜64 と 65〜74 の取り違え・原数値の表・天竜区の読み替え・浜通りの年齢を県の和に足さない・
   浜松の新しい区の理由・R6 で PT00）がすべて「書かずに落ちる」
+- 本番の投入（利用者の了承を得て）：1 回目（21:39〜21:54）は失敗してロールバックした（データは元のまま）。投入は本物の表を
+  truncate してから手元から COPY していて、その間ネットワークが遅く（area_values を 2 分で 90,208 行・約 15KB/s。直後に測ると 6.8MB/s）、
+  既定の statement_timeout（2 分）に当たった。COPY の間は区域の表を排他ロックしていたので、エリアの要約の読み手を最大で約 15 分
+  待たせうる状態だった。投入を「一時の表へ送る → サーバの中で入れ替える」に直し（ほかの投入と同じく statement_timeout も外す・
+  入れ替えのロック待ちは 10 秒まで）、2 回目（22:10）は送り 1.3 秒・入れ替え 5.5 秒・確定まで 1.2 秒で通った（投入後の確認 36 項目 PASS）。
+  DB の黄金テスト `golden_area_values_test.py` 21/21・`golden_area_summary_test.py` 28/28。3 つの表 14.1MB・DB 503 → 511MB
 

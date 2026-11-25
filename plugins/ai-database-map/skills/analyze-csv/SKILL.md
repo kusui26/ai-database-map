@@ -16,7 +16,8 @@ description: AI Database Map の build_dataset で駅×指標の CSV を作り�
    `truncated: true` なら全件ではない——limit を上げるか条件を絞り、漏れの可能性を本文で言う。
 2. **データセット生成**：`build_dataset` に
    `stations`（list_stations と同じセレクタ）か `grps` と、`metrics`（ファミリ名で足りる。
-   例 `["pax", "rate_covid", "pop", "pop_gr", "lp_med", "lp_gr", "bus_n", "estab_n"]`）を渡す。
+   例 `["pax", "rate_covid", "pop", "pop_gr", "lp_med", "lp_gr", "bus_n", "estab_n"]`。
+   年齢の構成なら `["pop15_64_share", "pop65_share", "pop15_64_gr_pred", "pop65_gr_pred"]`）を渡す。
    応答は**列スキーマとプレビューだけ**で、値は `url` の CSV・列の意味と出典は `meta_url` にある。
    災害を条件に使うなら `includeHazard: true` で `hazard_` 列（順序尺度）を結合するか、
    `get_hazard_summary`（≤500 駅・事前計算）を使う。
@@ -41,6 +42,9 @@ description: AI Database Map の build_dataset で駅×指標の CSV を作り�
      除外・補完のどちらにしても本文で件数を言う。
    - **フラグ列（`flag_*`・`*_lowbase`・`*_lown`）は 1=注意**（低分母・極端値）。
      該当行は除外するか ⚠ を付けて注記する。どの値列のフラグかは列メタの `flag` にある。
+   - **年齢の列を使うときは `pop_ageunk_*` も見る**（1＝補う前の年齢不詳が 10% 以上＝年齢の構成の多くを補った値）。
+     列メタの `flag` には載らないが、国勢調査の年齢を使う列（2050 年の高齢化率 `pop65_share_pred` 以外の年齢の列）に
+     かかる。該当する駅は注記する。
 5. **合成（スコアリング）するとき**：
    - 単位の違う値をそのまま足さない。**z-score か min-max で正規化してから**重み付き合成。
    - 重みは好みなので**先にユーザーに確認**する（勝手に決めて「おすすめ」と言わない）。

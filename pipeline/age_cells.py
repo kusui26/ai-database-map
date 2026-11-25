@@ -291,12 +291,19 @@ def check_r6(raw: pd.DataFrame) -> list[str]:
     return problems
 
 
-def r6_age_cells() -> pd.DataFrame:
-    """R6 → セル × 年 の総数（PTN）と 4 区分（県をまたぐセルは県ごとの行を足して 1 つに）。"""
+def r6_age_rows() -> pd.DataFrame:
+    """R6 の行（県 × セル）ごとの総数（PTN）と 4 区分（年ごと）に、セルのコードと市区町村コード（SHICODE）を添えて。
+
+    エリアの区域の値（`build_area_values.py`）が、この行を SHICODE ごとに足して行政区域の推計の年齢にする（2026-11-25）。
+    """
     raw = read_r6_age()
     problems = check_r6(raw)
     if problems:
         raise SystemExit("\n".join(["R6 の秘匿の決まりが崩れた:", *problems]))
     frames = [_r6_year(raw, year) for year in PRED_YEARS]
-    table = pd.concat([raw[["MESH_ID"]].rename(columns={"MESH_ID": "code"}), *frames], axis=1)
-    return table.groupby("code", as_index=False).sum()
+    return pd.concat([raw[["MESH_ID", "SHICODE"]].rename(columns={"MESH_ID": "code"}), *frames], axis=1)
+
+
+def r6_age_cells() -> pd.DataFrame:
+    """R6 → セル × 年 の総数（PTN）と 4 区分（県をまたぐセルは県ごとの行を足して 1 つに）。"""
+    return r6_age_rows().drop(columns=["SHICODE"]).groupby("code", as_index=False).sum()

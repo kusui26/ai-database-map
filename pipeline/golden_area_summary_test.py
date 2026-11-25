@@ -27,6 +27,7 @@ import numpy as np
 import psycopg
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from load_area_values import LINE_METRIC_COUNT  # noqa: E402
 from load_to_supabase import ROOT, db_params  # noqa: E402
 
 MIGRATION = ROOT / "supabase" / "migrations" / "20261010210000_area_summary.sql"
@@ -147,9 +148,9 @@ def check_rows(checks: Checks, cur: psycopg.Cursor) -> None:
     rows = call(cur, "area_rows", "keys", ["jp", "line:26001@1000"], {"with_children": False})
     keys = [r["key"] for r in rows]  # type: ignore[union-attr]
     line = next((r for r in rows if r["key"] == "line:26001@1000"), {})  # type: ignore[union-attr]
-    checks.add(keys == ["jp", "line:26001@1000"] and line.get("station_count") == 21 and len(line.get("values", {})) == 19
-               and line.get("width_m") == 1000 and line.get("line_cd") == TOYOKO,
-               "area_rows：子なしは指定した区域だけ・沿線は路線の駅の数と 19 の値", f"{keys}")
+    checks.add(keys == ["jp", "line:26001@1000"] and line.get("station_count") == 21
+               and len(line.get("values", {})) == LINE_METRIC_COUNT and line.get("width_m") == 1000 and line.get("line_cd") == TOYOKO,
+               f"area_rows：子なしは指定した区域だけ・沿線は路線の駅の数と {LINE_METRIC_COUNT} の値（年齢 32 を含む）", f"{keys}")
 
     rows = call(cur, "area_rows", "keys", ["jp"], {"with_children": True})
     prefs = [r for r in rows if r["kind"] == "prefecture"]  # type: ignore[union-attr]

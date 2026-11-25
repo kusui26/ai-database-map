@@ -21,11 +21,15 @@ export const PROJECTION_NOTE_JA =
 export const YEAR_GAP_NOTE_JA =
   '人口の実績は、市区町村・都道府県は 2025 年の国勢調査まで、沿線と駅の周りは 2020 年まで（2025 年のメッシュは未公表）。'
 
-/** このデータが見ていないこと。 */
+/** 年齢の読み方（生産年齢人口・高齢化率があるときだけ・2026-11-25）。 */
+export const AGE_NOTE_JA =
+  '年齢（生産年齢人口・高齢化率）は、2020 年までが国勢調査（年齢不詳を補った値）、2025 年からが推計。'
+
+/** このデータが見ていないこと（年齢は 2026-11-25 に区域の値へ入れた）。 */
 export const AREA_NOT_INCLUDED_JA: readonly string[] = [
   '増えた・減った理由（再開発・転入・住宅の供給など）',
   '地価・所得・売上のエリア全体の値（駅があれば、駅の周りの分布で見られる）',
-  '年齢構成・世帯の形',
+  '世帯の形',
   '通勤・通学の流れ（どこから来てどこへ行くか）',
   '町丁目より細かい場所の違い',
 ]
@@ -38,14 +42,14 @@ export function stationsNote(radiusM: number): string {
 /** 要約全体の注記（ある種類のエリアのときだけ付くものもある）。 */
 export function notesFor(summaries: readonly AreaSummary[], radiusM: number): string[] {
   const hasTotals = summaries.some((summary) => summary.totals.length > 0)
-  const hasFuture = summaries.some((summary) =>
-    summary.totals.some((total) => total.id === 'populationFuture'),
-  )
+  const hasTotal = (id: AreaSummary['totals'][number]['id']): boolean =>
+    summaries.some((summary) => summary.totals.some((total) => total.id === id))
   const hasStations = summaries.some((summary) => summary.stations.stats.length > 0)
   return [
     hasTotals ? AREA_TOTALS_NOTE_JA : null,
-    hasFuture ? PROJECTION_NOTE_JA : null,
+    hasTotal('populationFuture') ? PROJECTION_NOTE_JA : null,
     hasTotals ? YEAR_GAP_NOTE_JA : null,
+    hasTotal('workingAge') ? AGE_NOTE_JA : null,
     hasStations ? stationsNote(radiusM) : null,
   ].filter((note): note is string => note !== null)
 }

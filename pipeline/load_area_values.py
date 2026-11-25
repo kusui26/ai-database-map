@@ -3,7 +3,12 @@
 build_area_values.py・build_line_corridors.py が書いた CSV と、区域の指標のカタログ
 （`src/shared/catalog/area-catalog.json`）を、`public.area_metrics`・`areas`・`area_values` へ入れる。
 
-冪等性：truncate → COPY → 投入後の確認を**単一トランザクション**で行い、確認が 1 つでも崩れたらロールバック（旧データを保持）。
+冪等性：一時の表へ COPY → 本物の 3 つの表をサーバの中で入れ替え（truncate → insert … select）→ 投入後の確認を
+**単一トランザクション**で行い、確認が 1 つでも崩れたらロールバック（旧データを保持）。
+
+排他ロックを持つのは入れ替えと確認の間（数秒）だけ。手元から送る COPY は一時の表へ行うので、ネットワークが遅くても本物の表を
+読む人（エリアの要約）を待たせない（2026-11-25：以前は本物の表を truncate してから COPY していて、送りが遅い間に既定の
+statement_timeout 2 分に当たって失敗し、それまで約 15 分、区域の表を排他ロックしていた）。
 areas は stations を参照しないので、全量投入（load_to_supabase.py）の truncate では消えない。路線や駅を作り直したときは
 build_line_corridors.py → このスクリプトの順に回す（沿線が全路線 × 3 幅そろうことは投入後の確認が見る）。
 
@@ -16,6 +21,7 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 from pathlib import Path
 
 import psycopg
@@ -30,7 +36,16 @@ from area_common import (  # noqa: E402
     LINE_CORRIDORS_CSV,
     read_csv,
 )
-from area_rules import ANCHORS, LINE_WIDTHS_M  # noqa: E402
+from area_rules import AGE_KEY_PREFIXES, ANCHORS, LINE_WIDTHS_M, area_metrics  # noqa: E402
+
+#: 沿線 1 つが持つ値の数（人口 2・推計 11・事業所 3・従業者 3・年齢 32＝区域の指標のうち沿線でも作るもの）。
+LINE_METRIC_COUNT = sum(1 for metric in area_metrics() if metric.line is not None)
+#: 2020 年の年齢の 4 区分（行政区域の和＝人口の照合に使う）。
+AGE_KEYS_2020 = tuple(f"{prefix}_2020" for prefix in AGE_KEY_PREFIXES.values())
+#: 入れ替える 3 つの表（入れる順＝参照される側が先）。
+TABLES: tuple[str, ...] = ("area_metrics", "areas", "area_values")
+#: 入れ替えの排他ロックを待つ上限。読み手が長く掴んでいたら待たずに落とす（旧データのまま・読み手を後ろに並ばせない）。
+LOCK_TIMEOUT = "10s"
 
 AREA_COLUMNS = [
     "id", "key", "kind", "code", "line_cd", "width_m", "name_ja", "label_ja", "prefecture", "parent_key", "group_key",
@@ -65,27 +80,50 @@ def area_rows() -> list[list[object]]:
     return rows
 
 
-def copy_area_values(cur: psycopg.Cursor) -> tuple[int, int, int]:
-    """カタログと CSV を 3 つの表へ COPY する（呼び出し側のトランザクション内で実行）。"""
-    catalog = json.loads(AREA_CATALOG_JSON.read_text(encoding="utf-8"))
+def _stage(cur: psycopg.Cursor, catalog: dict[str, list[dict[str, object]]], areas: list[list[object]],
+           values: list[dict[str, str]]) -> None:
+    """一時の表（`stage_*`・トランザクションの終わりで消える）へ COPY する。本物の表はロックしない（読み手を止めない）。"""
     metric_id = {metric["key"]: number for number, metric in enumerate(catalog["metrics"], start=1)}
-    areas = area_rows()
     area_id = {row[1]: row[0] for row in areas}
-    values = read_csv(AREA_VALUES_CSV) + read_csv(LINE_CORRIDOR_VALUES_CSV)
-    stray = sorted({v["area_key"] for v in values} - set(area_id)) + sorted({v["metric_key"] for v in values} - set(metric_id))
-    if stray:
-        raise SystemExit(f"区域・指標に無い鍵の値がある（CSV とカタログがずれている）: {stray[:5]}")
-
-    cur.execute("truncate public.area_values, public.areas, public.area_metrics")
-    with cur.copy("copy public.area_metrics (id, key, meta) from stdin") as copy:
+    for table in TABLES:
+        cur.execute(f"create temp table stage_{table} (like public.{table} including defaults) on commit drop")
+    with cur.copy("copy stage_area_metrics (id, key, meta) from stdin") as copy:
         for metric in catalog["metrics"]:
-            copy.write_row([metric_id[metric["key"]], metric["key"], json.dumps(metric, ensure_ascii=False)])
-    with cur.copy(f"copy public.areas ({','.join(AREA_COLUMNS)}) from stdin") as copy:
+            copy.write_row([metric_id[str(metric["key"])], metric["key"], json.dumps(metric, ensure_ascii=False)])
+    with cur.copy(f"copy stage_areas ({','.join(AREA_COLUMNS)}) from stdin") as copy:
         for row in areas:
             copy.write_row(row)
-    with cur.copy("copy public.area_values (area_id, metric_id, value) from stdin") as copy:
+    with cur.copy("copy stage_area_values (area_id, metric_id, value) from stdin") as copy:
         for value in values:
             copy.write_row([area_id[value["area_key"]], metric_id[value["metric_key"]], float(value["value"])])
+
+
+def _swap(cur: psycopg.Cursor) -> None:
+    """本物の 3 つの表を一時の表の中身に入れ替える（サーバの中だけ・排他ロックはここから確定まで）。"""
+    cur.execute(f"set local lock_timeout = '{LOCK_TIMEOUT}'")
+    cur.execute(f"truncate {', '.join(f'public.{table}' for table in reversed(TABLES))}")
+    columns = {"area_metrics": "id, key, meta", "areas": ", ".join(AREA_COLUMNS), "area_values": "area_id, metric_id, value"}
+    for table in TABLES:
+        cur.execute(f"insert into public.{table} ({columns[table]}) select {columns[table]} from stage_{table}")
+
+
+def copy_area_values(cur: psycopg.Cursor) -> tuple[int, int, int]:
+    """カタログと CSV を一時の表へ COPY し、本物の 3 つの表を入れ替える（呼び出し側のトランザクション内で実行）。"""
+    catalog = json.loads(AREA_CATALOG_JSON.read_text(encoding="utf-8"))
+    metric_keys = {metric["key"] for metric in catalog["metrics"]}
+    areas = area_rows()
+    values = read_csv(AREA_VALUES_CSV) + read_csv(LINE_CORRIDOR_VALUES_CSV)
+    stray = sorted({v["area_key"] for v in values} - {row[1] for row in areas}) + sorted({v["metric_key"] for v in values} - metric_keys)
+    if stray:
+        raise SystemExit(f"区域・指標に無い鍵の値がある（CSV とカタログがずれている）: {stray[:5]}")
+    # 送りの COPY は一時の表へ（遅くても本物の表を止めない）。ほかの投入（load_to_supabase.py・load_station_age.py）と同じく
+    # 既定の statement_timeout（2 分）を外す——20 万行の送りはネットワーク次第で 2 分を超えうる
+    cur.execute("set statement_timeout = 0")
+    started = time.time()
+    _stage(cur, catalog, areas, values)
+    staged = time.time()
+    _swap(cur)
+    print(f"一時の表へ送る {staged - started:.1f} 秒・入れ替え {time.time() - staged:.1f} 秒（排他ロックはここから確定まで）")
     return len(catalog["metrics"]), len(areas), len(values)
 
 
@@ -115,9 +153,18 @@ POST_LOAD_CHECKS: tuple[tuple[str, str, object], ...] = (
         0,
     ),
     (
-        "沿線にはどれも 19 の値がある（人口 2・推計 11・事業所 3・従業者 3）",
+        f"沿線にはどれも {LINE_METRIC_COUNT} の値がある（人口 2・推計 11・事業所 3・従業者 3・年齢 32）",
         "select count(*) from public.areas a where a.kind = 'line' and "
-        "(select count(*) from public.area_values v where v.area_id = a.id) <> 19",
+        f"(select count(*) from public.area_values v where v.area_id = a.id) <> {LINE_METRIC_COUNT}",
+        0,
+    ),
+    (
+        "行政区域の 2020 年の年齢の 4 区分の和＝人口（年齢のある区域すべて）",
+        "select count(*) from public.areas a "
+        "join public.area_values t on t.area_id = a.id join public.area_metrics tm on tm.id = t.metric_id "
+        "and tm.key = 'pop_2020' where a.kind <> 'line' and abs(t.value - ("
+        "select sum(v.value) from public.area_values v join public.area_metrics m on m.id = v.metric_id "
+        f"where v.area_id = a.id and m.key in ({', '.join(repr(key) for key in AGE_KEYS_2020)}))) > 0.5",
         0,
     ),
     (
@@ -158,16 +205,17 @@ def main() -> int:
     with psycopg.connect(**db_params()) as conn:
         with conn.cursor() as cur:
             metrics, areas, values = copy_area_values(cur)
+            swapped = time.time()
             print(f"投入：指標 {metrics}・区域 {areas:,}・値 {values:,}")
             failures = run_post_load_checks(cur)
             if failures:
                 conn.rollback()
                 print(f"投入後の確認が崩れたのでロールバックした：{failures}")
                 return 1
-            for table in ("area_metrics", "areas", "area_values"):
+            for table in TABLES:
                 cur.execute(f"analyze public.{table}")
         conn.commit()
-    print("コミットした")
+    print(f"コミットした（入れ替えのあと確定まで {time.time() - swapped:.1f} 秒）")
     return 0
 
 

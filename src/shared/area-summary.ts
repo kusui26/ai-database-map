@@ -133,13 +133,25 @@ export type AreaLocateResponse = z.infer<typeof areaLocateResponseSchema>
 export const areaSummaryKindSchema = z.enum([...areaKindSchema.options, 'near', 'bbox'])
 export type AreaSummaryKind = z.infer<typeof areaSummaryKindSchema>
 
-/** 区域の値の作り方（駅から N m は、起点の駅の円の値＝メッシュの按分）。 */
-export const areaTotalMethodSchema = z.enum(['official', 'projection', 'mesh', 'stationRadius'])
+/**
+ * 区域の値の作り方（駅から N m は、起点の駅の円の値＝メッシュの按分）。`officialAndProjection` は実績（公表値）と推計を
+ * 1 つの系列に並べた行政区域の年齢（2020 年までが国勢調査の不詳補完値・2025 年からが推計・2026-11-25）。
+ */
+export const areaTotalMethodSchema = z.enum([
+  'official',
+  'projection',
+  'officialAndProjection',
+  'mesh',
+  'stationRadius',
+])
 export type AreaTotalMethod = z.infer<typeof areaTotalMethodSchema>
 
+/** 区域の値の系統。`workingAge`（生産年齢人口）と `agingRate`（高齢化率）は年齢の 4 区分から作る（2026-11-25）。 */
 export const areaTotalIdSchema = z.enum([
   'population',
   'populationFuture',
+  'workingAge',
+  'agingRate',
   'establishments',
   'employees',
 ])

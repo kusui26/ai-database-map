@@ -8,11 +8,11 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { areaCatalog, getAreaMetric, type AreaMetric } from '@/shared/area-catalog'
+import { AREA_AGE_BASES, areaCatalog, getAreaMetric, type AreaMetric } from '@/shared/area-catalog'
 import { type RadiusM } from '@/shared/constants'
 import { dataSources } from '@/domain/sources'
 import { areaDataSources } from '@/domain/area-summary/sources'
-import { totalLabelJa } from '@/domain/area-summary/totals'
+import { totalLabelsJa } from '@/domain/area-summary/totals'
 import { buildAreaSummaryResponse, type AreaSummaryParts } from '@/domain/area-summary/build'
 import { type ResolvedArea } from '@/domain/area-summary/resolve'
 import { resolveStationStats } from '@/domain/area-summary/stations'
@@ -26,8 +26,14 @@ import {
 } from './fixtures/area-summary'
 
 const RADIUS: RadiusM = 1000
-/** 区域の値の種類（カタログの baseMetric）。 */
-const BASES: readonly AreaMetric['baseMetric'][] = ['pop', 'pop_pred', 'estab_n', 'emp_n']
+/** 区域の値の種類（カタログの baseMetric・年齢の 4 区分は 2026-11-25）。 */
+const BASES: readonly AreaMetric['baseMetric'][] = [
+  'pop',
+  'pop_pred',
+  'estab_n',
+  'emp_n',
+  ...AREA_AGE_BASES,
+]
 const STATS = resolveStationStats(RADIUS, defaultColorEntry(RADIUS))
 
 /** カタログが持つ出典の組（出典・利用条件）。About と見比べる元。 */
@@ -78,15 +84,15 @@ describe('About のエリアの値の出典（areaDataSources）', () => {
     expect(new Set(about)).toEqual(catalogPairs())
   })
 
-  it('2026-11 のカタログでは 8 種類（行政区域 5・沿線 3）', () => {
+  it('2026-11-25 のカタログでは 12 種類（行政区域 7・沿線 5。年齢の 4 つを含む）', () => {
     const sources = areaDataSources()
-    expect(sources).toHaveLength(8)
-    expect(sources.filter((each) => each.scopesJa.includes('行政区域'))).toHaveLength(5)
-    expect(sources.filter((each) => each.scopesJa.includes('沿線'))).toHaveLength(3)
+    expect(sources).toHaveLength(12)
+    expect(sources.filter((each) => each.scopesJa.includes('行政区域'))).toHaveLength(7)
+    expect(sources.filter((each) => each.scopesJa.includes('沿線'))).toHaveLength(5)
   })
 
   it('札は画面の「エリア全体の値」と同じ言葉で、範囲（行政区域・沿線）を添える', () => {
-    const allowed = new Set(BASES.map((base) => totalLabelJa(base)))
+    const allowed = new Set(BASES.flatMap((base) => totalLabelsJa(base)))
     for (const each of areaDataSources()) {
       expect(each.usedForJa.length, each.source).toBeGreaterThan(0)
       expect(
@@ -100,6 +106,15 @@ describe('About のエリアの値の出典（areaDataSources）', () => {
       each.source.startsWith('経済センサス‐活動調査（'),
     )
     expect(census?.usedForJa).toEqual(['事業所（民営）', '従業者（民営）'])
+    // 年齢の出典の札は、画面の 2 行の名前（「年齢別の人口」のような画面に無い言葉にしない）
+    const age = areaDataSources().filter((each) => each.source.includes('年齢'))
+    expect(age).toHaveLength(4)
+    for (const each of age) {
+      expect(each.usedForJa, each.source).toEqual([
+        '生産年齢人口（15〜64歳）',
+        '高齢化率（65歳以上の割合）',
+      ])
+    }
   })
 })
 

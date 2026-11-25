@@ -5,7 +5,12 @@
  * 無い値の理由を確かめるために入れてある。内訳の子（区）の値は、内訳が使う 4 つ（人口 2020・2025 と推計 2020・2050）に絞った。
  */
 
-import { type AreaRow, type StationMetricValue, type StationStatRow } from '@/db/queries'
+import {
+  type AgeProfileRow,
+  type AreaRow,
+  type StationMetricValue,
+  type StationStatRow,
+} from '@/db/queries'
 import { type StationRow } from '@/shared/api'
 
 type AreaRowInput = Omit<AreaRow, 'values'> & { readonly values: Readonly<Record<string, number>> }
@@ -192,4 +197,154 @@ export const TAKEBASHI_5KM: Readonly<Record<string, number>> = {
   emp_n_2012_5km: 3248119,
   emp_n_2016_5km: 3364685,
   emp_n_2021_5km: 3702211,
+}
+
+/**
+ * 竹橋の駅の年齢の表（`station_age_profile` の 1km と 5km・駅詳細の人口タブと同じ値・2026-11-25 に写した）。駅から 5km の
+ * エリアの年齢は 5km の 8 年だけを読む（1km の行も入れて「ほかの半径を読まないこと」を確かめる）。5km の 2020 年の 4 区分の和は
+ * 1,277,680 人（`pop_2020_5km`）、2050 年は 1,464,683 人（`pop_pred_2024_2050_5km`）。
+ */
+export const TAKEBASHI_AGE_ROWS: readonly AgeProfileRow[] = [
+  { radiusM: 1000, year: 2015, projected: false, counts: [863, 6949, 939, 959], unknown: 232 },
+  { radiusM: 1000, year: 2020, projected: false, counts: [1103, 7908, 815, 982], unknown: 74 },
+  { radiusM: 1000, year: 2025, projected: true, counts: [1365, 8367, 753, 1071], unknown: null },
+  { radiusM: 1000, year: 2030, projected: true, counts: [1497, 8559, 876, 1071], unknown: null },
+  { radiusM: 1000, year: 2035, projected: true, counts: [1480, 8612, 1094, 1074], unknown: null },
+  { radiusM: 1000, year: 2040, projected: true, counts: [1412, 8507, 1300, 1161], unknown: null },
+  { radiusM: 1000, year: 2045, projected: true, counts: [1359, 8351, 1366, 1348], unknown: null },
+  { radiusM: 1000, year: 2050, projected: true, counts: [1337, 8040, 1426, 1584], unknown: null },
+  {
+    radiusM: 5000,
+    year: 2015,
+    projected: false,
+    counts: [119005, 820242, 117593, 106996],
+    unknown: 21425,
+  },
+  {
+    radiusM: 5000,
+    year: 2020,
+    projected: false,
+    counts: [140694, 905990, 111830, 119166],
+    unknown: 48557,
+  },
+  {
+    radiusM: 5000,
+    year: 2025,
+    projected: true,
+    counts: [149266, 943315, 102360, 134757],
+    unknown: null,
+  },
+  {
+    radiusM: 5000,
+    year: 2030,
+    projected: true,
+    counts: [150944, 968388, 119131, 137200],
+    unknown: null,
+  },
+  {
+    radiusM: 5000,
+    year: 2035,
+    projected: true,
+    counts: [150388, 977257, 146497, 139929],
+    unknown: null,
+  },
+  {
+    radiusM: 5000,
+    year: 2040,
+    projected: true,
+    counts: [151646, 965372, 171912, 153547],
+    unknown: null,
+  },
+  {
+    radiusM: 5000,
+    year: 2045,
+    projected: true,
+    counts: [151334, 950490, 179607, 177184],
+    unknown: null,
+  },
+  {
+    radiusM: 5000,
+    year: 2050,
+    projected: true,
+    counts: [148714, 934136, 173970, 207863],
+    unknown: null,
+  },
+]
+
+/**
+ * 横浜市の年齢の 4 区分（2015・2020 年は国勢調査の不詳補完値・2025〜2050 年は R6 の PTN × 構成の和・2026-11-25 に
+ * `data/derived/area_values.csv` から写した）。2020 年の 15〜64 歳 2,388,942 人・65 歳以上 946,678 人（高齢化率 25.1%）。
+ */
+export const YOKOHAMA_AGE: Readonly<Record<string, number>> = {
+  pop0_14_2015: 468652,
+  pop0_14_2020: 441871,
+  pop0_14_pred_2024_2025: 408955.0581,
+  pop0_14_pred_2024_2030: 383580.1626,
+  pop0_14_pred_2024_2035: 377222.1426,
+  pop0_14_pred_2024_2040: 377127.1273,
+  pop0_14_pred_2024_2045: 370395.7188,
+  pop0_14_pred_2024_2050: 354913.8549,
+  pop15_64_2015: 2385162,
+  pop15_64_2020: 2388942,
+  pop15_64_pred_2024_2025: 2395670.3495,
+  pop15_64_pred_2024_2030: 2336583.2631,
+  pop15_64_pred_2024_2035: 2223939.5239,
+  pop15_64_pred_2024_2040: 2092562.6083,
+  pop15_64_pred_2024_2045: 2014916.9522,
+  pop15_64_pred_2024_2050: 1964818.727,
+  pop65_74_2015: 465647,
+  pop65_74_2020: 448344,
+  pop65_74_pred_2024_2025: 394011.1733,
+  pop65_74_pred_2024_2030: 423354.2852,
+  pop65_74_pred_2024_2035: 500491.1707,
+  pop65_74_pred_2024_2040: 551716.9849,
+  pop65_74_pred_2024_2045: 515162.9573,
+  pop65_74_pred_2024_2050: 443159.894,
+  pop75_2015: 405383,
+  pop75_2020: 498334,
+  pop75_pred_2024_2025: 588065.419,
+  pop75_pred_2024_2030: 612641.2907,
+  pop75_pred_2024_2035: 613855.1658,
+  pop75_pred_2024_2040: 642641.2771,
+  pop75_pred_2024_2045: 703308.3718,
+  pop75_pred_2024_2050: 774360.5227,
+}
+
+/**
+ * 東急東横線の沿線（駅から 1km）の年齢の 4 区分（メッシュの按分・2026-11-25 に `line_corridor_values.csv` から写した）。
+ * 4 区分の和は沿線の人口（2020 年 760,068.8262）・将来推計人口（2050 年 787,122.1639）と一致する。
+ */
+export const TOYOKO_AGE: Readonly<Record<string, number>> = {
+  pop0_14_2015: 76268.1314,
+  pop0_14_2020: 83464.6441,
+  pop0_14_pred_2024_2025: 84084.9094,
+  pop0_14_pred_2024_2030: 83382.9701,
+  pop0_14_pred_2024_2035: 83115.654,
+  pop0_14_pred_2024_2040: 82765.7767,
+  pop0_14_pred_2024_2045: 81648.3824,
+  pop0_14_pred_2024_2050: 79531.0901,
+  pop15_64_2015: 508697.4459,
+  pop15_64_2020: 534998.5623,
+  pop15_64_pred_2024_2025: 529408.297,
+  pop15_64_pred_2024_2030: 530856.808,
+  pop15_64_pred_2024_2035: 523718.3735,
+  pop15_64_pred_2024_2040: 511021.012,
+  pop15_64_pred_2024_2045: 500581.1592,
+  pop15_64_pred_2024_2050: 490026.0899,
+  pop65_74_2015: 71272.4983,
+  pop65_74_2020: 68716.3472,
+  pop65_74_pred_2024_2025: 62985.2003,
+  pop65_74_pred_2024_2030: 73061.8171,
+  pop65_74_pred_2024_2035: 87933.0916,
+  pop65_74_pred_2024_2040: 98272.8757,
+  pop65_74_pred_2024_2045: 97513.1208,
+  pop65_74_pred_2024_2050: 91851.1932,
+  pop75_2015: 65286.0152,
+  pop75_2020: 72889.2726,
+  pop75_pred_2024_2025: 82577.6305,
+  pop75_pred_2024_2030: 85388.1266,
+  pop75_pred_2024_2035: 88342.2415,
+  pop75_pred_2024_2040: 97313.8673,
+  pop75_pred_2024_2045: 110753.3954,
+  pop75_pred_2024_2050: 125713.7908,
 }

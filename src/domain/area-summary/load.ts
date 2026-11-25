@@ -12,9 +12,10 @@ import {
   areaStationStats,
   datasetRows,
   lineStationsInOrder,
+  stationAgeProfile,
   type StationStatRow,
 } from '@/db/queries'
-import { areaCatalog } from '@/shared/area-catalog'
+import { areaCatalog, isAreaAgeBase } from '@/shared/area-catalog'
 import { type AreaSummaryResponse } from '@/shared/area-summary'
 import { type CatalogEntry } from '@/shared/catalog'
 import { isRadiusM, NO_COLORING, type RadiusM } from '@/shared/constants'
@@ -22,6 +23,7 @@ import { classifyAreas } from '@/domain/style/load'
 import { colorableEntry, defaultColorEntry, notColorableJa } from '@/domain/style/color-metric'
 import { lineBreakdownEntries } from './breakdown'
 import { buildAreaSummaryResponse, stationKeyOf, type AreaSummaryParts } from './build'
+import { ageCircleValues } from './near-age'
 import { parseAreaRefs } from './refs'
 import { resolveAreas, stationFilterOf, type ResolvedArea } from './resolve'
 import { resolveStationStats } from './stations'
@@ -70,23 +72,29 @@ async function lineParts(
 /**
  * 駅から N m（6 つの半径のどれか）の、起点の駅の円の値（区域の指標の key へ読み替える・年は沿線と同じ）。
  * 要る key だけを `dataset_rows` で引く（駅詳細と同じ値・1,163,836 人は 1,163,836 人のまま——2026-10-10 に、jsonb で返す関数が
- * 有効 6 桁に丸めていたのを直した・migration `20261010230000_jsonb_number_precision.sql`）。
+ * 有効 6 桁に丸めていたのを直した・migration `20261010230000_jsonb_number_precision.sql`）。年齢の 4 区分は駅の指標に無いので、
+ * 駅詳細と同じ駅の年齢の表（`station_age_profile`）を並列に引く（2026-11-25・`near-age.ts`）。
  */
 async function circleParts(
   area: Extract<ResolvedArea, { type: 'near' }>,
 ): Promise<AreaSummaryParts['circle']> {
   const within = area.withinM
   if (!isRadiusM(within)) return null
-  const metrics = areaCatalog.metrics.filter((metric) => metric.sources.line !== null)
+  const metrics = areaCatalog.metrics.filter(
+    (metric) => metric.sources.line !== null && !isAreaAgeBase(metric.baseMetric),
+  )
   const keys = new Map(metrics.map((metric) => [stationKeyOf(metric, within), metric.key]))
-  const rows = await datasetRows([area.origin.grp], [...keys.keys()])
+  const [rows, ageRows] = await Promise.all([
+    datasetRows([area.origin.grp], [...keys.keys()]),
+    stationAgeProfile(area.origin.grp),
+  ])
   const values = Object.entries(rows[area.origin.grp] ?? {}).flatMap(
     ([key, value]): [string, number][] => {
       const areaKey = keys.get(key)
       return areaKey === undefined ? [] : [[areaKey, value]]
     },
   )
-  return values.length === 0 ? null : new Map(values)
+  return values.length === 0 ? null : new Map([...values, ...ageCircleValues(ageRows, within)])
 }
 
 async function partsOf(area: ResolvedArea, statKeys: readonly string[]): Promise<AreaSummaryParts> {

@@ -30,7 +30,8 @@ import { classifyStations } from '@/domain/style/classify'
 import { areaSeriesColor } from '@/domain/style/palette'
 import { defaultColorEntry } from '@/domain/style/color-metric'
 import { changeOf, rateJa, rateOf, valueJa } from '@/domain/area-summary/wording'
-import { accuracyOf, buildTotals, peakOf, type MethodOf } from '@/domain/area-summary/totals'
+import { type MethodOf } from '@/domain/area-summary/method'
+import { accuracyOf, buildTotals, peakOf } from '@/domain/area-summary/totals'
 import { resolveStationStats, stationStatOf } from '@/domain/area-summary/stations'
 import { adminBreakdown, childrenOf, lineBreakdown } from '@/domain/area-summary/breakdown'
 import { compareAreas, INDEX_BASE_YEAR } from '@/domain/area-summary/compare'
@@ -944,7 +945,11 @@ describe('エリアの一覧（自己記述のカタログ）', () => {
       stationCount: 137,
     })
     expect(response.lineWidthsM).toEqual([500, 1000, 2000])
-    expect(response.metrics).toHaveLength(24)
+    // 自己記述のカタログ：人口・推計・事業所・従業者の 24 に、年齢の 4 区分 × 8 年（2026-11-25）
+    expect(response.metrics).toHaveLength(56)
+    expect(response.metrics.map((metric) => metric.key)).toEqual(
+      expect.arrayContaining(['pop15_64_2020', 'pop75_pred_2024_2050']),
+    )
     expect(response.kinds.map((kind) => kind.kind)).toContain('line')
   })
 })

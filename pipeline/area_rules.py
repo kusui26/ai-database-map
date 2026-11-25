@@ -11,11 +11,19 @@ fetch_area_stats.py・build_area_values.py・build_line_corridors.py・validate_
 
 将来推計人口は、国土数値情報の将来推計人口メッシュ（R6）を**市区町村コード（SHICODE）ごとに足す**。2020〜2050 年は
 社人研の地域別推計（令和 5 年推計）と同じ値になる（validate_area_values.py が全市区町村で照合する）。
+
+**人口の年齢**（4 区分・2026-11-25・`docs/261122_PLAN_population_improvement.md` §8.3）：行政区域の実績（2015・2020 年）は
+国勢調査の不詳補完値の表（公表値）、推計（2025〜2050 年）は R6 の行ごとの「真の総数（PTN）× 年齢構成」を SHICODE ごとに
+足す（駅の年齢と同じ作り。社人研の年齢別の推計とは各区分 10 人以内）。沿線は駅の年齢と同じセルの値を按分する。
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+
+from age_rules import BAND_LABELS_JA, BANDS
+from age_rules import CENSUS_YEARS as AGE_ACTUAL_YEARS
+from age_rules import PRED_YEARS as AGE_PRED_YEARS
 
 # --- 年・幅 ---------------------------------------------------------------
 
@@ -115,8 +123,9 @@ NORTHERN_TERRITORIES_CODES: frozenset[str] = frozenset({"01695", "01696", "01697
 #: 浜松市（2024-01 に 7 区 → 3 区）。中央区・浜名区の値は 2020・2025 年の人口だけ（2025 年の国勢調査の組替）。
 #: 天竜区は範囲が変わらずコードだけ変わったので、過去の値も推計もある。
 HAMAMATSU_CODE = "22130"
-#: 推計（R6）の再編前の区 → 今の区。天竜区（22137 → 22140）だけ写せる（build が 2020 年の人口の一致で確かめる）。
-#: 中区・東区・西区・南区・北区・浜北区は中央区・浜名区へ分かれて入ったので、区の単位では写せない（市全体だけ）。
+#: 推計（R6）と国勢調査の年齢の表（2015・2020 年）の再編前の区 → 今の区。天竜区（22137 → 22140）だけ写せる
+#: （build が 2020 年の人口の一致で確かめる）。中区・東区・西区・南区・北区・浜北区は中央区・浜名区へ分かれて入ったので、
+#: 区の単位では写せない（市全体だけ）。
 R6_CODE_ALIASES: dict[str, str] = {"22137": "22140"}
 #: 2020 年の人口が社会・人口統計体系に無いとき、令和 7 年国勢調査の「2020 年の人口（組替）」で埋める区域。
 POP2020_FROM_CENSUS2025: frozenset[str] = frozenset({"22138", "22139"})
@@ -125,6 +134,24 @@ HAMADORI_CODES: frozenset[str] = frozenset(
     {"07204", "07209", "07212", "07541", "07542", "07543", "07544", "07545", "07546", "07547", "07548", "07561", "07564"}
 )
 HAMADORI_R6_CODE = "07999"
+
+# --- 人口の年齢（2026-11-25・PR-5b） ---------------------------------------------------------
+
+#: 年齢の区域の指標の年（実績 2015・2020 → 推計 2025〜2050。駅の年齢の表と同じ年）。
+AGE_YEARS: tuple[int, ...] = AGE_ACTUAL_YEARS + AGE_PRED_YEARS
+#: 年齢の区分 → 区域の指標の key の頭（駅の指標と同じ頭。`pop_` の頭は使わない＝`pop_pred_…` の規則に当たらない）。
+AGE_KEY_PREFIXES: dict[str, str] = {"0_14": "pop0_14", "15_64": "pop15_64", "65_74": "pop65_74", "75plus": "pop75"}
+
+
+def age_key(band: str, year: int) -> str:
+    """年齢の区域の指標の key（実績は `pop15_64_2020`、推計は `pop15_64_pred_2024_2050`）。"""
+    prefix = AGE_KEY_PREFIXES[band]
+    return f"{prefix}_{year}" if year in AGE_ACTUAL_YEARS else f"{prefix}_pred_2024_{year}"
+
+
+#: 年齢の指標（実績と推計）の key の頭・推計だけの key の頭（無い値の規則に使う）。
+AGE_METRIC_PREFIXES: tuple[str, ...] = tuple(f"{prefix}_" for prefix in AGE_KEY_PREFIXES.values())
+AGE_PRED_PREFIXES: tuple[str, ...] = tuple(f"{prefix}_pred_" for prefix in AGE_KEY_PREFIXES.values())
 
 # --- 値が無い理由（無い値は必ずここで理由を言う。言っていない欠けは build が落とす） -----------------
 
@@ -154,10 +181,12 @@ MISSING_RULES: tuple[MissingRule, ...] = (
         "2024 年 1 月の区の再編（浜松市 7 区 → 3 区）で生まれた区。2015 年以前の値は無い"
         "（2020 年は 2025 年の国勢調査が新しい区に組み替えて出している）",
     ),
+    # 年齢（国勢調査の年齢の表・R6 とも）も同じ理由で、1 つの理由にまとめる（2026-11-25）。理由を別にすると、年齢の指標を
+    # 知らない前の版のアプリ（本番の main）が、年齢だけの理由を「出せない値：：…」と名前の無い行で出してしまう。
     MissingRule(
         frozenset({"22138", "22139"}), None,
-        ("pop_pred_2024_",),
-        "将来推計人口（R6）は再編前の浜松市の 7 区で作られている。浜松市全体の値はある",
+        ("pop_pred_2024_", *AGE_METRIC_PREFIXES),
+        "将来推計人口（R6）と年齢別の人口は、再編前の浜松市の 7 区で作られている。浜松市全体の値はある",
     ),
     MissingRule(
         frozenset({"22138", "22139"}), None,
@@ -166,7 +195,7 @@ MISSING_RULES: tuple[MissingRule, ...] = (
     ),
     MissingRule(
         HAMADORI_CODES, None,
-        ("pop_pred_2024_",),
+        ("pop_pred_2024_", *AGE_PRED_PREFIXES),
         "社人研は福島県の浜通り 13 市町村の個別の推計を出していない（13 市町村をまとめた値だけ）",
         in_parent_total=False,  # 福島県の和には、まとめた値（07999）を足して照合する
     ),
@@ -261,6 +290,26 @@ ECON_ADMIN_SOURCE = AreaSource(
 ECON_LINE_SOURCE = AreaSource(
     "mesh", "経済センサス‐活動調査 地域メッシュ統計（500m・e-Stat）を沿線の範囲で面積按分", LICENSE_ESTAT
 )
+AGE_ADMIN_SOURCE = AreaSource(
+    "official",
+    "総務省 国勢調査 不詳補完結果（年齢不詳を補った年齢別人口・2015年と2020年・令和2年国勢調査の参考表・e-Stat）",
+    LICENSE_ESTAT,
+)
+AGE_PRED_ADMIN_SOURCE = AreaSource(
+    "projection",
+    "国土数値情報 将来推計人口メッシュ（R6・国土交通省）の年齢別の人口を市区町村ごとに足したもの"
+    "（国立社会保障・人口問題研究所『日本の地域別将来推計人口（令和5年推計）』との差は各区分 10 人以内）",
+    LICENSE_KSJ,
+)
+AGE_LINE_SOURCE = AreaSource(
+    "mesh",
+    "総務省 国勢調査 地域メッシュ統計（250m・e-Stat 統計GIS）を沿線の範囲で面積按分"
+    "（年齢不詳は市区町村の不詳補完値に合わせて割り振った）",
+    LICENSE_ESTAT,
+)
+AGE_PRED_LINE_SOURCE = AreaSource(
+    "mesh", "国土数値情報 将来推計人口メッシュ（R6・250m・国土交通省）の年齢別の人口を沿線の範囲で面積按分", LICENSE_KSJ
+)
 
 
 @dataclass(frozen=True)
@@ -310,7 +359,22 @@ def area_metrics() -> tuple[AreaMetric, ...]:
         )
         for y in ECON_YEARS
     )
-    return pop + pred + estab + emp
+    # 年齢は末尾に足す（前の 24 指標の DB の id を変えない）。区分ごとに実績 → 推計、年の昇順。
+    return pop + pred + estab + emp + tuple(_age_metric(band, y) for band in BANDS for y in AGE_YEARS)
+
+
+def _age_metric(band: str, year: int) -> AreaMetric:
+    """年齢の区域の指標 1 つ（baseMetric は区分ごと＝実績と推計で 1 つの系列。推計かは vintage で分かる）。"""
+    label = BAND_LABELS_JA[band]
+    if year in AGE_ACTUAL_YEARS:
+        return AreaMetric(
+            age_key(band, year), AGE_KEY_PREFIXES[band], "population", f"{label}の人口（{year}年）", "人", "int", year,
+            None, AGE_ADMIN_SOURCE, AGE_LINE_SOURCE,
+        )
+    return AreaMetric(
+        age_key(band, year), AGE_KEY_PREFIXES[band], "population_forecast", f"{label}の将来推計人口（{year}年・R6推計）",
+        "人", "int", year, 2024, AGE_PRED_ADMIN_SOURCE, AGE_PRED_LINE_SOURCE,
+    )
 
 
 # --- 照合の固定値（公表値・社人研。build と validate と DB の黄金テストが見る） -------------------
@@ -345,4 +409,8 @@ ANCHORS: dict[tuple[str, str], int] = {
     ("muni:13100", "pop_2025"): 9_944_109,
     ("muni:22130", "pop_2025"): 765_254,
     ("muni:22138", "pop_2020"): 607_937,
+    # 令和 2 年国勢調査の不詳補完値（全国）：15 歳未満 15,031,602・15〜64 歳 75,087,865（65 歳以上 36,026,632 は
+    # 4 区分の和＝人口の照合で決まる）。
+    ("jp", "pop0_14_2020"): 15_031_602,
+    ("jp", "pop15_64_2020"): 75_087_865,
 }

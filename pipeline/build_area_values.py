@@ -9,7 +9,11 @@
 | 人口 2025 | 令和 7 年国勢調査 人口等基本集計 | 同じ表 |
 | 将来推計人口 2020〜2070 | R6 メッシュを市区町村コード（SHICODE）ごとに足す | R6 を都道府県・全国で足す |
 | 事業所・従業者 2012/2016/2021 | 社会・人口統計体系 市区町村データ（今の境域に組み替え済み） | 経済センサスの各年の公表値（境界未定地域を含む） |
+| 年齢の 4 区分 2015・2020 | 国勢調査の不詳補完値の表（公表値） | 同じ表 |
+| 年齢の 4 区分 2025〜2050 | R6 の行ごとの PTN × 年齢構成を SHICODE ごとに足す（駅の年齢と同じ作り） | R6 を都道府県・全国で足す |
 | 面積 | 令和 7 年国勢調査（面積・参考） | 同じ表 |
+
+年齢の 4 区分の和は、実績は人口（1 人単位）、推計は将来推計人口（浮動小数の誤差だけ）と一致すること（`check_age_totals`）。
 
 出力は `data/derived/area_units.csv`・`area_values.csv` と、区域の指標のカタログ
 `src/shared/catalog/area-catalog.json`（コミットする契約物・DB の `area_metrics` はこのミラー）。
@@ -22,11 +26,14 @@
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
+
+import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from area_common import (  # noqa: E402
@@ -40,7 +47,10 @@ from area_common import (  # noqa: E402
     read_n03_units,
     write_csv,
 )
+from age_rules import BANDS, MUNI_CODE_RENAMES, muni_age_table  # noqa: E402
 from area_rules import (  # noqa: E402
+    AGE_ACTUAL_YEARS,
+    AGE_PRED_YEARS,
     ANCHORS,
     BOUNDARY_UNDETERMINED_CODES,
     CENSUS2025_AREA_TAB,
@@ -64,6 +74,7 @@ from area_rules import (  # noqa: E402
     SSDS_POP_ITEM,
     AreaMetric,
     MissingRule,
+    age_key,
     area_metrics,
 )
 
@@ -167,6 +178,13 @@ def _put(values: Values, key: str, metric: str, value: float | None) -> None:
         values[(key, metric)] = value
 
 
+def _census_code(area: Area) -> str:
+    """国勢調査の表の区域のコード（全国 00000・都道府県 XX000・ほかは区域のコード）。"""
+    if area.kind == "country":
+        return "00000"
+    return f"{area.code}000" if area.kind == "prefecture" else area.code or ""
+
+
 def collect_population(areas: list[Area], values: Values) -> None:
     """人口（1995〜2025）。市区町村・政令市・23 区は市区町村データ、都道府県・全国は都道府県データと 2025 年の表。"""
     muni = read_estat("ssds_muni_pop")
@@ -192,57 +210,96 @@ def collect_population(areas: list[Area], values: Values) -> None:
                     value = pop2020_k.get(area.code or "")
                 _put(values, area.key, metric, value)
     for area in areas:
-        code = "00000" if area.kind == "country" else (f"{area.code}000" if area.kind == "prefecture" else area.code)
-        _put(values, area.key, "pop_2025", pop2025.get(code or ""))
+        _put(values, area.key, "pop_2025", pop2025.get(_census_code(area)))
 
 
 def collect_area_km2(areas: list[Area]) -> None:
     change25 = read_estat("census2025_change")
     km2 = change25.lookup(change25.area_class_id(), tab=CENSUS2025_AREA_TAB)
     for area in areas:
-        code = "00000" if area.kind == "country" else (f"{area.code}000" if area.kind == "prefecture" else area.code)
-        area.area_km2 = km2.get(code or "")
+        area.area_km2 = km2.get(_census_code(area))
         if area.area_km2 is None:
             raise SystemExit(f"{area.key} {area.name} の面積が無い")
+
+
+def _r6_by_area(
+    table: pd.DataFrame, columns: list[str], areas: list[Area], wards_of: dict[str, list[str]]
+) -> dict[str, pd.Series]:
+    """R6 の行（SHICODE つき）→ 区域の鍵 → 列の和。区・市町村は SHICODE ごと、政令市・23 区・都道府県・全国はその上の和。
+
+    総数（PTN）と年齢（PTN × 構成）で同じ足し方をする（無い区域も同じ＝浜通り・浜松の新しい区）。
+    """
+    by_code = table.groupby("SHICODE")[columns].sum()
+    unknown = sorted(set(by_code.index) - {a.code for a in areas if a.code} - set(R6_CODE_ALIASES)
+                     - set(HAMAMATSU_OLD_WARDS) - {HAMADORI_R6_CODE})
+    if unknown:
+        raise SystemExit(f"R6 にあって区域に無い市区町村コード（扱いを area_rules.py に書く）: {unknown}")
+    by_pref = table.assign(pref=table["SHICODE"].str[:2]).groupby("pref")[columns].sum()
+    aliases = {new: old for old, new in R6_CODE_ALIASES.items()}
+    sums: dict[str, pd.Series] = {}
+    for area in areas:
+        if area.kind == "country":
+            sums[area.key] = table[columns].sum()
+        elif area.kind == "prefecture":
+            if area.code in by_pref.index:
+                sums[area.key] = by_pref.loc[area.code]
+        elif area.kind == "city":
+            codes = HAMAMATSU_OLD_WARDS if area.code == HAMAMATSU_CODE else wards_of[area.code or ""]
+            absent = [c for c in codes if c not in by_code.index]
+            if absent:
+                raise SystemExit(f"{area.name} の区 {absent} が R6 に無い（市全体の推計が欠ける）")
+            sums[area.key] = by_code.loc[list(codes)].sum()
+        elif area.kind == "special_wards":
+            sums[area.key] = by_code.loc[[a.code for a in areas if a.group_key == area.key]].sum()
+        elif (source := aliases.get(area.code or "", area.code or "")) in by_code.index:
+            sums[area.key] = by_code.loc[source]
+    return sums
 
 
 def collect_projection(areas: list[Area], wards_of: dict[str, list[str]], values: Values) -> None:
     """将来推計人口（R6）。区・市町村は SHICODE ごとの和、政令市・23 区・都道府県・全国はその上の和。"""
     from area_mesh import R6_COLUMNS, read_r6_ptn
 
-    table = read_r6_ptn()
-    by_code = table.groupby("SHICODE")[list(R6_COLUMNS)].sum()
-    unknown = sorted(set(by_code.index) - {a.code for a in areas if a.code} - set(R6_CODE_ALIASES)
-                     - set(HAMAMATSU_OLD_WARDS) - {HAMADORI_R6_CODE})
-    if unknown:
-        raise SystemExit(f"R6 にあって区域に無い市区町村コード（扱いを area_rules.py に書く）: {unknown}")
-    by_pref = table.assign(pref=table["SHICODE"].str[:2]).groupby("pref")[list(R6_COLUMNS)].sum()
-    total = table[list(R6_COLUMNS)].sum()
-    aliases = {new: old for old, new in R6_CODE_ALIASES.items()}
-
-    def row_of(code: str) -> object | None:
-        source = aliases.get(code, code)
-        return by_code.loc[source] if source in by_code.index else None
-
-    for area in areas:
-        if area.kind == "country":
-            row: object | None = total
-        elif area.kind == "prefecture":
-            row = by_pref.loc[area.code] if area.code in by_pref.index else None
-        elif area.kind == "city":
-            codes = HAMAMATSU_OLD_WARDS if area.code == HAMAMATSU_CODE else wards_of[area.code or ""]
-            absent = [c for c in codes if c not in by_code.index]
-            if absent:
-                raise SystemExit(f"{area.name} の区 {absent} が R6 に無い（市全体の推計が欠ける）")
-            row = by_code.loc[list(codes)].sum()
-        elif area.kind == "special_wards":
-            row = by_code.loc[[a.code for a in areas if a.group_key == area.key]].sum()
-        else:
-            row = row_of(area.code or "")
-        if row is None:
-            continue
+    for key, row in _r6_by_area(read_r6_ptn(), list(R6_COLUMNS), areas, wards_of).items():
         for year, column in zip(PRED_YEARS, R6_COLUMNS):
-            values[(area.key, f"pop_pred_2024_{year}")] = float(row[column])  # type: ignore[index]
+            values[(key, f"pop_pred_2024_{year}")] = float(row[column])
+
+
+def collect_age_actual(areas: list[Area], values: Values) -> None:
+    """年齢の 4 区分の実績（2015・2020）：国勢調査の不詳補完値の表（公表値）。天竜区は再編前のコードで引く。"""
+    from age_muni import band_table
+
+    aliases = {new: old for old, new in R6_CODE_ALIASES.items()}
+    for year in AGE_ACTUAL_YEARS:
+        table = band_table(muni_age_table(year, imputed=True))
+        table.index = [MUNI_CODE_RENAMES[year].get(code, code) for code in table.index]
+        for area in areas:
+            code = _census_code(area)
+            source = aliases.get(code, code)
+            if source in table.index:
+                for band in BANDS:
+                    values[(area.key, age_key(band, year))] = float(table.loc[source, band])
+
+
+@functools.cache
+def _r6_age_rows() -> pd.DataFrame:
+    """R6 の行ごとの年齢（PTN × 構成・SHICODE つき）。足し方の照合（浜通り）でも使うので 1 回だけ読む。"""
+    from age_cells import r6_age_rows
+
+    return r6_age_rows()
+
+
+def _age_pred_columns() -> dict[str, str]:
+    """R6 の年齢の列（`b15_64_2050`）→ 区域の指標の key（`pop15_64_pred_2024_2050`）。"""
+    return {f"b{band}_{year}": age_key(band, year) for year in AGE_PRED_YEARS for band in BANDS}
+
+
+def collect_age_projection(areas: list[Area], wards_of: dict[str, list[str]], values: Values) -> None:
+    """年齢の 4 区分の推計（2025〜2050）：R6 の行ごとの PTN × 構成を、将来推計人口と同じ足し方で区域ごとに。"""
+    columns = _age_pred_columns()
+    for key, row in _r6_by_area(_r6_age_rows(), list(columns), areas, wards_of).items():
+        for column, metric in columns.items():
+            values[(key, metric)] = float(row[column])
 
 
 def collect_economy(areas: list[Area], values: Values) -> None:
@@ -314,7 +371,8 @@ def explain_missing(areas: list[Area], metrics: tuple[AreaMetric, ...], values: 
 
 
 def _close(a: float, b: float, metric: str) -> bool:
-    tolerance = FLOAT_TOLERANCE * max(1.0, abs(b)) if metric.startswith("pop_pred") else EXACT_TOLERANCE
+    """推計（`pop_pred_…`・年齢の `…_pred_…`）は浮動小数の誤差だけを許し、公表値は 1 人単位で比べる。"""
+    tolerance = FLOAT_TOLERANCE * max(1.0, abs(b)) if "_pred_" in metric else EXACT_TOLERANCE
     return abs(a - b) <= tolerance
 
 
@@ -367,12 +425,15 @@ def check_sums(areas: list[Area], metrics: tuple[AreaMetric, ...], values: Value
 
 
 def _hamadori_r6() -> dict[str, float]:
-    """福島県の R6 の和には、浜通り 13 市町村をまとめた 07999 が入る（市町村には割り振れない）。"""
+    """福島県の R6 の和には、浜通り 13 市町村をまとめた 07999 が入る（市町村には割り振れない）。年齢も同じ。"""
     from area_mesh import read_r6_ptn
 
     table = read_r6_ptn()
     rows = table[table["SHICODE"] == HAMADORI_R6_CODE]
-    return {f"pop_pred_2024_{year}": float(rows[f"PTN_{year}"].sum()) for year in PRED_YEARS}
+    totals = {f"pop_pred_2024_{year}": float(rows[f"PTN_{year}"].sum()) for year in PRED_YEARS}
+    ages = _r6_age_rows()
+    age_rows = ages[ages["SHICODE"] == HAMADORI_R6_CODE]
+    return totals | {metric: float(age_rows[column].sum()) for column, metric in _age_pred_columns().items()}
 
 
 def _undetermined_values() -> dict[tuple[str, str], float]:
@@ -399,6 +460,30 @@ def check_projection_base(areas: list[Area], values: Values) -> list[str]:
         if census is not None and base is not None and abs(census - base) > EXACT_TOLERANCE:
             problems.append(f"{area.key} {area.name}：推計の 2020 年 {base:,.1f} ≠ 国勢調査 {census:,.0f}")
     return problems
+
+
+def check_age_totals(areas: list[Area], values: Values) -> tuple[list[str], int]:
+    """年齢の 4 区分の和＝人口（実績・1 人単位）・＝将来推計人口（推計・浮動小数の誤差だけ）。4 区分がそろわない年も落とす。
+
+    戻り値の 2 つ目は比べた組の数（空振りしていないことを数で見る）。
+    """
+    problems: list[str] = []
+    compared = 0
+    for area in areas:
+        for year in AGE_ACTUAL_YEARS + AGE_PRED_YEARS:
+            bands = [values.get((area.key, age_key(band, year))) for band in BANDS]
+            if all(value is None for value in bands):
+                continue
+            total_key = f"pop_{year}" if year in AGE_ACTUAL_YEARS else f"pop_pred_2024_{year}"
+            total = values.get((area.key, total_key))
+            if any(value is None for value in bands) or total is None:
+                problems.append(f"{area.key} {area.name} の {year} 年：年齢の 4 区分か総数（{total_key}）が欠けている")
+                continue
+            compared += 1
+            got = sum(value for value in bands if value is not None)
+            if not _close(got, total, age_key("15_64", year)):
+                problems.append(f"{area.key} {area.name} の {year} 年：年齢の 4 区分の和 {got:,.2f} ≠ {total_key} {total:,.2f}")
+    return problems, compared
 
 
 def check_anchors(values: Values) -> list[str]:
@@ -431,6 +516,8 @@ def catalog_payload() -> dict[str, object]:
             "populationLine": list(LINE_POP_YEARS),
             "projection": list(PRED_YEARS),
             "economy": list(ECON_YEARS),
+            "age": list(AGE_ACTUAL_YEARS),
+            "ageProjection": list(AGE_PRED_YEARS),
         },
         "metrics": [
             {
@@ -497,18 +584,23 @@ def main() -> int:
     collect_population(areas, values)
     collect_projection(areas, wards_of, values)
     collect_economy(areas, values)
+    collect_age_actual(areas, values)
+    collect_age_projection(areas, wards_of, values)
 
     sum_problems, compared = check_sums(areas, metrics, values)
+    age_problems, age_compared = check_age_totals(areas, values)
     problems = (
         explain_missing(areas, metrics, values)
         + sum_problems
+        + age_problems
         + check_projection_base(areas, values)
         + check_anchors(values)
     )
     kinds: dict[str, int] = defaultdict(int)
     for area in areas:
         kinds[area.kind] += 1
-    print(f"区域 {len(areas):,}（{dict(kinds)}）・値 {len(values):,}・内訳の和の照合 {compared:,} 組")
+    print(f"区域 {len(areas):,}（{dict(kinds)}）・値 {len(values):,}・内訳の和の照合 {compared:,} 組"
+          f"・年齢の 4 区分の和の照合 {age_compared:,} 組")
     if problems:
         print(f"照合が {len(problems)} 件崩れた（書き出していない）:")
         for problem in problems[:40]:

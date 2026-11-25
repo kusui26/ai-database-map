@@ -33,8 +33,9 @@ from load_to_supabase import ROOT, db_params  # noqa: E402
 
 MIGRATION = ROOT / "supabase" / "migrations" / "20261010200000_area_values.sql"
 TABLES = ("area_metrics", "areas", "area_values")
-#: 3 つの表の大きさの上限（見積もり 6〜9MB。見積もりから大きく外れたら、作り方が崩れている）。
-MAX_TABLES_MB = 12
+#: 3 つの表の大きさの上限（見積もりから大きく外れたら、作り方が崩れている）。2026-10-10 は 6〜9MB の見積もりで 12MB。
+#: 2026-11-25 に年齢の 32 指標を足して値が 80,994 → 201,066 行になり、手元の一時の DB で 14MB（入れ直した直後）→ 20MB。
+MAX_TABLES_MB = 20
 #: 大きさの単位（Supabase のダッシュボード・pg_size_pretty と同じ 1024 × 1024 バイト）。
 MB = 1024 * 1024
 #: 横浜市と 18 区の全指標を読む速さの目安。

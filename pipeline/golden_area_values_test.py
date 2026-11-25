@@ -70,8 +70,8 @@ def check_counts_and_anchors(checks: Checks, cur: psycopg.Cursor) -> None:
     counts = {t: one(cur, f"select count(*) from public.{t}") for t in TABLES}
     kinds = dict(cur.execute("select kind, count(*) from public.areas group by kind").fetchall())
     checks.add(
-        counts["area_metrics"] == 24 and counts["areas"] == 3_764 and counts["area_values"] == 80_994,
-        "件数：指標 24・区域 3,764（行政 1,961＋沿線 1,803）・値 80,994", json.dumps(counts),
+        counts["area_metrics"] == 56 and counts["areas"] == 3_764 and counts["area_values"] == 201_066,
+        "件数：指標 56（年齢 32 を含む）・区域 3,764（行政 1,961＋沿線 1,803）・値 201,066", json.dumps(counts),
     )
     checks.add(
         kinds.get("prefecture") == 47 and kinds.get("city") == 20 and kinds.get("ward") == 171
@@ -192,6 +192,14 @@ def check_missing(checks: Checks, cur: psycopg.Cursor) -> None:
         "無い値の理由（浜松市中央区の 1995 年・いわき市の推計）・横浜市は欠けなし",
         f"浜松市中央区 {len(hamamatsu)} 件・いわき市 {len(iwaki)} 件",
     )
+    # 年齢は既存の理由に入る（年齢だけの理由を作ると、年齢を知らない前の版のアプリが名前の無い行を出す・area_rules.py）
+    checks.add(
+        any("pop15_64_2020" in r["keys"] and "pop_pred_2024_2050" in r["keys"] for r in hamamatsu)
+        and any("pop15_64_pred_2024_2050" in r["keys"] and "pop_pred_2024_2050" in r["keys"] for r in iwaki)
+        and not any("pop15_64_2020" in r["keys"] for r in iwaki),
+        "年齢の無い値の理由（浜松市中央区は実績も推計も・いわき市は推計だけ）は、将来推計人口と同じ理由に入る",
+        f"浜松市中央区 {len(hamamatsu)} 件・いわき市 {len(iwaki)} 件",
+    )
     no_value_has_reason = one(cur, """
         select count(*) from public.areas a cross join public.area_metrics m
         where a.kind <> 'line'
@@ -229,7 +237,7 @@ def check_security_size_speed(checks: Checks, cur: psycopg.Cursor) -> None:
     cur.execute(sql, ("muni:14100", "muni:14100"))
     rows = cur.fetchall()
     elapsed_ms = (time.perf_counter() - started) * 1000
-    checks.add(elapsed_ms < FAST_MS and len(rows) == 19 * 24, f"横浜市と 18 区の全指標を {FAST_MS}ms 未満で読む",
+    checks.add(elapsed_ms < FAST_MS and len(rows) == 19 * 56, f"横浜市と 18 区の全指標を {FAST_MS}ms 未満で読む",
                f"{len(rows)} 値・{elapsed_ms:.0f}ms")
 
 

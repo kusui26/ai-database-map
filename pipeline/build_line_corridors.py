@@ -7,6 +7,8 @@
   円は 32 分割（駅の値と同じ）。円が重ならない路線では、沿線の値が駅の円の値の和になる（validate_area_values.py が確かめる）
 - 年：人口は 2015・2020 年（250m）、推計は R6 の 2020〜2070 年（250m）、事業所・従業者は 2012・2016・2021 年（500m）。
   2025 年のメッシュは未公表。2010 年以前は 500m で、250m の年と比べると段差が出るので作らない
+- 年齢の 4 区分（2026-11-25）：駅の年齢と同じセルの値（`age_cells_census`＝年齢不詳を補った 2015・2020 年、`age_cells_r6`＝
+  R6 の 2025〜2050 年）を、人口と同じセル・同じ重なりで按分する。4 区分の和は沿線の人口・将来推計人口と一致する（落とす）
 
     python3 pipeline/build_lines.py && python3 pipeline/build_line_corridors.py   # 路線を作り直したら、沿線も作り直す
 
@@ -42,14 +44,25 @@ from area_mesh import (  # noqa: E402
     read_econ_mesh,
     to_albers,
 )
-from area_rules import ECON_YEARS, LINE_POP_YEARS, LINE_WIDTHS_M, PRED_YEARS, area_metrics  # noqa: E402
+from age_cells import BAND_COLUMNS  # noqa: E402
+from age_rules import BANDS, CENSUS_AGE_CELLS, R6_AGE_CELLS  # noqa: E402
+from area_rules import (  # noqa: E402
+    AGE_ACTUAL_YEARS,
+    AGE_PRED_YEARS,
+    ECON_YEARS,
+    LINE_POP_YEARS,
+    LINE_WIDTHS_M,
+    PRED_YEARS,
+    age_key,
+    area_metrics,
+)
 
 LINES_CSV = DERIVED_DIR / "lines.csv"
 LINE_STATIONS_CSV = DERIVED_DIR / "line_stations.csv"
 STATION_DATASET_CSV = DERIVED_DIR / "station_dataset.csv"
 #: 幅の言い方（題に使う）。
 WIDTH_LABELS_JA: dict[int, str] = {500: "500m", 1000: "1km", 2000: "2km"}
-#: 幅に対して単調であることの許し（浮動小数の誤差だけ）。
+#: 幅に対して単調であることの許し（浮動小数の誤差だけ）。年齢の 4 区分の和＝総数の許しも同じ。
 MONOTONE_TOLERANCE = 1e-6
 
 
@@ -74,15 +87,33 @@ class Grid:
         return {key: float(value) for key, value in zip(self.metric_keys, sums)}
 
 
+def age_cells() -> pd.DataFrame:
+    """250m の年齢の 4 区分（code と、区域の指標の key の列）。駅の年齢の表と同じセルの値（PR-1 の parquet）。"""
+    census = pd.read_parquet(CENSUS_AGE_CELLS, columns=["code", "year", *BAND_COLUMNS])
+    if census.duplicated(["code", "year"]).any():
+        raise SystemExit(f"{CENSUS_AGE_CELLS.name} に同じ年の同じセルが 2 行ある（セルの表が崩れている）")
+    frames = []
+    for year in AGE_ACTUAL_YEARS:
+        part = census[census["year"] == year].set_index("code")[list(BAND_COLUMNS)]
+        frames.append(part.set_axis([age_key(band, year) for band in BANDS], axis=1))
+    r6 = pd.read_parquet(R6_AGE_CELLS).set_index("code")
+    r6_columns = {f"{column}_{year}": age_key(band, year)
+                  for year in AGE_PRED_YEARS for band, column in zip(BANDS, BAND_COLUMNS, strict=True)}
+    frames.append(r6[list(r6_columns)].rename(columns=r6_columns))
+    return pd.concat(frames, axis=1).fillna(0.0).rename_axis("code").reset_index()
+
+
 def population_grid() -> Grid:
-    """250m：国勢調査 2015・2020 と R6 の 2020〜2070（同じセルにそろえる）。"""
+    """250m：国勢調査 2015・2020 と R6 の 2020〜2070、年齢の 4 区分（同じセルにそろえる）。"""
     cells = None
     for year in LINE_POP_YEARS:
         mesh = read_census_mesh(year).rename(columns={"pop": f"pop_{year}"})
         cells = mesh if cells is None else cells.merge(mesh, on="code", how="outer")
     r6 = r6_cells().rename(columns={column: f"pop_pred_2024_{column.removeprefix('PTN_')}" for column in R6_COLUMNS})
-    cells = cells.merge(r6, on="code", how="outer").fillna(0.0)  # type: ignore[union-attr]
-    keys = [f"pop_{y}" for y in LINE_POP_YEARS] + [f"pop_pred_2024_{y}" for y in PRED_YEARS]
+    ages = age_cells()
+    cells = cells.merge(r6, on="code", how="outer").merge(ages, on="code", how="outer").fillna(0.0)  # type: ignore[union-attr]
+    keys = ([f"pop_{y}" for y in LINE_POP_YEARS] + [f"pop_pred_2024_{y}" for y in PRED_YEARS]
+            + [column for column in ages.columns if column != "code"])
     return Grid(cells["code"], {key: cells[key].to_numpy(dtype=float) for key in keys})
 
 
@@ -120,6 +151,21 @@ def check_monotone(values: dict[tuple[int, int, str], float], line_cds: list[int
                     problems.append(f"路線 {line_cd} の {key} が幅を広げて減った: {series}")
                     break
     return problems
+
+
+def check_age_totals(values: dict[tuple[int, int, str], float], line_cds: list[int]) -> tuple[list[str], int]:
+    """年齢の 4 区分の和＝沿線の人口（2015・2020）・将来推計人口（2025〜2050）。セルで和＝総数なので、按分しても一致する。"""
+    problems = []
+    compared = 0
+    for line_cd in line_cds:
+        for width in LINE_WIDTHS_M:
+            for year in AGE_ACTUAL_YEARS + AGE_PRED_YEARS:
+                total = values[(line_cd, width, f"pop_{year}" if year in AGE_ACTUAL_YEARS else f"pop_pred_2024_{year}")]
+                got = sum(values[(line_cd, width, age_key(band, year))] for band in BANDS)
+                compared += 1
+                if abs(got - total) > MONOTONE_TOLERANCE * max(1.0, total):
+                    problems.append(f"路線 {line_cd} の {width}m・{year} 年：年齢の 4 区分の和 {got:,.4f} ≠ 総数 {total:,.4f}")
+    return problems, compared
 
 
 def main() -> int:
@@ -162,10 +208,12 @@ def main() -> int:
         if count % 100 == 0:
             print(f"  {count}/{len(line_cds)} 路線（{time.time() - started:.0f} 秒）")
 
-    problems = check_monotone(values, line_cds, expected_keys)
+    age_problems, age_compared = check_age_totals(values, line_cds)
+    problems = check_monotone(values, line_cds, expected_keys) + age_problems
     if problems:
         print("\n".join(["照合が崩れた（書き出していない）:", *problems[:20]]))
         return 1
+    print(f"年齢の 4 区分の和＝総数：{age_compared:,} 組")
     write_csv(LINE_CORRIDORS_CSV, ["key", "line_cd", "width_m", "name", "label", "station_count", "area_km2"], corridors)
     order = {key: i for i, key in enumerate(expected_keys)}
     write_csv(

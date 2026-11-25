@@ -30,7 +30,12 @@ from area_common import (  # noqa: E402
     LINE_CORRIDORS_CSV,
     read_csv,
 )
-from area_rules import ANCHORS, LINE_WIDTHS_M  # noqa: E402
+from area_rules import AGE_KEY_PREFIXES, ANCHORS, LINE_WIDTHS_M, area_metrics  # noqa: E402
+
+#: 沿線 1 つが持つ値の数（人口 2・推計 11・事業所 3・従業者 3・年齢 32＝区域の指標のうち沿線でも作るもの）。
+LINE_METRIC_COUNT = sum(1 for metric in area_metrics() if metric.line is not None)
+#: 2020 年の年齢の 4 区分（行政区域の和＝人口の照合に使う）。
+AGE_KEYS_2020 = tuple(f"{prefix}_2020" for prefix in AGE_KEY_PREFIXES.values())
 
 AREA_COLUMNS = [
     "id", "key", "kind", "code", "line_cd", "width_m", "name_ja", "label_ja", "prefecture", "parent_key", "group_key",
@@ -115,9 +120,18 @@ POST_LOAD_CHECKS: tuple[tuple[str, str, object], ...] = (
         0,
     ),
     (
-        "沿線にはどれも 19 の値がある（人口 2・推計 11・事業所 3・従業者 3）",
+        f"沿線にはどれも {LINE_METRIC_COUNT} の値がある（人口 2・推計 11・事業所 3・従業者 3・年齢 32）",
         "select count(*) from public.areas a where a.kind = 'line' and "
-        "(select count(*) from public.area_values v where v.area_id = a.id) <> 19",
+        f"(select count(*) from public.area_values v where v.area_id = a.id) <> {LINE_METRIC_COUNT}",
+        0,
+    ),
+    (
+        "行政区域の 2020 年の年齢の 4 区分の和＝人口（年齢のある区域すべて）",
+        "select count(*) from public.areas a "
+        "join public.area_values t on t.area_id = a.id join public.area_metrics tm on tm.id = t.metric_id "
+        "and tm.key = 'pop_2020' where a.kind <> 'line' and abs(t.value - ("
+        "select sum(v.value) from public.area_values v join public.area_metrics m on m.id = v.metric_id "
+        f"where v.area_id = a.id and m.key in ({', '.join(repr(key) for key in AGE_KEYS_2020)}))) > 0.5",
         0,
     ),
     (

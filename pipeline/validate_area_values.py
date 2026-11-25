@@ -9,7 +9,11 @@ build_area_values.py・build_line_corridors.py が書いた CSV を、別の経�
    - 沿線 ≥ その路線のどの駅の円の値（同じ幅）・沿線 ≤ 駅の円の値の和（円は重なりうる）
    - **円が重ならない路線では、沿線＝駅の円の値の和**（同じ方法で作っていることの確かめ）
 4. **形**：全路線 × 3 幅がそろう・駅の数が路線の駅の数と合う・区域の鍵が重ならない・区域の値の鍵がカタログにある
-5. `--mesh`（任意・約 5 分）：メッシュを市区町村へ按分した値と公表値のずれ（計画書 §6.12.4 a の表を再現する）
+5. **人口の年齢**（2026-11-25）
+   - 4 区分の和＝人口（実績）・＝将来推計人口（推計）：行政区域と沿線のすべて
+   - 社人研の年齢別の推計（5 歳階級を 4 区分へ）と：2020 年（実績）は 1 人単位で一致・2025〜2050 年は各区分 10 人以内
+   - 沿線：駅の年齢の表（`station_age_profiles.csv`）と比べて、最大の駅の円 ≤ 沿線 ≤ 駅の円の和・円が重ならない沿線は和と一致
+6. `--mesh`（任意・約 5 分）：メッシュを市区町村へ按分した値と公表値のずれ（計画書 §6.12.4 a の表を再現する）
 
     python3 pipeline/validate_area_values.py
     python3 pipeline/validate_area_values.py --mesh
@@ -21,6 +25,7 @@ import argparse
 import json
 import sys
 from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -37,11 +42,32 @@ from area_common import (  # noqa: E402
     LINE_CORRIDORS_CSV,
     read_csv,
 )
-from area_rules import ANCHORS, IPSS_LAST_YEAR, LINE_WIDTHS_M, RADIUS_SUFFIX  # noqa: E402
+from age_rules import BANDS, STATION_AGE_PROFILES_CSV  # noqa: E402
+from area_rules import (  # noqa: E402
+    AGE_ACTUAL_YEARS,
+    AGE_KEY_PREFIXES,
+    AGE_PRED_YEARS,
+    ANCHORS,
+    IPSS_LAST_YEAR,
+    LINE_WIDTHS_M,
+    RADIUS_SUFFIX,
+    age_key,
+)
 
 #: 駅の値は整数に四捨五入してあるので、駅 1 つにつき 0.5 まで許す（沿線との比べ方）。
 #: 実測（2026-10-10）：円の重ならない 6,042 組で、差は駅 1 つあたり最大 0.48＝丸めの分だけ。
 STATION_ROUNDING = 0.5
+#: 駅の年齢の表は 4 区分の和が総数になるように整数へ割り振ってある（最大剰余）ので、区分ごとには駅 1 つにつき 1 人まで許す。
+STATION_AGE_ROUNDING = 1.0
+#: 推計の年齢（R6 の PTN × 構成の和）と社人研の年齢別の推計の差の許し（各区分・人。計画書 261122 §8.3：最大 9 人）。
+IPSS_AGE_TOLERANCE = 10
+#: 社人研の結果表の 5 歳階級の列（0〜4 歳が 7 列目＝index 6 … 95 歳以上が index 25）→ 4 区分。
+IPSS_AGE_COLUMNS: dict[str, range] = {"0_14": range(6, 9), "15_64": range(9, 19), "65_74": range(19, 21), "75plus": range(21, 26)}
+#: 4 区分の和と総数の比べ方：公表値は 1 人単位、推計と按分は浮動小数の誤差（相対）と、CSV の桁（小数 4 桁に丸めて書く
+#: ＝1 つの値で ±0.00005、4 区分と総数の 5 つで 0.00025）の大きい方。総数 24 人の沿線では、丸めだけで 0.0001 ずれる。
+EXACT_TOLERANCE = 0.5
+FLOAT_TOLERANCE = 1e-6
+CSV_ROUNDING_TOLERANCE = 5 * 0.5e-4
 
 
 class Checks:
@@ -64,7 +90,7 @@ def load_values(path: Path) -> dict[tuple[str, str], float]:
 
 
 def read_ipss() -> pd.DataFrame:
-    """社人研の結果表（総数）→ (area_key, year, total)。浜通り（9）はまとめた値なので除く。"""
+    """社人研の結果表 → (area_key, year, total, 4 区分)。浜通り（9）はまとめた値なので除く。"""
     import openpyxl
 
     if not IPSS_XLSX.exists():
@@ -77,8 +103,9 @@ def read_ipss() -> pd.DataFrame:
             continue
         code5 = str(code).zfill(5)
         key = f"pref:{code5[:2]}" if kind == "a" else f"muni:{code5}"
-        rows.append((key, int(str(year).rstrip("年")), float(total)))
-    return pd.DataFrame(rows, columns=["area_key", "year", "total"])
+        bands = [float(sum(row[i] for i in IPSS_AGE_COLUMNS[band])) for band in BANDS]
+        rows.append((key, int(str(year).rstrip("年")), float(total), *bands))
+    return pd.DataFrame(rows, columns=["area_key", "year", "total", *(f"b{band}" for band in BANDS)])
 
 
 def check_ipss(checks: Checks, values: dict[tuple[str, str], float]) -> None:
@@ -102,6 +129,31 @@ def check_ipss(checks: Checks, values: dict[tuple[str, str], float]) -> None:
         f"{compared:,} 組（{years[0]}〜{years[-1]} 年）・不一致 {mismatched}・こちらに無い {absent}（浜松の旧区・浜通り）"
         + (f"・例 {examples}" if examples else ""),
     )
+    check_ipss_age(checks, values, ipss)
+
+
+def check_ipss_age(checks: Checks, values: dict[tuple[str, str], float], ipss: pd.DataFrame) -> None:
+    """年齢の 4 区分と社人研：2020 年（実績＝不詳補完値）は 1 人単位、推計（R6 の PTN × 構成の和）は各区分 10 人以内。"""
+    actual = ipss[ipss["year"].isin(AGE_ACTUAL_YEARS)]
+    actual_compared, actual_wrong = 0, []
+    for row in actual.itertuples(index=False):
+        for band in BANDS:
+            ours = values.get((row.area_key, age_key(band, row.year)))
+            if ours is not None:
+                actual_compared += 1
+                if round(ours) != round(getattr(row, f"b{band}")):
+                    actual_wrong.append(f"{row.area_key} {row.year} {band}")
+    checks.add(actual_compared > 7_000 and not actual_wrong,
+               "年齢の実績（不詳補完値の表）が社人研の推計の 2020 年（実績）と 1 人単位で一致",
+               f"{actual_compared:,} 組・不一致 {len(actual_wrong)}" + (f"・例 {actual_wrong[:3]}" if actual_wrong else ""))
+    gaps = [abs(ours - getattr(row, f"b{band}"))
+            for row in ipss[ipss["year"].isin(AGE_PRED_YEARS)].itertuples(index=False) for band in BANDS
+            if (ours := values.get((row.area_key, age_key(band, row.year)))) is not None]
+    series = pd.Series(gaps, dtype=float)
+    checks.add(len(series) > 40_000 and float(series.max()) <= IPSS_AGE_TOLERANCE,
+               f"年齢の推計（R6 の PTN × 構成の和）が社人研の年齢別の推計と各区分 {IPSS_AGE_TOLERANCE} 人以内",
+               f"{len(series):,} 組（{AGE_PRED_YEARS[0]}〜{AGE_PRED_YEARS[-1]} 年 × 4 区分）・最大 {series.max():.1f} 人・"
+               f"4 人以内 {(series <= 4).mean():.1%}")
 
 
 # --- 2. 固定値 ----------------------------------------------------------------------------------
@@ -116,20 +168,23 @@ def check_anchors(checks: Checks, values: dict[tuple[str, str], float]) -> None:
 # --- 3. 沿線の不変条件 ------------------------------------------------------------------------
 
 
-def check_corridors(checks: Checks, values: dict[tuple[str, str], float]) -> None:
+@dataclass(frozen=True)
+class Corridor:
+    """沿線 1 つ（区域の鍵・幅・路線の駅・駅の円が重ならないか）。"""
+
+    key: str
+    width: int
+    grps: list[str]
+    apart: bool
+
+
+def read_corridors(checks: Checks) -> list[Corridor]:
+    """沿線の一覧（形：全路線 × 3 幅・駅の数も確かめる）と、駅の円が重ならないか（正積図法で 2 × 幅 ＋ 1m より離れる）。"""
     corridors = read_csv(LINE_CORRIDORS_CSV)
     lines = read_csv(DERIVED_DIR / "lines.csv")
     members: dict[int, list[str]] = defaultdict(list)
     for row in read_csv(DERIVED_DIR / "line_stations.csv"):
         members[int(row["line_cd"])].append(row["grp"])
-
-    catalog = json.loads(AREA_CATALOG_JSON.read_text(encoding="utf-8"))
-    line_metrics = [m["key"] for m in catalog["metrics"] if m["sources"]["line"] is not None]
-    columns = {f"{m}_{RADIUS_SUFFIX[w]}" for m in line_metrics for w in LINE_WIDTHS_M}
-    stations = pd.read_csv(DERIVED_DIR / "station_dataset.csv", usecols=["grp", "lon", "lat", *sorted(columns)])
-    stations = stations.set_index("grp")
-
-    # 形：全路線 × 3 幅・駅の数
     have = {(int(c["line_cd"]), int(c["width_m"])) for c in corridors}
     want = {(int(row["line_cd"]), w) for row in lines for w in LINE_WIDTHS_M}
     counts_ok = all(int(c["station_count"]) == len(set(members[int(c["line_cd"])])) for c in corridors)
@@ -138,36 +193,76 @@ def check_corridors(checks: Checks, values: dict[tuple[str, str], float]) -> Non
 
     from area_mesh import to_albers
 
+    stations = pd.read_csv(DERIVED_DIR / "station_dataset.csv", usecols=["grp", "lon", "lat"]).set_index("grp")
     xy = dict(zip(stations.index, zip(*to_albers(stations["lon"].to_numpy(), stations["lat"].to_numpy()))))
-    below_max = above_sum = 0
-    exact_checked = exact_wrong = 0
-    worst_exact = 0.0
+    out = []
     for corridor in corridors:
-        line_cd, width = int(corridor["line_cd"]), int(corridor["width_m"])
-        grps = sorted(set(members[line_cd]))
+        width = int(corridor["width_m"])
+        grps = sorted(set(members[int(corridor["line_cd"])]))
         points = np.array([xy[g] for g in grps])
         gaps = np.sqrt(((points[:, None, :] - points[None, :, :]) ** 2).sum(axis=2))
         np.fill_diagonal(gaps, np.inf)
-        apart = len(grps) == 1 or float(gaps.min()) > 2 * width + 1.0  # 円が重ならない（1m の余裕）
+        out.append(Corridor(corridor["key"], width, grps, len(grps) == 1 or float(gaps.min()) > 2 * width + 1.0))
+    return out
+
+
+@dataclass
+class Bounds:
+    """沿線と駅の円の値の比べ（最大の駅の円 ≤ 沿線 ≤ 駅の円の和・重ならなければ和と一致）の数え。"""
+
+    rounding: float
+    below_max: int = 0
+    above_sum: int = 0
+    exact_checked: int = 0
+    exact_wrong: int = 0
+    worst_exact: float = 0.0
+
+    def add(self, ours: float, per_station: np.ndarray, apart: bool) -> None:
+        tolerance = self.rounding * len(per_station)
+        self.below_max += int(ours < per_station.max() - self.rounding)
+        self.above_sum += int(ours > per_station.sum() + tolerance)
+        if apart:
+            gap = abs(ours - per_station.sum())
+            self.exact_checked += 1
+            self.worst_exact = max(self.worst_exact, gap / len(per_station))
+            self.exact_wrong += int(gap > tolerance)
+
+    def report(self, checks: Checks, what: str, why_rounding: str) -> None:
+        checks.add(self.below_max == 0, f"{what}：沿線 ≥ その路線のどの駅の円の値（同じ幅）", f"崩れ {self.below_max}")
+        checks.add(self.above_sum == 0, f"{what}：沿線 ≤ 駅の円の値の和（重なりを二重に数えない）", f"崩れ {self.above_sum}")
+        checks.add(self.exact_checked > 100 and self.exact_wrong == 0,
+                   f"{what}：円が重ならない沿線は、駅の円の値の和と一致（駅の値と同じ方法）",
+                   f"{self.exact_checked:,} 組・駅 1 つあたりの差は最大 {self.worst_exact:.2f}（{why_rounding}）・"
+                   f"崩れ {self.exact_wrong}")
+
+
+def check_corridors(checks: Checks, values: dict[tuple[str, str], float], corridors: list[Corridor]) -> None:
+    """年齢以外の指標：駅の値（`station_dataset.csv` の同じ名前の列）と比べる。"""
+    catalog = json.loads(AREA_CATALOG_JSON.read_text(encoding="utf-8"))
+    line_metrics = [m["key"] for m in catalog["metrics"]
+                    if m["sources"]["line"] is not None and m["baseMetric"] not in AGE_KEY_PREFIXES.values()]
+    columns = {f"{m}_{RADIUS_SUFFIX[w]}" for m in line_metrics for w in LINE_WIDTHS_M}
+    stations = pd.read_csv(DERIVED_DIR / "station_dataset.csv", usecols=["grp", *sorted(columns)]).set_index("grp")
+    bounds = Bounds(STATION_ROUNDING)
+    for corridor in corridors:
         for metric in line_metrics:
-            ours = values[(corridor["key"], metric)]
-            per_station = stations.loc[grps, f"{metric}_{RADIUS_SUFFIX[width]}"].to_numpy(dtype=float)
-            tolerance = STATION_ROUNDING * len(grps)
-            if ours < per_station.max() - STATION_ROUNDING:
-                below_max += 1
-            if ours > per_station.sum() + tolerance:
-                above_sum += 1
-            if apart:
-                exact_checked += 1
-                gap = abs(ours - per_station.sum())
-                worst_exact = max(worst_exact, gap / len(grps))
-                if gap > tolerance:
-                    exact_wrong += 1
-    checks.add(below_max == 0, "沿線 ≥ その路線のどの駅の円の値（同じ幅）", f"崩れ {below_max}")
-    checks.add(above_sum == 0, "沿線 ≤ 駅の円の値の和（重なりを二重に数えない）", f"崩れ {above_sum}")
-    checks.add(exact_checked > 100 and exact_wrong == 0,
-               "円が重ならない沿線は、駅の円の値の和と一致（駅の値と同じ方法）",
-               f"{exact_checked:,} 組・駅 1 つあたりの差は最大 {worst_exact:.2f}（駅の値は整数に丸め）・崩れ {exact_wrong}")
+            per_station = stations.loc[corridor.grps, f"{metric}_{RADIUS_SUFFIX[corridor.width]}"].to_numpy(dtype=float)
+            bounds.add(values[(corridor.key, metric)], per_station, corridor.apart)
+    bounds.report(checks, "人口・推計・事業所・従業者", "駅の値は整数に丸め")
+
+
+def check_age_corridors(checks: Checks, values: dict[tuple[str, str], float], corridors: list[Corridor]) -> None:
+    """年齢：駅の年齢の表（`station_age_profiles.csv`・駅 × 半径 × 年の 4 区分）と比べる。"""
+    profiles = pd.read_csv(STATION_AGE_PROFILES_CSV)
+    by_radius_year = {key: frame.set_index("grp") for key, frame in profiles.groupby(["radius_m", "year"])}
+    bounds = Bounds(STATION_AGE_ROUNDING)
+    for corridor in corridors:
+        for year in AGE_ACTUAL_YEARS + AGE_PRED_YEARS:
+            frame = by_radius_year[(corridor.width, year)]
+            for band in BANDS:
+                per_station = frame.loc[corridor.grps, f"age{band}"].to_numpy(dtype=float)
+                bounds.add(values[(corridor.key, age_key(band, year))], per_station, corridor.apart)
+    bounds.report(checks, "年齢の 4 区分", "駅の年齢の表は和が総数になるよう整数へ割り振ってある")
 
 
 # --- 4. 形 -------------------------------------------------------------------------------------
@@ -198,7 +293,34 @@ def check_shape(checks: Checks) -> None:
     checks.add(not orphans, "親の区域がすべてある", f"{orphans[:5]}")
 
 
-# --- 5. メッシュの按分と公表値のずれ（任意） --------------------------------------------------------
+# --- 5. 人口の年齢 -------------------------------------------------------------------------------
+
+
+def check_age_totals(checks: Checks, admin: dict[tuple[str, str], float], lines: dict[tuple[str, str], float]) -> None:
+    """4 区分の和＝人口（実績）・＝将来推計人口（推計）。行政区域の実績は公表値どうし 1 人単位、ほかは浮動小数の誤差だけ。"""
+    compared = 0
+    wrong: list[str] = []
+    for label, values in (("行政区域", admin), ("沿線", lines)):
+        for area in sorted({key for key, _ in values}):
+            for year in AGE_ACTUAL_YEARS + AGE_PRED_YEARS:
+                bands = [values.get((area, age_key(band, year))) for band in BANDS]
+                if all(value is None for value in bands):
+                    continue
+                total_key = f"pop_{year}" if year in AGE_ACTUAL_YEARS else f"pop_pred_2024_{year}"
+                total = values.get((area, total_key))
+                if total is None or any(value is None for value in bands):
+                    wrong.append(f"{area} {year}：区分か総数が欠ける")
+                    continue
+                compared += 1
+                exact = label == "行政区域" and year in AGE_ACTUAL_YEARS
+                tolerance = EXACT_TOLERANCE if exact else max(FLOAT_TOLERANCE * total, CSV_ROUNDING_TOLERANCE)
+                if abs(sum(value for value in bands if value is not None) - total) > tolerance:
+                    wrong.append(f"{area} {year}")
+    checks.add(compared > 25_000 and not wrong, "年齢の 4 区分の和＝人口（実績）・将来推計人口（推計）（行政区域・沿線）",
+               f"{compared:,} 組・崩れ {len(wrong)}" + (f"・例 {wrong[:3]}" if wrong else ""))
+
+
+# --- 6. メッシュの按分と公表値のずれ（任意） --------------------------------------------------------
 
 
 def check_mesh(checks: Checks, values: dict[tuple[str, str], float]) -> None:
@@ -264,7 +386,10 @@ def main() -> int:
     check_shape(checks)
     check_anchors(checks, admin)
     check_ipss(checks, admin)
-    check_corridors(checks, lines)
+    corridors = read_corridors(checks)
+    check_corridors(checks, lines, corridors)
+    check_age_corridors(checks, lines, corridors)
+    check_age_totals(checks, admin, lines)
     if args.mesh:
         check_mesh(checks, admin)
     print(f"\n{checks.total - len(checks.failed)}/{checks.total} PASS")

@@ -5,6 +5,8 @@
 
 import { z } from 'zod'
 import {
+  AGE_BANDS,
+  type AgeYear,
   type LineRef,
   type StationListItem,
   type StationRow,
@@ -551,6 +553,36 @@ export async function stationBundle(grp: string): Promise<Map<string, number>> {
   return new Map(rows.map((r) => [r.key, r.value]))
 }
 
+// --- 駅詳細の年齢別の人口（人口の年齢 PR-3・261125） -----------------------
+const ageProfileRowSchema = z.object({
+  radius_m: z.number(),
+  year: z.number(),
+  projected: z.boolean(),
+  age0_14: z.number().int(),
+  age15_64: z.number().int(),
+  age65_74: z.number().int(),
+  age75plus: z.number().int(),
+  age_unknown: z.number().int().nullable(),
+})
+
+/** 駅の年齢の 1 行（半径 × 年）。`counts` は `AGE_BANDS` の順。 */
+export type AgeProfileRow = AgeYear & { readonly radiusM: number }
+
+/**
+ * 駅の年齢（`station_age_profile` RPC・6 半径 × 8 年＝48 行・半径 → 年の昇順）。表に無い駅は空。
+ * DB の配列の並び（[半径][年][区分]）は関数の中に閉じていて、ここは名前つきの列を読むだけ。
+ */
+export async function stationAgeProfile(grp: string): Promise<AgeProfileRow[]> {
+  const rows = await rpcRows('station_age_profile', { in_grp: grp }, ageProfileRowSchema)
+  return rows.map((row) => ({
+    radiusM: row.radius_m,
+    year: row.year,
+    projected: row.projected,
+    counts: AGE_BANDS.map((band) => row[`age${band}` as const]),
+    unknown: row.age_unknown,
+  }))
+}
+
 const stationRowSchema = z.object({
   grp: z.string(),
   station_name: z.string(),
@@ -616,7 +648,7 @@ export type ProfileRankRow = {
 }
 
 /**
- * 駅の指標が県内（と市内）で何位か（`station_profile_ranks` RPC・1 駅 11 指標で約 50ms）。
+ * 駅の指標が県内（と市内）で何位か（`station_profile_ranks` RPC・1 駅 12 指標で約 50ms）。
  * 値の無い指標・知らない key は返らない（Map に無い＝位置なし）。`area` は市区町村の前方一致（政令市は「横浜市」で全区）。
  */
 export async function stationProfileRanks(

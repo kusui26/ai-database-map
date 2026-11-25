@@ -142,9 +142,9 @@ function trendChartNode(panel: TrendChartPanel): VNode {
   ])
 }
 
-function statTableNode(panel: StatTablePanel): VNode {
-  return panelBox([
-    titleNode(panel.title),
+/** 表の行と注記（畳んだときも開いたときも同じ）。 */
+function statRowsNodes(panel: StatTablePanel): (VNode | null)[] {
+  return [
     el('table', {
       children: panel.rows.map((row) =>
         el('tr', {
@@ -158,6 +158,19 @@ function statTableNode(panel: StatTablePanel): VNode {
     panel.note === null || panel.note === undefined
       ? null
       : el('div', { cls: 'muted', text: panel.note }),
+  ]
+}
+
+/** 表（`folded` は「題（行の数）」の 1 行に畳み、押すと開く——Web の表と同じ）。 */
+function statTableNode(panel: StatTablePanel): VNode {
+  if (panel.folded !== true) return panelBox([titleNode(panel.title), ...statRowsNodes(panel)])
+  return panelBox([
+    el('details', {
+      children: [
+        el('summary', { cls: 'title', text: `${panel.title}（${panel.rows.length}）` }),
+        ...statRowsNodes(panel),
+      ],
+    }),
   ])
 }
 

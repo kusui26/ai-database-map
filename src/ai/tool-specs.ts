@@ -85,7 +85,6 @@ import {
   listStations,
   rankByColumn,
   searchStations,
-  stationBundle,
   stationByGrp,
   stationHazardSummaries,
   scatterPoints,
@@ -93,7 +92,8 @@ import {
   type StationFilter,
   type StationHazardRow,
 } from '@/db/queries'
-import { buildStationDetail } from '@/domain/stations/presenter'
+import { loadStationDetail } from '@/domain/stations/load'
+import { AGE_STRUCTURE_READING_JA } from '@/domain/stations/age-structure'
 import { loadStationProfile } from '@/domain/profile/load'
 import { buildRanking } from '@/domain/ranking/presenter'
 import { buildGrowth } from '@/domain/growth/presenter'
@@ -824,7 +824,14 @@ function stationDetailForLlm(
     radius: resolved,
     category: category ?? 'passenger',
     summary: summarizePanels(panelsForStationDetail(effect)),
+    ...(showsAgeStructure(effect) ? { reading: AGE_STRUCTURE_READING_JA } : {}),
   }
+}
+
+/** 人口タブ（年齢別の人口の図を含む）を出したか。読み方（`reading`）を添えるのはそのときだけ。 */
+function showsAgeStructure(effect: StationDetailEffect): boolean {
+  const population = effect.category === 'population' || effect.category === 'population_forecast'
+  return population && effect.detail.ageStructure !== null
 }
 
 /** プロフィールの 1 項目 → LLM 向け（値と位置は整形済みの文字列のまま・順位を作らせない）。 */
@@ -1515,10 +1522,10 @@ export const TOOL_SPECS = {
       category,
       radiusM,
     }): Promise<ToolRunResult<{ error: string } | ReturnType<typeof stationDetailForLlm>>> => {
-      const station = await stationByGrp(grp)
-      if (station === null) return pure({ error: `駅が見つかりません: ${grp}` })
-      const values = await stationBundle(grp)
-      const detail = buildStationDetail(station, values)
+      // 共通 API（/api/stations/[grp]）と同じ組み立て——画面の駅詳細と同じ系列・年齢別の人口を読む。
+      const detail = await loadStationDetail(grp)
+      if (detail === null) return pure({ error: `駅が見つかりません: ${grp}` })
+      const { station } = detail
       const resolved = resolveRadius(radiusM)
       const effect = {
         kind: 'stationDetail' as const,

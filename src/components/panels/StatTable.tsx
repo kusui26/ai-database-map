@@ -1,6 +1,6 @@
 'use client'
 
-/** statTable Panel のレンダラ（ラベル付き値の一覧＝増減率 9 ペア等）。 */
+/** statTable Panel のレンダラ（ラベル付き値の一覧＝増減率 9 ペア等）。`folded` は「題（N）」の 1 行に畳む。 */
 
 import { type StatTablePanel } from '@/shared/protocol'
 import { cn } from '@/lib/utils'
@@ -16,14 +16,10 @@ import { cn } from '@/lib/utils'
  */
 const ROW_BASIS = 'basis-[calc(50%-0.5rem)]'
 
-export function StatTable({ panel }: { panel: StatTablePanel }) {
-  const compact = panel.size === 'compact'
-
+/** 表の中身（行と注記）。畳んだときも開いたときも同じ。 */
+function StatRows({ panel }: { panel: StatTablePanel }) {
   return (
-    <section>
-      <h3 className={cn('font-semibold text-slate-800', compact ? 'text-sm' : 'text-base')}>
-        {panel.title}
-      </h3>
+    <>
       {panel.rows.length > 0 && (
         <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5">
           {panel.rows.map((row) => (
@@ -55,6 +51,29 @@ export function StatTable({ panel }: { panel: StatTablePanel }) {
       {panel.note !== null && panel.note !== undefined && (
         <p className="mt-2 text-xs text-slate-400">{panel.note}</p>
       )}
+    </>
+  )
+}
+
+export function StatTable({ panel }: { panel: StatTablePanel }) {
+  const compact = panel.size === 'compact'
+  const titleClass = cn('font-semibold text-slate-800', compact ? 'text-sm' : 'text-base')
+
+  // 畳んだ表は「題（行の数）」の 1 行。押すと同じ表が開く（消さずに畳む・人口タブの人口増減率＝D-5）。
+  if (panel.folded === true) {
+    return (
+      <details>
+        <summary className={cn(titleClass, 'cursor-pointer hover:text-slate-600')}>
+          {panel.title}（{panel.rows.length}）
+        </summary>
+        <StatRows panel={panel} />
+      </details>
+    )
+  }
+  return (
+    <section>
+      <h3 className={titleClass}>{panel.title}</h3>
+      <StatRows panel={panel} />
     </section>
   )
 }

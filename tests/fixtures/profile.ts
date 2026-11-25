@@ -23,11 +23,12 @@ export const YOKOHAMA: StationRow = {
   levelComplete: true,
 }
 
-/** 1km 圏の値（2026-10-09 の本番 DB の横浜駅）。 */
+/** 1km 圏の値（2026-10-09 の本番 DB の横浜駅。高齢化率は 2026-11-24 の build）。 */
 export const VALUES_1KM: Readonly<Record<string, number>> = {
   pop_2020_1km: 43_471,
   pop_gr_2020_2015_1km: 5.3,
   pop_gr_pred_2024_2040_1km: 7.6,
+  pop65_share_2020_1km: 16.1,
   inc_pc_2025_1km: 463.7,
   inc_city_only_1km: 1,
   lp_med_2026_1km: 1_735_000,
@@ -44,6 +45,7 @@ export const VALUES_500M: Readonly<Record<string, number>> = {
   pop_2020_500m: 4_881,
   pop_gr_2020_2015_500m: 4.5,
   pop_gr_pred_2024_2040_500m: 3.6,
+  pop65_share_2020_500m: 16.5,
   inc_pc_2025_500m: 463.7,
   lp_med_2026_500m: 4_200_000,
   emp_n_2021_500m: 75_667,

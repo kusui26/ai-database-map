@@ -250,9 +250,50 @@ export const metricSeriesSchema = z.object({
 })
 export type MetricSeries = z.infer<typeof metricSeriesSchema>
 
+// --- 駅詳細の年齢別の人口（人口の年齢 PR-3・2026-11-25・計画書 261122 §3.5・§5） -----
+/**
+ * 年齢の 4 区分（**下から積む順**・凡例も同じ順）。DB の関数 `station_age_profile` の列（`age0_14` …）と同じ並び。
+ * 足すと総数になる（年齢不詳は市区町村の不詳補完値に合わせて割り振ってある・`docs/population_mesh.md` §12）。
+ */
+export const AGE_BANDS = ['0_14', '15_64', '65_74', '75plus'] as const
+export const ageBandSchema = z.enum(AGE_BANDS)
+export type AgeBand = z.infer<typeof ageBandSchema>
+
+/** 1 つの年の 4 区分の人数（`counts` は `AGE_BANDS` の順）。 */
+export const ageYearSchema = z.object({
+  year: z.number().int(),
+  /** 推計の年か（R6）。国勢調査の年は false。 */
+  projected: z.boolean(),
+  counts: z.array(z.number().int().nonnegative()).length(AGE_BANDS.length),
+  /** 補う前の年齢不詳の人数（国勢調査の年だけ・推計の年は null）。⚠ の割合の分子。 */
+  unknown: z.number().int().nonnegative().nullable(),
+})
+export type AgeYear = z.infer<typeof ageYearSchema>
+
+/** 1 つの半径の年齢（年の昇順）。 */
+export const ageRadiusSchema = z.object({
+  radiusM: z.number(),
+  years: z.array(ageYearSchema),
+})
+export type AgeRadius = z.infer<typeof ageRadiusSchema>
+
+/**
+ * 駅の年齢別の人口（全半径・2015〜2050 年）。駅詳細は全半径を一度に返し、半径の切り替えは手元で選び直す（再取得しない）。
+ * 2015・2020 年は国勢調査、2025 年からは R6 推計（どの年が推計かは各年の `projected`）。
+ */
+export const ageStructureSchema = z.object({
+  radii: z.array(ageRadiusSchema),
+})
+export type AgeStructure = z.infer<typeof ageStructureSchema>
+
 export const stationDetailSchema = z.object({
   station: stationRowSchema,
   series: z.array(metricSeriesSchema),
+  /**
+   * 年齢別の人口（2026-11-25）。表に無い駅は null。**配備の切り替わりの間にブラウザに残る古い応答**（`max-age=300`）には
+   * この項目が無いので、省かれていても null と読む（人口タブの年齢の図だけが出ない）。
+   */
+  ageStructure: ageStructureSchema.nullable().default(null),
 })
 export type StationDetail = z.infer<typeof stationDetailSchema>
 

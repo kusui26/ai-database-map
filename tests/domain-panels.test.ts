@@ -16,6 +16,7 @@ import {
 } from '@/domain/stations/panels'
 import { panelSchema } from '@/shared/protocol'
 import { CATEGORY_COLORS } from '@/shared/constants'
+import { KOSUGI_1KM, KOSUGI_STATION, KOSUGI_VALUES_1KM, ageRowsOf } from './fixtures/age-structure'
 
 const station: StationRow = {
   grp: '東京#0',
@@ -186,6 +187,46 @@ describe('populationPanels', () => {
     for (const panel of populationPanels(popDetail, 500)) {
       expect(() => panelSchema.parse(panel)).not.toThrow()
     }
+  })
+
+  it('人口増減率の表は押すと開くに畳む（行は残す・D-5）', () => {
+    const [, table] = populationPanels(popDetail, 1000)
+    expect(table?.type === 'statTable' ? table.folded : undefined).toBe(true)
+    expect(table?.type === 'statTable' ? table.rows.length : 0).toBe(1)
+  })
+
+  it('年齢別の人口のある駅：人口の推移 → 年齢別の人口 → 人口増減率（畳む）の順', () => {
+    const detail = buildStationDetail(
+      KOSUGI_STATION,
+      new Map(Object.entries(KOSUGI_VALUES_1KM)),
+      ageRowsOf(1000, KOSUGI_1KM),
+    )
+    const panels = populationPanels(detail, 1000)
+    expect(
+      panels.map((panel) =>
+        panel.type === 'statTable'
+          ? 'table'
+          : panel.type === 'trendChart'
+            ? panel.title
+            : panel.type,
+      ),
+    ).toEqual(['人口の推移（実績・将来推計・1km圏）', '年齢別の人口（1km圏）', 'table'])
+    for (const panel of panels) expect(() => panelSchema.parse(panel)).not.toThrow()
+  })
+
+  it('チャットの中（compact）では人口増減率の表を出さない（図 2 枚・D-5）', () => {
+    const detail = buildStationDetail(
+      KOSUGI_STATION,
+      new Map(Object.entries(KOSUGI_VALUES_1KM)),
+      ageRowsOf(1000, KOSUGI_1KM),
+    )
+    expect(populationPanels(detail, 1000, 'compact').map((panel) => panel.type)).toEqual([
+      'trendChart',
+      'trendChart',
+    ])
+    expect(populationPanels(popDetail, 1000, 'compact').map((panel) => panel.type)).toEqual([
+      'trendChart',
+    ])
   })
 })
 

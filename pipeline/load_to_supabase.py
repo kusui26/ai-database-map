@@ -6,6 +6,8 @@
 - 数値メトリクス列を melt（NaN スキップ）して station_values（≈600万行）へ COPY
 - **フラグ列の 0 は格納しない**（行が無い＝0。`drop_flag_zeros`・260816 の容量対策）
 - 文字列メトリクス lp_near_use は float8 の station_values に入らないため stations に置く
+- stations の truncate cascade で消える表（station_routes・lines/line_stations・station_age_profiles）も同じ
+  トランザクションで入れ直す（station_age_profiles は人口の年齢 PR-3・261125）
 
 冪等性: metric_columns 再シード → stations/station_values 再投入を単一トランザクションで実行
 （失敗時はロールバック＝旧データ保持）。live app は commit まで旧データを読む（無停止）。
@@ -44,6 +46,7 @@ import psycopg
 
 from line_common import LINE_STATIONS_CSV, LINES_CSV
 from load_lines import copy_lines
+from load_station_age import copy_station_age_profiles
 from load_station_routes import ROUTES_CSV, copy_station_routes
 from load_municipality import MUNI_CSV, apply_municipality
 from station_columns import read_dataset_frame
@@ -191,10 +194,11 @@ def analyze_tables(conn: psycopg.Connection) -> None:
     conn.autocommit = True
     t0 = time.time()
     with conn.cursor() as cur:
-        for table in ("public.station_values", "public.stations", "public.station_routes"):
+        tables = ("public.station_values", "public.stations", "public.station_routes", "public.station_age_profiles")
+        for table in tables:
             cur.execute(f"analyze {table}")
     conn.autocommit = False
-    print(f"  ANALYZE（3 テーブル）in {time.time() - t0:.1f}s")
+    print(f"  ANALYZE（{len(tables)} テーブル）in {time.time() - t0:.1f}s")
 
 
 def main() -> int:
@@ -279,6 +283,13 @@ def main() -> int:
                 print(f"  lines ({lines_written} 路線・{members_written:,} 駅) copied in {time.time() - t0:.1f}s")
             else:
                 print(f"  lines: {LINES_CSV.name} が無いためスキップ（pipeline/build_lines.py を先に）")
+
+            # --- 年齢別の人口のグラフ用の表（人口の年齢 PR-3・261125）も同じトランザクションで入れ直す ---
+            # station_age_profiles は stations の truncate cascade で消え、駅の採番（id）も変わるため。
+            # 年齢の列（station_age.csv）と同じ build で作る CSV なので、**無ければ止める**（read_dataset と同じ扱い）。
+            t0 = time.time()
+            profiles_written = copy_station_age_profiles(cur)
+            print(f"  station_age_profiles ({profiles_written:,} 駅) copied in {time.time() - t0:.1f}s")
 
             # --- 市区町村（サイドカー・260902 PR-4）を同じトランザクションで結合 ---
             # routes と違い**無ければ失敗**させる——list_stations（MCP）の前提なので、

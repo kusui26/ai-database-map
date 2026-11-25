@@ -51,6 +51,8 @@ export const PROFILE_SECTIONS: readonly ProfileSectionSpec[] = [
         labelJa: '将来の人口（推計）',
         spanYears: 20,
       },
+      // 2026-11-25（人口の年齢 PR-3・計画書 261122 D-6）。位置の「上位」は高齢化が進んでいる側。
+      { id: 'agingRate', family: 'pop65_share', labelJa: '高齢化率' },
       { id: 'income', family: 'inc_pc', labelJa: '1人当たり所得' },
     ],
   },

@@ -10,9 +10,16 @@
  * 軸ラベルの整形は Web UI と同じ `formatCompact`（万・億で桁を抑える）を使う。
  */
 
-import { CATEGORY_COLORS, clusterColor } from '@/shared/constants'
+import { CATEGORY_COLORS, clusterColor, PROJECTED_OPACITY } from '@/shared/constants'
 import { formatCompact } from '@/shared/format'
 import { type ScatterPanel, type TrendChartPanel, type TrendSeries } from '@/shared/protocol'
+import {
+  isProjected,
+  labeledTotalXs,
+  projectedIndex,
+  stackTotalAt,
+  trendXs,
+} from '@/shared/trend-stack'
 import { el, type VNode } from './vnode'
 
 /** 図の寸法（px・viewBox 座標）。幅はパネル幅に対して等倍で伸縮する。 */
@@ -58,6 +65,10 @@ export const CHART_BAR_COLOR = '#6366f1'
 const AXIS_COLOR = '#cbd5e1'
 /** 軸ラベルの色。 */
 const TICK_COLOR = '#64748b'
+/** 実績と推計の境の破線の色（Web の図と同じ slate-400）。 */
+const PROJECTION_RULE_COLOR = '#94a3b8'
+/** 積み上げの区分の間のすき間（viewBox の px・面の色が見える。Web の図と同じ 2px）。 */
+const SEGMENT_GAP = 2
 
 /** 系列の色（`series.color` ＞ カテゴリ色 ＞ 予備パレット）。 */
 export function seriesColor(
@@ -133,15 +144,9 @@ function svgRoot(height: number, labelJa: string, children: readonly VNode[]): V
   })
 }
 
-/** 積み上げの合計（x ごと）。`totals` が無いときの上書き表示に使う。 */
+/** 積み上げの合計（x ごと・宣言された合計を優先）。縦軸の上端に使う。 */
 function stackTotals(panel: TrendChartPanel): ReadonlyMap<number, number> {
-  return panel.series.reduce<Map<number, number>>((totals, series) => {
-    series.points.forEach((point) => {
-      if (point.y === null) return
-      totals.set(point.x, (totals.get(point.x) ?? 0) + point.y)
-    })
-    return totals
-  }, new Map())
+  return new Map(trendXs(panel).map((x) => [x, stackTotalAt(panel, x)]))
 }
 
 /** 欠損（null）で切れた連続区間に分ける。 */
@@ -182,7 +187,33 @@ function lineNodes(
   })
 }
 
-/** 積み上げ縦棒（合計の数値は棒の上に置く）。 */
+/** 積み上げの区分 1 つ（上に面の色の 2px のすき間・推計の年は淡く）。 */
+function segmentNode(
+  panel: TrendChartPanel,
+  at: number,
+  box: {
+    readonly left: number
+    readonly width: number
+    readonly top: number
+    readonly bottom: number
+  },
+  fill: string,
+): VNode {
+  const height = Math.max(0, box.bottom - box.top)
+  const gap = height > SEGMENT_GAP * 2 ? SEGMENT_GAP : 0
+  return el('rect', {
+    attrs: {
+      x: round(box.left),
+      y: round(box.top + gap),
+      width: round(box.width),
+      height: round(height - gap),
+      fill,
+      ...(isProjected(panel, at) ? { 'fill-opacity': PROJECTED_OPACITY } : {}),
+    },
+  })
+}
+
+/** 積み上げ縦棒（合計の数値は棒の上に置く。書く年は `labeledTotalXs`）。 */
 function stackedNodes(
   panel: TrendChartPanel,
   xs: readonly number[],
@@ -190,35 +221,54 @@ function stackedNodes(
   y: (value: number) => number,
 ): readonly VNode[] {
   const width = Math.max(6, Math.min(28, 300 / Math.max(1, xs.length)))
+  const labeled = labeledTotalXs(panel, xs)
   return xs.flatMap((at) => {
     const bars = panel.series.reduce<{ base: number; nodes: VNode[] }>(
       (acc, series, index) => {
         const point = series.points.find((each) => each.x === at && each.y !== null)
         if (point === undefined || point.y === null) return acc
         const top = acc.base + point.y
-        return {
-          base: top,
-          nodes: [
-            ...acc.nodes,
-            el('rect', {
-              attrs: {
-                x: round(x(at) - width / 2),
-                y: y(top),
-                width: round(width),
-                height: round(Math.max(0, y(acc.base) - y(top))),
-                fill: seriesColor(series, index, panel.category),
-              },
-            }),
-          ],
-        }
+        const box = { left: x(at) - width / 2, width, top: y(top), bottom: y(acc.base) }
+        const fill = seriesColor(series, index, panel.category)
+        return { base: top, nodes: [...acc.nodes, segmentNode(panel, at, box, fill)] }
       },
       { base: 0, nodes: [] },
     )
     // 合計は**丸める前から作った正しい値**（protocol の `totals`）を優先する。
-    const declared = panel.totals?.find((total) => total.x === at)?.y
-    const total = declared === undefined || declared === null ? bars.base : declared
-    return [...bars.nodes, tick(x(at), y(bars.base) - 4, formatCompact(total), 'middle')]
+    const total = labeled.has(at)
+      ? [tick(x(at), y(bars.base) - 4, formatCompact(stackTotalAt(panel, at)), 'middle')]
+      : []
+    return [...bars.nodes, ...total]
   })
+}
+
+/** 実績と推計の境の破線と「推計」の文字（推計のある積み上げだけ）。 */
+function projectionNodes(
+  panel: TrendChartPanel,
+  xs: readonly number[],
+  x: (value: number) => number,
+): readonly VNode[] {
+  const first = projectedIndex(panel, xs)
+  const before = xs[first - 1]
+  const after = xs[first]
+  if (first <= 0 || before === undefined || after === undefined) return []
+  const at = round((x(before) + x(after)) / 2)
+  return [
+    el('line', {
+      attrs: {
+        x1: at,
+        y1: MARGIN / 2,
+        x2: at,
+        y2: TREND_HEIGHT - PAD,
+        stroke: PROJECTION_RULE_COLOR,
+        'stroke-dasharray': '4 3',
+      },
+    }),
+    el('text', {
+      text: '推計',
+      attrs: { x: at + 4, y: MARGIN / 2 + 9, 'font-size': 10, fill: TICK_COLOR },
+    }),
+  ]
 }
 
 /** 推移チャート（折れ線／積み上げ縦棒）。 */
@@ -243,7 +293,7 @@ export function trendChartSvg(panel: TrendChartPanel): VNode {
       index % step === 0 ? [tick(x(value), TREND_HEIGHT - PAD + 14, String(value), 'middle')] : [],
     ),
     ...(stacked
-      ? stackedNodes(panel, uniqueXs, x, y)
+      ? [...projectionNodes(panel, uniqueXs, x), ...stackedNodes(panel, uniqueXs, x, y)]
       : panel.series.flatMap((series, index) =>
           lineNodes(series, seriesColor(series, index, panel.category), x, y),
         )),

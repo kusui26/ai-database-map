@@ -2,9 +2,17 @@ import { describe, expect, it } from 'vitest'
 import { panelToVNode, panelsToVNodes } from '@/shared/viewer/panels'
 import { VIEWER_CSS } from '@/shared/viewer/styles'
 import { classNamesOf, vnodeToHtml, type VNode } from '@/shared/viewer/vnode'
-import { HAZARD_LEVEL_COLORS, HAZARD_LEVEL_ICONS, clusterColor } from '@/shared/constants'
+import {
+  HAZARD_LEVEL_COLORS,
+  HAZARD_LEVEL_ICONS,
+  PROJECTED_OPACITY,
+  clusterColor,
+} from '@/shared/constants'
 import { panelSchema, type Panel } from '@/shared/protocol'
+import { buildStationDetail } from '@/domain/stations/presenter'
+import { ageStructurePanel } from '@/domain/stations/age-structure'
 import { PANEL_FIXTURES, PANEL_TYPES, panelFixture, stackedTrendFixture } from './fixtures/panels'
+import { KOSUGI_1KM, KOSUGI_STATION, KOSUGI_VALUES_1KM, ageRowsOf } from './fixtures/age-structure'
 
 /**
  * **ビューアのパネル描画**（PR-11・`docs/260912_gui_chat_protocol.md` 決定 11）。
@@ -132,6 +140,56 @@ describe('チャートの規則（読み違えを生む所）', () => {
     const labels = findAll(panelToVNode(panel), 'text').map((node) => node.text)
     expect(labels).toContain('1,902')
     expect(labels).not.toContain('1,733')
+  })
+
+  it('推計のある積み上げ（年齢別の人口）：推計の年の棒は淡く、境に破線と「推計」、合計は 2020 と 2050 年だけ', () => {
+    const panel = ageStructurePanel(
+      buildStationDetail(
+        KOSUGI_STATION,
+        new Map(Object.entries(KOSUGI_VALUES_1KM)),
+        ageRowsOf(1000, KOSUGI_1KM),
+      ),
+      1000,
+    )
+    if (panel === null) throw new Error('年齢の図がありません')
+    const node = panelToVNode(panel)
+    const rects = findAll(node, 'rect')
+    expect(rects).toHaveLength(8 * 4)
+    const faint = rects.filter((rect) => rect.attrs['fill-opacity'] === PROJECTED_OPACITY)
+    expect(faint).toHaveLength(6 * 4) // 2025〜2050 の 6 年 × 4 区分
+    expect(findAll(node, 'line').some((line) => line.attrs['stroke-dasharray'] === '4 3')).toBe(
+      true,
+    )
+    const texts = findAll(node, 'text').map((text) => text.text)
+    expect(texts).toContain('推計')
+    expect(texts).toContain('7.5万') // 2020 年の合計 75,418
+    expect(texts).toContain('8.2万') // 2050 年の合計 81,565
+    expect(texts).not.toContain('6.8万') // 2015 年の合計は書かない（ツールチップの代わりに省く）
+  })
+
+  it('推計の無い積み上げ（売上）は以前のまま：淡い棒も破線も無く、合計は全部の年', () => {
+    const node = panelToVNode(stackedTrendFixture())
+    expect(findAll(node, 'rect').some((rect) => 'fill-opacity' in rect.attrs)).toBe(false)
+    expect(findAll(node, 'text').map((text) => text.text)).not.toContain('推計')
+    expect(findAll(node, 'text').map((text) => text.text)).toEqual(
+      expect.arrayContaining(['1,902', '2,010']),
+    )
+  })
+
+  it('畳んだ表（folded）は「題（行の数）」の summary に入れ、行は消さない', () => {
+    const html = htmlOf({
+      type: 'statTable',
+      title: '人口増減率',
+      rows: [
+        { label: '2015→2020', value: '+11.6%', flagged: false },
+        { label: '2010→2015', value: '+8.0%', flagged: false },
+      ],
+      note: null,
+      folded: true,
+    })
+    expect(html).toContain('<details><summary class="title">人口増減率（2）</summary>')
+    expect(html).toContain('+11.6%')
+    expect(htmlOf(panelFixture('statTable'))).not.toContain('<details>')
   })
 
   it('散布の色はクラスタ色（共有定数）で、凡例は出さない', () => {

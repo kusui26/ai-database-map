@@ -12,7 +12,7 @@
  */
 
 import { type LineStation, type StationStatRow } from '@/db/queries'
-import { areaKindLabel, getAreaMetric, type AreaMetric } from '@/shared/area-catalog'
+import { areaKindLabel, getAreaMetric, isAreaAgeBase, type AreaMetric } from '@/shared/area-catalog'
 import {
   type AreaMissing,
   type AreaStationStat,
@@ -27,11 +27,14 @@ import { cityOfWard } from '@/shared/municipality'
 import { sourcesForKeys } from '@/domain/sources'
 import { adminBreakdown, lineBreakdown } from './breakdown'
 import { compareAreas } from './compare'
+import { ageSourceHeadOf } from './near-age'
 import { nearestContainers, type AdminPlace } from './share'
 import { AREA_NOT_INCLUDED_JA, notesFor, sourcesFor } from './notes'
 import { type ResolvedArea } from './resolve'
 import { stationStatOf, type ResolvedStationStat } from './stations'
-import { buildTotals, type MethodOf } from './totals'
+import { type MethodOf } from './method'
+import { AGE_LABEL_JA } from './age-totals'
+import { buildTotals } from './totals'
 
 /** 沿線と駅の円で無い人口の年（メッシュの年が揃わない・2025 年は未公表）。 */
 export const MESH_UNAVAILABLE_JA =
@@ -88,20 +91,31 @@ const lineMethod: MethodOf = (metric) => ({
 function nearMethod(radiusM: RadiusM): MethodOf {
   return (metric) => ({
     method: 'stationRadius',
-    sourceJa: getEntry(stationKeyOf(metric, radiusM))?.source ?? '',
+    sourceJa: getEntry(sourceKeyOf(metric, radiusM))?.source ?? '',
   })
 }
 
-/** 区域の指標 → その半径の駅の指標の key（`pop_2020` → `pop_2020_1km`）。 */
+/** 区域の指標 → その半径の駅の指標の key（`pop_2020` → `pop_2020_1km`）。年齢の 4 区分は駅の指標に無い（`near-age.ts`）。 */
 export function stationKeyOf(metric: AreaMetric, radiusM: RadiusM): string {
   return `${metric.key}_${radiusLabel(radiusM)}`
 }
 
+/** 区域の指標 → 出典を持つ、その半径の駅の指標の key（年齢は駅の年齢の表と同じ出典の指標で名乗る）。 */
+function sourceKeyOf(metric: AreaMetric, radiusM: RadiusM): string {
+  if (!isAreaAgeBase(metric.baseMetric)) return stationKeyOf(metric, radiusM)
+  return `${ageSourceHeadOf(metric)}_${radiusLabel(radiusM)}`
+}
+
+/** 出せない値の名前（年齢の 4 区分は 1 つにまとめて「年齢別の人口」・漏れは型で落ちる）。 */
 const BASE_LABELS_JA: Readonly<Record<AreaMetric['baseMetric'], string>> = {
   pop: '人口',
   pop_pred: '将来推計人口',
   estab_n: '事業所',
   emp_n: '従業者',
+  pop0_14: AGE_LABEL_JA,
+  pop15_64: AGE_LABEL_JA,
+  pop65_74: AGE_LABEL_JA,
+  pop75: AGE_LABEL_JA,
 }
 
 /** 年の並び（「2012年」「1995〜2015年」）。 */
@@ -113,17 +127,20 @@ function yearsText(years: readonly number[]): string {
   return first === last ? `${first}年` : `${first}〜${last}年`
 }
 
-/** 無い値の言い方（「人口（1995〜2015年）：2024 年 1 月の区の再編…」）。 */
+/**
+ * 無い値の言い方（「人口（1995〜2015年）：2024 年 1 月の区の再編…」）。名前ごとに年をまとめる——年齢の 4 区分は
+ * 「年齢別の人口（2015〜2050年）」の 1 つ。
+ */
 export function missingText(missing: AreaMissing): string {
   const metrics = missing.keys
     .map(getAreaMetric)
     .filter((metric): metric is AreaMetric => metric !== undefined)
-  const bases = [...new Set(metrics.map((metric) => metric.baseMetric))]
-  const parts = bases.map((base) => {
+  const labels = [...new Set(metrics.map((metric) => BASE_LABELS_JA[metric.baseMetric]))]
+  const parts = labels.map((label) => {
     const years = metrics
-      .filter((metric) => metric.baseMetric === base)
+      .filter((metric) => BASE_LABELS_JA[metric.baseMetric] === label)
       .map((metric) => metric.year)
-    return `${BASE_LABELS_JA[base]}（${yearsText(years)}）`
+    return `${label}（${yearsText(years)}）`
   })
   return `${parts.join('・')}：${missing.reasonJa}`
 }
@@ -274,7 +291,7 @@ function metricsOf(values: ReadonlyMap<string, number>): AreaMetric[] {
 /** 駅から N m の出典（区域の値に使った駅の指標の出典）。 */
 function nearSourcesOf(withinM: number, circle: AreaSummaryParts['circle']): SourceRow[] {
   if (circle === null || !isRadiusM(withinM)) return []
-  return [...sourcesForKeys(metricsOf(circle).map((metric) => stationKeyOf(metric, withinM)))]
+  return [...sourcesForKeys(metricsOf(circle).map((metric) => sourceKeyOf(metric, withinM)))]
 }
 
 /** 区域の値の出典（行政区域・沿線はカタログ、駅から N m は駅の指標）。 */

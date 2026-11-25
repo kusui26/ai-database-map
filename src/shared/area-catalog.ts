@@ -34,9 +34,16 @@ export const areaSourceSchema = z.object({
 })
 export type AreaSource = z.infer<typeof areaSourceSchema>
 
+/**
+ * 年齢の 4 区分の系統（2026-11-25・`docs/261122_PLAN_population_improvement.md` §8.3）。1 つの系統に実績（2015・2020 年・
+ * `pop15_64_2020`）と推計（2025〜2050 年・`pop15_64_pred_2024_2050`）が年の順に並ぶ——推計かは `vintage` で分かる。
+ * 並びは `AGE_BANDS`（`@/shared/api`）と同じ＝下から積む順。
+ */
+export const AREA_AGE_BASES = ['pop0_14', 'pop15_64', 'pop65_74', 'pop75'] as const
+
 export const areaMetricSchema = z.object({
   key: z.string(),
-  baseMetric: z.enum(['pop', 'pop_pred', 'estab_n', 'emp_n']),
+  baseMetric: z.enum(['pop', 'pop_pred', 'estab_n', 'emp_n', ...AREA_AGE_BASES]),
   category: categorySchema,
   labelJa: z.string(),
   unit: z.string(),
@@ -57,6 +64,9 @@ export const areaCatalogSchema = z.object({
     populationLine: z.array(z.number().int()),
     projection: z.array(z.number().int()),
     economy: z.array(z.number().int()),
+    /** 年齢の 4 区分の実績（国勢調査）と推計（R6）の年。 */
+    age: z.array(z.number().int()),
+    ageProjection: z.array(z.number().int()),
   }),
   metrics: z.array(areaMetricSchema),
 })
@@ -85,4 +95,16 @@ export function areaMetricsOf(baseMetric: AreaMetric['baseMetric']): readonly Ar
   return areaCatalog.metrics
     .filter((metric) => metric.baseMetric === baseMetric)
     .sort((a, b) => a.year - b.year)
+}
+
+export type AreaAgeBase = (typeof AREA_AGE_BASES)[number]
+
+/** 年齢の 4 区分の系統か。 */
+export function isAreaAgeBase(baseMetric: AreaMetric['baseMetric']): baseMetric is AreaAgeBase {
+  return AREA_AGE_BASES.some((base) => base === baseMetric)
+}
+
+/** 推計の指標か（推計の時点 `vintage` を持つ＝R6。実績は null）。 */
+export function isProjectedAreaMetric(metric: AreaMetric): boolean {
+  return metric.vintage !== null
 }

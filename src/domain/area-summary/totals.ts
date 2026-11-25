@@ -11,16 +11,22 @@
  * - 事業所・従業者（民営）：最新の年の値と、5 年・9 年の増減
  */
 
-import { areaMetricsOf, type AreaMetric } from '@/shared/area-catalog'
+import {
+  areaMetricsOf,
+  isAreaAgeBase,
+  type AreaAgeBase,
+  type AreaMetric,
+} from '@/shared/area-catalog'
 import {
   type AreaAccuracy,
   type AreaChange,
   type AreaPoint,
   type AreaTotal,
   type AreaTotalId,
-  type AreaTotalMethod,
   type AreaYearValue,
 } from '@/shared/area-summary'
+import { AGING_RATE_LABEL_JA, buildAgeTotals, WORKING_AGE_LABEL_JA } from './age-totals'
+import { METHOD_LABELS_JA, type MethodOf } from './method'
 import { changeOf, rateOf, valueJa } from './wording'
 
 /** 将来推計人口で先に言う年。 */
@@ -30,43 +36,42 @@ export const ACCURACY_YEAR = 2025
 /** 推計と実績の差がこれ未満（%）なら「ほぼ同じ」。 */
 const ACCURACY_SAME_PERCENT = 0.05
 
-export const METHOD_LABELS_JA: Readonly<Record<AreaTotalMethod, string>> = {
-  official: '公表値',
-  projection: '推計（市区町村ごとの合計）',
-  mesh: 'メッシュの按分',
-  stationRadius: '駅の円の値（メッシュの按分）',
-}
-
-/** 区域の種類ごとの作り方と出典（行政区域・沿線はカタログ、駅から N m は駅の指標の出典）。 */
-export type MethodOf = (metric: AreaMetric) => {
-  readonly method: AreaTotalMethod
-  readonly sourceJa: string
-}
+/** 年齢の 4 区分以外の系統（1 つの系統が 1 つの区域の値になる）。 */
+type PlainBase = Exclude<AreaMetric['baseMetric'], AreaAgeBase>
 
 type TotalSpec = {
   readonly id: AreaTotalId
-  readonly baseMetric: AreaMetric['baseMetric']
+  readonly baseMetric: PlainBase
   readonly labelJa: string
 }
 
 /** 区域の値の名前（指標の種類ごと・漏れは型で落ちる）。About の出典の札も同じ言葉を使う（`sources.ts`）。 */
-const TOTAL_LABELS_JA: Readonly<Record<AreaMetric['baseMetric'], string>> = {
+const TOTAL_LABELS_JA: Readonly<Record<PlainBase, string>> = {
   pop: '人口',
   pop_pred: '将来推計人口',
   estab_n: '事業所（民営）',
   emp_n: '従業者（民営）',
 }
 
-const TOTAL_SPECS: readonly TotalSpec[] = [
+/** 年齢の 4 区分から作る区域の値（どの区分も両方に使う：15〜64 歳は生産年齢人口と高齢化率の分母）。 */
+const AGE_TOTAL_LABELS_JA: readonly string[] = [WORKING_AGE_LABEL_JA, AGING_RATE_LABEL_JA]
+
+/** 人口の 2 系統（この後に年齢の 2 系統・`age-totals.ts`）と、経済センサスの 2 系統。 */
+const POPULATION_SPECS: readonly TotalSpec[] = [
   { id: 'population', baseMetric: 'pop', labelJa: TOTAL_LABELS_JA.pop },
   { id: 'populationFuture', baseMetric: 'pop_pred', labelJa: TOTAL_LABELS_JA.pop_pred },
+]
+const ECONOMY_SPECS: readonly TotalSpec[] = [
   { id: 'establishments', baseMetric: 'estab_n', labelJa: TOTAL_LABELS_JA.estab_n },
   { id: 'employees', baseMetric: 'emp_n', labelJa: TOTAL_LABELS_JA.emp_n },
 ]
 
-/** 区域の値の名前（「人口」「将来推計人口」「事業所（民営）」「従業者（民営）」）。 */
-export function totalLabelJa(baseMetric: AreaMetric['baseMetric']): string {
-  return TOTAL_LABELS_JA[baseMetric]
+/**
+ * その系統の指標を使う区域の値の名前（画面の「エリア全体の値」の名前・About の出典の札）。年齢の 4 区分は
+ * 「生産年齢人口（15〜64歳）」と「高齢化率（65歳以上の割合）」の 2 つ。
+ */
+export function totalLabelsJa(baseMetric: AreaMetric['baseMetric']): readonly string[] {
+  return isAreaAgeBase(baseMetric) ? AGE_TOTAL_LABELS_JA : [TOTAL_LABELS_JA[baseMetric]]
 }
 
 /** 値のある年の点（年の古い順）と、使った指標。 */
@@ -221,13 +226,19 @@ function totalOf(
 }
 
 /**
- * 区域の値（区域の指標の key → 値）→ 区域の値の 4 系統（値の無い系統は出さない）。
- * `withAccuracy` は行政区域だけ（推計の当たり具合は、実績の 2025 年がある区域だけで言える）。
+ * 区域の値（区域の指標の key → 値）→ 区域の値の 6 系統（人口・将来推計人口・生産年齢人口・高齢化率・事業所・従業者。
+ * 値の無い系統は出さない）。`withAccuracy` は行政区域だけ（推計の当たり具合は、実績の 2025 年がある区域だけで言える）。
  */
 export function buildTotals(
   values: ReadonlyMap<string, number>,
   methodOf: MethodOf,
   withAccuracy: boolean,
 ): AreaTotal[] {
-  return present(TOTAL_SPECS.map((spec) => totalOf(spec, values, methodOf, withAccuracy)))
+  const totalsOf = (specs: readonly TotalSpec[]): AreaTotal[] =>
+    present(specs.map((spec) => totalOf(spec, values, methodOf, withAccuracy)))
+  return [
+    ...totalsOf(POPULATION_SPECS),
+    ...buildAgeTotals(values, methodOf, FUTURE_LEAD_YEAR),
+    ...totalsOf(ECONOMY_SPECS),
+  ]
 }

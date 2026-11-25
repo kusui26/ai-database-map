@@ -7,6 +7,8 @@
  * - 種類の違うエリア（横浜市と東横線の沿線）も並べてよいが、作り方（公表値・按分）を行で書く
  * - 片方がもう片方に入っているとき（区と市・市と県）は、人口・推計・事業所・従業者の行のすぐ下に**占める割合**の行を足す
  *   （いちばん近い入れ物に対して・`share.ts`・2026-10-13 B5d″）。入れ物のあるエリアが無ければ行を出さない
+ * - 年齢（2026-11-25）：生産年齢人口の 2020 年・2050 年への増減・高齢化率の 2020 年 → 2050 年。年齢の値のあるエリアが
+ *   無ければ行を出さない（地図の範囲だけの比べ・年齢を入れる前の DB）
  */
 
 import {
@@ -19,7 +21,7 @@ import {
 import { formatNumber, MISSING } from '@/shared/format'
 import { shareJa } from './share'
 import { FUTURE_LEAD_YEAR } from './totals'
-import { rateJa, rateOf, valueJa } from './wording'
+import { percentJa, rateJa, rateOf, valueJa } from './wording'
 
 /** 指数の基準の年。 */
 export const INDEX_BASE_YEAR = 2020
@@ -163,6 +165,35 @@ function futureRows(summaries: readonly AreaSummary[], containers: Containers): 
   ]
 }
 
+/** 高齢化率のセル（「25.1% → 37.9%」・2050 年が無ければ 2020 年だけ）。 */
+function agingCell(total: AreaTotal | undefined): string {
+  const from = pointAt(total, INDEX_BASE_YEAR)
+  const to = pointAt(total, FUTURE_LEAD_YEAR)
+  if (from === undefined) return MISSING
+  return to === undefined
+    ? percentJa(from.value)
+    : `${percentJa(from.value)} → ${percentJa(to.value)}`
+}
+
+/** 年齢：生産年齢人口（2020 年）と 2050 年への増減・高齢化率（2020 年 → 2050 年）。 */
+function ageRows(summaries: readonly AreaSummary[]): Row[] {
+  if (!summaries.some((summary) => totalOf(summary, 'workingAge') !== undefined)) return []
+  const working = (summary: AreaSummary): AreaTotal | undefined => totalOf(summary, 'workingAge')
+  return [
+    rowOf(summaries, `生産年齢人口（${INDEX_BASE_YEAR}年）`, (s) =>
+      valueCell(working(s), INDEX_BASE_YEAR),
+    ),
+    rowOf(
+      summaries,
+      `生産年齢人口の将来の増減（${INDEX_BASE_YEAR}→${FUTURE_LEAD_YEAR}年・推計）`,
+      (s) => changeCell(working(s), INDEX_BASE_YEAR, FUTURE_LEAD_YEAR),
+    ),
+    rowOf(summaries, `高齢化率（${INDEX_BASE_YEAR}年 → ${FUTURE_LEAD_YEAR}年）`, (s) =>
+      agingCell(totalOf(s, 'agingRate')),
+    ),
+  ]
+}
+
 /** 経済センサスの値（事業所・従業者）。値の行はエリアごとの最新の年、割合はそろえた年。 */
 const CENSUS_ROWS: readonly { readonly id: AreaTotalId; readonly nameJa: string }[] = [
   { id: 'establishments', nameJa: '事業所' },
@@ -248,6 +279,7 @@ export function compareAreas(
     rows: [
       ...populationRows(summaries, years, containers),
       ...futureRows(summaries, containers),
+      ...ageRows(summaries),
       ...otherRows(summaries, containers),
     ],
     baseYear: INDEX_BASE_YEAR,

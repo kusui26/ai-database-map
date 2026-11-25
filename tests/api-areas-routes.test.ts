@@ -25,6 +25,7 @@ import {
   KAWASAKI_ROWS,
   TAKEBASHI,
   TAKEBASHI_5KM,
+  TAKEBASHI_AGE_ROWS,
   TOYOKO_ROWS,
   YOKOHAMA_POP_GR,
   YOKOHAMA_ROWS,
@@ -39,6 +40,7 @@ const db = vi.hoisted(() => ({
   lineStationsInOrder: vi.fn(),
   datasetRows: vi.fn(),
   stationByGrp: vi.fn(),
+  stationAgeProfile: vi.fn(),
 }))
 
 vi.mock('@/db/queries', async (importOriginal) => {
@@ -101,6 +103,8 @@ beforeEach(() => {
     '代官山#0': { pop_2020_1km: 52529, pop_gr_2020_2015_1km: 5.7, pop_gr_pred_2024_2050_1km: -0.3 },
   })
   db.stationByGrp.mockImplementation(async (grp: string) => (grp === '竹橋#0' ? TAKEBASHI : null))
+  // 駅の年齢の表（駅から N m の年齢）：既定は表に無い駅（空）。年齢を見る試験だけ竹橋の表を返す
+  db.stationAgeProfile.mockResolvedValue([])
 })
 
 async function errorOf(response: Response): Promise<{ code: string; message: string }> {
@@ -203,6 +207,7 @@ describe('GET /api/areas/summary', () => {
 
   it('駅から 5km：起点の駅を引き、区域の値はその円の値（要る key だけ・1995〜2010 年は使わない・1,277,680 人）', async () => {
     db.datasetRows.mockResolvedValue({ '竹橋#0': TAKEBASHI_5KM })
+    db.stationAgeProfile.mockResolvedValue(TAKEBASHI_AGE_ROWS)
     const body = areaSummaryResponseSchema.parse(
       await (await summary('area=near:竹橋%230@5000')).json(),
     )
@@ -220,6 +225,31 @@ describe('GET /api/areas/summary', () => {
     const [near] = body.areas
     expect(near?.ref).toBe('near:竹橋#0@5000')
     expect(near?.totals[0]?.headlineJa).toBe('1,277,680 人（2020年）・2015→2020年で +9.8%')
+    // 年齢（2026-11-25）：駅の年齢の表の 5km だけを読む（年齢の列は dataset_rows に頼まない＝上の 19 key のまま）
+    expect(db.stationAgeProfile).toHaveBeenCalledWith('竹橋#0')
+    const age = near?.totals.filter(
+      (total) => total.id === 'workingAge' || total.id === 'agingRate',
+    )
+    expect(age?.map((total) => [total.headlineJa, total.method])).toEqual([
+      ['905,990 人（2020年）→ 2050年 934,136 人（推計・2020年比 +3.1%）', 'stationRadius'],
+      ['18.1%（2020年）→ 26.1%（2050年・推計）', 'stationRadius'],
+    ])
+    expect(body.sources.map((each) => each.source).join('\n')).toContain(
+      '国勢調査 地域メッシュ統計（e-Stat 統計GIS',
+    )
+  })
+
+  it('駅から 5km：駅の年齢の表が無い駅（表に無い）は、年齢の 2 行を出さない（人口などはそのまま）', async () => {
+    db.datasetRows.mockResolvedValue({ '竹橋#0': TAKEBASHI_5KM })
+    const body = areaSummaryResponseSchema.parse(
+      await (await summary('area=near:竹橋%230@5000')).json(),
+    )
+    expect(body.areas[0]?.totals.map((total) => total.id)).toEqual([
+      'population',
+      'populationFuture',
+      'establishments',
+      'employees',
+    ])
   })
 
   it('駅から 3km（6 つ以外の半径）：区域の値は引かない', async () => {

@@ -9,7 +9,7 @@
  */
 
 import { areaCatalog, type AreaMetric, type AreaSource } from '@/shared/area-catalog'
-import { totalLabelJa } from './totals'
+import { totalLabelsJa } from './totals'
 
 /** 区域の値の範囲。行政区域と沿線で、作り方も出典も違う。 */
 const SCOPE_LABELS_JA = { admin: '行政区域', line: '沿線' } as const
@@ -20,18 +20,19 @@ export type AreaDataSource = {
   readonly license: string
   /** どの範囲の値か（「行政区域」「沿線」）。 */
   readonly scopesJa: readonly string[]
-  /** 何の値か（「人口」「将来推計人口」「事業所（民営）」「従業者（民営）」・カタログの並び）。 */
+  /** 何の値か（「人口」「将来推計人口」「生産年齢人口（15〜64歳）」…「従業者（民営）」・カタログの並び）。 */
   readonly usedForJa: readonly string[]
 }
 
 type SourceUse = { readonly scope: Scope; readonly source: AreaSource; readonly labelJa: string }
 
-/** 指標 1 つが使う出典（行政区域は必ず、沿線はあるときだけ）。 */
+/** 指標 1 つが使う出典（行政区域は必ず、沿線はあるときだけ・その指標を使う区域の値の名前ごと）。 */
 function usesOf(metric: AreaMetric): SourceUse[] {
-  const labelJa = totalLabelJa(metric.baseMetric)
-  const admin: SourceUse = { scope: 'admin', source: metric.sources.admin, labelJa }
-  const line = metric.sources.line
-  return line === null ? [admin] : [admin, { scope: 'line', source: line, labelJa }]
+  const { admin, line } = metric.sources
+  return totalLabelsJa(metric.baseMetric).flatMap((labelJa): SourceUse[] => [
+    { scope: 'admin', source: admin, labelJa },
+    ...(line === null ? [] : [{ scope: 'line' as const, source: line, labelJa }]),
+  ])
 }
 
 /** 束ねる鍵（出典と利用条件の組）。 */

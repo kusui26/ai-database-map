@@ -13,6 +13,11 @@ export function valueJa(value: number, unit: string): string {
   return formatWithUnit(value, 'int', unit)
 }
 
+/** 割合（%）の書き方（「25.1%」・小数 1 桁・高齢化率）。 */
+export function percentJa(percent: number): string {
+  return formatNumber(percent, 'percent1')
+}
+
 /** 増減率（%）。起点が 0 以下なら null（率にならない）。 */
 export function rateOf(from: number, to: number): number | null {
   return from > 0 ? (to / from - 1) * 100 : null

@@ -44,6 +44,7 @@ export const profileItemIdSchema = z.enum([
   'population',
   'populationChange',
   'populationFuture',
+  'agingRate',
   'income',
   'landPrice',
   'landPriceChange',

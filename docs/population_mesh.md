@@ -585,7 +585,12 @@ R6 の年齢の列の全国の和と 0.05 人以内で一致する。
 ### 12.7 第 2 段（`data/derived/station_age_profiles.csv`・グラフ用）
 
 駅 × 6 半径 × 8 年（2015・2020・2025〜2050）の 4 区分（`age0_14`・`age15_64`・`age65_74`・`age75plus`）と、実績の年の補う前の
-年齢不詳（`age_unknown`・⚠ の割合の分子）。445,104 行。DB の表（`station_age_profiles`）は PR-3。
+年齢不詳（`age_unknown`・⚠ の割合の分子）。445,104 行。
+
+DB（PR-3・2026-11-25）は `station_age_profiles`：1 駅 1 行の配列（`counts integer[]`＝[半径 6][年 8][区分 4] の 192・
+`unknown integer[]`＝[半径 6][実績の年 2] の 12・8.8MB）。読むのは関数 `station_age_profile(in_grp)`（48 行・推計の年は
+`projected`）。投入は `pipeline/load_station_age.py`、照合は `pipeline/golden_station_age_profile_test.py`（全 445,104 行が CSV と一致・
+4 区分の和 ＝ 既存の総数の列）。人数は整数なので integer（同じ 4 バイトで、1,677 万人を超えても 1 人単位で持てる）。
 
 ---
 

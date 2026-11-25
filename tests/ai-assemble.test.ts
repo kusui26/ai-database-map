@@ -25,7 +25,8 @@ import {
 import { pointHazard } from '@/domain/hazard/point'
 import { hazardLayersWithPointAnswer } from '@/domain/hazard/catalog'
 import { type HazardPointEffect } from '@/ai/types'
-import { panelFixture } from './fixtures/panels'
+import { panelFixture, stackedTrendFixture } from './fixtures/panels'
+import { KOSUGI_1KM, KOSUGI_STATION, KOSUGI_VALUES_1KM, ageRowsOf } from './fixtures/age-structure'
 import {
   createCollector,
   type GrowthEffect,
@@ -112,12 +113,44 @@ const growthEffect: GrowthEffect = {
   excludeLowN: false,
 }
 
+/** 年齢別の人口のある駅（武蔵小杉・1km 圏）の人口タブ（2026-11-25）。 */
+const kosugiEffect: StationDetailEffect = {
+  kind: 'stationDetail',
+  detail: buildStationDetail(
+    KOSUGI_STATION,
+    new Map(Object.entries(KOSUGI_VALUES_1KM)),
+    ageRowsOf(1000, KOSUGI_1KM),
+  ),
+  category: 'population',
+  radiusM: 1000,
+}
+
 describe('panelsForStationDetail', () => {
-  it('駅カード → 焦点カテゴリのパネル（人口＝重ねチャート＋増減率表）', () => {
+  it('駅カード → 焦点カテゴリのパネル（人口＝人口の推移 → 人口増減率の表。表は畳む＝D-5）', () => {
     const panels = panelsForStationDetail(popEffect)
-    expect(panels[0]?.type).toBe('stationCard')
-    expect(panels.map((panel) => panel.type)).toContain('trendChart')
-    expect(panels.map((panel) => panel.type)).toContain('statTable')
+    expect(panels.map((panel) => panel.type)).toEqual(['stationCard', 'trendChart', 'statTable'])
+  })
+
+  it('年齢別の人口のある駅は、人口の推移 → 年齢別の人口 → 人口増減率の表（畳む）', () => {
+    const panels = panelsForStationDetail(kosugiEffect)
+    expect(panels.map((panel) => panel.type)).toEqual([
+      'stationCard',
+      'trendChart',
+      'trendChart',
+      'statTable',
+    ])
+    expect(panels[2]?.type === 'trendChart' ? panels[2].title : '').toBe('年齢別の人口（1km圏）')
+    expect(panels[3]?.type === 'statTable' ? panels[3].folded : undefined).toBe(true)
+    expect(panels.every((panel) => panel.size === 'compact')).toBe(true)
+  })
+
+  it('畳んだ人口増減率の表も AI の要約に残る（増減率を自分で計算させない・main と同じ値）', () => {
+    expect(summarizePanels(panelsForStationDetail(popEffect))).toContain(
+      '人口増減率: 2015→2020 +5.5%',
+    )
+    expect(summarizePanels(panelsForStationDetail(kosugiEffect))).toContain(
+      '人口増減率: 2015→2020 +11.6%',
+    )
   })
 
   it('すべて compact / inline（チャット内表示・⤢で昇格）', () => {
@@ -401,6 +434,29 @@ describe('summarizePanels', () => {
     const summary = summarizePanels(panelsForStationDetail(popEffect))
     expect(summary).toContain('駅: 東京（東京都')
     expect(summary).toContain('人口') // トレンド or 表の見出し
+  })
+
+  it('年齢別の人口：2020年 → 2050年の合計と区分・推計の始まり・チップ（区分ごとに言える＝§7.4）', () => {
+    const summary = summarizePanels(panelsForStationDetail(kosugiEffect))
+    expect(summary).toContain(
+      '年齢別の人口（1km圏）: 2020年 → 2050年（人・2025年からは推計） 合計 75,418 → 81,565・' +
+        '0〜14歳 9,965 → 9,175・15〜64歳 55,863 → 51,822・65〜74歳 5,055 → 9,329・75歳以上 4,535 → 11,239',
+    )
+    expect(summary).toContain(
+      '15〜64歳（2020年） 55,863 人・74.1%・高齢化率 2020→2050 12.7%→25.2%・15〜64歳 2020→2050 -7.2%',
+    )
+  })
+
+  it('積み上げ（売上）：最初の系列だけでなく、合計と全部の区分を言う（以前は小売だけが合計に見えた）', () => {
+    const summary = summarizePanels([stackedTrendFixture()])
+    expect(summary).toContain(
+      '売上の推移: 2016年 → 2021年（百万円） 合計 1,902 → 2,010・小売 1,469 → 1,500・飲食宿泊 263 → 310',
+    )
+  })
+
+  it('折れ線は以前のまま（最初の系列の端点）', () => {
+    const summary = summarizePanels(panelsForStationDetail(paxEffect))
+    expect(summary).toContain('乗降客数の推移: 2011年 920,144 → 2024年 1,262,604')
   })
 
   it('ランキング要約は順位・駅名・整形値を含む', () => {

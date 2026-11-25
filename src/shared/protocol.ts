@@ -310,6 +310,12 @@ export const panelSchema = z.discriminatedUnion('type', [
      * 省略時は表示中の系列を足した値を描く。
      */
     totals: z.array(seriesPointSchema).optional(),
+    /**
+     * この年（x）から推計（`stacked` のときに使う・2026-11-25 年齢別の人口）。その年からの棒を淡く描き、実績との境に
+     * 破線と「推計」を置き、AI の文に「2025年からは推計」と添える。指定しないパネルの描画は変わらない。
+     * 折れ線は推計を別の系列（`dashed`）で持つので、この項目を使わない。
+     */
+    projectedFrom: z.number().optional(),
     flags: z.array(reliabilityFlagSchema),
     series: z.array(trendSeriesSchema),
     stats: z.array(panelStatSchema).optional(), // 折れ線に添える要約 KPI（前年比・コロナ比等）
@@ -326,6 +332,12 @@ export const panelSchema = z.discriminatedUnion('type', [
     title: z.string(),
     rows: z.array(panelStatSchema), // ラベル付き値の一覧（増減率 9 ペア等）
     note: z.string().nullable().optional(),
+    /**
+     * 「題（行の数）」の 1 行に畳み、押すと開く（2026-11-25・人口タブの人口増減率＝D-5）。同じ値が図にもあって、
+     * いつも開いておくと画面が長くなる表に使う。**消さずに畳む**——行は応答にも AI の要約にも残る。
+     * 行の無い表は畳まない（題だけ・`shared/stat-table.ts` の `showsFolded`）。
+     */
+    folded: z.boolean().optional(),
     placement: placementSchema,
     size: sizeSchema,
   }),

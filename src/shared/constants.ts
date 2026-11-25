@@ -165,6 +165,29 @@ export const CATEGORY_COLORS: Readonly<Record<Category, string>> = {
 }
 
 /**
+ * 推計の棒の不透明度（`trendChart.projectedFrom`・2026-11-25 年齢別の人口）。Web（Chart.js）・ビューア（SVG）・ECharts で同じ値。
+ * 年齢の 4 区分は 1 つの色相の濃淡（若い＝淡い → 高齢＝濃い）なので、淡くしても隣の区分と明るさで分かれる値にした：
+ * 白に重ねた 4 色の隣どうしの OKLCH の明るさの差が 0.06 以上（dataviz の `validate_palette.js --ordinal`）。0.55 以下だと
+ * 15〜64 歳と 65〜74 歳、65〜74 歳と 75 歳以上が近づきすぎる（0.057）。
+ */
+export const PROJECTED_OPACITY = 0.6
+
+/**
+ * 実績と推計の境の描き方（Web の Chart.js とビューアの SVG で同じにする）：破線（slate-400・線 4px と間 3px）を引き、
+ * その右に「推計」（slate-500）を、破線から 4px 離して書く。
+ */
+export const PROJECTION_RULE_COLOR = '#94a3b8'
+export const PROJECTION_RULE_DASH_PX: readonly [number, number] = [4, 3]
+export const PROJECTION_LABEL_COLOR = '#64748b'
+export const PROJECTION_LABEL_GAP_PX = 4
+
+/**
+ * 積み上げの区分の間のすき間（px・面の色が見える）。区分が明るさの差だけで分かれないように、すき間でも分ける（dataviz）。
+ * Web の Chart.js とビューアの SVG で同じ。
+ */
+export const SEGMENT_GAP_PX = 2
+
+/**
  * 散布図クラスタの配色（旧プロジェクト Station Area Database Map と同一の 4 色）。
  *
  * クラスタ番号は k-means の任意 index で意味を持たないため、色は「集団の区別」だけを担う

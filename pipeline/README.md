@@ -284,7 +284,8 @@ python3 pipeline/estat_api_test.py --live                  # 本物の e-Stat �
 
 駅 × 半径の年齢 4 区分（0〜14・15〜64・65〜74・75 歳以上）を、国勢調査 250m メッシュ（2015・2020）と将来推計人口メッシュ R6
 （2025〜2050）から作る。設計は `docs/261122_PLAN_population_improvement.md`、データの説明は `docs/population_mesh.md` §12。
-PR-1 で `data/derived/` に作り、PR-2 でカタログと DB に入れた（第 1 段の 78 列）。グラフ用の表（第 2 段）の DB は PR-3。
+PR-1 で `data/derived/` に作り、PR-2 でカタログと DB に入れた（第 1 段の 78 列）。PR-3 でグラフ用の表（第 2 段）を DB に入れた
+（`station_age_profiles`・人口タブの「年齢別の人口」の材料）。
 
 ```bash
 python3 pipeline/fetch_age_mesh.py            # 国勢調査 250m の年齢（統計 GIS・151 区画 × 2 年・約 8 分・appId 不要）
@@ -301,6 +302,10 @@ python3 pipeline/load_to_supabase.py --append  # 年齢の 78 列だけを足す
 python3 pipeline/validate_load.py              # 全 PASS（(e) の基準は Pro の 2,048MB）
 python3 pipeline/golden_station_age_test.py    # 年齢の 78 列の全セルを CSV と照合（float4 の値どうし・約 10 秒）
 python3 pipeline/golden_rpc_test.py            # 9d：年齢の束・順位（低母数の除外）・フラグ・散布
+
+# PR-3：グラフ用の表（migration 20261125090000 を先に当てる。足すだけで、既存の表と関数は変えない）
+python3 pipeline/load_station_age.py                # 9,273 駅 × 配列（約 8.8MB・数秒）。投入後の確認が崩れたらロールバック
+python3 pipeline/golden_station_age_profile_test.py # 関数の出力（445,104 行）を CSV と全行照合・区分の和 ＝ 総数の列・守り（約 30 秒）
 ```
 
 | ファイル | 役割 |
@@ -314,6 +319,8 @@ python3 pipeline/golden_rpc_test.py            # 9d：年齢の束・順位（�
 | `build_station_age.py` | 組み立て・照合・書き出し |
 | `validate_station_age.py` | 別の道で確かめる：形・和・区分・第 2 段からの作り直し・割合・セル・全国・市区町村・既知の駅 |
 | `golden_station_age_test.py` | 投入後（PR-2）：`metric_columns` がカタログと id・key・meta で一致・年齢の列は末尾（797〜874）・全セルが CSV と一致・フラグは 1 の行だけ・カタログに無い列の行が無い |
+| `load_station_age.py` | グラフ用の表（PR-3）：`station_age_profiles.csv` を 1 駅 1 行の配列（`counts`＝[半径][年][区分] の 192・`unknown`＝[半径][実績の年] の 12）にして入れる。全量の投入（`load_to_supabase.py`）からも呼ぶ |
+| `golden_station_age_profile_test.py` | 投入後（PR-3）：関数 `station_age_profile` の出力を全駅で CSV と照合（配列の並びを知る 2 か所＝投入と関数が食い違えば落ちる・わざと壊すと 1 つだけ見つかる）・推計の印・区分の和 ＝ 総数の列（全年・全半径）・2020 年の 15〜64 歳 ＝ 第 1 段の列・RLS と anon の権限・PostgREST から同じ・速さ |
 
 **罠**
 
@@ -330,6 +337,11 @@ python3 pipeline/golden_rpc_test.py            # 9d：年齢の束・順位（�
 - **`station_age.csv` が無い・駅が合わないと、カタログ・投入・照合は止まる**（連結して読むため）。ノートブックで
   `station_dataset.csv` を作り直したら、`build_station_age.py` も流し直す
 - 年齢のキーは `pop_` で始めない（AI の解決器の前方一致で総数の `pop` に解ける）。新しい列は CSV の末尾に足す（カタログの id は列の並び）
+- **全量の投入（`load_to_supabase.py`）は `station_age_profiles` も入れ直す**（stations の truncate cascade で消え、駅の id も変わる・
+  `line_stations` と同じ）。`station_age_profiles.csv` が無ければ止まる。アプリは駅詳細のたびに関数を呼ぶ——表が空なら年齢の図が
+  出ないだけだが、**関数が無いと駅詳細が 502 になる**ので、migration は**アプリより先に**当てる
+- 配列の並び（半径・年・区分）を知っているのは、関数 `station_age_profile` と `load_station_age.py` だけ。どちらかを変えたら
+  `golden_station_age_profile_test.py` を流す
 
 **生成物**（`data/derived/`・gitignore）：`station_age.csv`（9,273 駅 × 第 1 段 66 列・フラグ 12 列）・`station_age_profiles.csv`
 （445,104 行＝駅 × 6 半径 × 8 年の 4 区分と、実績の年の補う前の年齢不詳）・`age_cells_census.parquet`・`age_cells_r6.parquet`

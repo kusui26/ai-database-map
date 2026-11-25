@@ -76,11 +76,12 @@ function itemOf(profile: ReturnType<typeof buildStationProfile>, id: string) {
 // --- 載せる指標（items.ts） --------------------------------------------------
 
 describe('載せる指標と年（カタログから決める）', () => {
-  it('1km 圏：11 指標・人口の増減は 5 年・将来は 20 年先・地価の増減は 5 年', () => {
+  it('1km 圏：12 指標・人口の増減は 5 年・将来は 20 年先・高齢化率は 2020 年・地価の増減は 5 年', () => {
     expect(rankedKeys(resolveProfileSections(1000))).toEqual([
       'pop_2020_1km',
       'pop_gr_2020_2015_1km',
       'pop_gr_pred_2024_2040_1km',
+      'pop65_share_2020_1km',
       'inc_pc_2025_1km',
       'lp_med_2026_1km',
       'lp_gr_2026_2021_1km',
@@ -92,7 +93,7 @@ describe('載せる指標と年（カタログから決める）', () => {
     ])
   })
 
-  it('どの半径でも 11 指標が揃う（半径が無い指標は近い半径に替える）', () => {
+  it('どの半径でも 12 指標が揃う（半径が無い指標は近い半径に替える）', () => {
     const items = PROFILE_SECTIONS.flatMap((section) => section.items)
     for (const radius of RADII_M) {
       expect(rankedKeys(resolveProfileSections(radius)), `${radius}`).toHaveLength(items.length)
@@ -359,6 +360,31 @@ describe('組み立て（buildStationProfile）', () => {
     ])
     expect(itemOf(profile, 'populationChange').valueJa).toBe('+5.3%')
     expect(itemOf(profile, 'landPrice').valueJa).toBe('1,735,000 円/㎡')
+  })
+
+  it('高齢化率（D-6・2026-11-25）：「住む人」の将来の人口の下・2020 年・県内と市内の位置・注記なし', () => {
+    const profile = buildStationProfile(inputFor())
+    const people = profile.sections.find((section) => section.id === 'people')
+    expect(people?.items.map((item) => item.id)).toEqual([
+      'population',
+      'populationChange',
+      'populationFuture',
+      'agingRate',
+      'income',
+    ])
+    const aging = itemOf(profile, 'agingRate')
+    expect(aging.labelJa).toBe('高齢化率')
+    expect(aging.key).toBe('pop65_share_2020_1km')
+    expect(aging.valueJa).toBe('16.1%')
+    expect(aging.periodJa).toBe('2020年')
+    expect(aging.positions.map((each) => each.scope)).toEqual(['prefecture', 'area'])
+    expect(aging.noteJa).toBeNull()
+    expect(aging.flagged).toBe(false)
+  })
+
+  it('高齢化率の ⚠ は年齢不詳のフラグ（pop_ageunk_2020）で立つ', () => {
+    const values = new Map(Object.entries({ ...VALUES_1KM, pop_ageunk_2020_1km: 1 }))
+    expect(itemOf(buildStationProfile(inputFor({ values })), 'agingRate').flagged).toBe(true)
   })
 
   it('政令市の所得は市の平均が主なので、市内では比べない（県内だけ・注記で理由を言う）', () => {

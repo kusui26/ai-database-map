@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { toEChartsDocument } from '@/shared/presenters/echarts'
-import { ACCENT_COLOR, clusterColor } from '@/shared/constants'
+import { ACCENT_COLOR, PROJECTED_OPACITY, clusterColor } from '@/shared/constants'
 import { type Panel } from '@/shared/protocol'
 import { CHART_BAR_COLOR } from '@/shared/viewer/charts'
+import { buildStationDetail } from '@/domain/stations/presenter'
+import { ageStructurePanel } from '@/domain/stations/age-structure'
 import { PANEL_FIXTURES, PANEL_TYPES, panelFixture, stackedTrendFixture } from './fixtures/panels'
+import { KOSUGI_1KM, KOSUGI_STATION, KOSUGI_VALUES_1KM, ageRowsOf } from './fixtures/age-structure'
 
 /**
  * **パネル → ECharts の option**（PR-12・`docs/260912_gui_chat_protocol.md` §4.3(a)）。
@@ -149,6 +152,42 @@ describe('推移（積み上げ）', () => {
 
   it('その注記が副題に出る（読んだ人が食い違いに気づける）', () => {
     expect(pick(option, 'title', 'subtext')).toContain('合計は内訳を丸める前の値です')
+  })
+})
+
+describe('推移（推計のある積み上げ＝年齢別の人口・2026-11-25）', () => {
+  const panel = ageStructurePanel(
+    buildStationDetail(
+      KOSUGI_STATION,
+      new Map(Object.entries(KOSUGI_VALUES_1KM)),
+      ageRowsOf(1000, KOSUGI_1KM),
+    ),
+    1000,
+  )
+  if (panel === null) throw new Error('年齢の図がありません')
+  const option = optionOf(panel)
+
+  it('推計の年（2025〜）の棒は点ごとの不透明度で淡く、実績の年はそのままの値', () => {
+    expect(pick(option, 'series', 1, 'data', 1)).toBe(55_863) // 2020 年の 15〜64 歳
+    expect(pick(option, 'series', 1, 'data', 2)).toEqual({
+      value: 53_522,
+      itemStyle: { opacity: PROJECTED_OPACITY },
+    })
+  })
+
+  it('合計の数字は 2020 年と 2050 年だけ（間の年は点ごとに label を消す・Web と同じ年）', () => {
+    expect(pick(option, 'series', 4, 'name')).toBe('合計')
+    expect(pick(option, 'series', 4, 'data', 0)).toEqual({ value: 67_587, label: { show: false } })
+    expect(pick(option, 'series', 4, 'data', 1)).toBe(75_418)
+    expect(pick(option, 'series', 4, 'data', 7)).toBe(81_565)
+  })
+
+  it('副題に推計の始まりを書く', () => {
+    expect(pick(option, 'title', 'subtext')).toContain('2025年からは推計（淡い棒）')
+  })
+
+  it('JSON だけ（関数が混ざらない）', () => {
+    expect(hasFunction(option)).toBe(false)
   })
 })
 

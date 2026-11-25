@@ -284,9 +284,9 @@ describe('scoreCase: 指標のファミリ（metricFamilies・2026-11-24）', ()
 })
 
 describe('EVAL_CASES', () => {
-  it('66 問・id 一意・全問に期待あり', () => {
-    expect(EVAL_CASES.length).toBe(66)
-    expect(new Set(EVAL_CASES.map((c) => c.id)).size).toBe(66)
+  it('67 問・id 一意・全問に期待あり', () => {
+    expect(EVAL_CASES.length).toBe(67)
+    expect(new Set(EVAL_CASES.map((c) => c.id)).size).toBe(67)
     for (const testCase of EVAL_CASES) {
       expect(testCase.query.length).toBeGreaterThan(0)
       expect(Object.keys(testCase.expect).length).toBeGreaterThan(0)

@@ -3,7 +3,7 @@
  *
  * 見ること：
  * - 応答が共通 API の Zod（`stationProfileSchema`）を通り、CDN に 1 時間持たせる
- * - 順位の問い合わせに**市内の値**（政令市は市全体）と、その半径で決まった 11 指標の key が届く
+ * - 順位の問い合わせに**市内の値**（政令市は市全体）と、その半径で決まった 12 指標の key が届く
  * - 半径の既定は 1km。6 段以外・数でない半径は 400 で、**集計を走らせない**
  * - 知らない駅は 404（値の束も順位も引かない）・DB の失敗は 502
  * - 往復は駅 1 回＋並列 3 回（値の束・順位・災害の事前計算）
@@ -60,7 +60,7 @@ describe('GET /api/stations/[grp]/profile', () => {
     expect(profile.hazard?.headlineJa).toBe(HAZARD.headlineJa)
   })
 
-  it('順位の問い合わせに、駅・その半径の 11 指標・市内（政令市は市全体）が届く', async () => {
+  it('順位の問い合わせに、駅・その半径の 12 指標・市内（政令市は市全体）が届く', async () => {
     await call('横浜#0', '?radiusM=500')
     expect(db.stationProfileRanks).toHaveBeenCalledTimes(1)
     const [grp, keys, area] = db.stationProfileRanks.mock.calls[0] ?? []

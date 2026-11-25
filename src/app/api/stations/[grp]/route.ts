@@ -1,19 +1,17 @@
-import { stationBundle, stationByGrp } from '@/db/queries'
-import { buildStationDetail } from '@/domain/stations/presenter'
+import { loadStationDetail } from '@/domain/stations/load'
 import { CACHE, handle, json, NotFoundError } from '@/lib/http'
 
 export const runtime = 'nodejs'
 
-/** GET /api/stations/[grp] — 駅詳細（全半径分の系列を組立済み＋フラグ）。 */
+/** GET /api/stations/[grp] — 駅詳細（全半径分の系列を組立済み＋フラグ＋年齢別の人口）。 */
 export function GET(
   _request: Request,
   context: { params: Promise<{ grp: string }> },
 ): Promise<Response> {
   return handle(async () => {
     const { grp } = await context.params
-    const station = await stationByGrp(grp)
-    if (station === null) throw new NotFoundError(`駅が見つかりません: ${grp}`)
-    const values = await stationBundle(grp)
-    return json(buildStationDetail(station, values), CACHE.hour)
+    const detail = await loadStationDetail(grp)
+    if (detail === null) throw new NotFoundError(`駅が見つかりません: ${grp}`)
+    return json(detail, CACHE.hour)
   })
 }

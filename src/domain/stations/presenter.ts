@@ -4,11 +4,20 @@
  * station_bundle（key→value）を、カタログ駆動で「カテゴリ×半径×推計時点」の系列に組み立てる。
  * 各点は format 済み文字列と信頼性フラグ解決（reliabilityFlagKey の値＝1 か）を持つ。
  * フラグ列（kind='flag'）自体は系列にせず、フラグ解決の材料として使う。
+ *
+ * 年齢別の人口（`station_age_profile` の行・2026-11-25）は半径ごとにまとめて `ageStructure` に載せる。
+ * 値の表の指標ではない（グラフにしか使わない）ので、系列には混ぜない。
  */
 
 import { type CatalogEntry, entries } from '@/shared/catalog'
-import { type MetricSeries, type StationDetail, type StationRow } from '@/shared/api'
+import {
+  type AgeStructure,
+  type MetricSeries,
+  type StationDetail,
+  type StationRow,
+} from '@/shared/api'
 import { formatNumber } from '@/shared/format'
+import type { AgeProfileRow } from '@/db/queries'
 import { baseMetricLabel } from '@/domain/metrics'
 
 /** 系列としてプロットする種別（フラグは除外）。 */
@@ -19,10 +28,26 @@ function groupKey(entry: CatalogEntry): string {
   return `${entry.baseMetric}|${entry.radiusM ?? 'none'}|${entry.vintage ?? 'none'}`
 }
 
-/** 駅の属性＋値の束から StationDetail を組み立てる。 */
+/** 年齢の行（半径 × 年）→ 半径ごと・年の昇順。行が無い（表に無い駅）なら null。 */
+export function ageStructureOf(rows: readonly AgeProfileRow[]): AgeStructure | null {
+  if (rows.length === 0) return null
+  const radii = [...new Set(rows.map((row) => row.radiusM))].sort((a, b) => a - b)
+  return {
+    radii: radii.map((radiusM) => ({
+      radiusM,
+      years: rows
+        .filter((row) => row.radiusM === radiusM)
+        .sort((a, b) => a.year - b.year)
+        .map(({ year, projected, counts, unknown }) => ({ year, projected, counts, unknown })),
+    })),
+  }
+}
+
+/** 駅の属性＋値の束（＋年齢の行）から StationDetail を組み立てる。 */
 export function buildStationDetail(
   station: StationRow,
   values: ReadonlyMap<string, number>,
+  ageRows: readonly AgeProfileRow[] = [],
 ): StationDetail {
   const groups = new Map<string, CatalogEntry[]>()
   for (const entry of entries) {
@@ -70,7 +95,7 @@ export function buildStationDetail(
     })
   }
 
-  return { station, series }
+  return { station, series, ageStructure: ageStructureOf(ageRows) }
 }
 
 /** 便宜：カテゴリ・半径で系列を絞り込む（UI タブ用）。 */

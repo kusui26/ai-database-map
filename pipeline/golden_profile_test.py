@@ -6,7 +6,7 @@ migration `20261009190000_station_profile.sql` の station_profile_ranks(in_grp,
   1. 順位と比べた駅の数が、直接の計算と一致（県内・市内・政令市は全区・東京 23 区は区）
   2. 同じ値は同じ順位（バス停 0 の駅）・駅に値の無い指標と知らない key は行を返さない・知らない駅は 0 行
   3. 市内は駅自身がその中にあるときだけ（違う市・「%」・空は null）
-  4. anon が実行できる・PostgREST（anon・名前つき引数）からも同じ結果・1 駅 11 指標が速い
+  4. anon が実行できる・PostgREST（anon・名前つき引数）からも同じ結果・1 駅 12 指標が速い
 
     python3 pipeline/golden_profile_test.py           # 当てたあと：全 PASS で exit 0
     python3 pipeline/golden_profile_test.py --trial   # 当てる前：migration をトランザクションの中で当てて確かめ、ロールバック（REST は見ない）
@@ -32,6 +32,7 @@ KEYS_1KM = [
     "pop_2020_1km",
     "pop_gr_2020_2015_1km",
     "pop_gr_pred_2024_2040_1km",
+    "pop65_share_2020_1km",  # 高齢化率（2026-11-25・人口の年齢 PR-3）
     "inc_pc_2025_1km",
     "lp_med_2026_1km",
     "lp_gr_2026_2021_1km",
@@ -45,7 +46,7 @@ KEYS_1KM = [
 CASES = [("横浜#0", "横浜市"), ("東京#0", "千代田区"), ("立川#0", "立川市"), ("新宿#0", "新宿区"), ("府中#0", None)]
 #: バス停 0 の駅が多い指標（同じ値の扱いを見る）。
 TIE_KEY = "bus_n_500m"
-#: 速さの目安（1 駅 11 指標・東京都 654 駅。実測 30〜50ms）。
+#: 速さの目安（1 駅 12 指標・東京都 654 駅。11 指標のときの実測 30〜50ms）。
 FAST_MS = 300
 #: float4 の有効桁（約 7 桁）ぶんの相対誤差。
 FLOAT4_RELATIVE = 1e-6
@@ -172,7 +173,7 @@ def check_security_and_speed(checks: Checks, cur: psycopg.Cursor) -> None:
     started = time.perf_counter()
     ranks(cur, "東京#0", KEYS_1KM, "千代田区")
     elapsed_ms = (time.perf_counter() - started) * 1000
-    checks.add(elapsed_ms < FAST_MS, f"1 駅 11 指標が {FAST_MS}ms 未満（東京都 654 駅）", f"{elapsed_ms:.0f}ms")
+    checks.add(elapsed_ms < FAST_MS, f"1 駅 12 指標が {FAST_MS}ms 未満（東京都 654 駅）", f"{elapsed_ms:.0f}ms")
 
 
 def rest(fn: str, args: dict[str, object]) -> object:

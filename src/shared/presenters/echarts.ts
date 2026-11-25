@@ -15,13 +15,13 @@
  * - **数値のパネルだけ**を変換する。`hazardCard`・`evacuationList`・`escapeDirection` は
  *   **チャートにしない**——危険度は順序尺度で、色・記号・免責・時制が落ちると誤読される
  *   （`docs/260824_flood.md` §7.5）。`statTable`・`stationCard`・`markdown` は表と文が正しい形。
- *   `stationProfile`（駅周辺のプロフィール）も表——単位の違う 11 指標の位置を 1 枚の図にしても読めない。
+ *   `stationProfile`（駅周辺のプロフィール）も表——単位の違う 12 指標の位置を 1 枚の図にしても読めない。
  *   `areaSummary`（エリアの要約）も表と文——推移と内訳は別の `trendChart`・`barChart` として届くので、それがチャートになる
  * - **色は Web UI・ビューアと同じ規則**（`shared/viewer/charts.ts` の `seriesColor`・
  *   共有定数の `clusterColor`）。同じ数字が経路によって違う色にならないようにする
  */
 
-import { ACCENT_COLOR, clusterColor } from '@/shared/constants'
+import { ACCENT_COLOR, clusterColor, PROJECTED_OPACITY } from '@/shared/constants'
 import {
   type BarChartPanel,
   type Panel,
@@ -29,6 +29,7 @@ import {
   type ScatterPanel,
   type TrendChartPanel,
 } from '@/shared/protocol'
+import { isProjected, labeledTotalXs, trendXs } from '@/shared/trend-stack'
 import { CHART_BAR_COLOR, seriesColor } from '@/shared/viewer/charts'
 
 // --- JSON だけの値（関数を型で禁じる） ----------------------------------
@@ -104,12 +105,6 @@ const literalLabel = (formatted: string): string => (/[{}]/.test(formatted) ? '{
 
 // --- 推移（折れ線／積み上げ縦棒） ---------------------------------------
 
-/** x の目盛（全系列の和集合・昇順）。 */
-const trendCategories = (panel: TrendChartPanel): readonly number[] =>
-  [...new Set(panel.series.flatMap((series) => series.points.map((point) => point.x)))].sort(
-    (a, b) => a - b,
-  )
-
 /** 目盛に合わせた値の列（無い年は null＝線が途切れる／棒が立たない）。 */
 function alignedValues(
   points: readonly { readonly x: number; readonly y: number | null }[],
@@ -119,14 +114,17 @@ function alignedValues(
   return categories.map((x) => byX.get(x) ?? null)
 }
 
-/** 合計の線（積み上げのとき・**内訳の丸め和ではなく宣言された合計**を出す）。 */
+/**
+ * 合計の線（積み上げのとき・**内訳の丸め和ではなく宣言された合計**を出す）。数字を書く年は Web と同じ
+ * （`labeledTotalXs`＝推計のある図は最後の実績の年と最後の年だけ）。点ごとの `label.show` で消す。
+ */
 function totalsSeries(panel: TrendChartPanel, categories: readonly number[]): readonly JsonValue[] {
   if (panel.totals === undefined || panel.totals.length === 0) return []
   return [
     {
       name: '合計',
       type: 'line',
-      data: alignedValues(panel.totals, categories),
+      data: totalPoints(panel, panel.totals, categories),
       symbol: 'circle',
       symbolSize: 5,
       lineStyle: { width: 1, type: 'dotted' },
@@ -137,15 +135,52 @@ function totalsSeries(panel: TrendChartPanel, categories: readonly number[]): re
   ]
 }
 
+/** 合計の点（数字を書かない年は、点ごとの `label.show: false`）。 */
+function totalPoints(
+  panel: TrendChartPanel,
+  totals: NonNullable<TrendChartPanel['totals']>,
+  categories: readonly number[],
+): readonly JsonValue[] {
+  const labeled = labeledTotalXs(panel, categories)
+  const values = alignedValues(totals, categories)
+  return categories.map((x, index) =>
+    labeled.has(x)
+      ? (values[index] ?? null)
+      : { value: values[index] ?? null, label: { show: false } },
+  )
+}
+
+/** 積み上げの棒の値（推計の年は淡く＝点ごとの不透明度・Web と同じ値）。 */
+function stackedValues(
+  panel: TrendChartPanel,
+  points: TrendChartPanel['series'][number]['points'],
+  categories: readonly number[],
+): readonly JsonValue[] {
+  const values = alignedValues(points, categories)
+  return categories.map((x, index) =>
+    isProjected(panel, x)
+      ? { value: values[index] ?? null, itemStyle: { opacity: PROJECTED_OPACITY } }
+      : (values[index] ?? null),
+  )
+}
+
+/** 推計の始まりの断片（副題に「2025年からは推計（淡い棒）」）。 */
+const projectionPart = (panel: TrendChartPanel): string | null =>
+  panel.stacked === true && panel.projectedFrom !== undefined
+    ? `${panel.projectedFrom}年からは推計（淡い棒）`
+    : null
+
 /** 推移チャートの option。 */
 function trendOption(panel: TrendChartPanel): EChartsOption {
-  const categories = trendCategories(panel)
+  const categories = trendXs(panel)
   const stacked = panel.stacked === true
   const series: readonly JsonValue[] = [
     ...panel.series.map((each, index) => ({
       name: each.label,
       type: stacked ? 'bar' : 'line',
-      data: alignedValues(each.points, categories),
+      data: stacked
+        ? stackedValues(panel, each.points, categories)
+        : alignedValues(each.points, categories),
       itemStyle: { color: seriesColor(each, index, panel.category) },
       ...(stacked
         ? { stack: 'total', barMaxWidth: 48 }
@@ -166,6 +201,7 @@ function trendOption(panel: TrendChartPanel): EChartsOption {
       panel.title,
       subtextOf([
         ...flagParts(panel.flags),
+        projectionPart(panel),
         stacked && panel.totals !== undefined ? '合計は内訳を丸める前の値です' : null,
       ]),
     ),

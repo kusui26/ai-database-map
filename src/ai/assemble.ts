@@ -25,7 +25,9 @@ import {
   type MapAction,
   type MapResponse,
   type Panel,
+  type TrendChartPanel,
 } from '@/shared/protocol'
+import { stackTotalAt, summaryXs, trendXs } from '@/shared/trend-stack'
 import {
   busPanels,
   employeePanels,
@@ -468,6 +470,36 @@ function endpoints(
 
 const nonEmpty = (part: string): boolean => part.length > 0
 
+/** 折れ線の要約（最初の系列の端点）。 */
+function lineBody(panel: TrendChartPanel): string {
+  const series = panel.series[0]
+  return series === undefined ? '—' : endpoints(series.points, panel.format)
+}
+
+/**
+ * 積み上げの要約（2026-11-25・計画書 261122 §7.4）。2 つの年（推計のある図は最後の実績の年 → 最後の年、無ければ最初 → 最後）の
+ * 合計と区分ごとの値、推計の始まり。以前は最初の系列だけを渡していた——売上は小売だけで合計に見え、人口は推計を言えなかった。
+ * 数は画面と同じ（合計は宣言された `totals`・`shared/trend-stack.ts`）。
+ */
+function stackedBody(panel: TrendChartPanel): string {
+  const xs = summaryXs(panel, trendXs(panel))
+  if (xs.length === 0) return '—'
+  const span = (valueAt: (x: number) => number | null): string =>
+    xs.map((x) => formatNumber(valueAt(x), panel.format)).join(' → ')
+  const notes = [
+    panel.unit === null || panel.unit === '%' ? null : panel.unit,
+    panel.projectedFrom === undefined ? null : `${panel.projectedFrom}年からは推計`,
+  ].filter((note): note is string => note !== null)
+  const head = `${xs.join('年 → ')}年${notes.length === 0 ? '' : `（${notes.join('・')}）`}`
+  const parts = [
+    `合計 ${span((x) => stackTotalAt(panel, x))}`,
+    ...panel.series.map(
+      (series) => `${series.label} ${span((x) => series.points.find((p) => p.x === x)?.y ?? null)}`,
+    ),
+  ]
+  return `${head} ${parts.join('・')}`
+}
+
 /** 区域の値 1 系統（見出しの文に年と増減が入っている・作り方と推計の山・当たり具合を添える）。 */
 function areaTotalText(total: AreaTotalLine): string {
   const extras = [
@@ -522,8 +554,7 @@ function summarizePanel(panel: Panel): string {
       return `駅: ${panel.stationName}（${panel.prefecture}${ops}）最新乗降 ${pax}`
     }
     case 'trendChart': {
-      const series = panel.series[0]
-      const body = series === undefined ? '—' : endpoints(series.points, panel.format)
+      const body = panel.stacked === true ? stackedBody(panel) : lineBody(panel)
       const stats = panel.stats?.map((stat) => `${stat.label} ${stat.value}`).join('・') ?? ''
       const flags = panel.flags.map((flag) => `⚠${flag.label}`).join('・')
       return [`${panel.title}: ${body}`, stats, flags]

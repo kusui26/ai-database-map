@@ -226,10 +226,17 @@ function barChartNode(panel: BarChartPanel): VNode {
   ])
 }
 
+/** 行の注意の印の意味（印のある行があるときだけ・題のすぐ下・Web の表と同じ・2026-11-25）。 */
+function rankingNoticeNode(panel: RankingTablePanel): VNode | null {
+  if (panel.noticeJa === undefined || !panel.rows.some((row) => row.noticed === true)) return null
+  return el('div', { cls: 'muted', text: panel.noticeJa })
+}
+
 function rankingTableNode(panel: RankingTablePanel): VNode {
   const head = ['#', '駅', '都道府県', panel.unit === null ? '値' : `値（${panel.unit}）`]
   return panelBox([
     titleNode(panel.title),
+    rankingNoticeNode(panel),
     el('table', {
       children: [
         el('tr', { children: head.map((label) => el('th', { text: label })) }),
@@ -239,7 +246,10 @@ function rankingTableNode(panel: RankingTablePanel): VNode {
               el('td', { cls: 'num', text: row.rank }),
               el('td', { text: row.flagged ? `⚠ ${row.name}` : row.name }),
               el('td', { text: row.prefecture }),
-              el('td', { cls: 'num', text: row.formatted }),
+              el('td', {
+                cls: 'num',
+                text: row.noticed === true ? `${row.formatted} ※` : row.formatted,
+              }),
             ],
           }),
         ),

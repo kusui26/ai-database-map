@@ -32,6 +32,15 @@ export type RankingOptions = {
   readonly lines?: readonly LineRef[]
   /** 市区町村・範囲・近傍（261008 B2）。絞り込みは DB 側、ここは応答へ載せて題に使う。 */
   readonly area?: AreaEcho
+  /** 行の注意の印：印のある駅（grp）と印の意味（`load.ts` が引く・2026-11-25・`notice.ts`）。 */
+  readonly notice?: { readonly noticeJa: string; readonly grps: ReadonlySet<string> }
+}
+
+/** 注意の印（印のある行があるときだけ、応答に印の意味を載せる）。 */
+function noticeJaOf(rows: readonly RankRawRow[], options: RankingOptions): { noticeJa?: string } {
+  const notice = options.notice
+  if (notice === undefined || !rows.some((row) => notice.grps.has(row.grp))) return {}
+  return { noticeJa: notice.noticeJa }
 }
 
 export function buildRanking(
@@ -66,6 +75,8 @@ export function buildRanking(
       formatted: formatNumber(row.value, entry.format, { signed }),
       flagged: row.flagValue === 1,
       ...(row.distM === undefined ? {} : { distM: row.distM }),
+      ...(options.notice?.grps.has(row.grp) === true ? { noticed: true as const } : {}),
     })),
+    ...noticeJaOf(rows, options),
   }
 }

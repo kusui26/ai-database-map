@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * rankingTable Panel のレンダラ（順位表・値 format 済・⚠ 列）。onSelect で行クリック→駅選択。
+ * rankingTable Panel のレンダラ（順位表・値 format 済・⚠ 列・注意の ※）。onSelect で行クリック→駅選択。
  * compact（会話の中）は上位だけを出し、残りの数を添える（`rankingRows.ts`）。
  * 起点から N km で絞った順位表は、都道府県の横に起点からの距離を出す（2026-10-08 B2）。
  */
@@ -44,9 +44,19 @@ function RankingRowButton({
       >
         {row.formatted}
         {row.flagged ? ' ⚠' : ''}
+        {row.noticed === true && <span className="text-slate-400"> ※</span>}
       </span>
     </button>
   )
+}
+
+/**
+ * 行の注意の印（※）の意味。見えている行に印があるときだけ、**題のすぐ下**に 1 行（2026-11-25）——図は 50 駅を並べるので、
+ * 表の下に置くと、上の行の ※ を見た人が送らないと意味を読めない。
+ */
+function NoticeNote({ panel, rows }: { panel: RankingTablePanel; rows: readonly RankingRow[] }) {
+  if (panel.noticeJa === undefined || !rows.some((row) => row.noticed === true)) return null
+  return <p className="mt-1 text-xs text-slate-400">{panel.noticeJa}</p>
 }
 
 export function RankingTable({
@@ -67,6 +77,7 @@ export function RankingTable({
           <span className="shrink-0 text-xs text-slate-400">単位: {panel.unit}</span>
         )}
       </div>
+      <NoticeNote panel={panel} rows={rows} />
 
       {rows.length === 0 ? (
         <p className="py-8 text-center text-sm text-slate-400">該当する駅がありません</p>

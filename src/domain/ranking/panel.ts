@@ -18,6 +18,7 @@ export function rankingPanel(
     metricKey: response.metric.key,
     unit: response.metric.unit,
     rows: response.rows,
+    ...(response.noticeJa === undefined ? {} : { noticeJa: response.noticeJa }),
     size,
   }
 }

@@ -258,21 +258,32 @@ function barChartOption(panel: BarChartPanel): EChartsOption {
   })
 }
 
-/** ランキングの option（1 位が上・⚠ の件数を副題に出す）。 */
+/** 行の注意の印の意味（印のある行があるときだけ副題に・Web の表と同じ・2026-11-25）。 */
+function rankingNoticePart(panel: RankingTablePanel): string | null {
+  const noticed = panel.rows.some((row) => row.noticed === true)
+  return noticed && panel.noticeJa !== undefined ? panel.noticeJa : null
+}
+
+/** ランキングの option（1 位が上・⚠ の件数と注意の印の意味を副題に出す）。 */
 function rankingOption(panel: RankingTablePanel): EChartsOption {
   const rows = [...panel.rows].reverse()
   const flagged = panel.rows.filter((row) => row.flagged).length
   return barOptionOf({
     title: titleOf(
       panel.title,
-      subtextOf([flagged === 0 ? null : `⚠ ${flagged} 件は信頼性フラグつき`]),
+      subtextOf([
+        flagged === 0 ? null : `⚠ ${flagged} 件は信頼性フラグつき`,
+        rankingNoticePart(panel),
+      ]),
     ),
     unit: panel.unit,
     categories: rows.map((row) => `${row.rank}. ${row.flagged ? '⚠ ' : ''}${row.name}`),
     items: rows.map((row) => ({
       value: plotValue(row.value),
       itemStyle: { color: CHART_BAR_COLOR },
-      label: { formatter: literalLabel(row.formatted) },
+      label: {
+        formatter: literalLabel(row.noticed === true ? `${row.formatted} ※` : row.formatted),
+      },
     })),
   })
 }

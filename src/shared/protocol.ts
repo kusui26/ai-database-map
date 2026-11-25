@@ -262,6 +262,11 @@ export const rankingRowSchema = z.object({
    * 受け手は無ければ出さない（以前の順位表と同じ形のまま読める）。
    */
   distM: z.number().optional(),
+  /**
+   * 読むときの注意がある行（2026-11-25・年齢不詳が多い駅＝年齢の構成の多くを補った値）。**印のある行だけ** true を持つ。
+   * ⚠（`flagged`＝信頼性が低い・除外できる）とは別の印で、除外はしない。意味は順位表の `noticeJa`。
+   */
+  noticed: z.literal(true).optional(),
 })
 export type RankingRow = z.infer<typeof rankingRowSchema>
 
@@ -359,6 +364,8 @@ export const panelSchema = z.discriminatedUnion('type', [
     metricKey: z.string(),
     unit: z.string().nullable(),
     rows: z.array(rankingRowSchema),
+    /** 行の注意の印（`noticed`）の意味（「※ 年齢不詳が多い駅…」）。印のある行があるときだけ持つ（2026-11-25）。 */
+    noticeJa: z.string().optional(),
     placement: placementSchema,
     size: sizeSchema,
   }),

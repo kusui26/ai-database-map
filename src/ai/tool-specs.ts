@@ -83,7 +83,6 @@ import { evacuationDisasterKeySchema, EVACUATION_DISASTERS } from '@/shared/evac
 import {
   datasetRows,
   listStations,
-  rankByColumn,
   searchStations,
   stationByGrp,
   stationHazardSummaries,
@@ -95,7 +94,7 @@ import {
 import { loadStationDetail } from '@/domain/stations/load'
 import { AGE_STRUCTURE_READING_JA } from '@/domain/stations/age-structure'
 import { loadStationProfile } from '@/domain/profile/load'
-import { buildRanking } from '@/domain/ranking/presenter'
+import { loadRanking } from '@/domain/ranking/load'
 import { buildGrowth } from '@/domain/growth/presenter'
 import { hazardPointAt } from '@/lib/hazard/point-source'
 import {
@@ -914,6 +913,19 @@ function distanceOf(distM: number | undefined): { readonly distance?: string } {
   return distM === undefined ? {} : { distance: distanceLabel(distM) }
 }
 
+/** LLM に渡す順位の行（上位 10）。 */
+const LLM_RANK_ROWS = 10
+
+function shownRows(response: RankingResponse): RankingResponse['rows'] {
+  return response.rows.slice(0, LLM_RANK_ROWS)
+}
+
+/** 行の注意の印の意味（渡す行に印があるときだけ・2026-11-25）。印が無ければ返却は以前と同じ。 */
+function noticeForLlm(response: RankingResponse): { notice?: string } {
+  const noticed = shownRows(response).some((row) => row.noticed === true)
+  return noticed && response.noticeJa !== undefined ? { notice: response.noticeJa } : {}
+}
+
 /** ランキング → LLM 向けの要約（上位 10 行に絞る）。 */
 function rankingForLlm(
   resolvedKey: string,
@@ -935,14 +947,16 @@ function rankingForLlm(
     routeTypes: response.routeTypes.map(routeTypeLabel),
     order: dir,
     total: response.total,
-    rows: response.rows.slice(0, 10).map((row) => ({
+    rows: shownRows(response).map((row) => ({
       rank: row.rank,
       name: row.name,
       prefecture: row.prefecture,
       value: row.formatted,
       flagged: row.flagged,
       ...distanceOf(row.distM),
+      ...(row.noticed === true ? { noticed: true } : {}),
     })),
+    ...noticeForLlm(response),
   }
 }
 
@@ -1663,15 +1677,18 @@ export const TOOL_SPECS = {
       const lim = Math.min(Math.max(limit ?? DEFAULT_RANK_LIMIT, 1), MAX_RANK_LIMIT)
       const exclude = excludeLowN ?? false
       const { prefectures, operators, operatorLabels, lines, routeTypes, area } = filters
-      const { rows, total } = await rankByColumn(resolved.key, figureFilter(filters), {
-        order: dir,
-        limit: lim,
-        offset: 0,
-        excludeLowN: exclude,
-      })
+      const page = { order: dir, limit: lim, offset: 0, excludeLowN: exclude }
       const scope = { operators, operatorLabels, routeTypes, lines, area: areaEcho(area) }
-      const response = buildRanking(resolved.key, prefectures, dir, rows, total, 0, scope)
-      if (total === 0) return pure(noFigureForLlm(response.metric.labelJa, filters, exclude))
+      const response = await loadRanking(
+        resolved.key,
+        prefectures,
+        figureFilter(filters),
+        page,
+        scope,
+      )
+      if (response.total === 0) {
+        return pure(noFigureForLlm(response.metric.labelJa, filters, exclude))
+      }
       return {
         effects: [{ kind: 'ranking' as const, response, excludeLowN: exclude }],
         forLlm: rankingForLlm(

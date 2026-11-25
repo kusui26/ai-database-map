@@ -570,11 +570,15 @@ function summarizePanel(panel: Panel): string {
       return `${panel.title}: ${bars.length > 0 ? bars : '—'}`
     }
     case 'rankingTable': {
-      const top = panel.rows
-        .slice(0, 5)
-        .map((row) => `${row.rank}位 ${row.name} ${row.formatted}${row.flagged ? '⚠' : ''}`)
+      const shown = panel.rows.slice(0, 5)
+      const top = shown
+        .map(
+          (row) =>
+            `${row.rank}位 ${row.name} ${row.formatted}${row.flagged ? '⚠' : ''}${row.noticed === true ? '※' : ''}`,
+        )
         .join('、')
-      return `${panel.title}: ${top}`
+      const noticed = shown.some((row) => row.noticed === true) && panel.noticeJa !== undefined
+      return `${panel.title}: ${top}${noticed ? ` ｜ ${panel.noticeJa}` : ''}`
     }
     case 'scatter':
       return `${panel.title}: ${panel.points.length}駅・${panel.clusterCount}クラスタ（${panel.xLabel}×${panel.yLabel}）`

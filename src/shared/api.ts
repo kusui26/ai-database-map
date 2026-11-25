@@ -318,6 +318,8 @@ export const rankingResponseSchema = z.object({
   offset: z.number(), // このページの先頭順位-1（P6c）
   total: z.number(), // フィルタ後の総件数（P6c）
   rows: z.array(rankingRowSchema),
+  /** 行の注意の印（`rows[].noticed`）の意味。印のある行があるときだけ（2026-11-25・`domain/ranking/notice.ts`）。 */
+  noticeJa: z.string().optional(),
 })
 export type RankingResponse = z.infer<typeof rankingResponseSchema>
 

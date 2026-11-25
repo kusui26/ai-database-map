@@ -29,6 +29,7 @@
 | `*_area_summary.sql` | エリアの要約と色分けの関数（261010 B5b）：`area_rows`（区域の行と内訳の子）・`area_catalog`・`area_station_stats`（駅の分布・⚠ を除く）・`station_metric_values`（色分けの値）・`area_station_counts`。どれも `security invoker`・`set extra_float_digits = 3`（PostgREST の接続の設定のまま real を jsonb にすると有効 6 桁に丸まる）。検証は `pipeline/golden_area_summary_test.py` |
 | `*_jsonb_number_precision.sql` | jsonb で返す `dataset_rows`・`scatter_points` に `extra_float_digits = 3`（261010・B5 で見つけたこと 1）。PostgREST の接続の設定のまま real を jsonb にすると有効 6 桁に丸まっていた（東京都の 20km の人口 12,407,970 → 12,408,000）。検証は `pipeline/golden_number_precision_test.py` |
 | `*_station_filter_set.sql` | 駅の絞り込みを「条件に合う駅の集合」`stations_matching_filters` にし、5 つの RPC（rank_by_column・scatter_points・list_stations・area_station_stats・station_metric_values）をそれで絞る（引数・返り値は以前のまま）。古い述語 `station_matches_filters`・`station_matches_railway` は落とした（261010・B5 で見つけたこと 2）。会社・路線などで絞ると約 160ms → 数 ms。検証は `pipeline/golden_station_filter_test.py` |
+| `*_station_age_profiles.sql` | 年齢別の人口のグラフ用の表（2026-11-25・人口の年齢 PR-3）：`station_age_profiles`（1 駅 1 行・`counts integer[]`＝[半径 6][年 8][区分 4]・`unknown integer[]`＝[半径 6][実績の年 2]）と関数 `station_age_profile(in_grp)`（48 行・半径・年・推計の印・4 区分・補う前の年齢不詳）。配列の並びは関数と `pipeline/load_station_age.py` だけが知る。足すだけ（既存の表と関数は変えない）。**アプリより先に当てる**（駅詳細が関数を呼ぶ）。検証は `pipeline/golden_station_age_profile_test.py` |
 
 上表は代表的なものだけ。実際に適用されるのは `supabase/migrations/` の全ファイル（タイムスタンプ順）。
 

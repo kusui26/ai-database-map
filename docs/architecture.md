@@ -119,8 +119,8 @@ type MapResponse = {
 |---|---|---|
 | `GET /api/metrics` | **メトリクス・カタログ**（機械可読・自己記述）| `domain/metrics` |
 | `GET /api/stations?bbox=…&q=…` | 駅検索・bbox・最寄（`municipality`・`lines`・`nearStation`＋`withinM` などを付けると対象集合の一覧。一覧では `bbox` も絞り込み、近傍なら各駅に起点からの距離 `distM`）| `domain/stations` |
-| `GET /api/stations/:grp` | 駅詳細（指標・年次推移）| `domain/stations` |
-| `GET /api/stations/:grp/profile?radiusM=…` | **駅周辺のプロフィール**（駅×半径の要点 11 指標と**県内・市内での位置**〔順位・駅数・上位◯%〕、性格の目安〔従業者 ÷ 人口と人の密度の規則〕、災害の要約〔事前計算〕、**見ていないこと**。駅詳細の「概要」タブ・AI の `getStationProfile`・MCP の `get_station_profile` が同じものを読む）| `domain/profile` |
+| `GET /api/stations/:grp` | 駅詳細（指標・年次推移・**年齢別の人口**〔`ageStructure`：全半径 × 2015〜2050 年の 4 区分・2026-11-25〕）| `domain/stations` |
+| `GET /api/stations/:grp/profile?radiusM=…` | **駅周辺のプロフィール**（駅×半径の要点 12 指標〔2026-11-25 に高齢化率〕と**県内・市内での位置**〔順位・駅数・上位◯%〕、性格の目安〔従業者 ÷ 人口と人の密度の規則〕、災害の要約〔事前計算〕、**見ていないこと**。駅詳細の「概要」タブ・AI の `getStationProfile`・MCP の `get_station_profile` が同じものを読む）| `domain/profile` |
 | `GET /api/stations/classes?metric=…&area=…` | **駅の色分け**（指標とエリア〔`area` を 1〜4 回・合わせて 1 つの凡例〕→ 凡例〔段・色・範囲・駅の数・⚠・値なし・色の意味〕・エリアの名前と、駅ごとの段と値〔書いた値つき〕。Web 地図の `?color&colorIn` と `render_map` の色分けが同じものを描く。水準は 5 分位・増減は 0 を中心に 5 段。駅が 5 未満などは理由を返す）| `domain/style` |
 | `GET /api/areas` | **エリアのカタログ**（行政区域 1,961 の鍵 `jp`／`pref:14`／`muni:14100`・名前・親・駅の数・無い値と理由、沿線の幅、区域の指標、エリアの文字列の書き方。AI・画面・MCP がここから選ぶ）| `domain/area-summary` |
 | `GET /api/areas/summary?area=…&radiusM=…&colorBy=…` | **エリアの要約**（`area` を 1〜4 回・2 つ以上は比較。区域の値〔行政区域は公表値・沿線はメッシュの按分・駅から N m は駅の円の値。作り方・出典・推計の山と当たり具合〕、無い値と理由、駅の分布〔中央値・四分位・上位と下位〕、内訳〔区・市区町村・都道府県・沿線の駅〕、比較〔そろう年・2020 年＝100 の指数・片方がもう片方に入るときは占める割合〔区は市、市は県に対する人口・推計・事業所・従業者〕〕、色分けの条件と凡例、注記、見ていないこと。AI の `getAreaSummary`・MCP の `get_area_summary` が同じものを読み、名前〔「横浜市」「東横線」「竹橋から 5km」〕はその入口で決める）| `domain/area-summary`・`domain/style` |

@@ -265,6 +265,15 @@ describe('人口の年齢（計画書 261122 PR-4）', () => {
     expect(skill).not.toMatch(/`"pax"`\s*＋\s*`years`/)
   })
 
+  it('沿線全体の年齢は get_area_summary（line）で、駅の値を足さない（PR-5b）', () => {
+    for (const name of ['transport-planning', 'demand', 'station-analysis']) {
+      const skill = readFileSync(`${ROOT}/skills/${name}/SKILL.md`, 'utf-8')
+      expect(skill, name).toContain('get_area_summary')
+      expect(skill, name).toMatch(/生産年齢人口[^\n]*\n?[^\n]*高齢化率/)
+      expect(skill, name).toMatch(/駅の値を足[しさ]/)
+    }
+  })
+
   it('年齢不詳の注意は、順位の印（noticed・⚠ と別・除外しない）と CSV での見方が書いてある', () => {
     const metrics = readFileSync(`${ROOT}/skills/station-analysis/references/metrics.md`, 'utf-8')
     const csv = readFileSync(`${ROOT}/skills/analyze-csv/SKILL.md`, 'utf-8')

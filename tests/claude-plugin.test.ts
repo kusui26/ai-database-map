@@ -3,6 +3,9 @@ import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { MCP_TOOL_CONFIGS } from '@/ai/mcp-tools'
 import { TOOL_SPEC_NAMES } from '@/ai/tool-specs'
+import { FUTURE_LEAD_YEAR } from '@/domain/area-summary/totals'
+import { PROFILE_SECTIONS } from '@/domain/profile/items'
+import { entries } from '@/shared/catalog'
 
 /**
  * **Claude Code プラグイン**（`docs/260828_research_claude_auth.md` §4.5 PR-3）。
@@ -11,7 +14,9 @@ import { TOOL_SPEC_NAMES } from '@/ai/tool-specs'
  * **ツール名が実在すること**（完全修飾名も、本文の短い名前も——打ち間違いは実行時に
  * 「tool not found」で静かに壊れる）、③知識型スキルが claude.ai/Cowork でハードエラーに
  * なる Claude Code 専用フィールドを使っていないこと、④**母艦（Canvas）対応の作法**が
- * 明文化されていること（PR-14・`docs/260912_gui_chat_protocol.md` §4.5）。
+ * 明文化されていること（PR-14・`docs/260912_gui_chat_protocol.md` §4.5）、⑤スキルが書く
+ * **指標の名前がカタログに実在すること**（打ち間違いは実行時に候補が返るだけで、答えが静かに崩れる・
+ * 2026-11-25 人口の年齢 PR-4）。
  * マニフェストの網羅的な検証は CI の `claude plugin validate --strict` が担う。
  */
 
@@ -76,6 +81,16 @@ describe('マニフェスト', () => {
     const url = 'url' in server && typeof server.url === 'string' ? server.url : ''
     expect(type).toBe('http')
     expect(url).toContain('https://ai-database-map.vercel.app/api/mcp')
+  })
+
+  it('CHANGELOG の先頭の版は plugin.json の版と同じ（版を上げたら、変わったことを書く）', () => {
+    const plugin: unknown = JSON.parse(readFileSync(`${ROOT}/.claude-plugin/plugin.json`, 'utf-8'))
+    const version =
+      typeof plugin === 'object' && plugin !== null && 'version' in plugin
+        ? String(plugin.version)
+        : ''
+    const changelog = readFileSync(`${ROOT}/CHANGELOG.md`, 'utf-8')
+    expect(changelog.match(/^## (\d+\.\d+\.\d+) — /m)?.[1]).toBe(version)
   })
 })
 
@@ -151,6 +166,136 @@ describe('完全修飾ツール名（打ち間違いは静かに壊れる）', (
     expect(body).toContain('図はこのサブエージェントでは出さない')
     // 親はこの報告をそのまま使う。限界・出典・正規化の脚注が無いと、親の答えから消える。
     expect(body).toContain('限界と出典・正規化の脚注は要約しない')
+  })
+})
+
+/** カタログのキーとファミリ名（指標の名前の唯一の真実）。 */
+const CATALOG_KEYS: ReadonlySet<string> = new Set(entries.map((entry) => entry.key))
+const CATALOG_FAMILIES: ReadonlySet<string> = new Set(entries.map((entry) => entry.baseMetric))
+
+/** スキル・エージェント・参照の Markdown（evals は採点の文なので除く）。 */
+function skillMarkdowns(): readonly { readonly path: string; readonly text: string }[] {
+  return pluginTextFiles(ROOT)
+    .filter((path) => path.endsWith('.md') && !path.includes('/evals/'))
+    .map((path) => ({ path, text: readFileSync(path, 'utf-8') }))
+}
+
+/** 文字列の配列として読める JSON だけを返す（README の CSP の設定などは指標ではない）。 */
+function stringArrayOf(json: string): readonly string[] {
+  try {
+    const value: unknown = JSON.parse(json)
+    if (!Array.isArray(value)) return []
+    return value.filter((item): item is string => typeof item === 'string')
+  } catch {
+    return []
+  }
+}
+
+/** 半径・年まで決まったキー（`pop65_share_2020_1km`・駅の値の `"pax_2011"`）。 */
+function fullKeysIn(text: string): readonly string[] {
+  const radius = /\b[a-z][a-z0-9]*(?:_[a-z0-9]+)*_(?:500m|1km|2km|5km|10km|20km)\b/g
+  const yearly = /`"?([a-z][a-z0-9]*(?:_[a-z0-9]+)*_\d{4})"?`/g
+  return [
+    ...[...text.matchAll(radius)].map((match) => match[0]),
+    ...[...text.matchAll(yearly)].map((match) => match[1] ?? ''),
+  ]
+}
+
+/** 道具に渡す指標の名前（`metrics` の配列・`x: "…"` などの引数）。キーかファミリのどちらか。 */
+function metricNamesIn(text: string): readonly string[] {
+  const blocks = [...text.matchAll(/```json\n([\s\S]*?)```/g)].map((match) => match[1] ?? '')
+  const inline = [...text.matchAll(/`(\[\s*"[^`]*\])`/g)].map((match) => match[1] ?? '')
+  const args = [...text.matchAll(/\b(?:x|y|metric|colorBy):\s*"([a-z][a-z0-9_]*)"/g)]
+  return [...[...blocks, ...inline].flatMap(stringArrayOf), ...args.map((match) => match[1] ?? '')]
+}
+
+describe('指標の名前（カタログが唯一の真実・打ち間違いは候補が返るだけで静かに崩れる）', () => {
+  it('スキルが書くキー（半径・年まで決まった名前）は、すべてカタログにある', () => {
+    const found = skillMarkdowns().flatMap(({ path, text }) =>
+      fullKeysIn(text).map((key) => ({ path, key })),
+    )
+    for (const { path, key } of found) expect(CATALOG_KEYS.has(key), `${path}: ${key}`).toBe(true)
+    // 人口の年齢の 2 つ（輸送計画のプリセット）を拾えている。
+    expect(found.map(({ key }) => key)).toEqual(
+      expect.arrayContaining([
+        'pop15_64_gr_pred_2024_2040_1km',
+        'pop65_share_2020_1km',
+        'pax_2011',
+      ]),
+    )
+  })
+
+  it('道具に渡す指標の名前（metrics の配列・x / y / metric）は、カタログのキーかファミリ', () => {
+    const found = skillMarkdowns().flatMap(({ path, text }) =>
+      metricNamesIn(text).map((name) => ({ path, name })),
+    )
+    for (const { path, name } of found) {
+      expect(CATALOG_KEYS.has(name) || CATALOG_FAMILIES.has(name), `${path}: ${name}`).toBe(true)
+    }
+    expect(found.map(({ name }) => name)).toEqual(
+      expect.arrayContaining(['pop15_64_gr_pred', 'pop65_gr_pred', 'pop65_share']),
+    )
+  })
+
+  it('指標の規約のファミリの表は、すべてカタログのファミリかキー（`rate_covid` は駅の値のキー）', () => {
+    const table = readFileSync(`${ROOT}/skills/station-analysis/references/metrics.md`, 'utf-8')
+    const names = [...table.matchAll(/^\|\s*`([a-z][a-z0-9_]*)`\s*\|/gm)].map(
+      (match) => match[1] ?? '',
+    )
+    expect(names.length).toBeGreaterThan(0)
+    for (const name of names) {
+      expect(CATALOG_FAMILIES.has(name) || CATALOG_KEYS.has(name), name).toBe(true)
+    }
+    expect(names).toEqual(expect.arrayContaining(['pop15_64', 'pop65_share', 'pop15_64_gr_pred']))
+  })
+})
+
+describe('人口の年齢（計画書 261122 PR-4）', () => {
+  it('輸送計画の方法論に、年齢の読み方と限界が明文化されている', () => {
+    const skill = readFileSync(`${ROOT}/skills/transport-planning/SKILL.md`, 'utf-8')
+    expect(skill).toContain('乗降客数の予測ではない')
+    expect(skill).toContain('範囲が小さいほど幅が大きい')
+    expect(skill).toContain('pop_ageunk_')
+    expect(skill).toContain('通勤者数・定期の乗降・混雑に言い換える')
+  })
+
+  it('乗降の時系列は年ごとのキーで取る（`years` は全部の指標にかかり、その年の無い指標で作られない）', () => {
+    const skill = readFileSync(`${ROOT}/skills/transport-planning/SKILL.md`, 'utf-8')
+    expect(skill).toContain('`"pax_2011"` … `"pax_2024"`')
+    expect(skill).not.toMatch(/`"pax"`\s*＋\s*`years`/)
+  })
+
+  it('年齢不詳の注意は、順位の ⚠ に出ないことと CSV での見方が書いてある', () => {
+    const metrics = readFileSync(`${ROOT}/skills/station-analysis/references/metrics.md`, 'utf-8')
+    const csv = readFileSync(`${ROOT}/skills/analyze-csv/SKILL.md`, 'utf-8')
+    expect(metrics).toContain('ランキングの ⚠ には**出ない**')
+    expect(csv).toContain('pop_ageunk_*')
+  })
+
+  it('スキルが書く将来推計の既定の年は、解決器の既定（FUTURE_LEAD_YEAR）と同じ', () => {
+    // CHANGELOG は昔の振る舞いも書く履歴なので見ない。スキルとエージェントだけ。
+    const guides = skillMarkdowns().filter(
+      ({ path }) => path.includes('/skills/') || path.includes('/agents/'),
+    )
+    const stated = guides.flatMap(({ path, text }) =>
+      [...text.matchAll(/`pop_gr_pred`[^。\n]*?2020→(\d{4})/g)].map((match) => ({
+        path,
+        year: Number(match[1]),
+      })),
+    )
+    expect(stated.length).toBeGreaterThanOrEqual(3)
+    for (const { path, year } of stated) expect(year, path).toBe(FUTURE_LEAD_YEAR)
+    // 0.8.16 から既定は 2050 年。「短期スパンに解決される」は古い説明（station-recommendation にあった）。
+    for (const { path, text } of guides) expect(text, path).not.toContain('短期スパン')
+  })
+
+  it('`/station` の説明は、駅周辺のプロフィールの高齢化率に触れる（概要は 12 項目）', () => {
+    const aging = PROFILE_SECTIONS.flatMap((section) => section.items).find(
+      (item) => item.id === 'agingRate',
+    )
+    expect(aging).toBeDefined()
+    const description = frontmatterOf(`${ROOT}/skills/station/SKILL.md`)['description'] ?? ''
+    expect(description).toContain(aging?.labelJa ?? '高齢化率')
   })
 })
 

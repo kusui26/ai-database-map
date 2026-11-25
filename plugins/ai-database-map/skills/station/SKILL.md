@@ -1,6 +1,6 @@
 ---
 name: station
-description: 駅を 1 つ指定して、周辺の主要指標（人口と増減・将来・所得・地価・従業者・売上・乗降客数・バス）と県内／市内での位置、エリアの性格の目安、水害リスクの要約を出す。/ai-database-map:station 東京 1000 のように使う。
+description: 駅を 1 つ指定して、周辺の主要指標（人口と増減・将来・高齢化率・所得・地価・従業者・売上・乗降客数・バス）と県内／市内での位置、エリアの性格の目安、水害リスクの要約を出す。/ai-database-map:station 東京 1000 のように使う。
 argument-hint: '<駅名> [半径m]'
 allowed-tools: mcp__plugin_ai-database-map_station-data__search_stations, mcp__plugin_ai-database-map_station-data__get_station_profile, mcp__plugin_ai-database-map_station-data__get_hazard_at_point, mcp__station-data__search_stations, mcp__station-data__get_station_profile, mcp__station-data__get_hazard_at_point
 ---

@@ -1,6 +1,6 @@
 # メトリクス・カタログ ラベル一覧（自動生成）
 
-`pipeline/build_catalog.py` が `station_dataset.csv`（806列）から生成。 値列 796 エントリ ＋ 駅属性 10。
+`pipeline/build_catalog.py` が値の表（`station_dataset.csv` ＋ `station_age.csv`・884列）から生成。 値列 874 エントリ ＋ 駅属性 10。
 
 凡例: `key` — ラベル 〔単位・format・rankable・⚠→信頼性フラグ〕
 
@@ -26,7 +26,7 @@
 - `flag_covid` — 乗降客数 コロナ前後増減率 注意フラグ（被覆<100%／pre<2019／|率|>100%） 〔—・—・not-rankable〕
 - `flag_covid_lown` — 乗降客数 コロナ前後増減率 低分母フラグ（|率|>100%＝小駅の分母ノイズ） 〔—・—・not-rankable〕
 
-## 人口（population）— 132件
+## 人口（population）— 180件
 
 - `pop_2020_500m` — 人口（2020年・500m圏） 〔人・int・rankable〕
 - `pop_2020_1km` — 人口（2020年・1km圏） 〔人・int・rankable〕
@@ -160,6 +160,54 @@
 - `pop_lowbase_2020_5km` — 人口 低基準フラグ（2020年・5km圏／基準人口<50人） 〔—・—・not-rankable〕
 - `pop_lowbase_2020_10km` — 人口 低基準フラグ（2020年・10km圏／基準人口<50人） 〔—・—・not-rankable〕
 - `pop_lowbase_2020_20km` — 人口 低基準フラグ（2020年・20km圏／基準人口<50人） 〔—・—・not-rankable〕
+- `pop15_64_2020_500m` — 生産年齢人口（15〜64歳・2020年・500m圏） 〔人・int・rankable〕
+- `pop15_64_2020_1km` — 生産年齢人口（15〜64歳・2020年・1km圏） 〔人・int・rankable〕
+- `pop15_64_2020_2km` — 生産年齢人口（15〜64歳・2020年・2km圏） 〔人・int・rankable〕
+- `pop15_64_2020_5km` — 生産年齢人口（15〜64歳・2020年・5km圏） 〔人・int・rankable〕
+- `pop15_64_2020_10km` — 生産年齢人口（15〜64歳・2020年・10km圏） 〔人・int・rankable〕
+- `pop15_64_2020_20km` — 生産年齢人口（15〜64歳・2020年・20km圏） 〔人・int・rankable〕
+- `pop15_64_share_2020_500m` — 生産年齢人口の割合（15〜64歳・2020年・500m圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_500m〕
+- `pop15_64_share_2020_1km` — 生産年齢人口の割合（15〜64歳・2020年・1km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_1km〕
+- `pop15_64_share_2020_2km` — 生産年齢人口の割合（15〜64歳・2020年・2km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_2km〕
+- `pop15_64_share_2020_5km` — 生産年齢人口の割合（15〜64歳・2020年・5km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_5km〕
+- `pop15_64_share_2020_10km` — 生産年齢人口の割合（15〜64歳・2020年・10km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_10km〕
+- `pop15_64_share_2020_20km` — 生産年齢人口の割合（15〜64歳・2020年・20km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_20km〕
+- `pop65_share_2020_500m` — 高齢化率（65歳以上の割合・2020年・500m圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_500m〕
+- `pop65_share_2020_1km` — 高齢化率（65歳以上の割合・2020年・1km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_1km〕
+- `pop65_share_2020_2km` — 高齢化率（65歳以上の割合・2020年・2km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_2km〕
+- `pop65_share_2020_5km` — 高齢化率（65歳以上の割合・2020年・5km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_5km〕
+- `pop65_share_2020_10km` — 高齢化率（65歳以上の割合・2020年・10km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_10km〕
+- `pop65_share_2020_20km` — 高齢化率（65歳以上の割合・2020年・20km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_20km〕
+- `pop75_share_2020_500m` — 75歳以上の割合（2020年・500m圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_500m〕
+- `pop75_share_2020_1km` — 75歳以上の割合（2020年・1km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_1km〕
+- `pop75_share_2020_2km` — 75歳以上の割合（2020年・2km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_2km〕
+- `pop75_share_2020_5km` — 75歳以上の割合（2020年・5km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_5km〕
+- `pop75_share_2020_10km` — 75歳以上の割合（2020年・10km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_10km〕
+- `pop75_share_2020_20km` — 75歳以上の割合（2020年・20km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_20km〕
+- `pop0_14_share_2020_500m` — 年少人口の割合（0〜14歳・2020年・500m圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_500m〕
+- `pop0_14_share_2020_1km` — 年少人口の割合（0〜14歳・2020年・1km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_1km〕
+- `pop0_14_share_2020_2km` — 年少人口の割合（0〜14歳・2020年・2km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_2km〕
+- `pop0_14_share_2020_5km` — 年少人口の割合（0〜14歳・2020年・5km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_5km〕
+- `pop0_14_share_2020_10km` — 年少人口の割合（0〜14歳・2020年・10km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_10km〕
+- `pop0_14_share_2020_20km` — 年少人口の割合（0〜14歳・2020年・20km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_20km〕
+- `pop15_64_gr_2020_2015_500m` — 生産年齢人口増減率（15〜64歳・2015→2020年・500m圏） 〔%・percent1・rankable・⚠→pop_lowbase_2015_500m〕
+- `pop15_64_gr_2020_2015_1km` — 生産年齢人口増減率（15〜64歳・2015→2020年・1km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2015_1km〕
+- `pop15_64_gr_2020_2015_2km` — 生産年齢人口増減率（15〜64歳・2015→2020年・2km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2015_2km〕
+- `pop15_64_gr_2020_2015_5km` — 生産年齢人口増減率（15〜64歳・2015→2020年・5km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2015_5km〕
+- `pop15_64_gr_2020_2015_10km` — 生産年齢人口増減率（15〜64歳・2015→2020年・10km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2015_10km〕
+- `pop15_64_gr_2020_2015_20km` — 生産年齢人口増減率（15〜64歳・2015→2020年・20km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2015_20km〕
+- `pop65_lowbase_2020_500m` — 65歳以上人口 低基準フラグ（2020年・500m圏／65歳以上<50人） 〔—・—・not-rankable〕
+- `pop65_lowbase_2020_1km` — 65歳以上人口 低基準フラグ（2020年・1km圏／65歳以上<50人） 〔—・—・not-rankable〕
+- `pop65_lowbase_2020_2km` — 65歳以上人口 低基準フラグ（2020年・2km圏／65歳以上<50人） 〔—・—・not-rankable〕
+- `pop65_lowbase_2020_5km` — 65歳以上人口 低基準フラグ（2020年・5km圏／65歳以上<50人） 〔—・—・not-rankable〕
+- `pop65_lowbase_2020_10km` — 65歳以上人口 低基準フラグ（2020年・10km圏／65歳以上<50人） 〔—・—・not-rankable〕
+- `pop65_lowbase_2020_20km` — 65歳以上人口 低基準フラグ（2020年・20km圏／65歳以上<50人） 〔—・—・not-rankable〕
+- `pop_ageunk_2020_500m` — 年齢不詳 注意フラグ（2020年・500m圏／補う前の年齢不詳≥10%） 〔—・—・not-rankable〕
+- `pop_ageunk_2020_1km` — 年齢不詳 注意フラグ（2020年・1km圏／補う前の年齢不詳≥10%） 〔—・—・not-rankable〕
+- `pop_ageunk_2020_2km` — 年齢不詳 注意フラグ（2020年・2km圏／補う前の年齢不詳≥10%） 〔—・—・not-rankable〕
+- `pop_ageunk_2020_5km` — 年齢不詳 注意フラグ（2020年・5km圏／補う前の年齢不詳≥10%） 〔—・—・not-rankable〕
+- `pop_ageunk_2020_10km` — 年齢不詳 注意フラグ（2020年・10km圏／補う前の年齢不詳≥10%） 〔—・—・not-rankable〕
+- `pop_ageunk_2020_20km` — 年齢不詳 注意フラグ（2020年・20km圏／補う前の年齢不詳≥10%） 〔—・—・not-rankable〕
 
 ## 所得（income）— 72件
 
@@ -317,7 +365,7 @@
 - `sales_asym_20km` — 売上 娯楽の集計定義 非対称フラグ（20km圏／娯楽を両年とも総数に揃えると増減率が5ポイント以上動く） 〔—・—・not-rankable〕
 - `sales_gr_unrel_20km` — 売上 増減率 信頼性フラグ（20km圏／低分母 または 娯楽の集計定義が年で揃わない） 〔—・—・not-rankable〕
 
-## 将来推計人口（population_forecast）— 180件
+## 将来推計人口（population_forecast）— 210件
 
 - `pop_pred_2024_2020_500m` — 将来推計人口（2020年・R6推計・500m圏） 〔人・int・rankable〕
 - `pop_pred_2024_2020_1km` — 将来推計人口（2020年・R6推計・1km圏） 〔人・int・rankable〕
@@ -499,6 +547,36 @@
 - `pop_err_2020_pred_2018_5km` — 人口予測誤差率（H30推計2020 vs 実績2020・5km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_5km〕
 - `pop_err_2020_pred_2018_10km` — 人口予測誤差率（H30推計2020 vs 実績2020・10km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_10km〕
 - `pop_err_2020_pred_2018_20km` — 人口予測誤差率（H30推計2020 vs 実績2020・20km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_20km〕
+- `pop15_64_gr_pred_2024_2030_500m` — 生産年齢人口の将来増減率（15〜64歳・2020→2030年・R6推計・500m圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_500m〕
+- `pop15_64_gr_pred_2024_2030_1km` — 生産年齢人口の将来増減率（15〜64歳・2020→2030年・R6推計・1km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_1km〕
+- `pop15_64_gr_pred_2024_2030_2km` — 生産年齢人口の将来増減率（15〜64歳・2020→2030年・R6推計・2km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_2km〕
+- `pop15_64_gr_pred_2024_2030_5km` — 生産年齢人口の将来増減率（15〜64歳・2020→2030年・R6推計・5km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_5km〕
+- `pop15_64_gr_pred_2024_2030_10km` — 生産年齢人口の将来増減率（15〜64歳・2020→2030年・R6推計・10km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_10km〕
+- `pop15_64_gr_pred_2024_2030_20km` — 生産年齢人口の将来増減率（15〜64歳・2020→2030年・R6推計・20km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_20km〕
+- `pop15_64_gr_pred_2024_2040_500m` — 生産年齢人口の将来増減率（15〜64歳・2020→2040年・R6推計・500m圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_500m〕
+- `pop15_64_gr_pred_2024_2040_1km` — 生産年齢人口の将来増減率（15〜64歳・2020→2040年・R6推計・1km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_1km〕
+- `pop15_64_gr_pred_2024_2040_2km` — 生産年齢人口の将来増減率（15〜64歳・2020→2040年・R6推計・2km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_2km〕
+- `pop15_64_gr_pred_2024_2040_5km` — 生産年齢人口の将来増減率（15〜64歳・2020→2040年・R6推計・5km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_5km〕
+- `pop15_64_gr_pred_2024_2040_10km` — 生産年齢人口の将来増減率（15〜64歳・2020→2040年・R6推計・10km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_10km〕
+- `pop15_64_gr_pred_2024_2040_20km` — 生産年齢人口の将来増減率（15〜64歳・2020→2040年・R6推計・20km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_20km〕
+- `pop15_64_gr_pred_2024_2050_500m` — 生産年齢人口の将来増減率（15〜64歳・2020→2050年・R6推計・500m圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_500m〕
+- `pop15_64_gr_pred_2024_2050_1km` — 生産年齢人口の将来増減率（15〜64歳・2020→2050年・R6推計・1km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_1km〕
+- `pop15_64_gr_pred_2024_2050_2km` — 生産年齢人口の将来増減率（15〜64歳・2020→2050年・R6推計・2km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_2km〕
+- `pop15_64_gr_pred_2024_2050_5km` — 生産年齢人口の将来増減率（15〜64歳・2020→2050年・R6推計・5km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_5km〕
+- `pop15_64_gr_pred_2024_2050_10km` — 生産年齢人口の将来増減率（15〜64歳・2020→2050年・R6推計・10km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_10km〕
+- `pop15_64_gr_pred_2024_2050_20km` — 生産年齢人口の将来増減率（15〜64歳・2020→2050年・R6推計・20km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_20km〕
+- `pop65_gr_pred_2024_2050_500m` — 65歳以上人口の将来増減率（2020→2050年・R6推計・500m圏） 〔%・percent1・rankable・⚠→pop65_lowbase_2020_500m〕
+- `pop65_gr_pred_2024_2050_1km` — 65歳以上人口の将来増減率（2020→2050年・R6推計・1km圏） 〔%・percent1・rankable・⚠→pop65_lowbase_2020_1km〕
+- `pop65_gr_pred_2024_2050_2km` — 65歳以上人口の将来増減率（2020→2050年・R6推計・2km圏） 〔%・percent1・rankable・⚠→pop65_lowbase_2020_2km〕
+- `pop65_gr_pred_2024_2050_5km` — 65歳以上人口の将来増減率（2020→2050年・R6推計・5km圏） 〔%・percent1・rankable・⚠→pop65_lowbase_2020_5km〕
+- `pop65_gr_pred_2024_2050_10km` — 65歳以上人口の将来増減率（2020→2050年・R6推計・10km圏） 〔%・percent1・rankable・⚠→pop65_lowbase_2020_10km〕
+- `pop65_gr_pred_2024_2050_20km` — 65歳以上人口の将来増減率（2020→2050年・R6推計・20km圏） 〔%・percent1・rankable・⚠→pop65_lowbase_2020_20km〕
+- `pop65_share_pred_2024_2050_500m` — 将来の高齢化率（65歳以上の割合・2050年・R6推計・500m圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_500m〕
+- `pop65_share_pred_2024_2050_1km` — 将来の高齢化率（65歳以上の割合・2050年・R6推計・1km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_1km〕
+- `pop65_share_pred_2024_2050_2km` — 将来の高齢化率（65歳以上の割合・2050年・R6推計・2km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_2km〕
+- `pop65_share_pred_2024_2050_5km` — 将来の高齢化率（65歳以上の割合・2050年・R6推計・5km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_5km〕
+- `pop65_share_pred_2024_2050_10km` — 将来の高齢化率（65歳以上の割合・2050年・R6推計・10km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_10km〕
+- `pop65_share_pred_2024_2050_20km` — 将来の高齢化率（65歳以上の割合・2050年・R6推計・20km圏） 〔%・percent1・rankable・⚠→pop_lowbase_2020_20km〕
 
 ## 地価（land_price）— 153件
 

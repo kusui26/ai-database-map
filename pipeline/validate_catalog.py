@@ -9,29 +9,52 @@
 
 from __future__ import annotations
 
-import csv
 import json
 import re
+import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from station_columns import dataset_header  # noqa: E402  （2 つの CSV を連結した見出し・2026-11-24）
+
 ROOT = Path(__file__).resolve().parents[1]
-CSV_PATH = ROOT / "data" / "derived" / "station_dataset.csv"
 CAT_PATH = ROOT / "src" / "shared" / "catalog" / "catalog.json"
 
 # docs/dataset.md §2 のカテゴリ別 値列数（ドキュメント＝独立した真実）
 EXPECTED_CATEGORY_COUNTS = {
     "passenger": 19,  # pax 14 + rate 2 + flag 3（flag_yoy/flag_covid/flag_covid_lown）
-    "population": 132,  # 実績42 + 増減率54 + lowbase36
+    # 実績42 + 増減率54 + lowbase36 ＋ 年齢（261124）：15〜64 歳6 + 割合24 + 15〜64 歳の増減率6 + フラグ12
+    "population": 180,
     "income": 72,  # inc_pc18 + inc_total18 + inc_gr12 + inc_lown18 + inc_city_only6
     "sales": 78,  # sales_{dest,retail,food,leisure}48 + sales_dest_gr6 + sales_lown12 + asym6 + gr_unrel6
-    "population_forecast": 180,  # 推計114 + 推計増減率60 + 誤差6
+    # 推計114 + 推計増減率60 + 誤差6 ＋ 年齢（261124）：15〜64 歳の将来18 + 65 歳以上の将来6 + 高齢化率 2050年6
+    "population_forecast": 210,
     "land_price": 153,  # lp_med(年次20×5=100) + lp_n5 + lp_lown5 + lp_gr20 + lp_gr_lown20 + lp_near3
     "bus": 36,
     "establishment": 36,  # estab_n18 + estab_gr12 + estab_gr_lown6
     "employee": 90,  # emp_n18 + emp_gr12 ＋ 産業別 emp_{trade,food,life}_n36 + _gr18 + emp_dest_gr6
 }
-EXPECTED_ENTRY_TOTAL = 796
-EXPECTED_COLUMN_TOTAL = 806
+EXPECTED_ENTRY_TOTAL = 874
+EXPECTED_COLUMN_TOTAL = 884
+# 人口の年齢（docs/261122_PLAN_population_improvement.md §3.3・§3.4）：ファミリ → (除外フラグの頭, 注意フラグの頭)。
+# 除外は母数（割合・将来＝2020 年の総数・増減率＝分母の 2015 年・65 歳以上の将来＝2020 年の 65 歳以上）、
+# 注意は 2020 年の年齢不詳（2050 年の高齢化率は R6 だけで作るので除外と同じ）。半径は key の末尾と同じ。
+EXPECTED_AGE_FLAGS: dict[str, tuple[str | None, str]] = {
+    "pop15_64": (None, "pop_ageunk_2020"),
+    "pop15_64_share": ("pop_lowbase_2020", "pop_ageunk_2020"),
+    "pop65_share": ("pop_lowbase_2020", "pop_ageunk_2020"),
+    "pop75_share": ("pop_lowbase_2020", "pop_ageunk_2020"),
+    "pop0_14_share": ("pop_lowbase_2020", "pop_ageunk_2020"),
+    "pop15_64_gr": ("pop_lowbase_2015", "pop_ageunk_2020"),
+    "pop15_64_gr_pred": ("pop_lowbase_2020", "pop_ageunk_2020"),
+    "pop65_gr_pred": ("pop65_lowbase_2020", "pop_ageunk_2020"),
+    "pop65_share_pred": ("pop_lowbase_2020", "pop_lowbase_2020"),
+}
+#: 人口の年齢の列の数（ファミリ → 列。第 1 段 66 ＋ フラグ 12）。
+EXPECTED_AGE_COUNTS = {
+    "pop15_64": 6, "pop15_64_share": 6, "pop65_share": 6, "pop75_share": 6, "pop0_14_share": 6, "pop15_64_gr": 6,
+    "pop15_64_gr_pred": 18, "pop65_gr_pred": 6, "pop65_share_pred": 6, "pop65_lowbase": 6, "pop_ageunk": 6,
+}
 IDENTITY = {
     "grp", "station_name", "label", "search_label", "prefecture",
     "lon", "lat", "n_op", "operators", "level_complete",
@@ -49,9 +72,29 @@ def radius_from_key(key: str) -> int | None:
     return RADIUS_MAP[m[1]] if m else None
 
 
+def age_problems(entries: list[dict[str, object]]) -> list[str]:
+    """人口の年齢の項目：ファミリごとの列の数と、除外・注意のフラグの参照先（半径も）が期待どおりか。"""
+    problems = []
+    counts: dict[str, int] = {}
+    for e in entries:
+        base = str(e["baseMetric"])
+        if base not in EXPECTED_AGE_COUNTS:
+            continue
+        counts[base] = counts.get(base, 0) + 1
+        suffix = str(e["key"]).rsplit("_", 1)[-1]
+        if base in EXPECTED_AGE_FLAGS:
+            exclude, notice = EXPECTED_AGE_FLAGS[base]
+            want = (None if exclude is None else f"{exclude}_{suffix}", f"{notice}_{suffix}")
+            got = (e["reliabilityFlagKey"], e.get("noticeFlagKey"))
+            if got != want:
+                problems.append(f"{e['key']}: フラグ {got}（{want} のはず）")
+    if counts != EXPECTED_AGE_COUNTS:
+        problems.append(f"ファミリごとの列の数 {counts}")
+    return problems
+
+
 def main() -> int:
-    with open(CSV_PATH, newline="", encoding="utf-8") as f:
-        header = next(csv.reader(f))
+    header = dataset_header()
     header_set = set(header)
     catalog = json.loads(CAT_PATH.read_text(encoding="utf-8"))
     entries = catalog["entries"]
@@ -136,6 +179,14 @@ def main() -> int:
     # 10. 必須文字列（labelJa / source / license）が非空
     bad_text = [e["key"] for e in entries if not (e["labelJa"] and e["source"] and e["license"])]
     check(not bad_text, "labelJa/source/license が非空", f"{bad_text[:3]}")
+
+    # 11. 人口の年齢（261124）：列の数・除外と注意のフラグ（計画書 §3.4）・既存の列の後ろ（id が動かない）
+    age = age_problems(entries)
+    check(not age, "人口の年齢：ファミリごとの列の数と、除外・注意のフラグ", f"{age[:3]}")
+    first_age = next((i for i, e in enumerate(entries) if e["baseMetric"] in EXPECTED_AGE_COUNTS), len(entries))
+    tail_only = all(e["baseMetric"] in EXPECTED_AGE_COUNTS for e in entries[first_age:])
+    check(tail_only and first_age == EXPECTED_ENTRY_TOTAL - sum(EXPECTED_AGE_COUNTS.values()),
+          "人口の年齢の列はカタログの末尾（既存の id が動かない）", f"先頭 {first_age}")
 
     # --- 出力 ---
     passed = sum(1 for ok, _, _ in results if ok)

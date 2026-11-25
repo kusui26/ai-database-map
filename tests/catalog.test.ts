@@ -11,10 +11,23 @@ import {
 } from '@/shared/catalog'
 import { CATEGORIES, RADII_M } from '@/shared/constants'
 
+/** 人口の年齢のファミリ（2026-11-24・docs/261122_PLAN_population_improvement.md §3.3）。 */
+const AGE_FAMILIES: ReadonlySet<string> = new Set([
+  'pop15_64',
+  'pop15_64_share',
+  'pop65_share',
+  'pop75_share',
+  'pop0_14_share',
+  'pop15_64_gr',
+  'pop15_64_gr_pred',
+  'pop65_gr_pred',
+  'pop65_share_pred',
+])
+
 describe('catalog（Zod ロード）', () => {
-  it('796 エントリ・10 属性・カウント整合', () => {
-    expect(catalog.entryCount).toBe(796)
-    expect(entries.length).toBe(796)
+  it('874 エントリ・10 属性・カウント整合', () => {
+    expect(catalog.entryCount).toBe(874)
+    expect(entries.length).toBe(874)
     expect(catalog.stationAttributes.length).toBe(10)
     expect(catalog.entryCount + catalog.stationAttributeCount).toBe(catalog.columnCount)
   })
@@ -34,9 +47,9 @@ describe('catalog（Zod ロード）', () => {
     expect(() => requireEntry('___missing___')).toThrow()
   })
 
-  it('カテゴリ別エントリ数の合計が 796', () => {
+  it('カテゴリ別エントリ数の合計が 874', () => {
     const total = CATEGORIES.reduce((sum, cat) => sum + entriesForCategory(cat).length, 0)
-    expect(total).toBe(796)
+    expect(total).toBe(874)
   })
 
   it('rankable は flag / hidden_ratio を含まない', () => {
@@ -81,10 +94,65 @@ describe('catalog（Zod ロード）', () => {
     const rateCovid = entries.find((e) => e.key === 'rate_covid')
     expect(rateCovid?.reliabilityFlagKey).toBe('flag_covid_lown')
     expect(rateCovid?.noticeFlagKey).toBe('flag_covid')
-    // 他の指標は両者が一致（挙動が変わらないことの保証）
-    const others = entries.filter((e) => e.key !== 'rate_covid' && e.reliabilityFlagKey !== null)
+    // 他の指標は両者が一致（挙動が変わらないことの保証）。人口の年齢は下の別のテスト（決め方が違う・261124）。
+    const others = entries.filter(
+      (e) =>
+        e.key !== 'rate_covid' && !AGE_FAMILIES.has(e.baseMetric) && e.reliabilityFlagKey !== null,
+    )
     expect(others.length).toBeGreaterThan(70)
     for (const e of others) expect(e.noticeFlagKey).toBe(e.reliabilityFlagKey)
+  })
+
+  it('人口の年齢：除外は母数のフラグ・注意は年齢不詳のフラグ（計画書 261122 §3.4）', () => {
+    // 除外：割合と将来は 2020 年の総数・15〜64 歳の増減率は分母の 2015 年・65 歳以上の将来は 2020 年の 65 歳以上（<50 人）。
+    // 注意：補う前の年齢不詳が 10% 以上の駅は補い方で値が動くので、年齢の値すべてに ⚠。2050 年の高齢化率は R6 だけで
+    // 作るので年齢不詳と関係が無く、注意は除外と同じ（既定）。母数の小さい駅は順位から外れ、人口タブの年齢の図（PR-3）は
+    // 理由ごとに印を出す。
+    const exclusion: Record<string, string | null> = {
+      pop15_64: null,
+      pop15_64_share: 'pop_lowbase_2020',
+      pop65_share: 'pop_lowbase_2020',
+      pop75_share: 'pop_lowbase_2020',
+      pop0_14_share: 'pop_lowbase_2020',
+      pop15_64_gr: 'pop_lowbase_2015',
+      pop15_64_gr_pred: 'pop_lowbase_2020',
+      pop65_gr_pred: 'pop65_lowbase_2020',
+      pop65_share_pred: 'pop_lowbase_2020',
+    }
+    const age = entries.filter((e) => AGE_FAMILIES.has(e.baseMetric))
+    expect(age).toHaveLength(66)
+    for (const e of age) {
+      const radius = radiusToken(e.key)
+      const exclude = exclusion[e.baseMetric]
+      expect(e.reliabilityFlagKey, e.key).toBe(exclude === null ? null : `${exclude}_${radius}`)
+      const notice =
+        e.baseMetric === 'pop65_share_pred' ? e.reliabilityFlagKey : `pop_ageunk_2020_${radius}`
+      expect(e.noticeFlagKey, e.key).toBe(notice)
+      expect(e.rankable).toBe(true)
+      const startsWithPop = e.key.startsWith('pop_')
+      expect(startsWithPop, `${e.key} は pop_ で始めない（解決器の前方一致）`).toBe(false)
+    }
+  })
+
+  it('人口の年齢：割合は % で 0〜100（percent1）・水準は人・将来は R6 推計の 2020 年起点', () => {
+    const share = requireEntry('pop65_share_2020_1km')
+    expect([share.kind, share.unit, share.format]).toEqual(['ratio', '%', 'percent1'])
+    expect(share.labelJa).toContain('高齢化率')
+    const working = requireEntry('pop15_64_2020_1km')
+    expect([working.kind, working.unit, working.format]).toEqual(['level', '人', 'int'])
+    expect(working.labelJa).toContain('15〜64歳')
+    const future = requireEntry('pop15_64_gr_pred_2024_2040_2km')
+    expect([future.category, future.yearBase, future.year, future.vintage]).toEqual([
+      'population_forecast',
+      2020,
+      2040,
+      2024,
+    ])
+    expect(requireEntry('pop65_share_pred_2024_2050_1km').labelJa).toContain('将来の高齢化率')
+    for (const flag of ['pop65_lowbase_2020_1km', 'pop_ageunk_2020_1km']) {
+      expect(requireEntry(flag).kind).toBe('flag')
+      expect(isRankableKey(flag)).toBe(false)
+    }
   })
 
   it('所得：増減率は「分母年」の低分母フラグを見る（docs/income.md §5 の実測）', () => {

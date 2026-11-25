@@ -247,10 +247,46 @@ describe('scoreCase: 付けてはいけない引数（forbidInputs・2026-10-09 
   })
 })
 
+describe('scoreCase: 指標のファミリ（metricFamilies・2026-11-24）', () => {
+  const totalPopulation = ['pop', 'pop_gr', 'pop_pred', 'pop_gr_pred']
+  const ranked = (metric: string): EvalObserved => ({
+    ...base,
+    toolCalls: [{ name: 'rankStations', input: { metric, radiusM: 1000 } }],
+  })
+
+  it('ファミリ名でもキーでも、同じファミリに直して見る', () => {
+    const expectation = { metricFamilies: { rankStations: totalPopulation } }
+    expect(scoreCase(expectation, ranked('pop_gr')).pass).toBe(true)
+    expect(scoreCase(expectation, ranked('pop_gr_2020_2015_2km')).pass).toBe(true)
+    expect(scoreCase(expectation, ranked('pop_gr_pred_2050')).pass).toBe(true)
+  })
+
+  it('人口の問が年齢の指標に流れたら落とす（生産年齢人口の増減率・高齢化率）', () => {
+    const expectation = { metricFamilies: { rankStations: totalPopulation } }
+    for (const metric of ['pop15_64_gr', 'pop15_64_gr_2020_2015_1km', 'pop65_share']) {
+      const result = scoreCase(expectation, ranked(metric))
+      expect(result.pass, metric).toBe(false)
+      expect(result.checks.find((check) => !check.ok)?.name).toContain('rankStations の指標')
+    }
+  })
+
+  it('散布は x と y の両方を見る・そのツールを呼ばなければ落とす・解けない指標は数えない', () => {
+    const expectation = { metricFamilies: { compareGrowth: ['pop15_64_gr_pred', 'pop65_gr_pred'] } }
+    const scatter = (x: string, y: string): EvalObserved => ({
+      ...base,
+      toolCalls: [{ name: 'compareGrowth', input: { x, y } }],
+    })
+    expect(scoreCase(expectation, scatter('pop15_64_gr_pred', 'pop65_gr_pred')).pass).toBe(true)
+    expect(scoreCase(expectation, scatter('pop15_64_gr_pred', 'pop_gr_pred')).pass).toBe(false)
+    expect(scoreCase(expectation, base).pass).toBe(false)
+    expect(scoreCase(expectation, scatter('nope', 'nope')).pass).toBe(false)
+  })
+})
+
 describe('EVAL_CASES', () => {
-  it('63 問・id 一意・全問に期待あり', () => {
-    expect(EVAL_CASES.length).toBe(63)
-    expect(new Set(EVAL_CASES.map((c) => c.id)).size).toBe(63)
+  it('66 問・id 一意・全問に期待あり', () => {
+    expect(EVAL_CASES.length).toBe(66)
+    expect(new Set(EVAL_CASES.map((c) => c.id)).size).toBe(66)
     for (const testCase of EVAL_CASES) {
       expect(testCase.query.length).toBeGreaterThan(0)
       expect(Object.keys(testCase.expect).length).toBeGreaterThan(0)

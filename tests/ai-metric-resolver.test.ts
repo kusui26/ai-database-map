@@ -240,6 +240,116 @@ describe('resolveMetricKey：確定させないケース（誤った指標を黙
   })
 })
 
+describe('resolveMetricKey：人口の年齢（2026-11-24・計画書 261122 §7.2）', () => {
+  it('年齢のファミリは既定の年と半径で解ける（実績は 2020 年・増減率は 2015→2020・将来は 2050 年）', () => {
+    expect(defaultKeyForBaseMetric('pop15_64')).toBe('pop15_64_2020_1km')
+    expect(defaultKeyForBaseMetric('pop65_share')).toBe('pop65_share_2020_1km')
+    expect(defaultKeyForBaseMetric('pop15_64_gr')).toBe('pop15_64_gr_2020_2015_1km')
+    expect(defaultKeyForBaseMetric('pop15_64_gr_pred')).toBe(
+      `pop15_64_gr_pred_2024_${FUTURE_LEAD_YEAR}_1km`,
+    )
+    expect(defaultKeyForBaseMetric('pop65_gr_pred')).toBe('pop65_gr_pred_2024_2050_1km')
+    expect(defaultKeyForBaseMetric('pop65_share_pred')).toBe('pop65_share_pred_2024_2050_1km')
+  })
+
+  it('最長一致：pop15_64_gr_pred を pop15_64_gr や pop15_64 に解かない', () => {
+    expect(resolvedKey({ metric: 'pop15_64_gr_pred_2040_2km' })).toBe(
+      'pop15_64_gr_pred_2024_2040_2km',
+    )
+    expect(resolvedKey({ metric: 'pop15_64_gr_2km' })).toBe('pop15_64_gr_2020_2015_2km')
+    expect(resolvedKey({ metric: 'pop65_share_pred' })).toBe('pop65_share_pred_2024_2050_1km')
+  })
+
+  it('前方一致の守り：pop_ のあとに年・半径でない語が続く指定は、総数の pop に解かず候補を返す', () => {
+    for (const metric of ['pop_15_64_2020_1km', 'pop_young', 'pop_65_share', 'pop_lowbase']) {
+      const resolution = resolveMetricKey({ metric })
+      expect(resolution.ok, metric).toBe(false)
+      if (resolution.ok) continue
+      expect(resolution.error).toContain('年・半径でない語')
+    }
+    const typo = resolveMetricKey({ metric: 'pop_15_64_2020_1km' })
+    expect(typo.ok).toBe(false)
+    if (typo.ok) return
+    expect(typo.didYouMean[0]).toBe('pop15_64')
+    expect(typo.hint).toContain('生産年齢人口')
+  })
+
+  it('前方一致の守りの候補：前方の一致のあとに、同じカテゴリのファミリ（年齢を含む）を並べる（8 件まで）', () => {
+    const young = resolveMetricKey({ metric: 'pop_young_2020_1km' })
+    expect(young.ok).toBe(false)
+    if (young.ok) return
+    expect(young.didYouMean[0]).toBe('pop')
+    expect(young.didYouMean).toEqual(expect.arrayContaining(['pop0_14_share', 'pop65_share']))
+    expect(young.didYouMean.length).toBeLessThanOrEqual(8)
+    expect(young.hint).toContain('年少人口の割合')
+    const future = resolveMetricKey({ metric: 'pop_pred_young_2024_2050_1km' })
+    expect(future.ok).toBe(false)
+    if (future.ok) return
+    expect(future.didYouMean.slice(0, 2)).toEqual(['pop_pred', 'pop'])
+    expect(future.didYouMean).toEqual(
+      expect.arrayContaining(['pop_gr_pred', 'pop15_64_gr_pred', 'pop65_share_pred']),
+    )
+  })
+
+  it('年・半径・推計の時点だけが続く指定は、今までどおり解く', () => {
+    expect(resolvedKey({ metric: 'pop_2020' })).toBe('pop_2020_1km')
+    expect(resolvedKey({ metric: 'pop_pred_r6_2050' })).toBe('pop_pred_2024_2050_1km')
+    expect(resolvedKey({ metric: 'pop_2020年' })).toBe('pop_2020_1km')
+    expect(resolvedKey({ metric: 'pop_gr__2km' })).toBe('pop_gr_2020_2015_2km')
+  })
+
+  it('日本語名と同じ指定は、そのファミリで解く（括弧の前でも・全角の括弧でも）。解いたことを注記に書く', () => {
+    const aging = resolveMetricKey({ metric: '高齢化率' })
+    expect(aging.ok).toBe(true)
+    if (!aging.ok) return
+    expect(aging.key).toBe('pop65_share_2020_1km')
+    expect(aging.note).toContain('「高齢化率」＝pop65_share')
+    expect(resolvedKey({ metric: '生産年齢人口' })).toBe('pop15_64_2020_1km')
+    expect(resolvedKey({ metric: '生産年齢人口の将来増減率', radiusM: 2000 })).toBe(
+      'pop15_64_gr_pred_2024_2050_2km',
+    )
+    expect(resolvedKey({ metric: '将来の高齢化率' })).toBe('pop65_share_pred_2024_2050_1km')
+    expect(resolvedKey({ metric: '高齢化率（65歳以上の割合）' })).toBe('pop65_share_2020_1km')
+    expect(resolvedKey({ metric: '人口増減率' })).toBe('pop_gr_2020_2015_1km')
+  })
+
+  it('あいまいな日本語は解かず、近いファミリを候補に返す（高齢者・働く世代）', () => {
+    const elderly = resolveMetricKey({ metric: '高齢者' })
+    expect(elderly.ok).toBe(false)
+    if (elderly.ok) return
+    expect(elderly.didYouMean).toEqual(expect.arrayContaining(['pop65_share', 'pop65_gr_pred']))
+    expect(elderly.hint).toContain('高齢化率')
+    const workers = resolveMetricKey({ metric: '働く世代の増え方' })
+    expect(workers.ok).toBe(false)
+    if (workers.ok) return
+    expect(workers.didYouMean).toContain('pop15_64_gr')
+  })
+
+  it('日本語の候補：語の字が名前に同じ順で現れるものも拾う。語が名前を含むものは長い名前から', () => {
+    const future = resolveMetricKey({ metric: '将来人口' })
+    expect(future.ok).toBe(false)
+    if (future.ok) return
+    expect(future.didYouMean).toEqual(expect.arrayContaining(['pop_pred', 'pop_gr_pred']))
+    expect(future.hint).toContain('将来推計人口')
+    const shares = resolveMetricKey({ metric: '人口の割合' })
+    expect(shares.ok).toBe(false)
+    if (shares.ok) return
+    expect(shares.didYouMean).toEqual(expect.arrayContaining(['pop15_64_share', 'pop0_14_share']))
+    const working = resolveMetricKey({ metric: '2050年の生産年齢人口' })
+    expect(working.ok).toBe(false)
+    if (working.ok) return
+    expect(working.didYouMean.indexOf('pop15_64')).toBeLessThan(working.didYouMean.indexOf('pop'))
+  })
+
+  it('日本語の名前がどの指標にも近くなければ、今までどおりカタログを案内する', () => {
+    const resolution = resolveMetricKey({ metric: '気温' })
+    expect(resolution.ok).toBe(false)
+    if (resolution.ok) return
+    expect(resolution.hint).toContain('getMetricsCatalog')
+    expect(resolution.didYouMean).toEqual([])
+  })
+})
+
 describe('resolveMetricKey：不変条件', () => {
   it('成功時のキーは必ずカタログに実在し rankable', () => {
     const specs: Parameters<typeof resolveMetricKey>[0][] = [

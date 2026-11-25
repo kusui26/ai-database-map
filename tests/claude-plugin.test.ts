@@ -3,6 +3,8 @@ import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { MCP_TOOL_CONFIGS } from '@/ai/mcp-tools'
 import { TOOL_SPEC_NAMES } from '@/ai/tool-specs'
+import { FUTURE_LEAD_YEAR } from '@/domain/area-summary/totals'
+import { PROFILE_SECTIONS } from '@/domain/profile/items'
 import { entries } from '@/shared/catalog'
 
 /**
@@ -268,6 +270,32 @@ describe('人口の年齢（計画書 261122 PR-4）', () => {
     const csv = readFileSync(`${ROOT}/skills/analyze-csv/SKILL.md`, 'utf-8')
     expect(metrics).toContain('ランキングの ⚠ には**出ない**')
     expect(csv).toContain('pop_ageunk_*')
+  })
+
+  it('スキルが書く将来推計の既定の年は、解決器の既定（FUTURE_LEAD_YEAR）と同じ', () => {
+    // CHANGELOG は昔の振る舞いも書く履歴なので見ない。スキルとエージェントだけ。
+    const guides = skillMarkdowns().filter(
+      ({ path }) => path.includes('/skills/') || path.includes('/agents/'),
+    )
+    const stated = guides.flatMap(({ path, text }) =>
+      [...text.matchAll(/`pop_gr_pred`[^。\n]*?2020→(\d{4})/g)].map((match) => ({
+        path,
+        year: Number(match[1]),
+      })),
+    )
+    expect(stated.length).toBeGreaterThanOrEqual(3)
+    for (const { path, year } of stated) expect(year, path).toBe(FUTURE_LEAD_YEAR)
+    // 0.8.16 から既定は 2050 年。「短期スパンに解決される」は古い説明（station-recommendation にあった）。
+    for (const { path, text } of guides) expect(text, path).not.toContain('短期スパン')
+  })
+
+  it('`/station` の説明は、駅周辺のプロフィールの高齢化率に触れる（概要は 12 項目）', () => {
+    const aging = PROFILE_SECTIONS.flatMap((section) => section.items).find(
+      (item) => item.id === 'agingRate',
+    )
+    expect(aging).toBeDefined()
+    const description = frontmatterOf(`${ROOT}/skills/station/SKILL.md`)['description'] ?? ''
+    expect(description).toContain(aging?.labelJa ?? '高齢化率')
   })
 })
 

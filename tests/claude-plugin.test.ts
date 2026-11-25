@@ -265,10 +265,11 @@ describe('人口の年齢（計画書 261122 PR-4）', () => {
     expect(skill).not.toMatch(/`"pax"`\s*＋\s*`years`/)
   })
 
-  it('年齢不詳の注意は、順位の ⚠ に出ないことと CSV での見方が書いてある', () => {
+  it('年齢不詳の注意は、順位の印（noticed・⚠ と別・除外しない）と CSV での見方が書いてある', () => {
     const metrics = readFileSync(`${ROOT}/skills/station-analysis/references/metrics.md`, 'utf-8')
     const csv = readFileSync(`${ROOT}/skills/analyze-csv/SKILL.md`, 'utf-8')
-    expect(metrics).toContain('ランキングの ⚠ には**出ない**')
+    expect(metrics).toContain('`noticed: true`')
+    expect(metrics).toContain('除外はされない')
     expect(csv).toContain('pop_ageunk_*')
   })
 

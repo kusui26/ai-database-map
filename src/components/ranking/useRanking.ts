@@ -6,6 +6,7 @@ import useSWRInfinite from 'swr/infinite'
 import { type Order, type RankingResponse, rankingResponseSchema } from '@/shared/api'
 import { fetchJson } from '@/lib/fetch-json'
 import { appendFilterParams, type FilterQueryValues } from '@/components/metrics/filterQuery'
+import { mergeRankingPages } from './pages'
 
 const PAGE_SIZE = 50
 const FETCH_TIMEOUT_MS = 12_000
@@ -61,10 +62,9 @@ export function useRanking(query: RankingQuery, enabled: boolean): RankingState 
   )
 
   const pages = data ?? []
-  const first = pages[0]
-  const rows = pages.flatMap((page) => page.rows)
-  const total = first?.total ?? 0
-  const ranking = first === undefined ? undefined : { ...first, rows }
+  const ranking = mergeRankingPages(pages)
+  const total = ranking?.total ?? 0
+  const loadedCount = ranking?.rows.length ?? 0
   const isLoadingMore = isValidating && pages.length > 0 && pages.length < size
 
   return {
@@ -72,7 +72,7 @@ export function useRanking(query: RankingQuery, enabled: boolean): RankingState 
     total,
     isLoading,
     isLoadingMore,
-    canLoadMore: rows.length < total,
+    canLoadMore: loadedCount < total,
     loadMore: () => void setSize(size + 1),
     error: error instanceof Error ? error : undefined,
   }

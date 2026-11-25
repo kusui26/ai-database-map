@@ -1,8 +1,7 @@
 import { isRankableKey } from '@/shared/catalog'
 import { rankingQuerySchema } from '@/shared/api'
-import { rankByColumn } from '@/db/queries'
 import { resolveFilters } from '@/domain/filters'
-import { buildRanking } from '@/domain/ranking/presenter'
+import { loadRanking } from '@/domain/ranking/load'
 import { filterParams } from '@/lib/filter-params'
 import { BadRequestError, CACHE, handle, json } from '@/lib/http'
 
@@ -32,14 +31,14 @@ export function GET(request: Request): Promise<Response> {
     const resolved = await resolveFilters(query)
     if (!resolved.ok) throw new BadRequestError(resolved.messageJa)
     const { filter, lines, operatorLabels, area } = resolved.filters
-    const { rows, total } = await rankByColumn(query.metric, filter, {
+    const page = {
       order: query.order,
       limit: query.limit,
       offset: query.offset,
       excludeLowN: query.excludeLowN,
-    })
+    }
     return json(
-      buildRanking(query.metric, query.prefectures, query.order, rows, total, query.offset, {
+      await loadRanking(query.metric, query.prefectures, filter, page, {
         operators: query.operators,
         operatorLabels,
         routes: query.routes,

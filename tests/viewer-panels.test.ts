@@ -167,6 +167,43 @@ describe('チャートの規則（読み違えを生む所）', () => {
     expect(texts).not.toContain('6.8万') // 2015 年の合計は書かない（ツールチップの代わりに省く）
   })
 
+  it('「推計」の文字は上の段にあり、最初の推計の年が山の駅でも棒に届かない（推計のある積み上げだけ段を足す）', () => {
+    const peak: Panel = {
+      type: 'trendChart',
+      title: '2025 年が山',
+      unit: '人',
+      format: 'int',
+      stacked: true,
+      projectedFrom: 2025,
+      totals: [2015, 2020, 2025, 2030].map((x, index) => ({ x, y: [60, 80, 100, 90][index] ?? 0 })),
+      flags: [],
+      series: [
+        {
+          label: 'A',
+          points: [2015, 2020, 2025, 2030].map((x, i) => ({ x, y: [40, 50, 60, 55][i] ?? 0 })),
+        },
+        {
+          label: 'B',
+          points: [2015, 2020, 2025, 2030].map((x, i) => ({ x, y: [20, 30, 40, 35][i] ?? 0 })),
+        },
+      ],
+    }
+    const node = panelToVNode(peak)
+    const label = findAll(node, 'text').find((text) => text.text === '推計')
+    const barTop = Math.min(...findAll(node, 'rect').map((rect) => Number(rect.attrs.y)))
+    // 字のベースラインの下に 2px（漢字の下端）を見ても、いちばん高い棒（2025 年）の上端より上。
+    expect(Number(label?.attrs.y) + 2).toBeLessThanOrEqual(barTop)
+    // 縦軸のいちばん上の目盛：推計の無い積み上げ（売上）は以前と同じ位置（上の余白 16＋3）、推計のある図は段（13）だけ下。
+    const topTickY = (panel: Panel): number =>
+      Math.min(
+        ...findAll(panelToVNode(panel), 'text')
+          .filter((text) => text.attrs['text-anchor'] === 'end')
+          .map((text) => Number(text.attrs.y)),
+      )
+    expect(topTickY(stackedTrendFixture())).toBe(19)
+    expect(topTickY(peak)).toBe(19 + 13)
+  })
+
   it('推計の無い積み上げ（売上）は以前のまま：淡い棒も破線も無く、合計は全部の年', () => {
     const node = panelToVNode(stackedTrendFixture())
     expect(findAll(node, 'rect').some((rect) => 'fill-opacity' in rect.attrs)).toBe(false)
@@ -190,6 +227,19 @@ describe('チャートの規則（読み違えを生む所）', () => {
     expect(html).toContain('<details><summary class="title">人口増減率（2）</summary>')
     expect(html).toContain('+11.6%')
     expect(htmlOf(panelFixture('statTable'))).not.toContain('<details>')
+  })
+
+  it('行の無い表は folded でも畳まない（「題（0）」を開いても何も無いので、題だけ）', () => {
+    const html = htmlOf({
+      type: 'statTable',
+      title: '人口増減率',
+      rows: [],
+      note: null,
+      folded: true,
+    })
+    expect(html).not.toContain('<details>')
+    expect(html).not.toContain('人口増減率（0）')
+    expect(html).toContain('人口増減率')
   })
 
   it('散布の色はクラスタ色（共有定数）で、凡例は出さない', () => {

@@ -12,7 +12,15 @@ import { useMemo } from 'react'
 import { Bar, Line } from 'react-chartjs-2'
 import { Chart, type ChartData, type ChartOptions, type Plugin } from 'chart.js'
 import { type TrendChartPanel } from '@/shared/protocol'
-import { ACCENT_COLOR, PROJECTED_OPACITY } from '@/shared/constants'
+import {
+  ACCENT_COLOR,
+  PROJECTED_OPACITY,
+  PROJECTION_LABEL_COLOR,
+  PROJECTION_LABEL_GAP_PX,
+  PROJECTION_RULE_COLOR,
+  PROJECTION_RULE_DASH_PX,
+  SEGMENT_GAP_PX,
+} from '@/shared/constants'
 import { formatCompact, formatNumber, formatWithUnit } from '@/shared/format'
 import { ensureChartRegistered } from '@/components/charts/chart-setup'
 import { cn } from '@/lib/utils'
@@ -36,13 +44,11 @@ const TOTAL_LABEL_COLOR = '#475569'
 const TOTAL_LABEL_GAP_PX = 6
 /** 棒の上の合計の居場所（上の余白・px）。 */
 const TOTAL_PADDING_PX: Record<'compact' | 'full', number> = { compact: 14, full: 18 }
+/** 棒の上の字（合計・「推計」）の大きさ（px）。 */
+const LABEL_FONT_PX: Record<'compact' | 'full', number> = { compact: 10, full: 11 }
 /** 「推計」の文字の居場所（合計の上にもう 1 段・px）。推計のある図だけ。 */
 const PROJECTION_LABEL_PX = 13
-/** 実績と推計の境の破線と「推計」の文字の色（slate-400／slate-500）。 */
-const PROJECTION_RULE_COLOR = '#94a3b8'
-const PROJECTION_TEXT_COLOR = '#64748b'
-/** 積み上げの区分の間のすき間（px・面の色＝白）。隣の区分が明るさの差だけで分かれるので、すき間でも分ける（dataviz）。 */
-const SEGMENT_GAP_PX = 2
+/** 区分の間のすき間に見せる面の色（パネルの白）。 */
 const SURFACE_COLOR = '#ffffff'
 
 /** ツールチップ 1 項目のうち、折れ線で使うぶんだけ。 */
@@ -207,7 +213,7 @@ function stackTotalPlugin(
     afterDatasetsDraw(chart) {
       const { ctx } = chart
       ctx.save()
-      ctx.font = `600 ${compact ? 10 : 11}px ${Chart.defaults.font.family}`
+      ctx.font = `600 ${LABEL_FONT_PX[compact ? 'compact' : 'full']}px ${Chart.defaults.font.family}`
       ctx.fillStyle = TOTAL_LABEL_COLOR
       ctx.textAlign = 'center'
       ctx.textBaseline = 'bottom'
@@ -222,9 +228,36 @@ function stackTotalPlugin(
   }
 }
 
+/** 実績と推計の境の x（最後の実績の棒と最初の推計の棒のまん中）。推計の無い図は null。 */
+function projectionRuleX(chart: Chart, first: number): number | null {
+  const scale = chart.scales.x
+  if (first <= 0 || scale === undefined) return null
+  return (scale.getPixelForValue(first - 1) + scale.getPixelForValue(first)) / 2
+}
+
+/** 境の破線（「推計」の段の下から、描画域の下まで）。 */
+function strokeProjectionRule(ctx: CanvasRenderingContext2D, x: number, bottom: number): void {
+  ctx.strokeStyle = PROJECTION_RULE_COLOR
+  ctx.lineWidth = 1
+  ctx.setLineDash([...PROJECTION_RULE_DASH_PX])
+  ctx.beginPath()
+  ctx.moveTo(x, PROJECTION_LABEL_PX)
+  ctx.lineTo(x, bottom)
+  ctx.stroke()
+}
+
+/** 「推計」の文字（破線の右・いちばん上の段＝合計の数字の上）。 */
+function fillProjectionLabel(ctx: CanvasRenderingContext2D, x: number, compact: boolean): void {
+  ctx.font = `${LABEL_FONT_PX[compact ? 'compact' : 'full']}px ${Chart.defaults.font.family}`
+  ctx.fillStyle = PROJECTION_LABEL_COLOR
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'top'
+  ctx.fillText('推計', x + PROJECTION_LABEL_GAP_PX, 0)
+}
+
 /**
- * 実績と推計の境（最後の実績の棒と最初の推計の棒のまん中）に破線を引き、その右上に「推計」と書くプラグイン。
- * 「推計」は合計の数字の上の段に置く（合計の数字と重ならない）。破線は棒の後ろに描く。推計の無い図では何もしない。
+ * 実績と推計の境に破線を引き、その右上に「推計」と書くプラグイン。「推計」は合計の数字の上の段に置く（合計の数字と
+ * 重ならない）。破線は棒の後ろに描く。推計の無い図では何もしない。
  */
 function projectionRulePlugin(
   panel: TrendChartPanel,
@@ -235,99 +268,104 @@ function projectionRulePlugin(
   return {
     id: 'projectionRule',
     beforeDatasetsDraw(chart) {
-      const scale = chart.scales.x
-      if (first <= 0 || scale === undefined) return
-      const x = (scale.getPixelForValue(first - 1) + scale.getPixelForValue(first)) / 2
-      const { ctx, chartArea } = chart
-      ctx.save()
-      ctx.strokeStyle = PROJECTION_RULE_COLOR
-      ctx.lineWidth = 1
-      ctx.setLineDash([4, 3])
-      ctx.beginPath()
-      ctx.moveTo(x, PROJECTION_LABEL_PX)
-      ctx.lineTo(x, chartArea.bottom)
-      ctx.stroke()
-      ctx.font = `${compact ? 10 : 11}px ${Chart.defaults.font.family}`
-      ctx.fillStyle = PROJECTION_TEXT_COLOR
-      ctx.textAlign = 'left'
-      ctx.textBaseline = 'top'
-      ctx.fillText('推計', x + 4, 0)
-      ctx.restore()
+      const x = projectionRuleX(chart, first)
+      if (x === null) return
+      chart.ctx.save()
+      strokeProjectionRule(chart.ctx, x, chart.chartArea.bottom)
+      fillProjectionLabel(chart.ctx, x, compact)
+      chart.ctx.restore()
     },
   }
 }
 
-/** 積み上げのデータ（推計の年は淡く・区分の間に面の色のすき間）。 */
+/**
+ * 積み上げの系列 1 本。推計の年は淡く（凡例の見本は最初の年＝実績の色になる。Chart.js は 0 番目の要素の色で描く）。
+ * 上の縁を面の色で塗って、区分の間にすき間を作る（棒の大きさは変わらない）。
+ */
+function stackedDataset(
+  series: TrendChartPanel['series'][number],
+  labels: readonly number[],
+  faint: readonly boolean[],
+  compact: boolean,
+): ChartData<'bar'>['datasets'][number] {
+  const color = series.color ?? ACCENT_COLOR
+  return {
+    label: series.label,
+    data: alignedValues(series.points, labels),
+    backgroundColor: faint.map((projected) =>
+      projected ? withAlpha(color, PROJECTED_OPACITY) : color,
+    ),
+    borderColor: SURFACE_COLOR,
+    borderWidth: { top: SEGMENT_GAP_PX, right: 0, bottom: 0, left: 0 },
+    borderRadius: 2,
+    maxBarThickness: compact ? 40 : 64,
+  }
+}
+
+/** 積み上げのデータ。 */
 function stackedData(panel: TrendChartPanel, labels: number[], compact: boolean): ChartData<'bar'> {
   const faint = labels.map((x) => isProjected(panel, x))
   return {
     labels: labels.map(String),
-    datasets: panel.series.map((series) => {
-      const color = series.color ?? ACCENT_COLOR
-      return {
-        label: series.label,
-        data: alignedValues(series.points, labels),
-        // 凡例の見本は最初の年（実績）の色になる（Chart.js は 0 番目の要素の色で描く）。
-        backgroundColor: faint.map((projected) =>
-          projected ? withAlpha(color, PROJECTED_OPACITY) : color,
-        ),
-        // 上の縁を面の色で塗って、区分の間に 2px のすき間を作る（棒の大きさは変わらない）。
-        borderColor: SURFACE_COLOR,
-        borderWidth: { top: SEGMENT_GAP_PX, right: 0, bottom: 0, left: 0 },
-        borderRadius: 2,
-        maxBarThickness: compact ? 40 : 64,
-      }
-    }),
+    datasets: panel.series.map((series) => stackedDataset(series, labels, faint, compact)),
+  }
+}
+
+/**
+ * 積み上げの設定。棒の上に合計を描くので、その分の余白を上に取る（描画域の外に出て切れないように）。
+ * 推計のある図は、その上に「推計」の文字の段を足す。
+ */
+function stackedOptions(panel: TrendChartPanel, labels: readonly number[]): ChartOptions<'bar'> {
+  const compact = panel.size === 'compact'
+  const isPercent = panel.format === 'percent1' || panel.format === 'ratio1'
+  const projected = projectedIndex(panel, labels) > 0
+  const top = TOTAL_PADDING_PX[compact ? 'compact' : 'full'] + (projected ? PROJECTION_LABEL_PX : 0)
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false,
+    interaction: { mode: 'index', intersect: false },
+    layout: { padding: { top } },
+    scales: buildScales(compact, isPercent, true),
+    plugins: { legend: stackedLegend(panel), tooltip: stackedTooltip(panel, labels) },
+  }
+}
+
+/** 積み上げの図のプラグイン設定（凡例・ツールチップ）。 */
+type StackedPlugins = NonNullable<ChartOptions<'bar'>['plugins']>
+
+/** 積み上げの凡例（色だけでは内訳が読めないので出す・下・小さめ・箱は正方形）。 */
+function stackedLegend(panel: TrendChartPanel): StackedPlugins['legend'] {
+  return {
+    display: panel.series.length > 1,
+    position: 'bottom',
+    labels: { boxWidth: 10, boxHeight: 10, padding: 12, font: { size: 11 } },
+  }
+}
+
+/** 積み上げのツールチップ（題＝年と推計・行＝区分の値と割合・足＝合計）。 */
+function stackedTooltip(
+  panel: TrendChartPanel,
+  labels: readonly number[],
+): StackedPlugins['tooltip'] {
+  return {
+    callbacks: {
+      title: (items) => stackTooltipTitle(items, panel, labels),
+      label: (item) => stackTooltipLabel(item, panel, labels),
+      footer: (items) => stackTooltipTotal(items, panel, labels),
+    },
   }
 }
 
 /** 積み上げ縦棒（`stacked`＝内訳の合計そのものが指標のとき）。 */
 function StackedTrend({ panel, labels }: { panel: TrendChartPanel; labels: number[] }) {
   const compact = panel.size === 'compact'
-  const isPercent = panel.format === 'percent1' || panel.format === 'ratio1'
-  const projected = projectedIndex(panel, labels) > 0
-
   const data = useMemo(() => stackedData(panel, labels, compact), [panel, labels, compact])
-
-  const options: ChartOptions<'bar'> = useMemo(
-    () => ({
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: false,
-      interaction: { mode: 'index', intersect: false },
-      // 棒の上に合計を描くので、その分の余白を上に取る（描画域の外に出て切れないように）。
-      // 推計のある図は、その上に「推計」の文字の段を足す。
-      layout: {
-        padding: {
-          top:
-            TOTAL_PADDING_PX[compact ? 'compact' : 'full'] + (projected ? PROJECTION_LABEL_PX : 0),
-        },
-      },
-      scales: buildScales(compact, isPercent, true),
-      plugins: {
-        // 積み上げは色だけでは内訳が読めないので凡例を出す（下・小さめ・箱は正方形）。
-        legend: {
-          display: panel.series.length > 1,
-          position: 'bottom',
-          labels: { boxWidth: 10, boxHeight: 10, padding: 12, font: { size: 11 } },
-        },
-        tooltip: {
-          callbacks: {
-            title: (items) => stackTooltipTitle(items, panel, labels),
-            label: (item) => stackTooltipLabel(item, panel, labels),
-            footer: (items) => stackTooltipTotal(items, panel, labels),
-          },
-        },
-      },
-    }),
-    [compact, isPercent, panel, labels, projected],
-  )
-
+  const options = useMemo(() => stackedOptions(panel, labels), [panel, labels])
   const plugins = useMemo(
     () => [stackTotalPlugin(panel, labels, compact), projectionRulePlugin(panel, labels, compact)],
     [panel, labels, compact],
   )
-
   return <Bar data={data} options={options} plugins={plugins} />
 }
 

@@ -48,6 +48,7 @@ import {
   type TrendChartPanel,
 } from '@/shared/protocol'
 import { type ProfileItem, type ProfileSection } from '@/shared/profile'
+import { showsFolded } from '@/shared/stat-table'
 import { CHART_BAR_COLOR, safeColor, scatterSvg, seriesColor, trendChartSvg } from './charts'
 import { el, type VNode } from './vnode'
 
@@ -161,9 +162,9 @@ function statRowsNodes(panel: StatTablePanel): (VNode | null)[] {
   ]
 }
 
-/** 表（`folded` は「題（行の数）」の 1 行に畳み、押すと開く——Web の表と同じ）。 */
+/** 表（`folded` は「題（行の数）」の 1 行に畳み、押すと開く——Web の表と同じ。行の無い表は畳まない）。 */
 function statTableNode(panel: StatTablePanel): VNode {
-  if (panel.folded !== true) return panelBox([titleNode(panel.title), ...statRowsNodes(panel)])
+  if (!showsFolded(panel)) return panelBox([titleNode(panel.title), ...statRowsNodes(panel)])
   return panelBox([
     el('details', {
       children: [

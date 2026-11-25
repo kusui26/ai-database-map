@@ -214,19 +214,29 @@ describe('populationPanels', () => {
     for (const panel of panels) expect(() => panelSchema.parse(panel)).not.toThrow()
   })
 
-  it('チャットの中（compact）では人口増減率の表を出さない（図 2 枚・D-5）', () => {
+  it('チャットの中（compact）でも人口増減率の表は畳んで出す（AI の要約がこのパネルから増減率を読む・D-5）', () => {
     const detail = buildStationDetail(
       KOSUGI_STATION,
       new Map(Object.entries(KOSUGI_VALUES_1KM)),
       ageRowsOf(1000, KOSUGI_1KM),
     )
-    expect(populationPanels(detail, 1000, 'compact').map((panel) => panel.type)).toEqual([
-      'trendChart',
-      'trendChart',
-    ])
+    const panels = populationPanels(detail, 1000, 'compact')
+    expect(panels.map((panel) => panel.type)).toEqual(['trendChart', 'trendChart', 'statTable'])
+    const table = panels[2]
+    expect(table?.type === 'statTable' ? table.folded : undefined).toBe(true)
+    expect(table?.type === 'statTable' ? table.rows.length : 0).toBeGreaterThan(0)
     expect(populationPanels(popDetail, 1000, 'compact').map((panel) => panel.type)).toEqual([
       'trendChart',
+      'statTable',
     ])
+  })
+
+  it('人口増減率の行が 1 つも無い駅・半径は、表を出さない（「人口増減率（0）」を畳んで見せない）', () => {
+    const noGrowth = new Map([...popValues].filter(([key]) => !key.startsWith('pop_gr_')))
+    for (const size of ['full', 'compact'] as const) {
+      const panels = populationPanels(buildStationDetail(station, noGrowth), 1000, size)
+      expect(panels.map((panel) => panel.type)).toEqual(['trendChart'])
+    }
   })
 })
 

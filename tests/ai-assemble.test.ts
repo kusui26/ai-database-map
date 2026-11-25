@@ -126,16 +126,31 @@ const kosugiEffect: StationDetailEffect = {
 }
 
 describe('panelsForStationDetail', () => {
-  it('駅カード → 焦点カテゴリのパネル（人口＝人口の推移。チャットの中では増減率の表を出さない＝D-5）', () => {
+  it('駅カード → 焦点カテゴリのパネル（人口＝人口の推移 → 人口増減率の表。表は畳む＝D-5）', () => {
     const panels = panelsForStationDetail(popEffect)
-    expect(panels.map((panel) => panel.type)).toEqual(['stationCard', 'trendChart'])
+    expect(panels.map((panel) => panel.type)).toEqual(['stationCard', 'trendChart', 'statTable'])
   })
 
-  it('年齢別の人口のある駅は、人口の推移 → 年齢別の人口の図 2 枚（増減率の表は出さない）', () => {
+  it('年齢別の人口のある駅は、人口の推移 → 年齢別の人口 → 人口増減率の表（畳む）', () => {
     const panels = panelsForStationDetail(kosugiEffect)
-    expect(panels.map((panel) => panel.type)).toEqual(['stationCard', 'trendChart', 'trendChart'])
+    expect(panels.map((panel) => panel.type)).toEqual([
+      'stationCard',
+      'trendChart',
+      'trendChart',
+      'statTable',
+    ])
     expect(panels[2]?.type === 'trendChart' ? panels[2].title : '').toBe('年齢別の人口（1km圏）')
+    expect(panels[3]?.type === 'statTable' ? panels[3].folded : undefined).toBe(true)
     expect(panels.every((panel) => panel.size === 'compact')).toBe(true)
+  })
+
+  it('畳んだ人口増減率の表も AI の要約に残る（増減率を自分で計算させない・main と同じ値）', () => {
+    expect(summarizePanels(panelsForStationDetail(popEffect))).toContain(
+      '人口増減率: 2015→2020 +5.5%',
+    )
+    expect(summarizePanels(panelsForStationDetail(kosugiEffect))).toContain(
+      '人口増減率: 2015→2020 +11.6%',
+    )
   })
 
   it('すべて compact / inline（チャット内表示・⤢で昇格）', () => {

@@ -10,7 +10,11 @@ import { stationAgeProfile, stationBundle, stationByGrp } from '@/db/queries'
 import { type StationDetail } from '@/shared/api'
 import { buildStationDetail } from './presenter'
 
-/** 駅（grp）→ 駅詳細（全半径の系列と年齢別の人口）。知らない駅は null（呼び出し側が 404・構造化エラーにする）。 */
+/**
+ * 駅（grp）→ 駅詳細（全半径の系列と年齢別の人口）。知らない駅は null（呼び出し側が 404・構造化エラーにする）。
+ * 年齢の表を引けないときも駅詳細ごと失敗させる（`profile/load.ts` の災害と同じ）——握りつぶして `ageStructure: null` で
+ * 返すと、年齢の図の無い応答が CDN に 1 時間残り（`CACHE.hour`）、失敗も見えなくなる。
+ */
 export async function loadStationDetail(grp: string): Promise<StationDetail | null> {
   const station = await stationByGrp(grp)
   if (station === null) return null

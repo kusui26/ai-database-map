@@ -173,6 +173,21 @@ export const CATEGORY_COLORS: Readonly<Record<Category, string>> = {
 export const PROJECTED_OPACITY = 0.6
 
 /**
+ * 実績と推計の境の描き方（Web の Chart.js とビューアの SVG で同じにする）：破線（slate-400・線 4px と間 3px）を引き、
+ * その右に「推計」（slate-500）を、破線から 4px 離して書く。
+ */
+export const PROJECTION_RULE_COLOR = '#94a3b8'
+export const PROJECTION_RULE_DASH_PX: readonly [number, number] = [4, 3]
+export const PROJECTION_LABEL_COLOR = '#64748b'
+export const PROJECTION_LABEL_GAP_PX = 4
+
+/**
+ * 積み上げの区分の間のすき間（px・面の色が見える）。区分が明るさの差だけで分かれないように、すき間でも分ける（dataviz）。
+ * Web の Chart.js とビューアの SVG で同じ。
+ */
+export const SEGMENT_GAP_PX = 2
+
+/**
  * 散布図クラスタの配色（旧プロジェクト Station Area Database Map と同一の 4 色）。
  *
  * クラスタ番号は k-means の任意 index で意味を持たないため、色は「集団の区別」だけを担う

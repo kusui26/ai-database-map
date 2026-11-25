@@ -33,15 +33,18 @@ from station_radii import RADII_M  # noqa: E402
 #: CSV の区分の列（積む順＝配列の中の並び）。
 BAND_COLUMNS: tuple[str, ...] = tuple(f"age{band}" for band in BANDS)
 CSV_COLUMNS: tuple[str, ...] = ("grp", "radius_m", "year", *BAND_COLUMNS, "age_unknown")
-#: 1 駅の配列の長さ。
-COUNTS_PER_STATION = len(RADII_M) * len(PROFILE_YEARS) * len(BANDS)
+#: 1 駅の行の数（CSV・関数の出力。6 半径 × 8 年＝48）と配列の長さ。
+ROWS_PER_STATION = len(RADII_M) * len(PROFILE_YEARS)
+COUNTS_PER_STATION = ROWS_PER_STATION * len(BANDS)
 UNKNOWN_PER_STATION = len(RADII_M) * len(CENSUS_YEARS)
-#: 投入後に RPC の 48 行を CSV と照合する駅（政令市の中心・都心の新しい街・年齢不詳の多い駅）。
+#: 投入後に関数の出力（1 駅 ROWS_PER_STATION 行）を CSV と照合する駅（政令市の中心・都心の新しい街・年齢不詳の多い駅）。
 CHECK_GRPS: tuple[str, ...] = ("横浜#0", "武蔵小杉#0", "矢場町#0")
+#: 投入後の確認 1 つ（名前・合否・詳細）。
+Check = tuple[str, bool, str]
 
 
 def read_profiles(path: Path = STATION_AGE_PROFILES_CSV) -> pd.DataFrame:
-    """CSV を読み、形を確かめる（列・駅ごとの 48 行・整数・年齢不詳は実績の年だけ）。崩れていれば止める。"""
+    """CSV を読み、形を確かめる（列・駅ごとの行の数・整数・年齢不詳は実績の年だけ）。崩れていれば止める。"""
     if not path.exists():
         raise SystemExit(f"{path.name} がありません。先に pipeline/build_station_age.py を実行してください")
     frame = pd.read_csv(path, dtype={"grp": str})
@@ -55,9 +58,9 @@ def read_profiles(path: Path = STATION_AGE_PROFILES_CSV) -> pd.DataFrame:
 
 def _shape_problems(frame: pd.DataFrame) -> list[str]:
     problems = []
-    per_station = frame.groupby("grp").size()
-    if (per_station != len(RADII_M) * len(PROFILE_YEARS)).any():
-        problems.append(f"48 行でない駅 {int((per_station != 48).sum())}")
+    wrong_size = frame.groupby("grp").size() != ROWS_PER_STATION
+    if wrong_size.any():
+        problems.append(f"{ROWS_PER_STATION} 行でない駅 {int(wrong_size.sum())}")
     if set(frame["radius_m"]) != set(RADII_M) or set(frame["year"]) != set(PROFILE_YEARS):
         problems.append(f"半径・年が違う: {sorted(set(frame['radius_m']))} / {sorted(set(frame['year']))}")
     if frame.duplicated(["grp", "radius_m", "year"]).any():
@@ -113,26 +116,30 @@ def _csv_rows(frame: pd.DataFrame, grp: str) -> list[tuple[object, ...]]:
     ]
 
 
-def run_post_load_checks(cur: psycopg.Cursor, frame: pd.DataFrame) -> list[str]:
-    """投入後の確認（DB の中で）。崩れたら呼び出し側がロールバックする。"""
-    failures: list[str] = []
-
-    def check(name: str, ok: bool, detail: str) -> None:
-        print(f"  {'PASS' if ok else 'FAIL'}  {name}（{detail}）")
-        if not ok:
-            failures.append(name)
-
+def _check_one_row_per_station(cur: psycopg.Cursor) -> list[Check]:
     cur.execute("select (select count(*) from public.station_age_profiles), (select count(*) from public.stations)")
     rows, stations = cur.fetchone()
-    check("全駅に 1 行ずつ", rows == stations, f"{rows:,} 行 / 駅 {stations:,}")
+    return [("全駅に 1 行ずつ", rows == stations, f"{rows:,} 行 / 駅 {stations:,}")]
+
+
+def _check_known_stations(cur: psycopg.Cursor, frame: pd.DataFrame) -> list[Check]:
+    checks: list[Check] = []
     for grp in CHECK_GRPS:
         cur.execute(f"select {', '.join(CSV_COLUMNS[1:])} from public.station_age_profile(%s)", (grp,))
         actual = [tuple(row) for row in cur.fetchall()]
-        check(f"{grp} の 48 行が CSV と同じ", actual == _csv_rows(frame, grp), f"{len(actual)} 行")
+        checks.append((f"{grp} の {ROWS_PER_STATION} 行が CSV と同じ", actual == _csv_rows(frame, grp),
+                       f"{len(actual)} 行"))
+    return checks
+
+
+def _check_projected_years(cur: psycopg.Cursor) -> list[Check]:
     cur.execute("select count(*) from public.station_age_profile(%s) where projected <> (year <> all(%s))",
                 (CHECK_GRPS[0], list(CENSUS_YEARS)))
     (wrong,) = cur.fetchone()
-    check("推計の年（projected）は国勢調査の年でない年", wrong == 0, f"違う行 {wrong}")
+    return [("推計の年（projected）は国勢調査の年でない年", wrong == 0, f"違う行 {wrong}")]
+
+
+def _check_band_sums(cur: psycopg.Cursor) -> list[Check]:
     cur.execute(
         "select count(*) from public.stations s cross join lateral public.station_age_profile(s.grp) a "
         "join public.metric_columns mc on mc.key = 'pop_2020_1km' "
@@ -141,8 +148,16 @@ def run_post_load_checks(cur: psycopg.Cursor, frame: pd.DataFrame) -> list[str]:
         "and a.age0_14 + a.age15_64 + a.age65_74 + a.age75plus <> v.value"
     )
     (differs,) = cur.fetchone()
-    check("1km・2020 年の 4 区分の和 ＝ pop_2020_1km（全駅）", differs == 0, f"違う駅 {differs}")
-    return failures
+    return [("1km・2020 年の 4 区分の和 ＝ pop_2020_1km（全駅）", differs == 0, f"違う駅 {differs}")]
+
+
+def run_post_load_checks(cur: psycopg.Cursor, frame: pd.DataFrame) -> list[str]:
+    """投入後の確認（DB の中で）。崩れた確認の名前を返す（1 つでもあれば呼び出し側がロールバックする）。"""
+    checks = [*_check_one_row_per_station(cur), *_check_known_stations(cur, frame),
+              *_check_projected_years(cur), *_check_band_sums(cur)]
+    for name, ok, detail in checks:
+        print(f"  {'PASS' if ok else 'FAIL'}  {name}（{detail}）")
+    return [name for name, ok, _ in checks if not ok]
 
 
 def main() -> int:

@@ -335,6 +335,7 @@ export const panelSchema = z.discriminatedUnion('type', [
     /**
      * 「題（行の数）」の 1 行に畳み、押すと開く（2026-11-25・人口タブの人口増減率＝D-5）。同じ値が図にもあって、
      * いつも開いておくと画面が長くなる表に使う。**消さずに畳む**——行は応答にも AI の要約にも残る。
+     * 行の無い表は畳まない（題だけ・`shared/stat-table.ts` の `showsFolded`）。
      */
     folded: z.boolean().optional(),
     placement: placementSchema,

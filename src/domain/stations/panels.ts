@@ -153,23 +153,22 @@ function populationTrendPanel(
   }
 }
 
-/** 人口増減率のミニ表 Panel（選択半径の 9 ペア・lowbase は各行 ⚠）。押すと開くに畳む（D-5）。 */
-function populationGrowthTable(detail: StationDetail, radiusM: number, size: PanelSize): Panel {
-  return {
-    type: 'statTable',
-    title: '人口増減率',
-    rows: growthRows(seriesAt(detail, 'pop_gr', radiusM)),
-    note: null,
-    folded: true,
-    size,
-  }
+/**
+ * 人口増減率のミニ表 Panel（選択半径の 9 ペア・lowbase は各行 ⚠）。押すと開くに畳む（D-5）。
+ * 行の無い駅（その半径に人が住んでいない駅＝500m で 29 駅など）では出さない（事業所・従業者の増減率と同じ）。
+ */
+function populationGrowthTable(detail: StationDetail, radiusM: number, size: PanelSize): Panel[] {
+  const rows = growthRows(seriesAt(detail, 'pop_gr', radiusM))
+  if (rows.length === 0) return []
+  return [{ type: 'statTable', title: '人口増減率', rows, note: null, folded: true, size }]
 }
 
 /**
  * 人口タブ 1 枚分の Panel[]（人口の推移 → 年齢別の人口 → 人口増減率）。選択半径で再計算（再フェッチ不要）。
  *
- * 人口増減率の表（9 行）は、タブでは押すと開くに畳み、チャットの中（compact）では出さない（計画書 261122 D-5）——
- * 年齢の図を足しても、タブとチャットが大きく伸びないように。チャットの増減は、推移の図と年齢の図のチップを AI の文が言う。
+ * 人口増減率の表（9 行）は、タブでもチャットの中（compact）でも「人口増減率（9）」の 1 行に畳む（計画書 261122 D-5）——
+ * 年齢の図を足しても、タブとチャットが大きく伸びないように。畳んでも行は消さない：AI への要約
+ * （`summarizePanels(panelsForStationDetail)`）はこのパネルから作るので、出さないと AI が増減率を読めなくなる。
  * 年齢の図は、年齢の表に無い駅（と、配備の切り替わりの間の古い応答）では出さない。
  */
 export function populationPanels(
@@ -181,7 +180,7 @@ export function populationPanels(
   return [
     populationTrendPanel(detail, radiusM, size),
     ...(age === null ? [] : [age]),
-    ...(size === 'compact' ? [] : [populationGrowthTable(detail, radiusM, size)]),
+    ...populationGrowthTable(detail, radiusM, size),
   ]
 }
 

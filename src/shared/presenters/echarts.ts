@@ -29,7 +29,7 @@ import {
   type ScatterPanel,
   type TrendChartPanel,
 } from '@/shared/protocol'
-import { isProjected, labeledTotalXs } from '@/shared/trend-stack'
+import { isProjected, labeledTotalXs, trendXs } from '@/shared/trend-stack'
 import { CHART_BAR_COLOR, seriesColor } from '@/shared/viewer/charts'
 
 // --- JSON だけの値（関数を型で禁じる） ----------------------------------
@@ -105,12 +105,6 @@ const literalLabel = (formatted: string): string => (/[{}]/.test(formatted) ? '{
 
 // --- 推移（折れ線／積み上げ縦棒） ---------------------------------------
 
-/** x の目盛（全系列の和集合・昇順）。 */
-const trendCategories = (panel: TrendChartPanel): readonly number[] =>
-  [...new Set(panel.series.flatMap((series) => series.points.map((point) => point.x)))].sort(
-    (a, b) => a - b,
-  )
-
 /** 目盛に合わせた値の列（無い年は null＝線が途切れる／棒が立たない）。 */
 function alignedValues(
   points: readonly { readonly x: number; readonly y: number | null }[],
@@ -126,17 +120,11 @@ function alignedValues(
  */
 function totalsSeries(panel: TrendChartPanel, categories: readonly number[]): readonly JsonValue[] {
   if (panel.totals === undefined || panel.totals.length === 0) return []
-  const labeled = labeledTotalXs(panel, categories)
-  const values = alignedValues(panel.totals, categories)
   return [
     {
       name: '合計',
       type: 'line',
-      data: categories.map((x, index) =>
-        labeled.has(x)
-          ? (values[index] ?? null)
-          : { value: values[index] ?? null, label: { show: false } },
-      ),
+      data: totalPoints(panel, panel.totals, categories),
       symbol: 'circle',
       symbolSize: 5,
       lineStyle: { width: 1, type: 'dotted' },
@@ -145,6 +133,21 @@ function totalsSeries(panel: TrendChartPanel, categories: readonly number[]): re
       z: 5,
     },
   ]
+}
+
+/** 合計の点（数字を書かない年は、点ごとの `label.show: false`）。 */
+function totalPoints(
+  panel: TrendChartPanel,
+  totals: NonNullable<TrendChartPanel['totals']>,
+  categories: readonly number[],
+): readonly JsonValue[] {
+  const labeled = labeledTotalXs(panel, categories)
+  const values = alignedValues(totals, categories)
+  return categories.map((x, index) =>
+    labeled.has(x)
+      ? (values[index] ?? null)
+      : { value: values[index] ?? null, label: { show: false } },
+  )
 }
 
 /** 積み上げの棒の値（推計の年は淡く＝点ごとの不透明度・Web と同じ値）。 */
@@ -169,7 +172,7 @@ const projectionPart = (panel: TrendChartPanel): string | null =>
 
 /** 推移チャートの option。 */
 function trendOption(panel: TrendChartPanel): EChartsOption {
-  const categories = trendCategories(panel)
+  const categories = trendXs(panel)
   const stacked = panel.stacked === true
   const series: readonly JsonValue[] = [
     ...panel.series.map((each, index) => ({

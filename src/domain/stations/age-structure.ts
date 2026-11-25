@@ -165,6 +165,22 @@ function bandTotals(radius: AgeRadius): NonNullable<TrendChartPanel['totals']> {
   return radius.years.map((year) => ({ x: year.year, y: sumOf(year.counts) }))
 }
 
+/** 推計の始まり（最初の推計の年）。推計の年が無ければ指定しない（全部を濃く描く）。 */
+function projectionOf(radius: AgeRadius): Pick<TrendChartPanel, 'projectedFrom'> {
+  const projectedFrom = radius.years.find((year) => year.projected)?.year
+  return projectedFrom === undefined ? {} : { projectedFrom }
+}
+
+/** どの駅・半径でも同じ、図の形（人数の積み上げ縦棒・人口の色の系統）。 */
+const AGE_CHART_SHAPE: Pick<TrendChartPanel, 'type' | 'unit' | 'format' | 'category' | 'stacked'> =
+  {
+    type: 'trendChart',
+    unit: '人',
+    format: 'int',
+    category: 'population',
+    stacked: true,
+  }
+
 /**
  * 年齢別の人口 Panel（選択半径）。年齢の表に無い駅・半径は null（人口タブは推移の図だけになる）。
  * 合計は、2015・2020 年が国勢調査の総数、2025 年からが R6 推計の総数（人口の推移の図の実績・R6 推計と同じ値）。
@@ -177,16 +193,11 @@ export function ageStructurePanel(
   const radius = ageRadiusOf(detail, radiusM)
   if (radius === undefined || radius.years.length === 0) return null
   const lowBase = lowBase2020(detail, radiusM)
-  const projectedFrom = radius.years.find((year) => year.projected)?.year
   return {
-    type: 'trendChart',
+    ...AGE_CHART_SHAPE,
     title: `年齢別の人口（${radiusLabel(radiusM)}圏）`,
-    unit: '人',
-    format: 'int',
-    category: 'population',
-    stacked: true,
     totals: bandTotals(radius),
-    ...(projectedFrom === undefined ? {} : { projectedFrom }),
+    ...projectionOf(radius),
     flags: ageFlags(detail, radius, lowBase),
     series: bandSeries(radius),
     stats: ageStats(detail, radiusM, lowBase),
